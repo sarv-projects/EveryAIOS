@@ -1,5 +1,8 @@
 # RESEARCH — Master Index
 
+> **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPEC.md) · delivery: [`../../TODO.md`](../../TODO.md). Frozen by decision **D8** — research docs are **never updated** with code changes, so a dated claim here is not a stale claim.
+
+
 > All research for the desktop app product. Updated 2026-09-15 (docs 49–91 added).
 > **Final product spec:** `desktop_app/DESKTOP-APP-SPEC.md` (**v3.78** live — Native agent plane frozen as v3.75, native rows v3.76, Settings Control Center v3.77, Windows-first runtime/picker/cowork evidence contract v3.78); this index is research provenance, not the contract)
 >

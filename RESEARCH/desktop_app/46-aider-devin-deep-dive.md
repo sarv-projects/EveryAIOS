@@ -1,5 +1,8 @@
 # 46 — Aider + Devin Cloud Deep Dive
 
+> **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPEC.md) · delivery: [`../../TODO.md`](../../TODO.md). Frozen by decision **D8** — research docs are **never updated** with code changes, so a dated claim here is not a stale claim.
+
+
 > **Date:** 2026-08-08  
 > **Repos:** Aider-AI/aider (48K⭐, Apache-2.0, Python), Devin Cloud (proprietary, Cognition AI)  
 > **Purpose:** Code-level feature extraction for EveryAIOS steal/adapt/refer decisions  

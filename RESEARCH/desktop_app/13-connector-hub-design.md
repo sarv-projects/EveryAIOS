@@ -1,5 +1,8 @@
 # 13 — Connector Hub Design (the unified connection layer)
 
+> **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPEC.md) · delivery: [`../../TODO.md`](../../TODO.md). Frozen by decision **D8** — research docs are **never updated** with code changes, so a dated claim here is not a stale claim.
+
+
 > Date: 2026-08-05 · Builds on doc 10 (Unified Tool Registry), doc 12 (Composio vs Nango), and fresh Zapier research.
 > **One hub, four engines, one registry, one permission system.** Users connect once; the LLM sees one flat tool list.
 

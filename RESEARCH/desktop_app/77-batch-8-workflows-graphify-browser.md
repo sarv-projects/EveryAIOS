@@ -1,5 +1,8 @@
 # Doc 77 — Batch 8: Programmable Workflows / Knowledge Graph / Browser (2026-08-16)
 
+> **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPEC.md) · delivery: [`../../TODO.md`](../../TODO.md). Frozen by decision **D8** — research docs are **never updated** with code changes, so a dated claim here is not a stale claim.
+
+
 **Date:** 2026-08-16 · **Sources (web-verified):** `apache/airflow`, `Graphify-Labs/graphify` (106.8K★), `addyosmani/agent-skills` (MIT), `Tencent/BrowserSkill`, `AIPexStudio/AIPex`, `browserable/browserable` (MIT), `kontext-security/browser-use-mcp-server`, `x1xhlol/system-prompts-and-models-of-ai-tools`; cross-checked against docs 06/58/62/63/65/67/71/72/75.
 
 **Focus (user):** *"any agent should be able to automatically create workflows, via various connectors, cron jobs, etc."*

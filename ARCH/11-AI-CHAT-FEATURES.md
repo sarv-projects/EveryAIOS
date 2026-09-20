@@ -1,6 +1,14 @@
 # 11 — AI Chat Features: Copy · Convert · Reject (the derivation)
 
-> **Full-Stack Module:** Module 1 & Module 3 — Universal Harness Chief Loop & Cockpit Shell Conversation Features (`packages/coordinator/src/chat.ts`, `prompt.ts`, `chief.ts`).
+> **SPLIT PENDING — see [`CORE.md`](CORE.md) and [`AGENT.md`](AGENT.md) first.** The AI-architecture rationale
+> here is superseded wherever it describes an EveryAIOS-owned reasoning loop: the loop belongs to the selected
+> agent (a binding), and EveryAIOS owns the environment. The UI feature contract stays valid.
+> **Split `P69.A22` (done 2026-09-20).**
+
+---
+
+
+> **Full-Stack Module:** Module 1 & Module 3 — Universal Harness Agent Loop & Cockpit Shell Conversation Features (`packages/coordinator/src/chat.ts`, `prompt.ts`, `chief.ts` — module path only; the `Chief` concept is retired per [`AGENT.md`](AGENT.md) §2 and [`CORE.md`](CORE.md) §7.1: the loop owner is the **AgentBinding**, coordination is the **Turn Coordinator**).
 > **User directive (verbatim):** *"for the ai chat features, copy from hermes, etc., and the rest from under ~business_Dev/APP/architecture.md — check the AI chat section. You need to understand what to copy, or convert, and not."*
 > This doc is that analysis. It takes the **two source corpora** and produces one clear list:
 > 1. **COPY** — reuse as-is (already built & tested in the `@personal-ai/core-*` engine — **now vendored in-repo at `packages/core-*`**, originally `APP/packages/`; or a research pattern to implement directly).
@@ -11,7 +19,7 @@
 
 ---
 
-> **Cross-reference (v3.75):** the *shipped* chat surface this doc derives is the **Native Agent Plane** defined in `17-NATIVE-AGENT.md` — the Chief loop (§17.3), the schema contract for the tool set the model actually calls (§17.4), the coordinator-side first-class tools `ask`/`plan`/`subagent`/`todo` (§17.4.3), and the two-plane boundary with external agents (§17.1). Where this doc says COPY/CONVERT/REJECT, ARCH/17 fixes *where the result runs* (native plane vs shared plane) and *what it may not do* (never remove an external agent's native tools; never claim a GUI-only capability).
+> **Cross-reference (v3.75):** the *shipped* chat surface this doc derives is the **agent plane** as re-based by `ARCH/CORE.md` §7 + `ARCH/AGENT.md` (historical derivation: `17-NATIVE-AGENT.md`) — the agent loop (§17.3), the schema contract for the tool set the model actually calls (§17.4), the coordinator-side first-class tools `ask`/`plan`/`subagent`/`todo` (§17.4.3), and the two-plane boundary with external agents (§17.1). Where this doc says COPY/CONVERT/REJECT, ARCH/17 fixes *where the result runs* (native plane vs shared plane) and *what it may not do* (never remove an external agent's native tools; never claim a GUI-only capability).
 
 ## 0. The two corpora, one rule
 
@@ -27,6 +35,17 @@ RULE:  chat *engine plumbing* (loops, routing, streaming, compression, gating) c
 ```
 
 Why this split: A is **already production-wired in the sidecar language (TS)** and covers the hard 80% (3-stage loop, tool loop, permission gate, cache-affine prompt assembly, stream batching). B contributes **feature surface** Hermes/others proved out (SOUL.md personality, self-created skills, fresh-context subagents, length-guard) that A lacks. The division-of-trust (ARCH 01 §1.3) is unchanged: sidecar proposes, Rust disposes — chat never leaves the sidecar except through everyaios-guard tickets, everyaios-vault key rings, and everyaios-audit ingest.
+
+---
+
+## 0.1 The split — UI feature contract vs AI-architecture rationale
+
+This document holds two things with different owners; read them separately:
+
+- **Part A — UI feature contract** (derives from [`UI.md`](UI.md)): the chat surface is a **projection** — keyed nodes (message · tool-call · tool-result · artifact · approval · work-status) rendered incrementally, owning no durable truth. The user-facing container word is **Chat**, not Session. Every durable change goes `UI → IPC → Work Gateway`, and an effect additionally passes Guard. Part A owns: streaming chat + stage chips + TTFT + risk chip + token/cost streamer (H1/H9); reasoning blocks, resumable streams, artifacts/Generative UI (B-11/12/13, A-16); message branching, pinning, searchable history; chat overlay on office docs/reader + cockpit + audit/replay UI (H2/H3); voice input post-v1 (H15); desktop-webview ports of engine behavior (C-1).
+- **Part B — AI-architecture rationale** (derives from [`AGENT.md`](AGENT.md)): the **loop belongs to the selected agent** (the binding — reasoning, planning, tool selection, retry); EveryAIOS owns the **environment** (durable Work, context projection, memory, capability packs, governance, lifecycle, event history) and the **Turn Coordinator** (load state, build context, project tools, emit events, drive recovery — not reasoning). External agents attach over the AgentBridge (ACP lifecycle · MCP capabilities · Work Gateway effects); governance modes (governed-mediated / self-contained / not-governed) are shown honestly per binding; no control over agent-internal reasoning is ever claimed. The COPY/CONVERT/REJECT analysis in §§1–4 is Part B evidence for where each chat atom runs.
+
+**Gates (both parts, from [`SECURITY.md`](SECURITY.md) / [`CORE.md`](CORE.md) §5.1):** the sidecar proposes, Guard authorizes with provenance (`agent_ticket` / `automation_ticket` / `human_gesture` stamped by Rust call sites — never a blanket ticket-everything claim), the kernel disposes; provider keys live only in everyaios-vault; every mutating chat tool call is audited.
 
 ---
 
@@ -63,7 +82,7 @@ These are proven patterns we implement in the sidecar (or Rust where noted). Eac
 
 | # | Feature | From (repo, doc) | Pattern to implement | Status |
 |---|---|---|---|---|
-| B-1 | **Frozen-snapshot memory injection** | Hermes `memory_tool.py` (02) | MEMORY.md/USER.md injected as stable snapshot at session start; mid-session writes go to disk only → **preserves prefix cache all session** (this is the byte-stable-prefix doctrine of 05, made operational) | 🟡 (C7) |
+| B-1 | **Stable-snapshot memory injection** | Hermes `memory_tool.py` (02) | MEMORY.md/USER.md injected as stable snapshot at session start; mid-session writes go to disk only → **preserves prefix cache all session** (this is the byte-stable-prefix doctrine of 05, made operational) | 🟡 (C7) |
 | B-2 | **SOUL.md personality** | Hermes `SOUL.md`/`USER.md` (02, also 16 §prompt_builder) | User-tunable persona file the agent can propose edits to; core rules inviolable; layered under A-7 presets | 🟡 (H10) |
 | B-3 | **Self-created skills (procedural memory)** | Hermes `skill_manager_tool.py` (02) | Agent writes SKILL.md after a successful task; skills spliced into system prompt (skills index tier); security audit of skill code (`skills_ast_audit`) | 🟡 (I2) |
 | B-4 | **Fresh-context subagents** | Hermes `delegate_tool.py` (02) | Child agent = fresh conversation, own workspace; parent sees only summary; **DELEGATE_BLOCKED_TOOLS** (delegate/clarify/memory/send_message/cronjob); batch parallel mode | 🟡 (B3 — 🟢 base in core-engine tool loop) |
@@ -120,29 +139,30 @@ These are proven patterns we implement in the sidecar (or Rust where noted). Eac
 
 ---
 
-## 5. Result — the desktop chat feature contract
+## 5. Result — the desktop chat surface, split
 
-After applying COPY (A-1…A-16, B-1…B-17), CONVERT (C-1…C-11), REJECT (R-1…R-12), the desktop **AI chat** surface is:
+After applying COPY (A-1…A-16, B-1…B-17), CONVERT (C-1…C-11), REJECT (R-1…R-12):
 
-**Engine (sidecar, reuses A):**
-- ConversationEngine 3-stage loop + tool loop + trajectory + risk compass + artifact hooks
-- SmartRouter with key-ring routing (03), intent classifier, cache affinity, size-aware reroute
-- Cache-affine 12-segment prompt assembly + untrusted envelope + citation invariant
-- StreamSession batching/checkpoints/cancel + budget-aware streaming (05)
-- Tiered compaction + Reasonix ratios + Hermes trajectory-anchor + BrowserOS fail-open summarizer (05)
-- Frozen-snapshot MEMORY.md/USER.md + SOUL.md personality + agent-created skills (B-1/2/3)
-- Fresh-context subagents with DELEGATE_BLOCKED_TOOLS + live logs (B-4/10); **v3.39:** derived child permissions (default-deny task/todo) + inbuilt abort/termination events (goal/timeout/max-turns/aborted/error). ACP covers external agents. **v3.40 Scout:** read-only research child; clone deps into managed cache, never write the workspace.
-- pi length-guard + model-swap hook (B-5/6) + trivial-prompt skip (B-7) + injection scan (B-16)
-- Event-sourced session: append-only log is source of truth; model messages are a projection; fork = lineage at a completed turn (not only UI bubble clone)
-
-**UI (desktop webview, ports C-1):**
+**Part A — UI feature contract (derives from [`UI.md`](UI.md); the chat surface is a projection owning no durable truth):**
 - Streaming chat + stage chips + TTFT + risk chip + token/cost streamer (H1/H9)
 - Reasoning blocks (B-11), resumable streams (B-12), artifacts/Generative UI (B-13, A-16)
 - Message branching, pinning, searchable history via `chat_search_index` (A-14/B-14); kernel fork lineage is the H3/session contract, not only the composer ⑂ control
 - Chat overlay on office docs/reader (ARCH 04 §overlay) + cockpit + audit/replay UI (H2/H3)
 - Voice input post-v1 (H15)
+- Desktop-webview ports of engine behavior (C-1: 100ms batching, stage chips, TTFT, risk chip — behavior ported, mobile code not imported)
 
-**Gates (unchanged from ARCH 06/08):** sidecar proposes → everyaios-guard ticket → Rust disposes; keys in everyaios-vault; every mutating chat tool call audited.
+**Part B — AI-architecture rationale (derives from [`AGENT.md`](AGENT.md); the loop belongs to the selected agent binding, EveryAIOS owns the environment + Turn Coordinator):**
+- ConversationEngine 3-stage loop + tool loop + trajectory + risk compass + artifact hooks — the loop runs for the bound agent, never as EveryAIOS reasoning about itself
+- SmartRouter with key-ring routing (03), intent classifier, cache affinity, size-aware reroute
+- Cache-affine 12-segment prompt assembly + untrusted envelope + citation invariant
+- StreamSession batching/checkpoints/cancel + budget-aware streaming (05)
+- Tiered compaction + Reasonix ratios + Hermes trajectory-anchor + BrowserOS fail-open summarizer (05)
+- Stable-snapshot MEMORY.md/USER.md + SOUL.md personality + agent-created skills (B-1/2/3)
+- Fresh-context subagents with DELEGATE_BLOCKED_TOOLS + live logs (B-4/10); **v3.39:** derived child permissions (default-deny task/todo) + abort/termination events (goal/timeout/max-turns/aborted/error) — subagents are child Work/Runs (I8), never a copied prompt. ACP covers external agents. **v3.40 Scout:** read-only research child; clone deps into managed cache, never write the workspace.
+- pi length-guard + model-swap hook (B-5/6) + trivial-prompt skip (B-7) + injection scan (B-16)
+- Event-sourced session: append-only log is source of truth; model messages are a projection; fork = lineage at a completed turn (not only UI bubble clone)
+
+**Gates (both parts, unchanged from ARCH 06/08):** sidecar proposes → everyaios-guard ticket → Rust disposes; keys in everyaios-vault; every mutating chat tool call audited.
 
 ---
 
@@ -151,5 +171,5 @@ After applying COPY (A-1…A-16, B-1…B-17), CONVERT (C-1…C-11), REJECT (R-1�
 - B1 row: **🟢 core loop EXISTS** (A-1) · 🟡 additions = length-guard + model-swap hook (B-5/6).
 - H1 row: expand description to include reasoning UI + resumable streams + artifacts/Generative UI (B-11/12/13).
 - H10 row: base persona (A-7) + SOUL.md (B-2) — already listed.
-- C7 row: frozen-snapshot injection (B-1) folds into memory injection — already listed.
+- C7 row: stable-snapshot injection (B-1) folds into memory injection — already listed.
 - No new matrix rows needed: every B/C item lands on an existing row **or the token-economy doc (05)** — B-7/B-8 fold into C7 + 05 §5.2 (checked against 09).

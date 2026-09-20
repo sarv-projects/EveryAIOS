@@ -1,5 +1,8 @@
 # Doc 78 — Batch 9: Multi-Harness Marketplace / Google Workspace / Jobs Vertical (2026-08-16)
 
+> **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPEC.md) · delivery: [`../../TODO.md`](../../TODO.md). Frozen by decision **D8** — research docs are **never updated** with code changes, so a dated claim here is not a stale claim.
+
+
 **Date:** 2026-08-16 · **Sources (web-verified):** `wshobson/agents` (94 plugins / 203 agents / 175 skills), `googleworkspace/cli` (`gws`, Google's official Workspace CLI), `feder-cr/Jobs_Applier_AI_Agent_AIHawk` (AIHawk); cross-checked against docs 58/65/77.
 
 **Focus (user):** *"esp the job application, can be useful."*

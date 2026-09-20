@@ -3011,7 +3011,7 @@ if (typeof window !== 'undefined') {
           // keep the in-memory UI intact but tell the runtime and user that
           // the latest session projection is not durable.
           setRuntimeState('degraded', `session persistence: ${runtimeError(error)}`)
-          s.notify('Session changes could not be saved. Check the vault and retry.', 'error')
+          s.notify('Chat changes could not be saved. Check the vault and retry.', 'error')
         }
       })()
     }, 400)

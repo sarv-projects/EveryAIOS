@@ -498,7 +498,7 @@ export default function ChatComposer({ budget, centered }: Props) {
       case '/export': {
         const sess = st.sessions.find((s) => s.id === st.activeSessionId)
         if (!sess) {
-          notify('No active session to export', 'error')
+          notify('No active chat to export', 'error')
           return true
         }
         const blob = new Blob([sessionTranscriptMarkdown(sess)], { type: 'text/markdown' })

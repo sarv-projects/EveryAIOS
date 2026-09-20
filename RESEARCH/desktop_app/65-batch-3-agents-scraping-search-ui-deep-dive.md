@@ -1,5 +1,8 @@
 # Doc 65 — Batch 3: Agent Infra, Scraping, Search & UI Deep-Dive
 
+> **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPEC.md) · delivery: [`../../TODO.md`](../../TODO.md). Frozen by decision **D8** — research docs are **never updated** with code changes, so a dated claim here is not a stale claim.
+
+
 **Date:** 2026-08-15
 **Scope:** The 37-repo list (AI-agent infra / web automation / data extraction / vector+lexical search / UI & docs / misc).
 **Method:** every repo verified live via GitHub API; 11 source-read (cloned + code-level), 8 web-level (README/architecture), 18 classified against the 255-repo ledger (already tracked → verdict unchanged).

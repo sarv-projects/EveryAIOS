@@ -1,5 +1,8 @@
 # 14 — Repo Implementation Ledger, Part 1: Agents, Coding, Orchestration, Cyber
 
+> **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPEC.md) · delivery: [`../../TODO.md`](../../TODO.md). Frozen by decision **D8** — research docs are **never updated** with code changes, so a dated claim here is not a stale claim.
+
+
 > Compiled 2026-08-06. Every repo mentioned in docs 01–13 was accessed (repo + README + docs + key source files).
 > This is the **implementation ledger**: how each project actually implements its features — real logic, real code paths — plus URLs for future checks.
 > **Part 2 (desktop apps, scraping, deep research, business tools, connectors) → `15-repo-implementation-ledger-2-apps-tools-connectors.md`.**

@@ -1,5 +1,8 @@
 # 87 — Local-model UX + chat-bar/UI deep-dive (A5/C/H research, 2026-09-04)
 
+> **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPEC.md) · delivery: [`../../TODO.md`](../../TODO.md). Frozen by decision **D8** — research docs are **never updated** with code changes, so a dated claim here is not a stale claim.
+
+
 > **Method:** three parallel live passes 2026-09-04 (WebFetch + WebSearch, repos + docs + releases read raw where it mattered). No installs. VERIFIED = fetched this session (key URLs in §9). Extends doc 86 (desktop batch) and doc 79 (local-model fetch core) without re-deriving them.
 > 🔗 **Repos:** `lmstudio-ai/lms` · `lmstudio-ai/mlx-engine` · `ollama/ollama` · `mozilla-ai/llamafile` (moved from `Mozilla-Ocho`) · `mudler/LocalAI` · `nomic-ai/gpt4all` · `ml-explore/mlx` + `mlx-lm` · `jundot/omlx` · `LostRuins/koboldcpp` · `abetlen/llama-cpp-python` · `ggml-org/llama.cpp` · `microsoft/Foundry-Local` · `vllm-project/vllm` · surfaces from doc 86 (AnythingLLM/Jan/Cherry/Chatbox/Hermes/opencode/Cowork/Zed/Cursor/OpenChamber/OpenClaw).
 

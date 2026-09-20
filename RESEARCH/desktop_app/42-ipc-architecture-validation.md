@@ -1,4 +1,7 @@
 # Doc 42 — IPC Architecture Validation & Agentic OS Axioms
+
+> **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPEC.md) · delivery: [`../../TODO.md`](../../TODO.md). Frozen by decision **D8** — research docs are **never updated** with code changes, so a dated claim here is not a stale claim.
+
 **Reconciling the external IPC analysis with our existing spec. Code-verified against OpenFang & ZeroClaw source.**
 
 ---

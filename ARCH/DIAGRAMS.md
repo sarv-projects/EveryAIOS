@@ -1,8 +1,29 @@
 # EveryAIOS — Architecture & Flow Diagrams (Mermaid)
 
-> **Generated:** 2026-09-15 · **Spec version:** v3.78 (current contract; the two-plane content in diagram 27 froze at v3.75 — see `SPEC-CHANGELOG.md`) · **Diagrams:** 27
-> **Purpose:** Every major system flow visualized. Render with any Mermaid-compatible viewer.
-> **Surgical hierarchy (doc 52 §1) + Dynamic Chief:** harness-driving diagrams compose external agent CLIs as **brain → core → surgeon** workers via ACP (J17/F12). The **brain tier is a swappable `primary_chief` slot** (inbuilt or **any installed** ACP loop — Claude Code, Codex, Grok Build, OpenCode, …). An external Chief runs that product's loop; omitted `fs`/`terminal` means Self-contained (not “UNSUPPORTED → MCP”). Slash = `available_commands_update`. Handoff = compacted live view. Storage-intelligence (D9–D12) and G8 cascade: docs 49/52.
+> **Generated:** 2026-09-15 · **Spec version:** v3.78 (current contract; the two-plane content in diagram 27 froze at v3.75 — see `SPEC-CHANGELOG.md`) · **Diagrams:** 28 (diagram 0 is the canonical backbone — `P69.A27`)
+> **Purpose:** Every major system flow visualized. Render with any Mermaid-compatible viewer. **Reading order:** diagram 0 first — the single Work→Effect→Event backbone plus the projection split. Diagrams marked HISTORICAL describe a topology that no longer exists and are kept only so the decision stays legible; their replacements are named inline.
+> **Surgical hierarchy (doc 52 §1) + dynamic agent binding (formerly “Dynamic Chief”):** harness-driving diagrams compose external agent CLIs as **brain → core → surgeon** workers via ACP (J17/F12). The **brain tier is a swappable agent-binding slot** (built-in or **any installed** ACP loop — Claude Code, Codex, Grok Build, OpenCode, …). An external agent runs that product's loop; omitted `fs`/`terminal` means Self-contained (not “UNSUPPORTED → MCP”). Slash = `available_commands_update`. Handoff = compacted live view. Storage-intelligence (D9–D12) and G8 cascade: docs 49/52.
+
+---
+
+## 0. The backbone — Work → Effect → Event, and the projection split (canonical — `P69.A27`)
+
+```mermaid
+flowchart TD
+    W["WORK (durable intent)"] --> R["RUN / STEP"] --> EF["EFFECT (Guard → Executor)"]
+    EF --> OB["OBSERVATION + VERIFICATION"] --> RC["RECEIPT"] --> EV["EVENT LOG — the historical truth"]
+    EV --> PR["PROJECTIONS — Timeline · Work status · artifacts"]
+    PR --> UI["UI / Timeline views"]
+    PR --> CS["CONTEXT SURFACE — derived, bounded projection"]
+    CS --> CE["CONTEXT ENGINEERING — 7-step order, cache-stable prefix"]
+    CE --> CB["CACHE BOUNDARY"] --> PA["PROMPT ASSEMBLER — serializes, owns no policy"]
+    PA --> AG["ANY AGENT — the bound engine (built-in or external)"]
+    AG -->|"proposes"| W
+```
+
+The UI, the Timeline, and the Context Surface render **projections**; they own no durable truth and mutate
+only through the Work Gateway. The assembler serializes Context; `ContextSelector` owns policy
+(`ARCH/CONTEXT.md`). The agent proposes; the kernel disposes.
 
 ---
 
@@ -56,6 +77,10 @@ graph TB
 ---
 
 ## 2. Agent Turn Lifecycle
+
+> **HISTORICAL (`P69.A27`) — the sidecar-owned loop topology no longer exists.** The loop belongs to the
+> bound agent ([`AGENT.md`](AGENT.md)); kept so the pre-thaw wiring stays legible. The surviving parity
+> contract is `ARCH/16-CHAT-LOOP-RUST-PORT.md` §5.
 
 ```mermaid
 sequenceDiagram
@@ -245,6 +270,10 @@ flowchart TD
 
 ## 7. Circuit Breaker + MCQ Interrupt + DAG Resume
 
+> **HISTORICAL in part (`P69.A27`).** The planner-owned DAG runtime is retired — blueprint is
+> declarative-only and triggers create Work (`P69.D12`); the MCQ interrupt card itself survives as the
+> Guard-2 approval surface. Read the interrupt half, not the planner half.
+
 ```mermaid
 stateDiagram-v2
     [*] --> Planning: User submits goal
@@ -349,6 +378,10 @@ flowchart TD
 ---
 
 ## 9. Token Economy / Compaction Pipeline
+
+> **HISTORICAL (`P69.A27`).** The normative order and cache contract now live in `ARCH/CONTEXT.md` §§3–4
+> (cheap reducers → re-measure → bounded semantic compaction; stable prefix vs dynamic tail). Kept as the
+> pre-thaw pipeline record.
 
 ```mermaid
 flowchart TD
@@ -710,6 +743,10 @@ sequenceDiagram
 
 ## 19. Sub-Agent Orchestration
 
+> **HISTORICAL in part (`P69.A27`).** Subagents are child Work/Runs with scoped grants, bounded
+> depth/concurrency, and summary-only returns (`P69.D14`) — there is no separate subagent runtime. The
+> constraint values below are the pre-thaw record; the contract is `ARCH/AGENT.md` §6 + `ARCH/WORK.md`.
+
 ```mermaid
 flowchart TD
     User[User goal] --> Planner[Planner Agent<br/>frontier model]
@@ -745,6 +782,9 @@ flowchart TD
 ---
 
 ## 20. Full System Interaction (All Components Working Together)
+
+> **HISTORICAL (`P69.A27`) — the module-number topology no longer exists.** The target module map is
+> `ARCH/CORE.md` §13; the runtime shape is diagram 0 above. Kept as the pre-thaw integration record.
 
 ```mermaid
 flowchart TB
@@ -847,8 +887,8 @@ flowchart TB
 graph LR
     subgraph App["EveryAIOS Desktop (Tauri 2)"]
         subgraph Sidebar["Sidebar (240px)"]
-            Nav[New Session<br/>Automations<br/>Guard<br/>Connectors<br/>Memory<br/>Analytics]
-            Sessions[Recent Sessions<br/>• Running ⏳<br/>• Action Required ●<br/>• Completed ✓<br/>└─ Child sessions]
+            Nav[New Chat<br/>Automations<br/>Guard<br/>Connectors<br/>Memory<br/>Analytics]
+            Sessions[Recent Chats<br/>• Running ⏳<br/>• Action Required ●<br/>• Completed ✓<br/>└─ Child chats]
         end
 
         subgraph Center["Chat Panel (40%)"]
@@ -987,13 +1027,13 @@ sequenceDiagram
 
 ---
 
-## 27. The two agent planes (frozen v3.75 — ARCH/17)
+## 27. The two agent planes (v3.75 — superseded: see [`CORE.md`](CORE.md) §7.1)
 
-> The orthogonal view to every diagram above: **who owns which capability**. Native owns both planes; an external agent keeps its own and borrows the shared one; resolution is native-first.
+> The orthogonal view to every diagram above: **who owns which capability**. The built-in runtime is one unprivileged binding; an external agent keeps its own plane and borrows the shared one; resolution is native-first (see [`CORE.md`](CORE.md) §7.1, [`AGENT.md`](AGENT.md)).
 
 ```mermaid
 graph TB
-    subgraph NATIVE["EVERYAIOS NATIVE AGENT (Chief)"]
+    subgraph NATIVE["BUILT-IN RUNTIME (unprivileged binding)"]
         N1["NATIVE AGENT PLANE<br/>loop · planning · routing · context<br/>memory reasoning · sub-agents · skills<br/>native coding · shell · web search"]
         N2["SHARED COWORK PLANE (borrows)"]
     end
@@ -1021,17 +1061,19 @@ graph TB
     E2 --> SHARED
     SHARED --> KERNEL
 
-    POL["Resolution policy: native-first, augmentation-second.<br/>If the agent's native X is reachable through the integrated<br/>seam (CLI/ACP/MCP), use it; else use shared X; if both,<br/>the Chief chooses by quality/cost/permission/latency/context."]
+    POL["Resolution policy: native-first, augmentation-second.<br/>If the bound agent's native X is reachable through the integrated<br/>seam (CLI/ACP/MCP), use it; else use shared X; if both,<br/>resolution chooses by quality/cost/permission/latency/context."]
     N1 -.-> POL
 ```
 
-**Native vs shared, at a glance:** conversation loop · planning · routing · memory *reasoning* · sub-agent orchestration · native coding/shell/edit · native web search · verification · skills · cost · recovery = **Native owns** (external agents keep their own equivalents). Office · browser · computer use · connectors · workspace map · artifacts · durable Work · scheduler · background runs · shared memory retrieval · Guard · vault · budget · leases · cross-agent delegation = **shared**. Cross-agent delegation (hiring an external agent as a specialist) is Native-exclusive.
+**Native vs shared, at a glance (pre-thaw record — ownership now in [`AGENT.md`](AGENT.md) §§1–2, 7):** conversation loop · planning · routing · memory *reasoning* · sub-agent orchestration · native coding/shell/edit · native web search · verification · skills · cost · recovery = **the bound agent's** (external agents keep their own equivalents; the built-in runtime is one unprivileged binding). Office · browser · computer use · connectors · workspace map · artifacts · durable Work · scheduler · background runs · shared memory retrieval · Guard · vault · budget · leases · cross-agent delegation = **shared**.
 
 ---
 
 ## Notes on Diagram Consistency
 
-After iterating through all flows, the following cross-cutting invariants hold across every diagram:
+After iterating through all flows, the following cross-cutting invariants hold across every diagram.
+Diagrams 2, 7 (planner half), 9, 19 (runtime half), and 20 are HISTORICAL (see their headers) — the live
+topology is diagram 0 plus `ARCH/CORE.md`:
 
 1. **"Sidecar proposes, Rust disposes"** — visible in diagrams 2, 6, 10, 12, 18: every mutating action from the sidecar passes through everyaios-guard before execution.
 

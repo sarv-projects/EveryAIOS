@@ -1,5 +1,8 @@
 # 64 — Giants Code-Level Deep-Dive (rustdesk · ladybird · serenity · brave · chromium + lightpanda re-read)
 
+> **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPEC.md) · delivery: [`../../TODO.md`](../../TODO.md). Frozen by decision **D8** — research docs are **never updated** with code changes, so a dated claim here is not a stale claim.
+
+
 > **Pass:** 2026-08-15 — the five repos previously only web-level checked are now **cloned + source-read at code level** (per user directive "deep-dive the remaining web-level repos to code level and extract steal candidates"):
 > - **rustdesk** (`rustdesk/rustdesk`, full clone, 26 MB) — NAT traversal + rendezvous + relay
 > - **ladybird** (`LadybirdBrowser/ladybird`, full clone, 294 MB) — process model + layered sandbox + .ipc DSL + process-per-navigation

@@ -1,5 +1,8 @@
 # 57 — ACP Registry & BYO-Agent Subscription Auth (finalize)
 
+> **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPEC.md) · delivery: [`../../TODO.md`](../../TODO.md). Frozen by decision **D8** — research docs are **never updated** with code changes, so a dated claim here is not a stale claim.
+
+
 > Live-verified 2026-08-10. Answers the user question: *"why can't we copy what Zed and Hermes do — use an ACP registry to use any agent? users who paid for a subscription but have no API key shouldn't face a loss."* Verdict: **we already planned exactly this (F12/J17/TODO-1010) — this pass makes it concrete (the official ACP registry now exists; live-verified 346★ / 38 agents) and sharpens one over-broad reading (subscription reuse is *precise*, not banned: Claude via the official ACP wrapper = allowed; token-harvest for other engines = blocked).** No new matrix rows (maps onto F8/F12/J17 + ARCH/06 §6.16); ledger 226 → **227 repos** (`agentclientprotocol/registry`).
 
 ---

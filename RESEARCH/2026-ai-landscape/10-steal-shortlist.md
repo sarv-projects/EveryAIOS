@@ -1,5 +1,8 @@
 # 10 · Steal-Shortlist — What to Build From, What to Skip
 
+> **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPEC.md) · delivery: [`../../TODO.md`](../../TODO.md). Frozen by decision **D8** — research docs are **never updated** with code changes, so a dated claim here is not a stale claim.
+
+
 > Consolidated action list distilled from ALL research docs in this archive.
 > Everything here maps to our desktop app vision: browser + chat + coding + research + reader +
 > editor in one app, scoped filesystem access, BYOK, per-user Composio, subagents, beautiful UI.

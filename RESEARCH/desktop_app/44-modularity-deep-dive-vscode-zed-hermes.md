@@ -1,5 +1,8 @@
 # 44 — Modularity Deep-Dive: VS Code, Zed, Hermes, Agentic Apps (source-verified)
 
+> **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPEC.md) · delivery: [`../../TODO.md`](../../TODO.md). Frozen by decision **D8** — research docs are **never updated** with code changes, so a dated claim here is not a stale claim.
+
+
 > **Date:** 2026-08-07 · **Purpose:** answer "how did these apps make themselves 100% modular / future-expandable?" — then extract the exact mechanisms we copy into our **Extension ABI** (doc 44b proposal → spec §0 hardening of P8).
 > **Method:** all claims below were source-read this pass from the live repos (raw.githubusercontent HEAD trees). Nothing is README-paraphrased.
 > **Related:** doc 05 (plugins/agents/skills), doc 41 (steal index), doc 43 (landmines), ARCH/02 (module layout), spec P8 (Forge/skills).

@@ -1,5 +1,8 @@
 # Coding Agent Comparison — opencode, pi, Claude Code, Hermes, AnythingLLM, Reasonix
 
+> **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPEC.md) · delivery: [`../../TODO.md`](../../TODO.md). Frozen by decision **D8** — research docs are **never updated** with code changes, so a dated claim here is not a stale claim.
+
+
 > Research date: 2026-08-05. GitHub star counts verified via GitHub API. Code-level reads of each repo (go.mod, package.json, README, SPEC/ARCHITECTURE docs).
 > Context: choosing what to steal for our desktop app's agent/coding pillar.
 

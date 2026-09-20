@@ -1,5 +1,8 @@
 # 06 — Browser Automation & Web Scraping for the Desktop App
 
+> **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPEC.md) · delivery: [`../../TODO.md`](../../TODO.md). Frozen by decision **D8** — research docs are **never updated** with code changes, so a dated claim here is not a stale claim.
+
+
 > Verified 2026-08-05 via GitHub API + docs. Stars are live.
 > **This is the "powerful free web search + scrape, no API dependency" pillar.**
 

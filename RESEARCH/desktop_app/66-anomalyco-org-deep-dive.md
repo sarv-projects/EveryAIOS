@@ -1,5 +1,8 @@
 # Doc 66 — anomalyco Org Deep-Dive: models.dev Catalog + opencode + opentui (2026-08-15)
 
+> **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPEC.md) · delivery: [`../../TODO.md`](../../TODO.md). Frozen by decision **D8** — research docs are **never updated** with code changes, so a dated claim here is not a stale claim.
+
+
 **Scope:** the anomalyco org's main repos — **opencode** (197,724★), **models.dev** (6,413★), **opentui** (13,015★), **sst** (26,234★) + **openauth** (7,339★, bonus REF).
 **Method:** GitHub API live-verified; **models.dev + opentui cloned + source-read**; opencode re-verified (already ⬛ source-read, doc 38); sst/openauth README-level.
 **Headline:** `models.dev` is a **direct MIT-licensed steal** for our A6 model catalog + A9 cost engine — an open database of AI model capabilities, pricing (incl. cache-read/write), and limits with a two-tier **lab-vs-provider** schema that is *exactly* our model-family-adapter vs transport-provider-adapter split.

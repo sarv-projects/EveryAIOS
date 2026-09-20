@@ -49,7 +49,7 @@ interface PaletteItem {
   label: string
   hint?: string
   icon: React.ElementType
-  group: 'actions' | 'navigate' | 'sessions' | 'views' | 'settings'
+  group: 'actions' | 'navigate' | 'chats' | 'views' | 'settings'
   shortcut?: string
   keywords?: string
   onSelect: () => void
@@ -99,7 +99,7 @@ export function CommandPalette() {
       { id: 'office-pdf', label: officePaths['office-pdf'] ? `PDF · ${officePaths['office-pdf']!.split(/[\\/]/).pop()}` : 'PDF · no file open', icon: FileText, shortcut: '' },
       { id: 'progress', label: 'Progress timeline', icon: Activity, shortcut: '⌘⇧P' },
       { id: 'diff', label: 'Diff (pending patches)', icon: GitCompare, shortcut: '⌘⇧D' },
-      { id: 'timeline', label: 'Session timeline', icon: Activity, shortcut: '' },
+      { id: 'timeline', label: 'Chat timeline', icon: Activity, shortcut: '' },
       { id: 'audit', label: 'Audit & Replay', icon: ShieldCheck, shortcut: '' },
       { id: 'storage', label: 'Storage intelligence', icon: BarChart3, shortcut: '' },
       { id: 'trajectory', label: 'Trajectory (context injection)', icon: ScanSearch, shortcut: '⌘⇧T' },
@@ -163,7 +163,7 @@ export function CommandPalette() {
         label: s.title,
         hint: s.preview,
         icon: Clock,
-        group: 'sessions' as const,
+        group: 'chats' as const,
         keywords: s.preview,
         onSelect: () => {
           setActiveSession(s.id)
@@ -450,7 +450,7 @@ export function CommandPalette() {
             autoFocus
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search sessions, files, commands…"
+            placeholder="Search chats, files, commands…"
             className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/60"
           />
           <kbd className="text-[10px] text-muted-foreground/60 font-mono border border-border rounded px-1.5 py-0.5">

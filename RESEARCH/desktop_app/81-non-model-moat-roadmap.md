@@ -1,5 +1,8 @@
 # 81 — Non-Model Moat Roadmap + Primary-Source Notes (reviewed, corrected, and repo-mapped)
 
+> **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPEC.md) · delivery: [`../../TODO.md`](../../TODO.md). Frozen by decision **D8** — research docs are **never updated** with code changes, so a dated claim here is not a stale claim.
+
+
 > **Source:** external strategy artifacts provided 2026-08-17: (a) *EveryAIOS — Non-Model Moat Roadmap* (K1–K6 proof-carrying work, reversible change sets, demo compiler, work graph/passports, data-release firewall, trusted supply chain; delivery stages 0–5); (b) *Desktop AI Benchmark — Current Primary-Source Notes* (competitor claim ledger, time-stamped 2026-08-17).
 > **Verification:** all primary-source claims in (b) cross-checked live 2026-08-17 against first-party pages/docs; every EveryAIOS claim cross-checked against the actual codebase (`crates/`, `src-tauri/`, `ui/`, `TODO.md` reconciled 2026-08-16: 884 tasks / 438 done · workspace 1052 tests).
 > **Repos:** 0 new — **ledger unchanged 281**.

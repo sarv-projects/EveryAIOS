@@ -1,5 +1,8 @@
 # 32 — Context-Mode Deep-Dive + The Tokenmining Principle
 
+> **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPEC.md) · delivery: [`../../TODO.md`](../../TODO.md). Frozen by decision **D8** — research docs are **never updated** with code changes, so a dated claim here is not a stale claim.
+
+
 > Fetched live 2026-08-06. `mksglu/context-mode` was previously logged at **~1.8K⭐ / "confirmed"** (docs 24/25) — it has since **exploded to 19,654⭐** (HN #1, 570+ pts; "used across teams at" Microsoft/Google/Meta/Amazon/NVIDIA/…). Full re-read this pass: README (all sections), npm registry (`context-mode` v1.0.169), `package.json`, LICENSE. ⚠️ GitHub API rate-limited — no source files pulled; claims from README/npm only (🟦 structure-verified).
 > ⚠️ **License: Elastic License 2.0 (ELv2)** — source-available, NOT OSI. Cannot provide as hosted/managed service, cannot remove license. **Learn the architecture, don't copy code** (same treatment as glyphdown, doc 31 §2).
 

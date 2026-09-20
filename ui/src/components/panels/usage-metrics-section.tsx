@@ -77,7 +77,7 @@ export function UxMetricsSection() {
     >
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         {[
-          ['Sessions', String(metrics.sessionsCreated)],
+          ['Chats', String(metrics.sessionsCreated)],
           ['Turns completed', String(metrics.turnsCompleted)],
           ['Turns failed', String(metrics.turnsFailed)],
           ['Completion rate', fmtPct(cr)],

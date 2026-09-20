@@ -1,13 +1,35 @@
 # ARCH/16 — Porting the async chat loop to Rust (ConversationEngine `run()` + `runChatStream`)
 
-> **Status: DE-PRIORITIZED / FROZEN (2026-09-17 Architecture Freeze).**
+> **Derived from [`CORE.md`](CORE.md) — the root authority; this document specializes, never restates, it.**
+> **SUPERSEDED IN PART — see [`AGENT.md`](AGENT.md).** The premise of this document is that EveryAIOS owns the
+> chat loop. It does not: the loop belongs to the **selected agent** (`AgentBinding`). What remains as
+> EveryAIOS’s job is the environment — context projection, memory, capabilities, governance, durability.
+> Keep only the parity/migration content. **Replaced `P69.A25` (done 2026-09-20).**
+
+---
+
+
+> **Status: SUPERSEDED IN PART — the 2026-09-17 architecture freeze is lifted by [`ADR/0003`](ADR/0003-architecture-thaw-core-authority.md).** The premise that EveryAIOS owns the chat loop is retired: the loop belongs to the selected agent ([`AGENT.md`](AGENT.md)). What survives is the parity/migration content. **Replaced `P69.A25` (done 2026-09-20).**
 > Under the 8 Full-Stack Module architecture, EveryAIOS is finalized as the **Universal Agent Harness and Desktop Cowork OS**.
 > The async multi-turn streaming conversation loop in `packages/coordinator/src/chat.ts` is robust, battle-tested, and fully operational.
 > Heavy compute, cryptographic verification, security guardrails, SQLCipher persistence, and document calculations are already executed in pure Rust (`crates/everyaios-engine`, `crates/everyaios-guard`, `crates/everyaios-vault`, `crates/everyaios-office`).
 > Rewriting the entire TypeScript chat loop in Rust (~3,400 LOC) is an unnecessary rewrite treadmill and is permanently de-prioritized.
 > This document is preserved for architectural completeness and potential future sub-component optimizations.
 
+## 0. Ownership / migration note (`P69.A25` — read this first)
+
+> The loop belongs to the selected agent ([`AGENT.md`](AGENT.md)): reasoning, planning, tool selection and
+> retry are the bound agent's job. EveryAIOS owns the environment — context projection, memory, capability
+> packs, governance, durability. There is **no planned Rust chat-loop crate**: the M0–M4 port plan in §6
+> below is **historical, not pursued**, and §§1/3/4 are the estimate record for that retired plan, not a
+> target. What survives from this document is the **parity contract in §5** (every model-visible block
+> reconstructable from the trace; byte-stable prefix above `CACHE_BOUNDARY`, now owned by the
+> `CacheBoundary` contract in [`CONTEXT.md`](CONTEXT.md)) and the call-path record in §2.
+
 ## 1. Why this is the last meaningful port slice
+
+> **Historical — retired by `P69.A25`.** The table below estimated a port that is not pursued: the loop
+> belongs to the bound agent. Kept as the cost record.
 
 Every correctness/safety primitive the loop touches already lives in Rust:
 
@@ -32,6 +54,9 @@ So the *state machine* is the small part; the coordinated orchestration and the
 
 ## 2. Verified call path today (why TS is a relay, not an owner)
 
+> **Record, not target.** The pre-thaw wiring described below is accurate as history; under
+> [`AGENT.md`](AGENT.md) the orchestration belongs to the bound agent and the sidecar proposes to Rust.
+
 ```mermaid
 flowchart LR
     UI["UI (React)"] -->|"chat_stream (Tauri cmd)"| SH["Tauri shell (Rust)"]
@@ -52,6 +77,9 @@ into Rust. Porting the loop to Rust removes three round-trips per turn and the
 whole `PendingQueue`/`FrameProviderBridge` machinery.
 
 ## 3. The cut-path (target architecture after M3)
+
+> **Not pursued (`P69.A25`).** The diagram below is the retired plan's target, kept so the decision stays
+> legible. No `everyaios-chat` crate is planned.
 
 ```mermaid
 flowchart LR
@@ -102,6 +130,9 @@ win. The default is: port both.
 
 ## 6. Migration phases (each lands green, nothing regresses)
 
+> **Historical — not pursued (`P69.A25`).** M0–M4 assumed an EveryAIOS-owned loop. The loop belongs to the
+> bound agent; the surviving parity requirements are §5.
+
 - **M0 — Harness:** add `everyaios-chat` workspace crate; a `RunTurn` facade with the
   loop state machine + the existing native deps (broker/tools/memory/gate/risk/plan)
   wired in-process; emit via a tested `ChatEvent` channel (inject the Tauri emitter).
@@ -143,6 +174,10 @@ win. The default is: port both.
   design (they are not the chat hot-path and have their own delegation seams).
 
 ## 8. Outcome
+
+> **Superseded (`P69.A25`).** "One turn becomes one process" assumed the retired Rust-loop target. The live
+> end condition: the bound agent owns the turn; EveryAIOS owns context projection, governance, and
+> durability around it.
 
 One turn becomes **one process, zero TS hops, zero IPC round-trips for provider,
 tool, and memory** — and the sidecar's largest remaining TS surface is gone. That is

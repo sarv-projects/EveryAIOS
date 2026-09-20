@@ -32,7 +32,8 @@
     "confirmed": [
       "2,203 edges, all kind='import'; 74 cross-crate edges concentrated core→guard (17), core→blueprint (10), browser→cdp (9) — matches components.md and hotspots.md",
       "0 edges cross between ui/, packages/ and crates/, so invariant I6 holds. The only outer-boundary crossings are 63 src-tauri → crates edges: that is the designed L3 shell → L2 kernel seam, not a boundary violation",
-      "files.sha256 is populated for content-addressed incrementality, and meta.last_root_hash equals the reported Merkle root"
+      "files.sha256 is populated for content-addressed incrementality, and meta.last_root_hash equals the reported Merkle root",
+      "the 13 subsystem documents exist by name (CORE, WORK, SESSION, AGENT, EXTERNAL-AGENTS, CONTEXT, CAPABILITIES, MEMORY, SECURITY, RECOVERY, ROUTING, UI, DESKTOP) and every CORE.md cross-reference resolves"
     ],
     "unchanged_since_f99a5d9": "the 12 files added by 3d80e6b are documentation, so every structural count above is identical to the set built at f99a5d9; only the file total (1426 → 1436) and the provenance pointers moved"
   },
@@ -78,5 +79,36 @@
     "understanding artifacts must be regenerated after architectural or behavioral changes; do not treat a stale set as evidence"
   ],
   "refresh_policy": "re-run codegraph index after structural changes; regenerate this artifact set after architectural or behavioral changes",
-  "map_generation_note": "CODEBASE-MAP.md's §14 documentation index renders the map's own line/byte size, so a single `gen-codebase-map.mjs` run always trails the file it just wrote. Run it twice (or to a passing `--check`) after any file-count change. At 911234c the first pass had left a deleted file (DESIGN.md) listed and the Markdown census at 165/13 instead of 164/12. Second hazard: §14 records the line count of every tracked `.md`, so editing any Markdown file — including this artifact set — invalidates the map again. Finish all Markdown edits first, then run the generator last, to convergence."
+  "map_generation_note": "CODEBASE-MAP.md's §14 documentation index renders the map's own line/byte size, so a single `gen-codebase-map.mjs` run always trails the file it just wrote. Run it twice (or to a passing `--check`) after any file-count change. At 911234c the first pass had left a deleted file (DESIGN.md) listed and the Markdown census at 165/13 instead of 164/12. Second hazard: §14 records the line count of every tracked `.md`, so editing any Markdown file — including this artifact set — invalidates the map again. Finish all Markdown edits first, then run the generator last, to convergence.",
+  "architecture_thaw": {
+    "date": "2026-09-20",
+    "adr": "ARCH/ADR/0003-architecture-thaw-core-authority.md",
+    "root_authority": "ARCH/CORE.md",
+    "effect": "bodies refreshed post-thaw (TODO P69.A35, 2026-09-20): framing now defers to ARCH/CORE.md (27 invariants I1–I27) + the subsystem contracts; decisions D1–D9 preserved, D10 appended as a status note. Structural graph counts below are carried from the 0dd50da verification — the index was not re-run.",
+    "post_thaw_refresh": {
+      "date": "2026-09-20",
+      "task": "TODO P69.A35",
+      "base_commit": "9af30bb (working tree also carries other in-flight P69 edits outside this set)",
+      "scope": "banner + body framing in the 9 understanding artifacts; decisions D1–D9 untouched, D10 appended",
+      "graph_index_rerun": false,
+      "structural_counts": "carried unchanged from the 0dd50da reverification above; not re-verified",
+      "code_seams_reread_in_working_tree": [
+        "crates/everyaios-acp/src/chief.rs:417 (V1) and :373 (V3)",
+        "crates/everyaios-acp/src/client.rs:521 and :538 (V2)",
+        "packages/core-providers/src/vault.ts:88 and :147 (V4)",
+        "crates/everyaios-guard/src/ticket.rs:59,:146–162",
+        "crates/everyaios-audit/src/lib.rs:34",
+        "crates/everyaios-ipc/src/lib.rs:40",
+        "capabilities.yaml (166 id: entries)"
+      ]
+    },
+    "vocabulary_changes": [
+      "Chief is retired as a concept (the loop belongs to the selected agent; the built-in runtime is one unprivileged binding)",
+      "token economy is now context engineering (ARCH/CONTEXT.md)",
+      "five-tier memory is now four classes (ARCH/MEMORY.md)",
+      "the user-facing container word is Chat; Session is the internal/API term (ARCH/SESSION.md)",
+      "authorization provenance replaces 'every mutation is ticketed' (ARCH/CORE.md section 5.1: agent/automation = ticket, human UI = trusted gesture)",
+      "behavioural policy is one agent-agnostic AgentBehaviorProfile compiled per adapter; uncompilable clauses report unenforceable (I27, ARCH/AGENT.md section 5.2)"
+    ]
+  }
 }

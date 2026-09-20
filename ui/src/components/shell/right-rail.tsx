@@ -819,7 +819,7 @@ export function RightViewport() {
 
           <div className="shrink-0 h-8 border-b border-border bg-sidebar/60 flex items-center px-2 gap-2 no-select">
             <span className="text-[11px] font-medium text-foreground/80 truncate flex-1 capitalize">
-              {activeView === 'timeline' ? 'Session Timeline' : activeView.replace('office-', '').replace('-', ' ')}
+              {activeView === 'timeline' ? 'Chat Timeline' : activeView.replace('office-', '').replace('-', ' ')}
             </span>
             {actions.map((act) => {
               const ActIcon = act.icon

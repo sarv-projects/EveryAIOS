@@ -179,7 +179,7 @@ export function TitleBar() {
         >
           <Search className="h-3 w-3 opacity-60" />
           <span className="flex-1 text-left">
-            Search sessions, files, commands…
+            Search chats, files, commands…
           </span>
           <kbd className="flex items-center gap-0.5 text-[10px] text-muted-foreground/60 font-mono">
             <Command className="h-2.5 w-2.5" />K

@@ -1,5 +1,8 @@
 # Ultra-Agentic Evolvable Orchestration — Research Blueprint
 
+> **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPEC.md) · delivery: [`../../TODO.md`](../../TODO.md). Frozen by decision **D8** — research docs are **never updated** with code changes, so a dated claim here is not a stale claim.
+
+
 > Research: how "no upper limit" agent systems actually work in 2026 — self-evolution, spec-driven orchestration, per-agent model assignment, continuous autonomous loops, weak-tool-model resilience, cyber use-cases.
 > Sources: hermes-agent, agent-zero, OpenClaw (openclaw/openclaw, ~385K⭐, TypeScript), smolagents, Agno, CrewAI, AutoGen, MetaGPT, DeerFlow, Strix/PentAGI/PentestGPT (verified via GitHub API).
 

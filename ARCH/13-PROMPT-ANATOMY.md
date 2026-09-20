@@ -1,5 +1,13 @@
 # ARCH/13 — Prompt Anatomy
 
+> **Derived from [`CORE.md`](CORE.md) — the root authority; this document specializes, never restates, it.**
+> **ABSORBED — see [`CONTEXT.md`](CONTEXT.md).** The prompt assembler is the *serializer* of Context; it does
+> not own Context policy (`ContextSelector` does). The anatomy of the assembled prompt remains accurate as
+> implementation detail. **Absorbed `P69.A24` (done 2026-09-20).**
+
+---
+
+
 > **Full-Stack Module:** Module 3 — Unified Cockpit Shell & Context Compaction Engine (`packages/coordinator/src/prompt.ts`, 12-segment cache-affine prompt assembler).
 
 The desktop prompt is assembled in `packages/coordinator/src/prompt.ts`.
@@ -12,9 +20,20 @@ Prompt content is not a permission boundary. Tool authorization, vault access,
 Guard-2 decisions, and audit recording remain Rust-owned. Prompt instructions
 must never be used to infer approval.
 
+## Authority and direction (`P69.A24`)
+
+Policy lives in [`CONTEXT.md`](CONTEXT.md): `ContextSelector` decides what enters a turn, `CacheBoundary`
+owns the stable-prefix line, and the 7-step optimization order (CONTEXT.md §3) binds every reduction. The
+assembler here — `buildDesktopSystemPrompt` and its 12 segments — **serializes** that decision into provider
+text; it owns no selection, budget, or compaction policy (I22). `assertAllLogged()` / `ContextTrace`
+presence and the `CacheBoundary` byte-stability rule are stated normatively in `CONTEXT.md` §§4–5; this
+document keeps the segment anatomy below as implementation detail.
+
 ## Segment schema and cache invariants
 
-`17-NATIVE-AGENT.md` §17.7 is the authoritative segment table: segments **1–7**
+The authoritative segment table now lives in [`CONTEXT.md`](CONTEXT.md) (the assembler serializes,
+the selector decides); `17-NATIVE-AGENT.md` §17.7 is the historical source (pending split per `P69.A26`).
+Segments **1–7**
 above the boundary (SOUL.md identity scanned before insertion · shipped
 instructions · persona tone · style memory · **tool definitions**) must stay
 byte-identical across turns; segments **8–12** below it

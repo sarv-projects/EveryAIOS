@@ -42,7 +42,7 @@ it is not covered by H18 today and must not be claimed as shipped.
 
 ## 3. Local models, BYOK catalog, computer use (2026-09-10)
 
-- **vs LM Studio / Jan / Ollama:** we must match discover / fit / serve / OpenAI-compat API. Differentiator is not a prettier chat — it is the **same local model as a broker provider** the Chief, subagents, and tools use under Guard.
+- **vs LM Studio / Jan / Ollama:** we must match discover / fit / serve / OpenAI-compat API. Differentiator is not a prettier chat — it is the **same local model as a broker provider** the active agent, subagents, and tools use under Guard.
 - **vs AnythingLLM:** document RAG stays the C-series memory plane. Do not fork a second workspace store.
 - **vs ChatGPT Desktop / Claude Computer Use:** E9 is required parity **plus** background (user keeps the desktop) and **exact-path exe launch** from an allow-list so agents open real apps without a per-session toggle.
 - **BYOK:** every models.dev provider (4h refresh) + custom inference + NVIDIA + **OpenCode Zen / OpenCode Go / OpenCode Free** (three list rows; Free is keyless). 429 rotates; generic 5xx does not. Live chat still `DEFAULT_BASE_URLS` until P55.5/P56.

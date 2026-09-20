@@ -1,5 +1,8 @@
 # 62 — Cost Optimization + Event-Driven Orchestration + Eval Reality Check
 
+> **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPEC.md) · delivery: [`../../TODO.md`](../../TODO.md). Frozen by decision **D8** — research docs are **never updated** with code changes, so a dated claim here is not a stale claim.
+
+
 > **Pass:** user-supplied "cost optimization / autonomous IDE / orchestration" research, cross-checked and live-verified 2026-08-14 (web + GitHub API). **Ledger: unchanged at 255 repos — this pass adds 0 repos** (2 closed products WATCH, 2 papers, 2 unpinned repos, 1 unverifiable flag).
 > **Thesis:** the *cost* problem is a **harness-design problem, not a provider problem** (Writer's CTO: "I cannot control the labs, but when I build the harness I have significant control"). Our spec already has the skeleton (A9 cache costs · A7 routing · J11 budgets · B6 iteration budgets); this pass upgrades it into a coherent **cache + routing + budget stack** without inventing new rows.
 

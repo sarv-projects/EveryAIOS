@@ -1,9 +1,9 @@
 # 04 — Office Engine: Open + Edit Word / Excel / PPT / PDF
 
 > **The user requirement, verbatim:** *"must have the capability to open excel, word, ppt, pdf, etc — all types of files, Microsoft files — edit."*
-> Design rules: **surgical, byte-preserving** edits (never full re-serialize), **deterministic math** (never LLM-computed), **render-anywhere** UI. Patterns: GenOffice block-patch + Rust xlsx sidecar (doc 28), LibreOffice as conformance oracle (doc 29), OOXML parts-direct editing (web research, 2026), core-files `ooxml-extractors` + renderers (built).
+> Design rules: **surgical, byte-preserving** edits (never full re-serialize), **deterministic math** (never LLM-computed), **render-anywhere** UI. Patterns: GenOffice block-patch + Rust xlsx sidecar (doc 28), LibreOffice as conformance oracle (doc 29), OOXML parts-direct editing (web research, 2026), `everyaios-office` OOXML extractors + renderers (built).
 > **Full-Stack Module:** Module 5 — Work-Native Primitives (Office, Browser, CUA) (`crates/everyaios-office`, IronCalc 0.8.3, OOXML patcher).
-> **Plane (ARCH/17 §17.1):** the Office engine is the **Shared Cowork Plane** — it belongs to EveryAIOS, not to any agent. The Native agent reaches it through the shared façades exactly as an external agent does (ARCH/17 §17.5); it does not hold a private copy. One Rust implementation behind both the native task-shaped façade and the MCP façade.
+> **Ownership ([`CORE.md`](CORE.md) §4, §9):** the Office engine belongs to EveryAIOS, not to any agent — the shared plane belongs to the environment, the agent’s own plane belongs to whichever agent is bound. The built-in runtime reaches it through the shared façades exactly as an external agent does, and holds no private copy (it is unprivileged, `ADR/0003`). One Rust implementation behind both the native task-shaped façade and the MCP façade.
 
 ## 4.1 The core principle: OOXML = ZIP + XML parts
 
@@ -23,7 +23,7 @@ open ZIP → parse structure (parts index, content types, rels)
 
 ### Word (.docx, and .doc via conversion fallback)
 - **Edit:** block-patch engine (GenOffice doc 28 §1: `text-patch.ts` — minimal `w:t` prefix/suffix patches, `patch.ts` orchestrator, `parse/scan.ts` block tree). The LLM edits rendered plain text; the engine maps back to the minimal run patches. Headers/footers/tables/sections are separate blocks.
-- **Read/ingest:** existing `core-files` OOXML extractors + markitdown-class conversion for RAG. **v3.39 `DocumentAsset`:** every ingest records source_uri, converter + versions, source_hash, extracted_hash. Ingest ≠ mutate ≠ render.
+- **Read/ingest:** the `everyaios-office` OOXML extractors + markitdown-class conversion for RAG. **v3.39 `DocumentAsset`:** every ingest records source_uri, converter + versions, source_hash, extracted_hash. Ingest ≠ mutate ≠ render.
 - **Render:** webview rendering from the block tree (styled paragraphs, tables, images) — no external engine.
 - **.doc (legacy binary):** read-only via conversion (headless soffice or textract) + "edit as new .docx" (documented limitation; edits always produce modern OOXML).
 
@@ -39,7 +39,7 @@ open ZIP → parse structure (parts index, content types, rels)
 - Scope guard: complex smart-art/video/full theme redesign = "open in PowerPoint/LibreOffice" suggestion; our edits stay text/shape/order-level (honest boundary, doc 29 contrast).
 
 ### PDF
-- **Read/render:** pdf.js-class renderer in webview (built pattern in mobile renderers) + `core-files` pdf-text extraction + OCR cascade (built).
+- **Read/render:** pdf.js-class renderer in webview (built pattern in mobile renderers) + `everyaios-office` pdf-text extraction + OCR cascade (built).
 - **Edit modes (by operation):**
   1. **Form fill + annotation** — **lopdf 0.36** (Rust, in `crates/everyaios-office` — AcroForms, walks `/AcroForm` `/Fields` recursively, sets `/V` on leaves) — the safe, high-fidelity path. Appearance-stream regeneration + free-text/highlight annotations = P4.7b D8-gap.
   2. **Text replacement** — **lopdf** `replace_text` (in-crate, exact-match `Tj` swaps; layout preserved because glyph positions are untouched; never reflow).
@@ -49,7 +49,7 @@ open ZIP → parse structure (parts index, content types, rels)
 
 ## 4.3 Read + RAG integration
 
-Everything opened becomes **ingestible in one click** → `core-files` pipeline (chunk → hybrid index → memory, 07) → the agent can answer "what did the Q3 report say?" and cite the exact page/paragraph (source-lineage, built). Chat-overlay on any open document (page-scoped questions, built mobile pattern).
+Everything opened becomes **ingestible in one click** → ingest pipeline (`everyaios-storage` chunk + index → `everyaios-memory`, 07) → the agent can answer "what did the Q3 report say?" and cite the exact page/paragraph (source-lineage, built). Chat-overlay on any open document (page-scoped questions, built mobile pattern).
 
 ## 4.4 Conformance & no-failure guarantees
 
@@ -71,4 +71,4 @@ Everything opened becomes **ingestible in one click** → `core-files` pipeline 
 | PDF suite | `crates/everyaios-office` — form-fill + redaction via **lopdf**; text-replace (exact-match, glyph-preserving); re-author via extracted-content regeneration | New |
 | LibreOffice oracle | harness in `crates/everyaios-office` tests (headless soffice round-trip conformance) | New (dependency: LibreOffice, dev/test only) |
 | Renderers | `ui/` (webview) | New (patterns from app-mobile renderers) |
-| Extract/ingest | `@personal-ai/core-files` | Exists |
+| Extract/ingest | `everyaios-office` + `everyaios-storage` | Exists *(Rust; the former TS `core-files` package was consolidated into these two — Tier 2c)* |

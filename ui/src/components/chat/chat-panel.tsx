@@ -105,7 +105,7 @@ const MENU_ITEMS: {
   // P51.9 — session goal (finish-line): setting one adds a banner under the
   // header; achieving it is a one-click check. Persisted on the Session.
   { icon: Target, label: 'Set / clear goal' },
-  { icon: GitBranch, label: 'Fork session' },
+  { icon: GitBranch, label: 'Fork chat' },
   { icon: Copy, label: 'Copy transcript' },
   { icon: Download, label: 'Export', shortcut: '⌘E' },
   { icon: RotateCw, label: 'Reopen last closed' },
@@ -209,12 +209,12 @@ export default function ChatPanel() {
     const sid = st.activeSessionId
     const sess = st.sessions.find((s) => s.id === sid)
     if (!sess) {
-      notify('No active session', 'error')
+      notify('No active chat', 'error')
       return
     }
     switch (label) {
       case 'Rename': {
-        const next = window.prompt('Rename session', sess.title)
+        const next = window.prompt('Rename chat', sess.title)
         if (next !== null) st.renameSession(sid, next)
         break
       }
@@ -235,9 +235,9 @@ export default function ChatPanel() {
         }
         break
       }
-      case 'Fork session': {
+      case 'Fork chat': {
         const nid = st.forkSession(sid)
-        notify(nid ? 'Forked into a new session' : 'Fork failed — session not found', nid ? 'default' : 'error')
+        notify(nid ? 'Forked into a new chat' : 'Fork failed — chat not found', nid ? 'default' : 'error')
         break
       }
       case 'Copy transcript':
@@ -247,10 +247,10 @@ export default function ChatPanel() {
           .catch(() => notify('Copy failed — clipboard unavailable', 'error'))
         break
       case 'Reopen last closed':
-        notify(st.reopenClosedSession() ? 'Reopened the last closed session' : 'Nothing closed this run to reopen')
+        notify(st.reopenClosedSession() ? 'Reopened the last closed chat' : 'Nothing closed this run to reopen')
         break
       case 'Empty archive':
-        if (window.confirm('Permanently forget every closed session from this run? Their transcripts are lost.')) {
+        if (window.confirm('Permanently forget every closed chat from this run? Their transcripts are lost.')) {
           st.purgeAllClosed()
           notify('Archive emptied')
         }
@@ -259,7 +259,7 @@ export default function ChatPanel() {
         if (label.startsWith('Reopen:')) {
           const cid = label.slice('Reopen:'.length)
           notify(
-            st.reopenClosedSessionId(cid) ? 'Reopened the closed session' : 'That closed session is no longer available',
+            st.reopenClosedSessionId(cid) ? 'Reopened the closed chat' : 'That closed chat is no longer available',
             st.closedSessions.some((c) => c.id === cid) ? 'default' : 'error',
           )
         }
@@ -276,7 +276,7 @@ export default function ChatPanel() {
         break
       }
       case 'Clear messages':
-        if (window.confirm(`Clear all messages in “${sess.title}”? The session stays.`)) {
+        if (window.confirm(`Clear all messages in “${sess.title}”? The chat stays.`)) {
           st.clearSessionMessages(sid)
         }
         break
@@ -521,7 +521,7 @@ export default function ChatPanel() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-44">
-              <DropdownMenuLabel className="font-mono text-[10px] text-muted-foreground">Session</DropdownMenuLabel>
+              <DropdownMenuLabel className="font-mono text-[10px] text-muted-foreground">Chat</DropdownMenuLabel>
               {MENU_ITEMS.map((item, i) => (
                 <span key={item.label}>
                   {/* Separator before Fork (index 3) and Clear (last). */}
@@ -585,11 +585,11 @@ export default function ChatPanel() {
           type="button"
           onClick={() => store.setActiveView('diff')}
           className="flex shrink-0 items-center gap-2 border-b border-emerald-500/20 bg-emerald-500/5 px-3 py-1.5 text-left transition-colors hover:bg-emerald-500/10"
-          title="Review the files the agent changed this session — open the diff view"
+          title="Review the files the agent changed in this chat — open the diff view"
         >
           <GitBranch className="h-3 w-3 shrink-0 text-emerald-300" />
           <span className="text-[11px] text-emerald-100/90">
-            {pendingPatches.length} file change{pendingPatches.length === 1 ? '' : 's'} this session — review before they stack up
+            {pendingPatches.length} file change{pendingPatches.length === 1 ? '' : 's'} in this chat — review before they stack up
           </span>
           <ChevronRight className="h-3 w-3 shrink-0 text-emerald-300/70" />
         </button>

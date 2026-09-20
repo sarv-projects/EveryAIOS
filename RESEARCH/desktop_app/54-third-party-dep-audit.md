@@ -1,5 +1,8 @@
 # 54 — Third-Party Dependency & Catalog Verification Audit
 
+> **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPEC.md) · delivery: [`../../TODO.md`](../../TODO.md). Frozen by decision **D8** — research docs are **never updated** with code changes, so a dated claim here is not a stale claim.
+
+
 > **Date:** 2026-08-09 · **Method:** every load-bearing third-party name in the corpus re-verified live (GitHub API + crates.io, 2026-08-09). Two goals: (1) catch abandoned/unmaintained deps before they harden — the **Kuzu lesson** (archived Oct 2025, team acquired by Apple); (2) settle the tool-catalog naming question (`focus_window`). All data below fetched today, not from memory.
 > **Actions applied:** ledger kuzu row flagged archived + LadybugDB added (section 23, 218→**219 repos**); ARCH/08 enumeration completed with `focus_window`; xxhash-rust BSL flag recorded at the storage-crate row (ARCH/02).
 

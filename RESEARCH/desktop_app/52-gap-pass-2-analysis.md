@@ -1,5 +1,8 @@
 # 52 — Gap Pass 2: Hierarchy, Escalation, Computer-Use & the Tiered Web-Search Stack
 
+> **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPEC.md) · delivery: [`../../TODO.md`](../../TODO.md). Frozen by decision **D8** — research docs are **never updated** with code changes, so a dated claim here is not a stale claim.
+
+
 > **Date:** 2026-08-09 · **Status:** 🟦 web-verified (GitHub API live-checked 2026-08-09; docs/README level)
 > **Input:** an external AI's v3.7 review (Aider-hierarchy, storage, escalation) + its web-research pass (computer-use, memory, sandbox, marketplace, observability, orchestration, LeAgent) + a web-search deep-dive (tiered cascade) + DeepSeek app analysis + worst-case build estimate.
 > **Purpose:** decide **what to ADD / what is ALREADY IN / what NOT to add**, with every proposed repo **live-verified** (26 real, 8 unverifiable).

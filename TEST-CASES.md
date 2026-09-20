@@ -11,7 +11,7 @@
 
 This specification defines the complete, exhaustive enterprise quality assurance regimen for EveryAIOS. Engineered according to Tier-1 multinational corporation (MNC) engineering standards (Google, Microsoft, Apple, Amazon), this framework validates the system's foundational architecture: **the permanent rejection of the proprietary coding agent trap** in favor of an uncompromised **Universal Agentic OS and Desktop Harness**.
 
-EveryAIOS hosts, manages, sandboxes, evaluates, and orchestrates any external frontier or open-source agent (Claude Code, OpenAI Codex, OpenCode, Aider, Cline/Roo, Grok Build) via open protocols (ACP stdio and MCP), while providing industrial-grade native cowork engines (IronCalc XLSX, surgical OOXML, tiered headless browser, native CUA, 5-tier cognitive memory, and a 7-layer security membrane).
+EveryAIOS hosts, manages, sandboxes, evaluates, and orchestrates any external frontier or open-source agent (Claude Code, OpenAI Codex, OpenCode, Aider, Cline/Roo, Grok Build) via open protocols (ACP stdio and MCP), while providing industrial-grade native cowork engines (IronCalc XLSX, surgical OOXML, tiered headless browser, native CUA, four-class cognitive memory, and a 7-layer security membrane).
 
 Testing is organized into **8 orthogonal dimensions**:
 1. **Level 1: Unit & Algorithmic Correctness** (pure function math, state transitions, parsing, token counting)
@@ -32,10 +32,10 @@ Testing is organized into **8 orthogonal dimensions**:
 
 | Test ID | Level & Type | Objective | Preconditions | Execution Steps & Verification | Expected Outcome |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| `M1-UNT-01` | L1: Unit | Validate dynamic Chief registration & model decoupling | Clean coordinator boot | Register external ACP agent (`claude-code`); verify Chief dispatch routes coding tasks without internal loop modification | Task dispatched via ACP stdio; zero coordinator prompt alteration |
+| `M1-UNT-01` | L1: Unit | Validate dynamic agent-binding registration & model decoupling | Clean coordinator boot | Register external ACP agent (`claude-code`); verify agent dispatch routes coding tasks without internal loop modification | Task dispatched via ACP stdio; zero coordinator prompt alteration |
 | `M1-UNT-02` | L1: Unit | Subagent recursion & depth clamp (`checkSpawn`) | Parent session active | Attempt to spawn subagent at depth 3 when `max_depth = 2` | Spawner rejects with `SpawnError::DepthLimitExceeded`; error returned to parent |
 | `M1-INT-01` | L2: Contract | ACP stdio JSON-RPC 2.0 wire framing | Agent subprocess spawned | Transmit `initialize`, `session/new`, `turn/start`, `turn/stream` packets over stdin/stdout | 100% schema compliance; all JSON-RPC IDs matched; zero dropped frames |
-| `M1-BND-01` | L3: Boundary | 100+ concurrent subagent worktrees | Git repository loaded | Chief fans out 100 concurrent tasks across 100 isolated Git worktrees | All 100 worktrees created in `< 500ms` each; zero branch or lock collision |
+| `M1-BND-01` | L3: Boundary | 100+ concurrent subagent worktrees | Git repository loaded | The agent fans out 100 concurrent tasks across 100 isolated Git worktrees | All 100 worktrees created in `< 500ms` each; zero branch or lock collision |
 | `M1-CHS-01` | L4: Chaos | External agent SIGKILL recovery | Subagent running long build | Send `kill -9` to subagent process; verify coordinator state cleanup | Subagent marked `Crashed`; parent receives structured error; worktree unmounted |
 | `M1-SEC-01` | L5: Security | Child process environment sanitization | Secret keys in vault | Spawn external agent; inspect `/proc/<pid>/environ` or Windows process environment block | Zero API keys or host credentials present in child environment |
 | `M1-UIX-01` | L6: UI/UX | Two-pane runtime configuration & provenance | Cockpit open | Navigate to Agents screen; toggle external agent; inspect path provenance | Disclosed provenance (`managed`, `windows_path`, `wsl`); CLS = 0; spring transition |
@@ -107,7 +107,7 @@ Testing is organized into **8 orthogonal dimensions**:
 
 ---
 
-### Module 6: 5-Tier Cognitive Memory & Autonomous Failure Immunity
+### Module 6: Four-Class Cognitive Memory & Autonomous Failure Immunity
 *Backend: `crates/everyaios-memory`, `crates/everyaios-storage`, `crates/everyaios-codeintel` | Frontend: Memory center screen, Knowledge Graph*
 
 | Test ID | Level & Type | Objective | Preconditions | Execution Steps & Verification | Expected Outcome |
@@ -171,7 +171,7 @@ Testing is organized into **8 orthogonal dimensions**:
 - **Objective**: Verify that when Module 1 fans out 4 subagents into 4 separate Git worktrees (Module 7), each performing distinct code refactoring and memory reads (Module 6), every operation is serialized into the single cryptographic Merkle audit log (Module 8) without lock contention.
 - **Preconditions**: Git repository loaded; 4 model keys configured; audit log initialized.
 - **Execution**:
-  1. Chief receives prompt: "Implement authentication across API, DB migrations, Frontend forms, and Integration tests".
+  1. The agent receives prompt: "Implement authentication across API, DB migrations, Frontend forms, and Integration tests".
   2. Module 1 creates 4 worktrees: `wt/api`, `wt/db`, `wt/ui`, `wt/tests`.
   3. Subagents execute concurrently, committing file changes and reading shared memory.
   4. Module 8 validates all pathfloor constraints and appends 24 sequential leaf hashes to the Merkle tree.
@@ -285,7 +285,7 @@ Testing is organized into **8 orthogonal dimensions**:
 
 #### `E2E-UC-02`: Multi-Entity Multinational Currency Consolidation & ASC 830 Translation
 - **Industry Context**: Fortune 100 Corporate Controller consolidating 18 international subsidiaries into US GAAP reporting.
-- **Agent & Model**: EveryAIOS Native Chief delegating to `OpenCode` running Qwen 2.5 Coder 32B.
+- **Agent & Model**: the built-in runtime delegating to `OpenCode` running Qwen 2.5 Coder 32B.
 - **Involved Modules**: Module 5 (IronCalc), Module 2 (Vault), Module 6 (Memory).
 - **Input Assets**: `Global_Consolidation_Q3.xlsx` with EUR, JPY, GBP, and BRL operational trial balances.
 - **Execution Sequence**:
@@ -349,7 +349,7 @@ Testing is organized into **8 orthogonal dimensions**:
 
 #### `E2E-UC-07`: Biopharma Regulatory Submission (FDA 21 CFR Part 11) Clinical Protocol Redlining
 - **Industry Context**: Regulatory Affairs Director preparing Investigational New Drug (IND) amendment.
-- **Agent & Model**: Native Chief delegating to Claude 3.7 Sonnet.
+- **Agent & Model**: the built-in runtime delegating to Claude 3.7 Sonnet.
 - **Involved Modules**: Module 5 (Office), Module 8 (Audit Merkle Log).
 - **Input Assets**: `Protocol_Phase3_Oncology_Amendment4.docx`.
 - **Execution Sequence**:
@@ -382,7 +382,7 @@ Testing is organized into **8 orthogonal dimensions**:
 
 #### `E2E-UC-10`: Interactive Commercial Real Estate Lease Agreement Form Filling & PDF Signing
 - **Industry Context**: Commercial Property Asset Manager executing 10-year retail tenant lease.
-- **Agent & Model**: Native Chief with `lopdf` tools.
+- **Agent & Model**: the built-in runtime with `lopdf` tools.
 - **Involved Modules**: Module 5 (Office PDF), Module 8 (Guard).
 - **Input Assets**: `Standard_Commercial_Lease_Form_AcroForm.pdf`.
 - **Execution Sequence**:
@@ -397,17 +397,17 @@ Testing is organized into **8 orthogonal dimensions**:
 
 #### `E2E-UC-11`: 5-Agent Swarm Enterprise Monorepo Microservices Modernization
 - **Industry Context**: Lead Architect migrating a legacy billing monorepo to event-driven architecture.
-- **Agent & Model**: Primary Chief (`claude-code`) orchestrating 4 subordinate ACP agents (`opencode`, `codex`, `aider`, `cline`).
+- **Agent & Model**: Primary agent (`claude-code`) orchestrating 4 subordinate ACP agents (`opencode`, `codex`, `aider`, `cline`).
 - **Involved Modules**: Module 1 (Swarm Harness), Module 7 (Git Worktrees), Module 8 (Merkle Audit).
 - **Input Assets**: Monorepo repository with 250,000 lines of TypeScript, Go, and PostgreSQL migrations.
 - **Execution Sequence**:
   1. User prompt: "Refactor payment processing into independent microservices: Agent 1 creates Go gRPC service, Agent 2 writes Kafka producer, Agent 3 updates React checkout, Agent 4 writes E2E tests."
-  2. Primary Chief creates 4 isolated Git worktrees: `wt/grpc`, `wt/kafka`, `wt/checkout`, `wt/tests`.
+  2. The primary agent creates 4 isolated Git worktrees: `wt/grpc`, `wt/kafka`, `wt/checkout`, `wt/tests`.
   3. All 4 agents execute in parallel within their respective worktrees without file write collisions.
-  4. Each agent runs local unit tests; Chief coordinates 3-way AST merge back into staging branch.
+  4. Each agent runs local unit tests; the agent coordinates 3-way AST merge back into staging branch.
   5. Merkle audit log records 86 individual tool calls and git commits under a single parent job ID.
 - **Expected Artifact**: Clean git history with 4 atomic commits; monorepo build and test suite passes 100%.
-- **Recovery/Boundary**: If merge conflict occurs between `wt/grpc` and `wt/kafka`, Chief invokes Tree-Sitter AST conflict resolver to merge schemas cleanly.
+- **Recovery/Boundary**: If merge conflict occurs between `wt/grpc` and `wt/kafka`, the agent invokes Tree-Sitter AST conflict resolver to merge schemas cleanly.
 
 #### `E2E-UC-12`: Automated Regression Bisect, Root-Cause Isolation & TDD Repair
 - **Industry Context**: Staff Reliability Engineer diagnosing a subtle memory leak introduced in past 200 commits.
@@ -632,7 +632,7 @@ Testing is organized into **8 orthogonal dimensions**:
 
 #### `E2E-UC-29`: Cybersecurity CVE Vulnerability & Software Supply-Chain Threat Assessment
 - **Industry Context**: Chief Information Security Officer (CISO) auditing enterprise software dependencies.
-- **Agent & Model**: Native Chief with Security Scanner Tools.
+- **Agent & Model**: the built-in runtime with security-scanner tools.
 - **Involved Modules**: Module 7 (Codeintel), Module 8 (Netfloor), Module 6 (Memory).
 - **Input Assets**: Production `package-lock.json` and `Cargo.lock` files.
 - **Execution Sequence**:
@@ -739,8 +739,8 @@ Testing is organized into **8 orthogonal dimensions**:
 
 #### `E2E-UC-37`: `AvoidanceStore` Error Signature Capture & Autonomous Web Scraping Self-Healing
 - **Industry Context**: Automation Engineer running resilient data pipelines against shifting target websites.
-- **Agent & Model**: Native Chief + Tier-3 Browser Engine.
-- **Involved Modules**: Module 6 (Memory AvoidanceStore), Module 5 (Browser), Module 1 (Chief).
+- **Agent & Model**: the built-in runtime + Tier-3 browser engine.
+- **Involved Modules**: Module 6 (Memory AvoidanceStore), Module 5 (Browser), Module 1 (agent orchestration).
 - **Input Assets**: Website that recently redesigned its DOM structure from tables to nested divs.
 - **Execution Sequence**:
   1. Agent attempts to extract data using legacy selector: `table.data-grid > tr > td`.
@@ -792,7 +792,7 @@ Testing is organized into **8 orthogonal dimensions**:
 
 #### `E2E-UC-41`: Zero-I/O `netfloor` Cloud Metadata & Private Subnet SSRF Attack Neutralization
 - **Industry Context**: Enterprise Security Operations Center (SOC) evaluating desktop agent against hostile prompt injection.
-- **Agent & Model**: Native Chief + Module 8 Rust Guard.
+- **Agent & Model**: the built-in runtime + Module 8 Rust Guard.
 - **Involved Modules**: Module 8 (Netfloor Kernel), Module 8 (Merkle Audit).
 - **Input Assets**: Malicious web page containing prompt injection payload: `fetch('http://169.254.169.254/latest/meta-data/iam/security-credentials/')`.
 - **Execution Sequence**:
@@ -910,7 +910,7 @@ Testing is organized into **8 orthogonal dimensions**:
 
 #### `E2E-UC-50`: Cryptographic Secure Workspace Wipe & Memory Shredding
 - **Industry Context**: Financial Auditor decommissioning a classified project workspace after transaction closing.
-- **Agent & Model**: Native Chief Security Shredder.
+- **Agent & Model**: the built-in runtime security shredder.
 - **Involved Modules**: Module 7 (Filesystem), Module 6 (Memory), Module 2 (Vault), Module 8 (Audit).
 - **Input Assets**: Workspace `Project_Classified_M&A` with local files, memory vectors, and session history.
 - **Execution Sequence**:

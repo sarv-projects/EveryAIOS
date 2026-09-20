@@ -175,7 +175,7 @@ export default function TrajectoryView() {
             <p className="text-[11px] text-muted-foreground">
               {loading
                 ? 'Loading trajectory…'
-                : 'No context-injection log for this session yet.'}
+                : 'No context-injection log for this chat yet.'}
             </p>
           </div>
         )}

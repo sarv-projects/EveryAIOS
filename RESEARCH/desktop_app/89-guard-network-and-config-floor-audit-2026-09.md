@@ -1,5 +1,8 @@
 # 89 — Guard network-destination + agent-config floor audit (2026-09-13)
 
+> **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPEC.md) · delivery: [`../../TODO.md`](../../TODO.md). Frozen by decision **D8** — research docs are **never updated** with code changes, so a dated claim here is not a stale claim.
+
+
 > **Method:** a **code-level audit of this repository's own guard floors** (read 2026-09-13), then the fix recorded as the **P62** queue. Every claim below is tagged **VERIFIED** (read in this repo, this session, with `file:line`) or **REPORTED** (external/third-party claim, not primary-read here). This document is the provenance for P62 — it is *not* a market-research pass and it adds **0 repos** to the ledger.
 >
 > ⚠️ **Provenance gap, stated rather than hidden:** the in-code comments written with the P62 change cite an external "2026 agent security survey". That brief is **not persisted** anywhere in `RESEARCH/` (the corpus ended at doc 88), so its specific findings are **not** treated as evidence here and no claim in this document depends on it. The findings below were independently re-derived from the code. If the survey is still available it should be filed as a separate doc and cross-linked; until then the P62 rows trace to *this* audit.

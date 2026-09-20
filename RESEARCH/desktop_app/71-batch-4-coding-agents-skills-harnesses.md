@@ -1,5 +1,8 @@
 # Doc 71 — Batch 4: Coding Agents, Skills, Plugins, Agentic Cores (2026-08-16)
 
+> **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPEC.md) · delivery: [`../../TODO.md`](../../TODO.md). Frozen by decision **D8** — research docs are **never updated** with code changes, so a dated claim here is not a stale claim.
+
+
 **Date:** 2026-08-16 · **Method:** web-verified (GitHub + ecosystem), cross-checked against docs 02/05/14/21/22/38/65/69.
 **Scope:** 21 repos — coding agents, skills, plugins, agentic cores, harnesses, workflow builders.
 

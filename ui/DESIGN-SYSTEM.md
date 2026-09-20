@@ -40,7 +40,7 @@ JetBrains Mono (mono). **Spacing** 4px grid. **Motion** 150–300ms
 ## 2. Layouts (code: `src/components/shell/*`)
 
 - **Cockpit** (`App.tsx`): TitleBar → [LeftSidebar | CenterColumn | ActivityRail | RightViewport] → StatusBar. Never 9 peer tabs.
-- **LeftSidebar**: workspace selector, nav (Home/Activity/Projects/Files/Automations), Recent sessions (P11.5.1 child forks indent), Settings. Collapsible to 48px.
+- **LeftSidebar**: workspace selector, nav (Home/Activity/Projects/Files/Automations), Recent chats (P11.5.1 child forks indent), Settings. Collapsible to 48px.
 - **CenterColumn**: chat (timeline + composer + approve cards) or one panel screen.
 - **ActivityRail + RightViewport** (`right-rail.tsx`): 48px rail (Folder/Shell/Browse/Code + Office flyout + Progress/Trajectory), one open surface, drag-resize 28–70%, per-session persistence (P11.5.3).
 - **StatusBar**: live runtime state (● Live / ⏸ Paused / Processing) + privacy reassurance + the current provider/model label when available; dev-mode telemetry strip incl. LCP/TTI (P11.4). Never present a curated seed row as live catalog data.
@@ -54,7 +54,7 @@ JetBrains Mono (mono). **Spacing** 4px grid. **Motion** 150–300ms
 | EmptyState | `ui/empty-state.tsx` | icon + title + desc + action (P11.2) |
 | ErrorState (5 kinds) | `ui/error-state.tsx` | network / keyRevoked / provider5xx / budget / unknown |
 | LoadingState (5 kinds) | `ui/loading-state.tsx` | ttft / compaction / tool / agent / generic |
-| MessageBubble, ChatComposer, MCQ card | `chat/*` | Composer: Work Mode ▾ · Agent ▾ (installed Chiefs) · Autonomy ▾. Slash/`@` follow the pinned Chief (H32: inbuilt catalog vs live ACP `available_commands`). Casual chips `[🤖 Auto] [🛡 Ask]`. |
+| MessageBubble, ChatComposer, MCQ card | `chat/*` | Composer: Work Mode ▾ · Agent ▾ (installed agents) · Autonomy ▾. Slash/`@` follow the pinned agent (H32: built-in catalog vs live ACP `available_commands`). Casual chips `[🤖 Auto] [🛡 Ask]`. |
 | Agent-picker governance badge | `chat/agent-model-picker.tsx` | P50.3.9: Governed-Mediated (green, "every effect ticketed + audited") · Self-contained (amber, "approvals mediated; agent's own effects unaudited") · NotGoverned (red) — honest note on hover; data from `acp_agents` `governance` |
 | OnboardingModal | `onboarding-modal.tsx` | 4 steps, non-dismissible, skip allowed |
 | Folder/Shell/Browse/Code/Diff views | `views/*` | real backends (fs / H36 profile-backed PTY / CDP / undo-list) |
@@ -71,7 +71,7 @@ Radix focus traps.
 ## 5. Performance UX (P11.4)
 
 Skeletons on async views; debounced search (`useDebouncedValue`); virtual
-scrolling (`useVirtualList` in session timeline); lazy chunks (pdf/charts/
+scrolling (`useVirtualList` in chat timeline); lazy chunks (pdf/charts/
 markdown); LCP/TTI measured in `lib/perf.ts` and surfaced in the status bar.
 
 ## 6. Layouts index (all screens)

@@ -1,5 +1,8 @@
 # 61 — Desktop Agent Land-Grab 2026 (market + harness/memory/model/protocol batch)
 
+> **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPEC.md) · delivery: [`../../TODO.md`](../../TODO.md). Frozen by decision **D8** — research docs are **never updated** with code changes, so a dated claim here is not a stale claim.
+
+
 > **Pass:** user-supplied "Desktop Agent Wars" research (Aug 2026) + repo list, cross-checked against docs 01–60 and live-verified via GitHub API 2026-08-14 (⭐ + SPDX + pushed_at).
 > **Ledger:** 247 → **255 repos** (8 new live). **Unverifiable flags:** RavenClaws · ReflexionOS · Keelson · "Iroh desktop agent" · Distri · M1K3 — **never cite these** (see §8).
 > **Thesis unchanged:** this pass *validates* the spec, it does not widen it. Every real find maps onto an existing matrix row; nothing new is added to the 138-row contract.

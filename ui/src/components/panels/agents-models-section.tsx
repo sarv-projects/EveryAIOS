@@ -553,7 +553,7 @@ function AgentDetailCards({ agent }: { agent: AgentRuntime }) {
             { label: 'Office (xlsx/docx/pptx/pdf)', hint: 'surgical patches' },
             { label: 'Browser (tiered)', hint: 'Lightpanda → Chrome CDP' },
             { label: 'Computer use', hint: 'guarded desktop' },
-            { label: 'MCP + connectors', hint: 'session loadout' },
+            { label: 'MCP + connectors', hint: 'chat loadout' },
             { label: 'Memory (5-tier)', hint: 'scoped recall' },
           ].map((r) => (
             <li key={r.label} className="flex items-center justify-between gap-2 text-[9px]">

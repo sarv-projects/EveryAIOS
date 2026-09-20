@@ -214,7 +214,7 @@ export async function restoreCheckpointPaths(paths: string[]): Promise<RestoreRe
     return Promise.reject(new Error('Nothing to restore — no saved files for this step.'))
   }
   if (!inTauri()) {
-    return Promise.reject(new Error('Restore needs the desktop app — open this session in Tauri to restore.'))
+    return Promise.reject(new Error('Restore needs the desktop app — open this chat in Tauri to restore.'))
   }
   const restored: string[] = []
   const failed: { path: string; error: string }[] = []

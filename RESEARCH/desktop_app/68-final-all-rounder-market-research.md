@@ -1,5 +1,8 @@
 # 68 — Final All-Rounder Market Research (2026) & Capability Scorecard
 
+> **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPEC.md) · delivery: [`../../TODO.md`](../../TODO.md). Frozen by decision **D8** — research docs are **never updated** with code changes, so a dated claim here is not a stale claim.
+
+
 > **Date:** 2026-08-15 · **Method:** web-verified against primary sources (vendor help centers, official announcements, JetBrains Apr-2026 survey) + cross-checked against our own docs 66–67 + ARCH/12 v2.0. **0 new GitHub repos** — this is a market/competitive consolidation, not a steal pass.
 > **Where it lands:** three new capability rows (**H30/H31/H32**), one extension (**H18** mobile note), two cross-cutting extensions (**F12/J17 two-channel capability injection**, **A6/A7 agent-scoped model picker**), and the positioning record vs the competitors the prior analysis conflated.
 > **Verdict up front:** finished EveryAIOS is the **widest** desktop-agent surface in the field, and the only one that is **local-first + BYOK + engine-true Office + verified-completion + ACP cockpit**. It loses on default brain (frontier model baked in), habit/brand, and cloud-continue-when-lid-closed. That is the honest, verified trade.

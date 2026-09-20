@@ -107,7 +107,7 @@ export function SessionsTable() {
 
   return (
     <ChartCard
-      title="Per-session cost breakdown"
+      title="Per-chat cost breakdown"
       subtitle={isLive ? 'live ledger · cost desc' : showPreview ? 'preview fixtures' : 'no live ledger data'}
       right={
         isLive ? (
@@ -122,7 +122,7 @@ export function SessionsTable() {
       <Table>
         <TableHeader>
           <TableRow className="border-border hover:bg-transparent">
-            <TableHead className="h-7 text-[10px] uppercase text-muted-foreground">Session</TableHead>
+            <TableHead className="h-7 text-[10px] uppercase text-muted-foreground">Chat</TableHead>
             <TableHead className="h-7 text-[10px] uppercase text-muted-foreground">Agent</TableHead>
             <TableHead className="h-7 text-right text-[10px] uppercase text-muted-foreground">Tokens</TableHead>
             <TableHead className="h-7 text-right text-[10px] uppercase text-muted-foreground">Cost</TableHead>
@@ -135,7 +135,7 @@ export function SessionsTable() {
                 <TableRow><TableCell colSpan={6} className="py-8 text-center text-xs text-muted-foreground">Loading usage ledger…</TableCell></TableRow>
               ) : isLive
             ? rows.length === 0 ? (
-                <TableRow><TableCell colSpan={6} className="py-8 text-center text-xs text-muted-foreground">No session usage recorded yet.</TableCell></TableRow>
+                <TableRow><TableCell colSpan={6} className="py-8 text-center text-xs text-muted-foreground">No chat usage recorded yet.</TableCell></TableRow>
               ) : rows.map((s) => (
                 <TableRow key={s.session} className="border-border/50">
                   <TableCell className="py-1.5 font-mono text-xs text-foreground">{s.session}</TableCell>
@@ -164,7 +164,7 @@ export function SessionsTable() {
                   <TableCell className="py-1.5 text-right font-mono text-[11px] text-muted-foreground">{s.dur}</TableCell>
                 </TableRow>
               )) : (
-                <TableRow><TableCell colSpan={6} className="py-8 text-center text-xs text-muted-foreground">Session usage is unavailable. {error ?? ''}</TableCell></TableRow>
+                <TableRow><TableCell colSpan={6} className="py-8 text-center text-xs text-muted-foreground">Chat usage is unavailable. {error ?? ''}</TableCell></TableRow>
               )}
         </TableBody>
       </Table>
@@ -227,7 +227,7 @@ export function AgentBreakdown() {
                 <div className="flex items-center gap-1.5">
                   <span className="text-xs font-medium text-foreground">{a.name}</span>
                   <Badge variant="secondary" className="bg-background/60 text-[8px] font-normal text-muted-foreground">
-                    {s.sessions} sessions
+                    {s.sessions} chats
                   </Badge>
                 </div>
                 <div className="mt-1 flex items-center gap-2">

@@ -87,10 +87,10 @@ function LiveContextMeter() {
   if (pills.context && ctxPct > 0) rows.push({ label: 'context', value: `${ctxPct}%` })
   if (pills.throughput && live && streamStats.tokensPerSec > 0)
     rows.push({ label: 'throughput', value: `${streamStats.tokensPerSec.toFixed(0)} tok/s` })
-  if (pills.cost && tokens) rows.push({ label: 'session tokens', value: `${(tokens / 1000).toFixed(1)}k` })
+  if (pills.cost && tokens) rows.push({ label: 'chat tokens', value: `${(tokens / 1000).toFixed(1)}k` })
   if (pills.cost && liveBudget?.tokens) rows.push({ label: 'lifetime tokens', value: `${(liveBudget.tokens / 1000).toFixed(1)}k` })
   if (pills.cache && cachePct) rows.push({ label: 'prompt cache', value: cachePct })
-  if (pills.cost && spent != null) rows.push({ label: 'session spend', value: `$${spent.toFixed(4)}` })
+  if (pills.cost && spent != null) rows.push({ label: 'chat spend', value: `$${spent.toFixed(4)}` })
   if (pills.cost && liveBudget) rows.push({ label: 'lifetime spend', value: `$${liveBudget.spent.toFixed(4)} / cap $${liveBudget.cap.toFixed(2)}` })
 
   return (
@@ -250,7 +250,7 @@ export function StatusBar() {
       icon: Sparkles,
       label: 'agent',
       value: activeAgent ?? '—',
-      tooltip: activeAgent ? `Active agent: ${activeAgent}` : 'No active session agent is available.',
+      tooltip: activeAgent ? `Active agent: ${activeAgent}` : 'No active chat agent is available.',
     },
     {
       icon: Cpu,

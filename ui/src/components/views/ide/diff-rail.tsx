@@ -131,7 +131,7 @@ export function DiffRail() {
       </div>
       {undos.length === 0 ? (
         <div className="rounded border border-dashed border-[#333] px-2 py-1.5 text-[10px] text-[#666]">
-          No pending workspace changes this session.
+          No pending workspace changes in this chat.
         </div>
       ) : (
         <div className="space-y-1">

@@ -1,5 +1,8 @@
 # 47 — Terminal Agents & IDE Extensions Deep Dive
 
+> **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPEC.md) · delivery: [`../../TODO.md`](../../TODO.md). Frozen by decision **D8** — research docs are **never updated** with code changes, so a dated claim here is not a stale claim.
+
+
 > **Date:** 2026-08-08
 > **Repos:** Goose (52.6K), OpenHands (83.5K), Cline (65.9K), Continue (35.4K), Amp (proprietary)
 > **Also verified:** Mentat (2.5K, archived), Roo Code (24.4K, archived), Twinny (3.6K, archived), Void (28.9K, archived)

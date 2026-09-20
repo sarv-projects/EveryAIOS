@@ -1,5 +1,8 @@
 # 06 · Local Model Stack — Ollama, Open WebUI, llama.cpp, LM Studio
 
+> **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPEC.md) · delivery: [`../../TODO.md`](../../TODO.md). Frozen by decision **D8** — research docs are **never updated** with code changes, so a dated claim here is not a stale claim.
+
+
 > For the desktop app: users should be able to run local models (privacy, offline, no cost)
 > alongside BYOK cloud providers.
 

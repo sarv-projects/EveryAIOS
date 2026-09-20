@@ -1,5 +1,8 @@
 # 18 — Tier-2 Feature Implementation: Medium-depth maps (frameworks, desktop apps, cyber, business tools)
 
+> **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPEC.md) · delivery: [`../../TODO.md`](../../TODO.md). Frozen by decision **D8** — research docs are **never updated** with code changes, so a dated claim here is not a stale claim.
+
+
 > Compiled 2026-08-06. Tier-2 = medium depth: per-repo **feature list → where/how implemented** (code paths where known) + URLs.
 > Tier-1 deep dives → docs 16–17. All-repo ledger overviews → docs 14–15.
 

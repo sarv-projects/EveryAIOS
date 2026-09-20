@@ -1,5 +1,8 @@
 # 19 — BYOK Provider Implementation Reference (the copy-this doc)
 
+> **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPEC.md) · delivery: [`../../TODO.md`](../../TODO.md). Frozen by decision **D8** — research docs are **never updated** with code changes, so a dated claim here is not a stale claim.
+
+
 > Compiled 2026-08-06. Goal: **we don't build multi-provider/BYOK from scratch** — we copy the provider abstractions that pi, LiteLLM, LibreChat, AnythingLLM, and Reasonix already ship.
 > For each: URL, how providers are structured (classes/packages), how BYOK keys are handled, and the exact file paths to copy from.
 

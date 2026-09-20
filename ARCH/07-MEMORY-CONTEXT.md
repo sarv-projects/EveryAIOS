@@ -1,164 +1,78 @@
 # 07 — Memory & Context System
 
-> **The user requirement, verbatim:** *"memory and context systems"* are a top priority, with token minimization. This doc merges the **built** engine (`core-memory`/`core-files`: spreading-activation 11 tests, phantom-thread 9, forgetting-to-remember 17, temporal-anticipation, knowledge-graph, conflict, correction-detector, decay — v2.0 §3) with the **2026 SOTA** (mem0 multi-signal fusion, Letta agent-managed paging, graphiti temporal KG, doc 34 §2) and the tokenmining retrieve rule (05 §5.1).
-> **Full-Stack Module:** Module 6 — Durable Work & Cognitive 5-Tier Memory Subsystem (`crates/everyaios-memory`, ACT-R activation, FTS5 BM25, graph).
-> **Plane (ARCH/17 §17.1):** the memory **store** (ACT-R base, FTS5/BM25, graph, vectors) is **shared infrastructure**. Memory **reasoning** — what to remember, retrieve, forget, promote to durable project knowledge, and what stays scoped to one Work — is owned by the **Native agent plane** and is not delegatable to a tool or an external agent. External agents get memory APIs (ARCH/17 §17.5), not ownership of the cognitive system; their own memory, if any, stays theirs.
+> **SUPERSEDED MODEL — see [`MEMORY.md`](MEMORY.md) first.** The five-tier model is replaced by **four
+> classes** (Context · Episodic · Knowledge · Procedural), and episodic memory is now a *projection of the
+> event log* rather than a parallel timeline. The algorithms below (ACT-R, FSRS, spreading activation, the
+> temporal knowledge graph, the seven-algorithm set) are **kept as strategies behind the memory API** — they
+> must not become separate architecture layers or subsystems. **Rewritten `P69.A18` (done 2026-09-20).**
 
-## 7.1 Five-tier model (with identity scopes)
+---
 
-Every memory row carries `scope(user, agent, session, project)` — **multi-scope identity** (mem0 pattern): a financial fact tagged `project:taxes` can never leak into `project:scifi-novel` (the leakage floor is structural, not prompt-level).
+> **The user requirement, verbatim:** *"memory and context systems"* are a top priority, with token minimization.
+> **Full-Stack Module:** Module 6 — Durable Work & Cognitive **Memory** Subsystem (`crates/everyaios-memory`; four classes, with ACT-R activation, FTS5/BM25 and the graph as strategies).
+> **Ownership ([`CORE.md`](CORE.md) §4, §10):** the memory **store** (FTS5/BM25, graph, vectors, provenance, tombstones) is **shared infrastructure** owned by the memory crate. Memory **reasoning** — what to remember, retrieve, forget or promote — is EveryAIOS-owned reasoning ([`MEMORY.md`](MEMORY.md) §9), never delegated to a capability or an external agent. External agents get memory APIs, not ownership of the store; their own private memory stays theirs and is never promoted automatically (I25).
 
-| Tier | Storage | Write path | Read path |
-|---|---|---|---|
-| Sensory | in-memory ring buffer | window/keystroke/clipboard events (permission-gated) | only when user asks / task needs |
-| Working | LLM context (05 budgets) | conversation | the current window |
-| Episodic | SQLite `events` table | every tool dispatch + session markers (06 §6.7) | temporal queries, "what did I do Tuesday" |
-| Semantic | SQLite FTS5 + sqlite-vec + facts table | extraction pipeline (below) | multi-signal retrieval (7.3) |
-| Procedural | `~/.everyaios/skills/` + workflows (Forge) | verified skill promotion | planner action list injection |
+## 7.0 The contract — four classes, one memory system (from [`MEMORY.md`](MEMORY.md) / [`CORE.md`](CORE.md) §10)
 
-## 7.2 The seven algorithms (built, kept) — how they wire
+| Class | Meaning | Persistence |
+|---|---|---|
+| **Context** | this turn only — **not** persistent memory | none |
+| **Episodic** | what happened — **derived from the Work/Run/Event history**, never a parallel timeline (I3, I4) | derived |
+| **Knowledge** | durable facts, entities, relationships, preferences, project facts | durable |
+| **Procedural** | skills, workflows, learned procedures | durable |
 
-1. **Forgetting-to-Remember (polarized retention):** `sentiment_polarity` column (−1..+1) on facts + correction-store. Normal recall filters `>= 0`; **defensive queries** ("what should I avoid?", "what went wrong before?") flip the flag and rank negatives first. Correction-detector auto-tags regressions/retries (built).
-2. **Hallucination Risk Compass (risk-compass, built in core-engine):** post-generation score = retrieval-confidence × source-coverage ÷ hedging-density (length-normalized). High-risk bands → auto-flag or silent self-check loop (one cheap re-ask grounded on the retrieved blocks only).
-3. **Phantom Thread (warm set):** `RwLock<Vec<Fact>>` top-5 for the current (project, session) — swapped on workspace change **with 0ms TTFT**; injection budget fixed (05 §5.1: 600 tokens). Leakage floor = scope filter at write and read.
-4. **Temporal Graph Anticipation:** weekly-rhythm tracker on engagement logs → morning briefs + proactive pre-indexing ("Monday 9am: rent agreement" → open pre-warmed). Beats recency baselines >15pts (built, tested).
-5. **Spreading Activation (SYNAPSE):** the Rust-native entity graph (adjacency, versioned edges; Graphiti-style temporal edges) + activation spread with per-hop decay + **lateral inhibition**; re-ranks FTS5+vector results → the agent grasps multi-hop relations vector search misses. LadybugDB is an optional/deferred backend with a compatible schema, not the canonical storage dependency.
-6. **Crystallization** (05 Rule 3 / v2.0 built): workflows → deterministic loops, 0 tokens.
-7. **Knowledge Graph + conflict resolution** (built): entity extraction → LLM refinement → edge writes; conflicts resolved by recency + confidence + user-pin.
+Scope is hierarchical — **User → Space → Project → Session → Work** — a narrower scope filters, promotion is explicit, a project fact never silently becomes global. **Agent-private memory sits beside the hierarchy**, never inside it, and is never promoted automatically (I25). Three things must not be conflated: **Memory** (known outside this turn) · **Context** (selected for this turn) · **Work state** (durable execution state from the Work/event system — never duplicated into the memory store).
 
-## 7.3 Multi-signal retrieval (the 2026 SOTA fusion — new layer)
+Progressive disclosure: memory is durable data, not prompt stuffing. A relevance decision routes each candidate to a tiny bounded injection or to on-demand tool retrieval. **The budget is a maximum, not a spend** — no relevant memory means zero injected tokens (indicative ceilings: routine turn ≤ ~256 tokens; important task ≤ ~512; deep research ⇒ on-demand retrieval only).
 
-```
-query → intent classifier (memory vs fact vs event vs document)
-      → parallel signals:
-          S1 FTS5/BM25 (keyword, headings 5×, trigram)
-          S2 sqlite-vec (embeddings, on-device bge-micro/gte-small — built bundling)
-          S3 entity graph activation (spreading activation)
-          S4 temporal recency (graphiti-style edge timestamps — "last time we discussed X")
-      → score fusion (weighted, mem0-style single fused score; weights learned/calibrated offline)
-      → dedupe + smart snippets + budget cap (05 §5.1)
-```
-This is the layer mem0 showed delivering **+29.6 temporal / +23.1 multi-hop** over plain RAG (doc 34 §2) — on top of the vectorless default (FTS5-only fast path when embeddings are off).
+| Call | Purpose |
+|---|---|
+| `memory.recall` | retrieve durable knowledge by query, scope, limit ("what do we know?") |
+| `memory.remember` | deliberately persist something |
+| `memory.forget` | honour an explicit request, including "don't remember this" (permanent) |
+| `memory.maintain()` | analyze references / update graph / decay (not only store/retrieve) |
+| `context.recall` | current-task continuity *inside this Work*: decisions, findings, event history, artifacts, summaries |
 
-**v3.39 (named fields, not a new memory product):** graph edges carry EXTRACTED vs INFERRED + source span (C6); a session **fork** is lineage, not one global chronological log (C2); memory tools include `maintain()` (analyze references / update graph / decay), not only store/retrieve; fusion work is **abortable** when the owning turn dies (C3). The append-only event log is the session source of truth; model history is a projection.
+Algorithms are **not** exposed: an agent never sees ACT-R, FSRS, BM25, RRF or graph traversal — it sees `recall`, `remember`, `forget`. Writes are derived from execution history **after** the turn (events → candidate extraction → dedupe / conflict / provenance → write queue → persist), never on the hot path; each entry carries provenance (source binding, Work, project, evidence, confidence, timestamp). Every memory row carries `scope(user, agent, session, project)` — a project fact can never leak into another project (the leakage floor is structural, not prompt-level). Fusion work is **abortable** when the owning turn dies; a session **fork** is lineage, not one global chronological log. Memory may be `Disabled · Project only · Space + Project · Full` — when disabled there is no injection, retrieval, writes, or background extraction. Graph edges carry EXTRACTED vs INFERRED + source span. The append-only event log is the session source of truth; model history is a projection.
 
-## 7.4 Agent-managed paging (Letta pattern — for long autonomous runs)
+| Owner | Owns |
+|---|---|
+| `everyaios-memory` (Rust) | persistence · schema · scopes · FTS5/BM25 · embeddings · graph · provenance · temporal metadata · tombstones · retrieval + fusion primitives |
+| memory reasoning (TS, narrowed) | **only** reasoning: should this be remembered? retrieved? promoted? forgotten? is this a conflict? |
 
-For deep multi-hour sessions: the agent gets three memory surfaces — **core** (always in context, ≤600 tok), **archival** (Rust-native graph/SQLite, searchable; LadybugDB optional), **recall** (episodic events, queryable). The agent itself decides what to page in/out via `memory` tools (read/write/search/forget), with the context planner (05 §5.2) enforcing budgets. Memory writes are queued to **turn boundaries** to protect the prefix cache (05 §5.5).
+## 7.1 Strategies behind the memory API (replaceable — never new subsystems)
 
-## 7.5 Injection & integrity
+Adding a scorer must add a **scorer inside one memory system**, never a parallel `ACTRMemorySystem` / store / graph / planner. Status of each strategy:
 
-- All recalled content wrapped in `<memory>`/`<user_document>` delimiters + injection scan (06 §6.5).
-- Source lineage on every fact (which file/page/tool produced it, confidence, timestamp) — "why does it know this" is always answerable and deletable.
-- Export (JSON/Markdown) + wipe per scope; optional E2E-encrypted sync (core-sync built) — off by default.
+| Strategy | Lives in | Row |
+|---|---|---|
+| Multi-signal fusion (weighted RRF, dedupe, smart snippets, per-type budget caps) | `everyaios-memory::fusion` (`rrf_fuse`) — P5.1 ✅; cross-encoder rerank still open | C3 |
+| Keyword signal (FTS5/BM25; headings 5×, trigram) + vectorless default fast path | `everyaios-memory::bm25` + `everyaios-storage` (FTS5) ✅ | C4 |
+| Optional on-device embeddings (bge-micro/gte-small, int8/vec0) | `everyaios-storage` ✅ | C5 |
+| Graph store + spreading activation (Alg #6; typed `supports`/`contradicts`/`derived-from` edges; temporal `valid_from`/`valid_to`) | `everyaios-memory::graph` (`GraphStore`, `query_depth` d=2/top-k=15) — P5.2 ✅; LadybugDB C++ FFI deferred (same schema, swap-in backend) | C6 |
+| ACT-R activation (#32: retention decay with log-strength half-life, `importance ≥ 8.0` protect bit, associative recall, spontaneous pre-turn recall channel, pass-by-reference 05 §5.9) | coordinator `memory/fusion.ts` wiring | C1 |
+| Temporal-KG semantics (bi-temporal validity windows, contradiction ⇒ `valid_until`, incremental episodes; `remember`/`recall`/`forget`/`improve`) | `memory-kg` / `memory-store` (SQLite-first: sqlite-vec + FTS5 + recursive CTEs + temporal tables; Postgres optional) | C11/C12 |
+| Spaced-repetition reinforcement (retention-target scheduling, reschedule-on-review, simulator, due-review queue) | `everyaios-memory::fsrs` + `reinforce` — Alg **#34** (permissive fsrs-rs v6.x; FSRS-7 upstream is adopt-when-shipped) | C13 |
+| Taste profile (confidence-scored rules, `observe_accept/reject/edit`, stable-prefix injection, markdown round-trip) | `everyaios-memory::taste` — P5.6 ✅ | C9 |
+| Pass-by-reference context (`RefHandle` + bounded previews ≤2K tokens; query via E4 script-eval, never serialize what you can reference) | `everyaios-memory::reference` — P5.8 ✅ | C10 |
+| Warm set (top-5 per project/session, swapped on workspace change, fixed injection budget 05 §5.1: 600 tokens) + agent-managed paging (core ≤600 tok · archival · recall; writes queued to turn boundaries) | coordinator + 05 budgets | C7/C2 |
+| Polarized retention (sentiment −1..+1; defensive queries flip to negatives first; correction-detector auto-tags regressions) + risk compass (retrieval-confidence × source-coverage ÷ hedging-density ⇒ auto-flag or grounded self-check) + temporal anticipation (weekly-rhythm pre-indexing) + crystallization (workflows → deterministic loops, 0 tokens) + KG conflict resolution (recency + confidence + user-pin) | `@personal-ai/core-memory` ✅ (spreading-activation 11 tests, phantom-thread 9, forgetting-to-remember 17, temporal-anticipation, knowledge-graph, conflict, correction-detector, decay) | C1 |
+| Ghost-context prevention (file-event tombstone eviction via `notify`: tombstone FTS5/vec/graph rows on rename/delete; rename = re-path, never delete+re-index; purge on compaction) | memory coordinator | C7 |
+| Sync/export/wipe (`render_markdown_export`/`render_json_export`, Obsidian `[[wiki-link]]` view mirror, per-scope `WipeScope`; E2E sync ChaCha20-Poly1305 + X25519 + version vectors + tombstones + `reconcile` + `ConflictPolicy` + live TCP transport + 8 Tauri commands + Settings → Connections) | `everyaios-core::export` / `everyaios-core::sync` — P8.9 ✅ | C8 |
+| Lazy concept-graph mode (query-time concept graph, `relevance_budget` knob; indexing ≈ vector RAG) | tracked as TODO P5.12 | C6 |
 
-## 7.5.1 Ghost Context Prevention (tombstone eviction)
+Retrieval shape (one fused query, not a new layer): intent classifier (memory vs fact vs event vs document) → parallel signals (FTS5/BM25 · sqlite-vec · entity-graph activation · temporal recency) → weighted fusion (mem0-style single fused score; weights calibrated offline) → dedupe + smart snippets + budget cap — on top of the vectorless FTS5-only fast path when embeddings are off. All recalled content is wrapped in `<memory>`/`<user_document>` delimiters + injection scan (06 §6.5); source lineage (which file/page/tool, confidence, timestamp) makes "why does it know this" always answerable and deletable; export (JSON/Markdown) + wipe per scope; E2E-encrypted sync off by default.
 
-**Problem:** When a local file is renamed/moved/deleted, its vector chunks, FTS5 entries, and LadybugDB graph edges persist as "ghost context" — the agent retrieves non-existent code, references deleted files, or generates broken imports.
+## 7.2 History — the superseded five-tier model (non-normative, kept for traceability)
 
-**Solution:** File-system event hooks (Rust `notify` crate) trigger **transactional tombstone writes** on rename/delete:
-1. `notify` emits `Rename(old, new)` or `Remove(path)` event.
-2. Memory coordinator atomically: (a) marks all FTS5 rows with `source_path = old` as tombstoned, (b) updates or removes corresponding sqlite-vec vectors, (c) removes or re-paths corresponding edges and nodes in the Rust-native graph store (LadybugDB-compatible schema; optional backend).
-3. Tombstoned entries are excluded from all retrieval queries immediately; physically purged on next compaction cycle.
-4. **Rename = re-path, not delete+re-index** — preserves graph edges and vector associations while updating the path reference (zero re-embedding cost).
+The sensory / working / episodic / semantic / procedural tier table described the same system before the contract above replaced it: episodic is now a projection of the event log (not an `events`-table timeline of its own), and the remaining tiers are the four classes in §7.0. Do not build against it; it is preserved here only so older references resolve.
 
-This prevents the #1 cause of agent hallucination in file-heavy workspaces.
-
-## 7.6 Memory module map
+## 7.3 Memory module map
 
 | Piece | Where | Status |
 |---|---|---|
 | 7 algos + KG + conflict + decay | `@personal-ai/core-memory` | **Built** (tested) |
-| FTS5+vec hybrid + embeddings + chunking | `@personal-ai/core-files` | **Built** |
+| FTS5+vec hybrid + embeddings + chunking | `everyaios-memory` + `everyaios-storage` | **Built** *(former TS `core-files`, consolidated — Tier 2c)* |
 | Rust-native graph store (LadybugDB-compatible optional backend) | coordinator `memory/graph.ts` | Canonical graph surface; optional backend swap-in |
-| Multi-signal fusion + paging + scopes | coordinator `memory/fusion.ts` | New (SOTA layer) |
+| Multi-signal fusion + paging + scopes | coordinator `memory/fusion.ts` | New (strategy layer) |
 | Warm-set + injection | coordinator + 05 budgets | New wiring |
-
----
-
-## 7.7 ACT-R activation + spontaneous recall (NOOA pattern — doc 39, algorithm #32)
-
-From `NVIDIA-NeMo/labs-OO-Agents` `nooa-memory` (source-read this pass, Apache 2.0 — pattern only, Python→TS translation):
-
-1. **Retention decay (ACT-R-style):** `retention = f(time_since_last_access, stability)` with `stability = decay_half_life_hours × (1 + log1p(strength))` — accessed memories decay much more slowly; fully recent ≈ 1.0. Our decay (algorithm 10) gains the log-strength half-life term.
-2. **Importance floor:** memories with `importance ≥ 8.0` are **never auto-forgotten** (protected type). → a hard `protect` bit in our schema.
-3. **Associative recall = semantic + keyword + recency + graph** in one query (already our C3 fusion — NOOA proves the same shape).
-4. **Typed relational edges:** `supports` / `contradicts` / `derived-from` on the canonical Rust-native memory graph; temporal edge versioning is backend-neutral. Contradiction edges feed our KG conflict resolution + risk compass.
-5. **Spontaneous recall channel:** a pre-turn hook derives *queries from recent events* and injects matching memories as a dynamic context block — distinct from Phantom Thread (activity-aware preload of a fixed warm set). Both run: Phantom = workspace switch; spontaneous = event-driven query derivation.
-6. **References re-read fresh at recall:** stored entries may point at live files/objects instead of pasted values (pass-by-reference — see 05 §5.9) — token-minimizing by construction.
-
-**Status:** 🟡 new (algorithm #32). Wire into coordinator `memory/fusion.ts`; the Rust-native graph schema carries `relation_type` (LadybugDB remains an optional implementation backend).
-
----
-
-## 7.8 Temporal Knowledge Graph Layer (Graphiti + Cognee Patterns, doc 46)
-
-> Sources: getzep/graphiti (29.7K⭐, Apache-2.0) — temporal context graphs; topoteretes/cognee (29.9K⭐, Apache-2.0) — full-stack memory on Postgres.
-
-### 7.8.1 Graphiti Temporal Model
-
-Facts have **validity windows**, not just timestamps:
-
-```
-Entity: { id, name, type, properties, created_at }
-Fact/Edge: { id, source, target, relation, valid_from, valid_until, confidence, episode_id }
-Episode: { id, source_type, content_hash, created_at }
-```
-
-**Bi-temporal tracking:**
-- **Transaction time**: when the system learned the fact
-- **Valid time**: when the fact was true in the real world
-- Enables queries like "what did we believe about X on date Y?" vs "what was actually true?"
-
-**Contradiction resolution:**
-- When a new fact contradicts an existing one, the old fact's `valid_until` is set
-- Both facts remain in the graph (history preserved)
-- Queries automatically filter by current validity unless historical view requested
-
-**Incremental construction:**
-- New episodes update the graph incrementally (no batch recomputation)
-- Entity deduplication via semantic similarity + name matching
-- Relationship types can be prescribed (Pydantic schemas) or learned from data
-
-### 7.8.2 Cognee Full-Stack Pattern
-
-Entire memory stack on a single database (Postgres or SQLite):
-
-| Layer | Implementation |
-|-------|---------------|
-| Knowledge graph | Postgres with recursive CTEs (or Kuzu/Neo4j/FalkorDB optional) |
-| Vector embeddings | pgvector extension (or ChromaDB/Qdrant optional) |
-| Session memory | Table with session_id + TTL + fast cache layer |
-| Metadata/ontology | Cognitive-science-grounded auto-generated ontology |
-| Full-text search | FTS5 (SQLite) or pg_trgm (Postgres) |
-
-**API (4 operations):**
-- `remember(content, session_id?)` — ingest and index
-- `recall(query, filters?)` — hybrid retrieval (graph + vector + keyword)
-- `forget(entity_id | session_id | scope)` — targeted deletion
-- `improve(feedback)` — refine ontology, update confidence scores
-
-### 7.8.3 Integration with Existing 5-Tier Model
-
-| Tier | Enhancement from doc 46 |
-|------|------------------------|
-| Sensory (working) | Headroom reversible compression (CCR) for live context |
-| Working (session) | Context-mode FTS5+BM25 event capture (98% tool output reduction) |
-| Episodic | Graphiti episodes with provenance + temporal validity |
-| Semantic (KG) | Cognee auto-ontology + Graphiti temporal facts |
-| Procedural | Mem0 multi-level (user/session/agent) with 92.5 LoCoMo score |
-
-### 7.8.4 Recommended Implementation Stack
-
-**SQLite-first (desktop, single-user):**
-- sqlite-vec for embeddings
-- FTS5 for keyword search
-- Recursive CTEs for graph traversal
-- Custom temporal tables for Graphiti-pattern facts
-- Single file = portable, no server process
-
-**Optional Postgres upgrade (power users, shared):**
-- pgvector for embeddings
-- pg_trgm + FTS for search
-- Postgres graph queries via recursive CTEs or age extension
-- Multi-user with row-level security

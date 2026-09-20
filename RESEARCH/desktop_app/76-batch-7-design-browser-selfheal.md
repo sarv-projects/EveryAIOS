@@ -1,5 +1,8 @@
 # Doc 76 — Batch 7: Design / Browser Self-Healing / Computer-Use (2026-08-16)
 
+> **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPEC.md) · delivery: [`../../TODO.md`](../../TODO.md). Frozen by decision **D8** — research docs are **never updated** with code changes, so a dated claim here is not a stale claim.
+
+
 **Date:** 2026-08-16 · **Sources (web-verified):** `nexu-io/open-design` (57–68K★ in ~8 weeks), `browser-use/browser-harness` (16.7K★), `microsoft/magentic-ui` (MagenticLite, 10K★), `web-infra-dev/midscene`, `jackwener/OpenCLI`, `nanobrowser/nanobrowser`, `DietrichGebert/ponytail`, `stitionai/devika`; cross-checked against docs 06/15/17/18/48/63.
 
 **One-line result:** 3 of 11 already covered (browser-use → 06/15/17/63; UI-TARS-desktop → 48; LM Studio/lmstudio-ai → 18/34/35). Two real steals: **open-design's DESIGN.md brand-system-as-skill + composable design-skills** (I2/H29) and **browser-harness's self-healing harness** (agent edits its own helpers mid-task → our script-eval + P21 governed-repair). The rest are validations of the one-session browser+files+HITL cockpit. → **TODO P24**.

@@ -1,5 +1,8 @@
 # 05 · Agent OS + Computer-Use Layer
 
+> **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPEC.md) · delivery: [`../../TODO.md`](../../TODO.md). Frozen by decision **D8** — research docs are **never updated** with code changes, so a dated claim here is not a stale claim.
+
+
 > Research on "LLM as the CPU" projects: agent operating systems, desktop/computer-use control,
 > and the Linux-dev → Windows-deploy strategy.
 

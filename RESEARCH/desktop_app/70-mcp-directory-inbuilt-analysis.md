@@ -1,5 +1,8 @@
 # Doc 70 — MCP Directory Inbuilt Analysis (mcpservers.org)
 
+> **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPEC.md) · delivery: [`../../TODO.md`](../../TODO.md). Frozen by decision **D8** — research docs are **never updated** with code changes, so a dated claim here is not a stale claim.
+
+
 **Date:** 2026-08-16 · **Source:** `https://mcpservers.org/all` (11,054 servers, 18 categories)
 **Sampled:** `/all` (newest 30), `/category/productivity` (1,787), `/category/web-scraping` (436),
 `/category/communication` (584), `/category/file-system` (127). Cross-checked via web search.

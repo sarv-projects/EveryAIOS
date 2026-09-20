@@ -1,5 +1,8 @@
 # 29 — LibreOffice Core Deep-Dive (verified 2026-08-06)
 
+> **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPEC.md) · delivery: [`../../TODO.md`](../../TODO.md). Frozen by decision **D8** — research docs are **never updated** with code changes, so a dated claim here is not a stale claim.
+
+
 > **Repo:** https://github.com/LibreOffice/core (C++, 4,197⭐ live) — the reference implementation of office documents. 200+ top-level modules, ~8M LOC. **Role for us: format-fidelity ground truth + optional headless conversion backend — NOT something to bundle or copy.** Our primary engines stay GenOffice-style surgical (doc 28) + markitdown (parse) + our own.
 > Verified this pass: repo meta, full module list, `libreofficekit/README.md`, `rust_uno/Cargo.toml`. ⚠️ Deep module listings (`oox/`, `formula/`, `sc/source/core/tool/`, `editeng/`, `sw/source/core/`) were **rate-limited by the GitHub API this pass** — those locations are from module names + known LO layout, marked per-item.
 

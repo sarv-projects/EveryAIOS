@@ -1,8 +1,48 @@
-# 05 — Token Economy: Minimize Inputs, Maximize Output Power
+# 05 — Context Engineering: Minimize Inputs, Maximize Output Power
+
+> **SCOPE REDUCED — see [`CORE.md`](CORE.md) §8 and [`CONTEXT.md`](CONTEXT.md) first.** The research here is
+> retained, but its status changed: prefix-cache economics, tool-result size control and pass-by-reference are
+> **strategies**, not independent architectural systems. The architecture is the six exposed contracts in
+> `CONTEXT.md` §5 plus the normative optimization order in §3. The name for this area is now **context
+> engineering**. **Rewritten `P69.A16` (done 2026-09-20).**
+
+---
+
 
 > **The user's #1 goal:** *"tokens minimizing, yet greater, more powerful, capable outputs — so control the inputs basically."* This is the entire doc. Doctrine from doc 32 (tokenmining): **retrieve instead of preload · compress instead of repeat · structure instead of narrate · spend tokens where reasoning actually matters.** Knobs from Reasonix (doc 05 §6), BrowserOS (doc 33 §7.2), Janus (doc 31), context-mode (doc 32), rtk (doc 23), Hermes budgets (doc 16).
-> **Full-Stack Module:** Module 3 — Unified Cockpit Shell & Context Compaction Engine (`packages/coordinator/src/prompt.ts`, `crates/everyaios-engine`, token budgets).
-> **Plane (ARCH/17 §17.1):** split by ownership. The `token_usage` ledger and per-key budgets are **shared execution-kernel telemetry**; context assembly (the 12-segment cache-affine prompt) and cost/routing *strategy* are owned by the **Native agent plane**. An external agent's own token spend is its own; EveryAIOS does not claim to account for it.
+> **Ownership ([`CORE.md`](CORE.md) §4, §8):** split by owner. The `token_usage` ledger and per-key budgets are **shared execution-kernel telemetry**; context selection and assembly belong to **EveryAIOS context engineering** ([`CONTEXT.md`](CONTEXT.md)) and cost/routing strategy to [`ROUTING.md`](ROUTING.md). An external agent's own token spend is its own; EveryAIOS does not claim to account for it.
+> **Where this file sits:** everything in §§5.1–5.10 below is a **strategy** — a replaceable mechanism that plugs in behind the contracts in §5.0. Strategies never become architecture (I19–I22 live in CORE, not here).
+
+## 5.0 The architecture: six contracts + the optimization order (from [`CONTEXT.md`](CONTEXT.md))
+
+These six are architecture. Everything else in this file is a replaceable strategy.
+
+| Contract | Responsibility |
+|---|---|
+| `ContextBudget` | how much of this turn may be spent, per category (§5.2 is one strategy for filling it) |
+| `ContextSelector` | what deserves to enter this turn |
+| `Compactor` | `selectRange()` · `buildSummaryRequest()` · `summarize()` · `installProjection()` · `verify()` |
+| `ReferenceStore` | resolve a reference to content on demand (§§5.8–5.9 are strategies for avoiding inline content) |
+| `CacheBoundary` | where stability ends and churn begins (§§5.3/5.5 are strategies for keeping the stable side stable) |
+| `CostLedger` | what was actually spent, per route and per turn (§5.6 is the ledger strategy) |
+
+**The optimization order — normative** (doing these out of order is a defect, I19). Steps 1–5 are cheap and deterministic; only step 6 costs a model call:
+
+1. **reuse the cached stable prefix** (§5.3)
+2. **do not inject unnecessary context** (§5.1 Rule 1, §5.9)
+3. **replace resources with references** (§5.9)
+4. **prune oversized tool results** (§5.4, §§5.8/5.10)
+5. **remove low-value historical surface** (§5.1 Rule 2)
+6. **semantic compaction** — bounded, and it must fit its own summarizer (I20: §5.1 step 3 fails open; §5.6 degraded rescue is stated, never silent)
+7. **retry against the exact route's capacity** (I21: capacity comes from the resolved route, never a global registry)
+
+```
+pressure → cheap reducers → RE-MEASURE → still too large? → no: done
+                                                     ↓ yes
+                                              semantic compaction → RE-MEASURE
+```
+
+Every reducer must **re-measure**. Capacity comes from the route adapter; there is no global context-window registry (I21). Assembly serializes Context — it does not own policy (I22).
 
 ## 5.1 The four rules, made operational
 

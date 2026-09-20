@@ -1,5 +1,8 @@
 # 85 — Work Gateway / Durable Session Layer (Claude Cowork · OpenClaw · Podium · Codex)
 
+> **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPEC.md) · delivery: [`../../TODO.md`](../../TODO.md). Frozen by decision **D8** — research docs are **never updated** with code changes, so a dated claim here is not a stale claim.
+
+
 > **Added 2026-08-30** — the cross-surface durable-session research that drove **spec v3.64 (Work Gateway / Session Runtime) + v3.65 (hardening) + v3.66 (final reconciliation)**. The architecture froze at v3.66; it was extended — not superseded — by **v3.75 (`ARCH/17-NATIVE-AGENT.md`: the Native agent plane vs the shared cowork plane, plus the tool/agent schema catalog)**, which composes the Work Gateway this doc produced. Everything below is unchanged. **0 new repos — ledger unchanged 282** (all four sources were already tracked: OpenClaw doc 03/14, Codex doc 05/38/63, Claude Cowork doc 75/80; Podium is a competitor surface, not a repo).
 
 ---

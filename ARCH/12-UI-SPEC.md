@@ -1,13 +1,31 @@
 # 12 — UI/UX Specification: Desktop Layout & Interaction Design
 
+> **Derived from [`CORE.md`](CORE.md) — the root authority; this document specializes, never restates, it.**
+> **CONTRACT RE-SCOPED — see [`UI.md`](UI.md) first.** This document remains the authority for layout
+> and interaction *detail*. `DESKTOP.md` owns the **boundary**: the UI is a projection, it owns no durable
+> truth, it mutates only through the Work Gateway, and the File Workbench opens any resource through a viewer
+> registry. **User-facing vocabulary is Chat, not Session** (see [`SESSION.md`](SESSION.md) §2): the sweep has landed — the sidebar, title bar, new-button, composer and palette labels below all read **Chat**. `Session` survives only as the internal/API term (`P69.A23` closed).
+
+## 0. Projection contract — what the UI reads, never owns, and how it mutates (`P69.A23`)
+
+> Authority: [`CORE.md`](CORE.md) (root) · [`UI.md`](UI.md) (the boundary) · [`WORK.md`](WORK.md) (durable truth) · [`SESSION.md`](SESSION.md) (Chat vocabulary). This section is the contract; everything from §1 on is unchanged layout/interaction detail under it.
+
+- **Reads:** projections of canonical state — Work status, the event-derived Timeline, artifact lists, agent activity, and the Settings `ConnectionRecord`/read models. Never the kernel, provider internals, or the event log directly; a presentation event contract sits between (UI.md §1).
+- **Owns:** no durable truth. Every store entry is projection, cache (with an invalidation rule), or ephemeral UI state (selection, tabs, composer text) per UI.md §2. Optimistic presentation never asserts a completed effect before the receipt exists.
+- **Mutates:** only through the Work Gateway — `UI → Tauri IPC → Work Gateway`, with effects additionally passing Guard (agent/automation paths carry an `AuthorizationTicket`; human UI acts through a trusted native gesture). The shell is never an alternate kernel, Work database, security engine, or event log.
+- **Timeline:** the Progress view (§4.3) renders the canonical event log; the Chat vocabulary rule applies throughout this document.
+
+---
+
+
 > **Full-Stack Module:** Module 3 — Unified Cockpit Shell & Context Compaction Engine (React 19 + Zustand 5 + Tailwind 4, 12 Center Screens & 19 Viewports).
 > **Version:** UI-spec rev 3.10 (2026-09-15 — Windows-first runtime/picker/cowork audit, P66). **Numbering note:** the `3.x` in this header is the **UI-spec document revision**, a separate series from the workspace/shell version in `ui/src/lib/version.ts` (currently **v3.78** — the value `scripts/check-doc-sync.mjs` verifies). A `3.x` here is therefore *not* a stale shell version and never should be read as one.
 > **Reference:** Claude Desktop Views / Cursor activity bar / ChatGPT Work / Devin Desktop (2026 work-cockpit pattern — doc 67 §6); Devin Cloud UI (doc 46) for viewers only  
 > **Principle:** ONE project, ONE durable Work, ONE session, ONE effect-authorization model, ONE timeline. Chat + live progress stay in the center; the **right activity rail** selects the active lens while the viewport supports multiple open, reorderable tabs. Only one view is rendered at a time inside that viewport; the product is not split into separate Chat/Cowork/Code applications.
-> **Cross-refs:** ARCH/01 (system architecture) · ARCH/09 (feature matrix H1–H36 — H20 redefined doc 67) · **ARCH/17 (the Native agent plane — the chat surface this spec renders: §17.3 the Chief loop, §17.4.3 the first-class tools `ask`/`plan`/`subagent`/`todo`, §17.1 the two-plane boundary with external agents)** · ARCH/DIAGRAMS #7 (MCQ interrupt) + #27 (two planes) · doc 67 §6 (finalization record)
+> **Cross-refs:** ARCH/01 (system architecture) · ARCH/09 (feature matrix H1–H36 — H20 redefined doc 67) · **ARCH/CORE.md §7 + ARCH/AGENT.md (the agent model — the chat surface this spec renders: the agent loop belongs to the bound agent, §7.4 first-class tools `ask`/`plan`/`subagent`/`todo`, §7.5 governance modes), and ARCH/17 §17.12 for the Settings Control Center read model (pending split → AGENT.md + EXTERNAL-AGENTS.md per `P69.A26`)** · ARCH/DIAGRAMS #7 (MCQ interrupt) + #27 (two planes — superseded, see CORE.md §7.1) · doc 67 §6 (finalization record)
 > **v2.1 (2026-08-16, superseded visually by v3.78):** `UI-DESIGN-PROMPT.md` (repo root) is the **canonical production UI spec** — light/dark surfaces, cool-blue semantic brand, selectable accent tokens, full screen/panel/tab/overlay inventory, motion + mock-data tables. This ARCH/12 stays the layout/architecture contract (rail + one viewport, chat states, view contracts, keyboard map). When the two disagree on pixels, UI-DESIGN-PROMPT.md wins.
 >
-> **v3.10 (2026-09-15 — Windows-first runtime/picker audit):** Windows is the first release target. Agent discovery now has an explicit provenance contract (managed absolute path, PATH/App Paths, user path, package manager, or WSL distro/path); catalog entries never imply occupancy. The agent picker is a two-pane/full-screen configuration surface: installed/discovered agents left, selected agent-owned model/auth/native capabilities plus EveryAIOS shared grants right. The chat bar remains compact and blue-semantic themed; session capabilities are enabled in a separate pane. Office/browser/computer-use/memory claims remain evidence-gated on real Windows acceptance. **Implementation status (2026-09-15):** the provenance read model, App Paths/WSL probes, stale-record rejection, full-screen two-pane picker, and cool-blue picker/agent cards are landed and unit/type/doc verified; WSL launch, the session capability pane, global theme migration, and all Windows/cowork live acceptance remain open (TODO P66).
+> **v3.10 (2026-09-15 — Windows-first runtime/picker audit):** Windows is the first release target. Agent discovery now has an explicit provenance contract (managed absolute path, PATH/App Paths, user path, package manager, or WSL distro/path); catalog entries never imply occupancy. The agent picker is a two-pane/full-screen configuration surface: installed/discovered agents left, selected agent-owned model/auth/native capabilities plus EveryAIOS shared grants right. The chat bar remains compact and blue-semantic themed; capabilities are enabled in a separate pane. Office/browser/computer-use/memory claims remain evidence-gated on real Windows acceptance. **Implementation status (2026-09-15):** the provenance read model, App Paths/WSL probes, stale-record rejection, full-screen two-pane picker, and cool-blue picker/agent cards are landed and unit/type/doc verified; WSL launch, the capability pane, global theme migration, and all Windows/cowork live acceptance remain open (TODO P66).
 > **v3.9 (2026-09-13 — casual surface, P61):** casual mode asks **one** question instead of three. The composer keeps the SPEC three-control taxonomy in **power**, but casual renders **one plain autonomy dial** (`Look only · Ask me first · Balanced · Just do it`) over the same four `PermissionMode` values — a display layer only, so the per-task `config_hash` freeze, `syncAutonomyFromRust()` and every guard decision are unchanged. The right rail/viewport remains a power surface (`setActiveView`/`addView` switch to power when a view opens, so nothing traps the user). Home's empty state is pre-scoped starter cards; the Guard panel states one sentence in casual instead of the Trust Ladder meter and 5×5 matrix; high-blast interrupts require typing the resource name.
 > **v3.8 (2026-09-10):** Two surfaces — Browse + Office inbuilt (no vision); Computer use = real OS see-pane + primary rail icon. Vision-gate modal. Progress renders CUA DAG.
 > **v3.8 (2026-09-12 reconciliation):** Status bar and agent/model picker consume reachable live catalog rows, preserve provider-qualified model identity through routing, and label curated seed rows as fallback. Provider/profile rows with no supported transport are unavailable rather than guessed.
@@ -31,12 +49,12 @@
 
 ---
 
-## 1. Core Layout: Left Sessions · Center Chat · Right Rail + Viewport
+## 1. Core Layout: Left Chats · Center Conversation · Right Rail + Viewport
 
 ```
 ┌───────────────┬─────────────────────────────┬──┬───────────────────────────────┐
 │  LEFT         │      CENTER                 │R │ RIGHT VIEWPORT (collapsible)   │
-│  sessions     │  chat · now-doing · tickets │R │ active view + persisted tab strip │
+│  chats        │  chat · now-doing · tickets │R │ active view + persisted tab strip │
 │  automations  │  approve cards              │I │ (0px collapsed ~ 50-60% open)  │
 │  memory/guard │                             │L │                                │
 │  (240 / 48px) │                             │  │                                │
@@ -57,7 +75,7 @@
 
 | Piece | Always | Notes |
 |-------|--------|-------|
-| Title bar | Project · session title · Guard chip · $spent/$cap | native Tauri |
+| Title bar | Project · chat title · Guard chip · $spent/$cap | native Tauri |
 | Left | 240px or 48px icon-only | persist width |
 | Center | chat + 2-line now-doing under composer | never unmount on rail collapse |
 | Right rail | 48px icons | click active icon = collapse viewport |
@@ -77,7 +95,7 @@
 ├─────────────────────────┤
 │ 🔍  [Search]            │  ← Global search (Cmd+K)
 ├─────────────────────────┤
-│ + New session            │  ← Primary action button
+│ + New chat               │  ← Primary action button
 │ ⏱ Automations           │  ← Scheduled tasks & event triggers
 │ 🔒 Guard                │  ← Security overview & permissions
 │ 🔌 Connectors           │  ← Connector hub status
@@ -87,13 +105,13 @@
 │ Recent                   │  ← Section header
 │  🔍  ⚙  ⋯              │  ← Search, filter, more actions
 │                          │
-│  Session 1 title...      │  ← Active session (highlighted)
+│  Chat 1 title...         │  ← Active chat (highlighted)
 │    ● Action required     │  ← Status badge (orange = needs input)
-│  Session 2 title...      │
+│  Chat 2 title...         │
 │    ✓ Completed           │  ← Green = done
-│    └─ Sub-session 1      │  ← Child sessions indented
-│    └─ Sub-session 2      │
-│  Session 3 title...      │
+│    └─ Sub-chat 1         │  ← Child chats indented
+│    └─ Sub-chat 2         │
+│  Chat 3 title...         │
 │    ⏳ Running             │  ← Yellow = in progress
 ├─────────────────────────┤
 │ ⚙  📥  ❓               │  ← Settings, Downloads, Help
@@ -105,14 +123,14 @@
 | Click | Action |
 |-------|--------|
 | Workspace dropdown | Switch between projects/workspaces |
-| + New session | Opens chat with empty session, focus on input |
+| + New chat | Opens an empty chat with focus on the input |
 | Automations | Shows automation list with sparkline activity charts |
-| Guard | Shows Trust Ladder status, recent blocks, permission grants |
+| Guard | Shows Guard status, recent blocks, permission grants |
 | Connectors | Shows connected services, MCP servers, status indicators |
 | Memory | Browse knowledge items, skills, episodic memory |
-| Analytics | Token usage chart, cost per model, session history |
-| Session entry | Opens that session in Chat + Workspace panels |
-| Sub-session | Opens sub-agent session (parent stays in breadcrumb) |
+| Analytics | Token usage chart, cost per model, chat history |
+| Chat entry | Opens that chat in Chat + Workspace panels |
+| Sub-chat | Opens sub-chat (parent stays in breadcrumb) |
 | Status badge | Quick-action: respond to MCQ interrupt inline |
 
 ### 2.3 Session Status Indicators
@@ -134,7 +152,7 @@
 
 ```
 ┌─────────────────────────────────────────┐
-│ Session Title                    🏴 ⋯  │  ← Title + flag + menu
+│ Chat Title                       🏴 ⋯  │  ← Title + flag + menu
 ├─────────────────────────────────────────┤
 │                                          │
 │  [Chat messages scroll area]             │
@@ -190,7 +208,7 @@ Displayed when the agent creates/edits a file. Shows:
 - Orange dot + "Action required: [description]"
 - Shows diff-card for destructive actions
 - Buttons: Approve / Edit / Reject / More Options
-- Maps to ARCH/06 Guard-2 diff-card handshake
+- Maps to the Guard-2 diff-card handshake (see SECURITY.md; ARCH/06 is derived)
 
 #### Generative UI Components (H25, AG-UI — doc 50)
 - Agent-emitted live components (React/HTML/Mermaid) render **inline in sandboxed iframes** — strict CSP + process isolation (Anthropic Artifacts pattern), never inline-script in the main window
@@ -213,7 +231,7 @@ Displayed when the agent creates/edits a file. Shows:
 | 🎙 Microphone | Voice-to-text recording |
 | 🔊 Speaker | Read-aloud toggle (H28 — offline sherpa-onnx TTS by default; hosts Piper voices, ⚠️ piper archived) |
 | ▶ Send | Submit message (Enter also works) |
-| Slash commands | **Chief-dependent (H32).** Inbuilt Chief: EveryAIOS `/help` `/mode` `/model` `/undo` `/compact` `/clear` `/export` (local intercept). ACP Chief: live `available_commands_update` list; submit `/name args` as `session/prompt` text — do **not** intercept EveryAIOS slash. No per-harness hardcoded tables. |
+| Slash commands | **Agent-dependent (H32).** Built-in runtime bound: EveryAIOS `/help` `/mode` `/model` `/undo` `/compact` `/clear` `/export` (local intercept). ACP agent: live `available_commands_update` list; submit `/name args` as `session/prompt` text — do **not** intercept EveryAIOS slash. No per-harness hardcoded tables. |
 | `!macro` | Knowledge macro expansion (e.g., `!deploy-checklist`) — inbuilt composer only |
 | `@mention` | Workspace file refs (path / ACP resource block when `embeddedContext`); not a per-CLI `@agent` table |
 
@@ -254,7 +272,7 @@ On first launch, if `onboardingCompleted` is false, an interactive full-screen m
    - Renders a dynamic typographic cycling title (`EveryAIOS` · `EveryAgent` · `EveryWork` · `EveryDoc` · `EveryModel` · `EveryTask`) with physical spring motion (`framer-motion`).
    - Introduces EveryAIOS as the universal desktop operating harness and shared cowork plane.
 2. **Stage 1: Engine Capabilities & Theme Customization**
-   - Showcase cards for full-stack engines (Native Agent Orchestrator, Multi-Model Cloud/Local BYOK, Tiered Browser & CDP, Office & IronCalc, Guard-2 Security, 5-Tier Memory).
+   - Showcase cards for full-stack engines (Agent Orchestration & Control, Multi-Model Cloud/Local BYOK, Tiered Browser & CDP, Office & IronCalc, Guard-2 Security, Durable Memory).
    - Dynamic Dark/Light mode toggle and semantic cool-blue accent color customizer (`blue`, `sky`, `emerald`, `violet`, `amber`).
 3. **Stage 2: Live ACP Agent Discovery & Auto-Detection**
    - Automatically probes host for installed ACP coding agents (`claude`, `codex`, `opencode`, `aider`, `grok`, etc.) via `acpInstallStatus` (`acp_install_status`).
@@ -322,7 +340,7 @@ Settings is a control center, not a collection of decorative panels. It uses the
 
 **Channels & Connectors.** Show `Discovered`, `Installed`, `Connected`, `Disconnected`, and `Degraded` groups. Each detail includes transport, scopes, data/effect summary, enabled consumers, health, last error, and connect/disconnect/revoke actions. A connected badge comes only from the backend's live attach/OAuth truth. MCP tools are not displayed as a flat 51-row wall; task-shaped shared façades are the target surface.
 
-**Schedules.** Show trigger, target Work/blueprint, Chief, capability scope, autonomy, budget, network policy, next run, last run, and state. `Run now` creates a normal Work and does not edit the recurrence. In-flight runs retain their frozen runtime manifest when settings change.
+**Schedules.** Show trigger, target Work/blueprint, **the active agent binding**, capability scope, autonomy, budget, network policy, next run, last run, and state. `Run now` creates a normal Work and does not edit the recurrence. In-flight runs retain their frozen runtime manifest when settings change.
 
 **Installed / Marketplace.** `Installed` shows skills, plugins, MCP servers, ACP runtimes, hooks, and tools with version, digest/signature, trust, capabilities requested/granted, bound agents, activation, and health. `Marketplace` is discovery only. Install is validate → preview → Guard-2 consent → sandbox/grant → atomic write → inventory → lazy activation → health. Disable/remove/rollback actions operate on the pinned installed record.
 
@@ -436,7 +454,7 @@ interface ViewDefinition {
 ```
 
 - Core four + Office + Progress are first-party views using this contract; plugins use the same `+` slot
-- **Per-session persistence** (Cursor bug fix): activeViewId, officeDocId, railCollapsed, splitRatio, browseMode (clean | my-chrome), composerMode (agent | plan | research | quick | code) saved per sessionId — switching sessions restores exactly what you left; new session starts rail-collapsed until a tool needs a view
+- **Per-session persistence** (Cursor bug fix): activeViewId, officeDocId, railCollapsed, splitRatio, browseMode (clean | my-chrome), composerMode (agent | plan | research | quick | code) saved per sessionId — switching chats restores exactly what you left; a new chat starts rail-collapsed until a tool needs a view
 
 ### 4.3 Progress View (view.progress)
 
@@ -842,7 +860,7 @@ Unified timeline of all agent actions:
 | Shortcut | Action |
 |----------|--------|
 | Cmd+K | Global search / command palette |
-| Cmd+N | New session |
+| Cmd+N | New chat |
 | Cmd+Enter | Send message |
 | Cmd+Shift+P | Progress view / Pause-Resume agent |
 | Cmd+Shift+E | Folder view |

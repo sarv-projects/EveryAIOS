@@ -61,7 +61,7 @@ const INITIAL_NOTIFICATIONS: AppNotification[] = [
     id: 'n1',
     kind: 'cost',
     title: 'Daily budget 37% used',
-    detail: '$1.84 / $5.00 spent today across 5 sessions',
+    detail: '$1.84 / $5.00 spent today across 5 chats',
     ts: Date.now() - 1000 * 60 * 2,
     unread: true,
     source: 'Budget',
@@ -82,7 +82,7 @@ const INITIAL_NOTIFICATIONS: AppNotification[] = [
     detail: 'Revenue chart and exec summary updated · 184K tokens',
     ts: Date.now() - 1000 * 60 * 23,
     unread: false,
-    source: 'Session',
+    source: 'Chat',
   },
   {
     id: 'n4',
@@ -100,7 +100,7 @@ const INITIAL_NOTIFICATIONS: AppNotification[] = [
     detail: '47 product pages crawled, 3 throttled — backing off 60s',
     ts: Date.now() - 1000 * 60 * 60 * 2,
     unread: false,
-    source: 'Session',
+    source: 'Chat',
   },
   {
     id: 'n6',

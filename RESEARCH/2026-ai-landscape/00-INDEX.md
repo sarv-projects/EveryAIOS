@@ -1,5 +1,8 @@
 # 2026 AI Landscape — Research Archive Index
 
+> **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPEC.md) · delivery: [`../../TODO.md`](../../TODO.md). Frozen by decision **D8** — research docs are **never updated** with code changes, so a dated claim here is not a stale claim.
+
+
 > **Purpose:** Permanent reference for all research conducted for the open-source desktop AI app
 > (browser + chat + coding + research + reader + editor in one). Every repo, framework, architecture
 > decision, and steal-list from the 2026 research sessions.

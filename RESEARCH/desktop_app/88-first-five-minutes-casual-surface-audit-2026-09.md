@@ -1,5 +1,8 @@
 # 88 — Casual surface / first-five-minutes UX audit (2026-09-13)
 
+> **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPEC.md) · delivery: [`../../TODO.md`](../../TODO.md). Frozen by decision **D8** — research docs are **never updated** with code changes, so a dated claim here is not a stale claim.
+
+
 > **Method:** one external research pass (2026-09-13) over agentic-desktop products + 2026 activation/approval literature, then every load-bearing claim **checked against this repo's code** before it was acted on. Extends doc 84 (casual vs power) and doc 86 (competitor desktop deep-dive) without re-deriving them. Claims are marked **VERIFIED (code/read this session)**, **REPORTED (external source, not primary-read)**, or **UNCONFIRMED**.
 > 🔗 **Products:** Claude Cowork (help docs + Simon Willison first impressions) · Eigent (`eigent-ai/eigent`) · OpenAI Codex app · OpenClaw / OpenCowork / Hermes Desktop (doc 86) · Perplexity local-first Portable Computer.
 > 🔗 **Design evidence:** Zylos *"Designing the First 5 Minutes for AI Agent Products"* · tianpan.co *"The Approval Prompt Nobody Reads"* · Wharton AI Agent Adoption Blueprint · Nielsen mid-2026 · NN/g progressive disclosure.

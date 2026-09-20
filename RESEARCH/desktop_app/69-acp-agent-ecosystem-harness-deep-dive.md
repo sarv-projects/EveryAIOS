@@ -1,5 +1,8 @@
 # Doc 69 — ACP Agent Ecosystem + Harness Deep-Dive (2026-08-16)
 
+> **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPEC.md) · delivery: [`../../TODO.md`](../../TODO.md). Frozen by decision **D8** — research docs are **never updated** with code changes, so a dated claim here is not a stale claim.
+
+
 Goal: make **every** major coding agent usable through our app via ACP ("same
 chat bar, agent differs"), and record what to steal from each. Companion to
 doc 45 (ACP spec), doc 57 (ACP registry + subscription auth), doc 56

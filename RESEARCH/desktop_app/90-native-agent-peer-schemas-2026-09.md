@@ -1,5 +1,8 @@
 # Doc 90 — Native agent peer schemas & loops (2026-09-15)
 
+> **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPEC.md) · delivery: [`../../TODO.md`](../../TODO.md). Frozen by decision **D8** — research docs are **never updated** with code changes, so a dated claim here is not a stale claim.
+
+
 > **Purpose:** research provenance for **ARCH/17-NATIVE-AGENT.md** (two-plane contract frozen in spec v3.75; nine native-plane rows landed in v3.76; Settings Control Center composition added in v3.77). This is the pass that asked: *what does each leading agent actually expose as tools and loops, so EveryAIOS Native can adopt the schemas/invariants — without copying product behavior we cannot observe at runtime?*
 > **Evidence grade:** **DOC-VERIFIED** = the vendor's own documentation page was located and its content checked (titles/snippets). **REPO-VERIFIED** = this repository's own code (the only source of truth for what EveryAIOS already has). **No source clones in this pass** — unlike docs 55/64/67, nothing here was cloned and read line-by-line; treat every external claim below as documentation-level, not code-level.
 > **Outputs:** `ARCH/17-NATIVE-AGENT.md` (Native plane + Settings Control Center §17.12) · spec §4.6 + Settings Control Center contract · `TODO.md` **P64** + **P65** · `ARCH/00-INDEX.md`.

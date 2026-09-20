@@ -1,5 +1,8 @@
 # Doc 67 — Capability Deltas: Sites / Heartbeat / Proactivity / Inline-Edit / Kanban-ACP + UI/UX Finalization (2026-08-15)
 
+> **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPEC.md) · delivery: [`../../TODO.md`](../../TODO.md). Frozen by decision **D8** — research docs are **never updated** with code changes, so a dated claim here is not a stale claim.
+
+
 **Scope:** the 5 capability deltas flagged from competitor research (ChatGPT Work / Claude Cowork / Devin Desktop / Cursor 3) → checked against the 278-repo ledger → **bolt.diy + Hatchet + durable-execution-the-hard-way cloned + source-read** → verdicts + landing map. **Second half:** the UI/UX finalization (activity-rail work cockpit) applied to ARCH/12 + matrix H20.
 **Method:** GitHub API live-verified; bolt.diy (stackblitz-labs) + hatchet-dev/hatchet + hatchet-dev/durable-execution-the-hard-way cloned + source-read at code level; competitor capability claims cross-checked against official docs (support.claude.com, learn.chatgpt.com, latent.space reconstructions).
 **Headline:** 2 of the 5 deltas are **real steal candidates** (bolt.diy → local-first "Sites"; Hatchet → heartbeat/durable-execution for B7). The other 3 are **wiring/UI nuances already covered by existing rows**. UI/UX: the 9-tab workspace strip is replaced by a **48px activity rail + views contract** — matching where Claude/ChatGPT/Cursor/Devin actually landed in 2026.

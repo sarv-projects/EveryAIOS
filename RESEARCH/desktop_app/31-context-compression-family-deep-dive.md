@@ -1,5 +1,8 @@
 # 31 — Context-Compression Family Deep-Dive: Headroom · Glyphdown · Terse · Janus · DarwinCaveman · Repomix
 
+> **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPEC.md) · delivery: [`../../TODO.md`](../../TODO.md). Frozen by decision **D8** — research docs are **never updated** with code changes, so a dated claim here is not a stale claim.
+
+
 > Fetched live 2026-08-06. Theme of this batch: **token reduction & context compaction** — the exact pillar doc 03 §7 calls *Lossless Prompt Compaction & System Daemons* (and doc 20/23's `rtk` bash-output cut). Headroom was already deep-dived (docs 22 §A / 24 — ⬛); this pass re-verifies it + deep-reads the 5 new repos.
 > Depth: **glyphdown / terse / Janus / repomix 🟦 structure-verified** (full README + deps read); DarwinCaveman 🟩 (README + app.py read — it's a 50-line FastAPI app); ⚠️ GitHub API rate-limited — no file trees pulled; all claims from READMEs, `package.json`, `LICENSE` files fetched this pass.
 

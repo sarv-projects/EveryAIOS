@@ -1,5 +1,8 @@
 # 04 — Reality-Check: The Circulating "Agentic OS" Blueprint (code-verified)
 
+> **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPEC.md) · delivery: [`../../TODO.md`](../../TODO.md). Frozen by decision **D8** — research docs are **never updated** with code changes, so a dated claim here is not a stale claim.
+
+
 > Date: 2026-08-05 · Verdict: the paste was **~40% your own shipped code, ~20% real ecosystem, ~20% misrepresented repos, ~20% invented claims.**
 
 ## 🚨 Headline 1: the other AI was selling you your own ideas

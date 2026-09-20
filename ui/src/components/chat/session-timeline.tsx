@@ -44,7 +44,7 @@ interface TimelineEvent {
 // empty session renders an honest empty state, never sample work.
 function getTimelineEvents(session: Session): TimelineEvent[] {
   const events: TimelineEvent[] = [
-    { id: `${session.id}-start`, timestamp: session.updatedAt, type: 'message', title: 'Session started', detail: session.title, status: 'done' },
+    { id: `${session.id}-start`, timestamp: session.updatedAt, type: 'message', title: 'Chat started', detail: session.title, status: 'done' },
   ]
 
   for (const m of session.messages ?? []) {
@@ -212,7 +212,7 @@ export function SessionTimeline() {
       <div className="shrink-0 px-4 py-3 border-b border-border bg-sidebar/40">
         <div className="flex items-center gap-2 mb-1">
           <Activity className="h-4 w-4 text-brand" />
-          <span className="text-sm font-semibold">Session Timeline</span>
+          <span className="text-sm font-semibold">Chat Timeline</span>
           {agent && (
             <span className={cn('ml-auto h-5 w-5 rounded text-[7px] font-bold flex items-center justify-center', agent.accent)}>{agent.mark}</span>
           )}
@@ -276,7 +276,7 @@ export function SessionTimeline() {
           )}
           {ckptState === 'unavailable' && (
             <p className="py-1 text-[11px] leading-relaxed text-muted-foreground" role="status">
-              Checkpoints need the desktop app — open this session in Tauri to see saved copies
+              Checkpoints need the desktop app — open this chat in Tauri to see saved copies
               and restore.
             </p>
           )}
@@ -303,7 +303,7 @@ export function SessionTimeline() {
           {ckptState === 'ready' && checkpointTurns.length === 0 && (
             <p className="py-1 text-[11px] leading-relaxed text-muted-foreground" role="status">
               {ckptFiles.length > 0
-                ? `No file-changing turns in this transcript, but ${ckptFiles.length} saved file${ckptFiles.length === 1 ? '' : 's'} remain for this session — open the diff view to review and restore them.`
+                ? `No file-changing turns in this transcript, but ${ckptFiles.length} saved file${ckptFiles.length === 1 ? '' : 's'} remain for this chat — open the diff view to review and restore them.`
                 : 'No file-changing turns yet — checkpoints appear here after the agent edits, runs shell, or updates office files.'}
             </p>
           )}
@@ -334,7 +334,7 @@ export function SessionTimeline() {
       <div ref={scrollRef} onScroll={onScroll} className="min-h-0 flex-1 overflow-auto">
         {events.length <= 1 ? (
           <p className="px-4 py-6 text-center text-[11px] text-muted-foreground">
-            No events yet — send the first message to start this session's timeline.
+            No events yet — send the first message to start this chat's timeline.
           </p>
         ) : (
         <div className="px-4 py-3" style={{ height: totalHeight, position: 'relative' }}>

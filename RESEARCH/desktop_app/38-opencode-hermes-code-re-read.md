@@ -1,5 +1,8 @@
 # 38 — opencode & Hermes: full code re-read (subagents · token tracking · compaction)
 
+> **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPEC.md) · delivery: [`../../TODO.md`](../../TODO.md). Frozen by decision **D8** — research docs are **never updated** with code changes, so a dated claim here is not a stale claim.
+
+
 > Added 2026-08-06 on user request: *"opencode, hermes, once again, read their entire repos… esp its subagents, its cli mode → how it tracks tokens… not the cli, but its internal algos, codes."*
 > **Method:** both shallow-cloned and source-read this pass (`/tmp/oc-deep` 218MB, `/tmp/h-deep` 220MB). OpenCode = `anomalyco/opencode` (TS/Bun rewrite); Hermes = `nousresearch/hermes-agent` (Python). Ledger depth ⬛ both (already source-read — this pass deepens).
 >

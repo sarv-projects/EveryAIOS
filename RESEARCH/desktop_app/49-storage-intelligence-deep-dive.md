@@ -1,5 +1,8 @@
 # 49 — Storage Intelligence Deep Dive (eDirStat / UltraSearch / WinDirStat / fclones)
 
+> **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPEC.md) · delivery: [`../../TODO.md`](../../TODO.md). Frozen by decision **D8** — research docs are **never updated** with code changes, so a dated claim here is not a stale claim.
+
+
 > **Date:** 2026-08-09 · **Status:** 🟦 web-verified (README + docs + secondary sources; not a full source read)
 > **Repos:** eDirStat (`xangelix/edirstat`, MIT, Rust), UltraSearch (`Dicklesworthstone/ultrasearch`, Windows Rust), WinDirStat (`windirstat/windirstat`, GPL-2.0), fclones (`pkolaczk/fclones`, MIT, Rust) + landscape: ncdu / gdu / dust / dua-cli / filelight / baobab / QDirStat
 > **Purpose:** Close the **storage-intelligence gap** (0 research mentions, 0 TODO tasks before this doc) — the most valuable new idea from the gap audit. Derive a new `everyaios-storage` crate + matrix rows D9–D11 + G7.

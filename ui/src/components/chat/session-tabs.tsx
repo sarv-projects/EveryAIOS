@@ -92,7 +92,7 @@ export function SessionTabs() {
                 void deleteSession(s.id)
               }}
               className="ml-0.5 shrink-0 rounded p-0.5 text-muted-foreground/50 opacity-0 transition-opacity hover:bg-accent hover:text-foreground group-hover:opacity-100"
-              title="Close tab (session parks in the closed ring — Reopen last closed restores it)"
+              title="Close tab (chat parks in the closed ring — Reopen last closed restores it)"
               aria-label={`Close ${s.title}`}
             >
               <X className="h-3 w-3" />

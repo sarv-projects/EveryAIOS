@@ -1,5 +1,8 @@
 # 08 · Automation Architectures — Desktop Scheduling Options
 
+> **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPEC.md) · delivery: [`../../TODO.md`](../../TODO.md). Frozen by decision **D8** — research docs are **never updated** with code changes, so a dated claim here is not a stale claim.
+
+
 > Research: how automations (reminders, daily briefs, workflow runs) execute on a desktop app where
 > everything runs on the user's machine — NO server, NO push, open-source and user-dependent.
 

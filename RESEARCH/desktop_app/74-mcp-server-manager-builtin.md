@@ -1,5 +1,8 @@
 # Doc 74 — Built-In MCP Server Manager (mcpservers.org, second pass)
 
+> **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPEC.md) · delivery: [`../../TODO.md`](../../TODO.md). Frozen by decision **D8** — research docs are **never updated** with code changes, so a dated claim here is not a stale claim.
+
+
 **Date:** 2026-08-16 · **Source:** `https://mcpservers.org/` (homepage — now **9,800+** official + community servers, 18 categories: Featured / Official 🌟 / Development / Productivity / Database / Search / Web Scraping / File System / Version Control / Communication / Cloud Service / Cloud Storage / Marketing / Finance / Design / Memory / Other). Cross-checked against doc 70 (first pass, 11,054-server `/all` sampling) + the existing `everyaios-acp` registry/installer/launcher machinery.
 
 **Question (refined):** instead of re-implementing each server's capability in Rust, can we optimize by **having MCP servers directly** — a built-in way to install + run third-party MCP servers as first-class citizens?

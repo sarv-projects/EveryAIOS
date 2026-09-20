@@ -1,5 +1,8 @@
 # 16 — Tier-1 Feature Implementation: Agents & Coding (feature-by-feature, code-level)
 
+> **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPEC.md) · delivery: [`../../TODO.md`](../../TODO.md). Frozen by decision **D8** — research docs are **never updated** with code changes, so a dated claim here is not a stale claim.
+
+
 > Compiled 2026-08-06. Tier-1 = full code-level breakdown: **every major feature, HOW it's implemented (real code paths, classes, functions), plus URLs**.
 > Tier-1 in this doc: AnythingLLM, Hermes, pi, Reasonix, OpenClaw, Agent Zero, smolagents, OpenFang.
 > Tier-1 in doc 17: browser-use, firecrawl, crawl4ai, deep-research family, Composio, Nango, Zapier connectors, Jan, Vellum.

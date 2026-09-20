@@ -1,5 +1,10 @@
 # EveryAIOS — Codebase Understanding
 
+> **Post-thaw authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md)** (27 invariants I1–I27) **+ the subsystem contracts** (`WORK` · `SESSION` · `AGENT` · `EXTERNAL-AGENTS` · `CONTEXT` · `CAPABILITIES` · `MEMORY` · `SECURITY` · `RECOVERY` · `ROUTING` · `UI` · `DESKTOP`). Refreshed post-thaw (TODO **P69.A35**). This artifact remains what it was built to be: accurate about the **code and tests** it indexes — that is its value. Where quoted code wording predates the thaw (legacy `Chief` identifiers, "token economy" module docs), quotations are verbatim and marked as such.
+
+---
+
+
 Generated understanding artifacts for the EveryAIOS desktop harness. Compact,
 reviewable, and evidence-linked: every non-obvious claim points to source files,
 tests, configuration, or Git history. These files are committed; the machine
@@ -8,14 +13,17 @@ index they were derived from (`.code-intelligence/`) is disposable and gitignore
 ## What this repository is
 
 EveryAIOS is a **local-first, BYO-key desktop harness that hosts coding agents**
-(Claude Code, Codex, OpenCode, MCP servers, an inbuilt native agent) rather than
-being one itself. Chat, browser, files, documents, code, automations, agents, and
+(Claude Code, Codex, OpenCode, MCP servers, plus an optional built-in binding) rather than
+being one itself. The user-facing container is a **Chat**; the technical unit behind it is a
+**Session** (`ARCH/SESSION.md` — a Chat may be standalone or attached to a Project). Chat, browser, files, documents, code, automations, agents, and
 connected accounts share one durable work context. Every side-effecting operation
-crosses an effect-authorization model (Guard-1 scan → authorization ticket →
-Guard-2 human approval), executor, event log, and progress timeline.
+enters the authoritative effect boundary with **authorization provenance** (`ARCH/CORE.md` §5.1):
+agent/automation mutations consume a single-use, args-bound `AuthorizationTicket` minted by
+`everyaios-guard`; human UI mutations carry trusted user-gesture provenance. Both are audited.
 
 Normative product spec: [`DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPEC.md).
 Agent contract: [`AGENTS.md`](../../AGENTS.md).
+Capability identity: [`capabilities.yaml`](../../capabilities.yaml) == `ARCH/09-FEATURE-MATRIX.md` == spec §0 (**166** ids, CI-enforced by `scripts/check-doc-sync.mjs`).
 
 ## Runtime shape (5 layers)
 
@@ -27,16 +35,23 @@ Agent contract: [`AGENTS.md`](../../AGENTS.md).
 | L1 Bun sidecar | `packages/coordinator` — LLM turn loop | ACP / MCP / CDP |
 | L0 External agents | Claude Code, Codex, OpenCode, MCP servers, Chrome | their own protocols |
 
-**The one invariant: the sidecar proposes, the Rust core disposes.** Every
-mutating effect requires an authorization ticket minted in Rust; provider API
-keys never leave the vault. See [invariants.md](invariants.md).
+**The one invariant (`ARCH/CORE.md` I1): Work proposes, the kernel disposes.** The sidecar has no
+effect-execution surface; provider API keys never leave the vault (I10). Agent/automation effects carry
+ticket provenance; human UI effects carry trusted user-gesture provenance (`ARCH/CORE.md` §5.1) —
+"every mutation is ticketed" was never the invariant. See [invariants.md](invariants.md).
+
+*Architecture view:* `ARCH/CORE.md` §2 restates the layers above as seven planes (shell · agent plane ·
+runtime kernel · capability plane · external agents · persistent intelligence · platform) with the
+dependency rule that nothing reaches an effect except through the kernel. The L0–L4 table is the
+code-layout view; the planes are the authority. "Chief" is retired as a concept — the loop owner is the
+selected agent's `AgentBinding` (`ARCH/AGENT.md`); the name survives only in legacy identifiers.
 
 ## Build / test / verify
 
 ```bash
 cargo build                                  # Rust kernel
 pnpm install                                 # JS workspace
-pnpm --filter @personal-ai/coordinator build  # sidecar
+pnpm --filter @everyaios/coordinator build   # sidecar
 cargo test                                   # all Rust tests
 pnpm test                                    # all Vitest suites
 pnpm --filter ui tsc --noEmit                # UI typecheck

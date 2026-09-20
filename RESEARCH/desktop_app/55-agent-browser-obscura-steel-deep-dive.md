@@ -1,5 +1,8 @@
 # 55 — Agent Browser Ecosystem Deep-Dive: agent-browser / Obscura / Steel (source-verified) + the 2026 Market Map
 
+> **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPEC.md) · delivery: [`../../TODO.md`](../../TODO.md). Frozen by decision **D8** — research docs are **never updated** with code changes, so a dated claim here is not a stale claim.
+
+
 > **Date:** 2026-08-10 · **Status:** ⬛/🟦 — all three repos **cloned and key files source-read** (not README-paraphrased); star counts **live-verified via GitHub API 2026-08-10**; the Medium article read via Wayback (Medium blocks direct fetch).
 > **Purpose:** verify/revert the browser-layer decisions (ARCH/08) against the three most relevant live projects, and close the market-positioning gap with the "Best Agent Browsers 2026" article.
 > **Cross-refs:** ARCH/08 (browser layer — this doc patches §8.2/§8.8/§8.9), ARCH/06 (security — adds §6.15), ARCH/09 (E10/F11 rows), doc 33 (BrowserOS), doc 34 (§2.1 chrome-for-testing), doc 06 (browser automation), ledger doc 27.

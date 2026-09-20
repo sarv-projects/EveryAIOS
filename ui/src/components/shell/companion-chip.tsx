@@ -76,7 +76,7 @@ export function CompanionChip() {
         {running
           ? paused
             ? `${agentName} is resting — paused mid-task, take over anytime`
-            : `${agentName} is focused — working on this session`
+            : `${agentName} is focused — working on this chat`
           : `${agentName} is ready — idle, waiting for your next task`}
       </TooltipContent>
     </Tooltip>

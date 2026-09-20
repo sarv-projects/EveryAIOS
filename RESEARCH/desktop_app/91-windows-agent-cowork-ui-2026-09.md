@@ -1,5 +1,8 @@
 # Doc 91 — Windows-first agent discovery, picker, and cowork readiness (2026-09-15)
 
+> **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPEC.md) · delivery: [`../../TODO.md`](../../TODO.md). Frozen by decision **D8** — research docs are **never updated** with code changes, so a dated claim here is not a stale claim.
+
+
 > **Purpose:** implementation provenance for the Windows-first UI and runtime follow-up (`TODO.md` P66). This is an audit of the current checkout plus targeted primary-source/repository research. It does not claim that a library or external product is integrated merely because it was researched.
 > **Evidence rule:** `REPO-VERIFIED` means confirmed in this checkout; `DOC/SEARCH-VERIFIED` means confirmed from an official page or repository search result; `UNVERIFIED` means it needs a Windows/live acceptance test.
 

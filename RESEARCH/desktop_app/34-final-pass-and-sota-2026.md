@@ -1,5 +1,8 @@
 # 34 — Final Pass: Gap Closure + 2026 SOTA Validations (2026-08-06)
 
+> **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPEC.md) · delivery: [`../../TODO.md`](../../TODO.md). Frozen by decision **D8** — research docs are **never updated** with code changes, so a dated claim here is not a stale claim.
+
+
 > The closing research pass before the spec. Three jobs: (a) sweep for **other repos** we'd missed, (b) **web-verify** the tech-SOTA assumptions the spec rests on, (c) reconcile the ledger to 142. Feeds directly into `DESKTOP-APP-SPEC.md`.
 > ⚠️ The earlier "agent-OS family" README-only gap (doc 30 §9) is closed for the flagship (BrowserOS → doc 33 source-read). ZeroClaw/IronClaw remain 🟦 structure-verified (candidate for a future code-level pass).
 

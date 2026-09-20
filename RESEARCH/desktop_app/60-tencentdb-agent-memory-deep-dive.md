@@ -1,5 +1,8 @@
 # 60 — TencentDB Agent Memory Deep-Dive (memory-asset governance + distillation pipeline)
 
+> **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPEC.md) · delivery: [`../../TODO.md`](../../TODO.md). Frozen by decision **D8** — research docs are **never updated** with code changes, so a dated claim here is not a stale claim.
+
+
 > Added 2026-08-13. Source-level read of TencentDB-Agent-Memory README/INSTALL (live-verified via GitHub API: **21,002⭐, MIT**, created 2026-04-07, pushed 2026-08-11, current release **v2.0.0**).
 > **This is the single best existing articulation of the "one memory model" product invariant we already decided to freeze** — one governed taxonomy for *everything an agent can remember*, not a chat-log warehouse.
 

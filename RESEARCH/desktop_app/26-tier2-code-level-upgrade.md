@@ -1,5 +1,8 @@
 # 26 — Tier-2 Code-Level Upgrade (2026-08-06)
 
+> **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPEC.md) · delivery: [`../../TODO.md`](../../TODO.md). Frozen by decision **D8** — research docs are **never updated** with code changes, so a dated claim here is not a stale claim.
+
+
 > Live structure verification for every tier-2 repo in doc 18 (structures fetched from GitHub this pass). Upgrades medium maps → source-verified. ⚠️ = API rate-limited this pass, structure pending re-listing (paths per doc 18).
 
 ---

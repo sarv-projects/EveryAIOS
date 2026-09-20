@@ -1,18 +1,33 @@
-# 02 — Module Layout (The 8 Full-Stack Modules)
+# 02 — Module Layout (derived from CORE §4 and §13)
 
-> **The 8 Full-Stack Modules Architecture:** Every module in the repository belongs to exactly one of the 8 Full-Stack Modules. EveryAIOS functions as the **Universal Agentic OS & Desktop Harness**, driving external coding agents while providing native Office primitives, tiered browsers, computer use, durable worktrees, and 7-layer Guard-2 security.
+> **DERIVED DOCUMENT — see [`CORE.md`](CORE.md) §4 first.** Ownership is defined by CORE's 9-question
+> matrix (one owner per question). Where this document's mapping disagrees with CORE §4, CORE wins. The
+> target is a disposition table (canonical / shrink / merge / remove), not a description of the current tree.
+> **Rewritten `P69.A15` (done 2026-09-20).`
+
+> **How to read this document:** §2.1 maps each component to its owning plane (CORE §13) and the single
+> ownership question it answers (CORE §4). §2.3 is the disposition table — the final action per component.
+> The per-crate evidence rows (§2.2) and the workspace tree are retained as still-true implementation detail.
+
+---
+
+
+> **The 8 function groups:** every module in the repository belongs to exactly one function group, and each
+> group is anchored to a CORE plane (§2.1 below states the plane per row). EveryAIOS functions as the
+> **durable agent operating plane** hosting replaceable external agents, while providing native Office
+> primitives, tiered browsers, computer use, durable worktrees, and sole-Guard security.
 > **Rule:** A function that appears in two contexts is one implementation with thin façades, never two competing implementations.
 
 ## 2.1 The 8 Full-Stack Modules Mapping
 
 | Module | Rust Crates (`crates/`) | TS Sidecar Packages (`packages/`) | Frontend Cockpit Surfaces (`ui/src/`) |
 | :--- | :--- | :--- | :--- |
-| **Module 1: Universal Agent Harness & Swarm Orchestrator** | `everyaios-acp`, `everyaios-core` (`multirun.rs`, `worktrees.rs`), `everyaios-blueprint` (`subagent.rs`), `everyaios-agents` | `coordinator` (`chat.ts`, `chief.ts`), `core-agents` | `screens/AgentsScreen.tsx`, `screens/ChatScreen.tsx` (Chief picker), right-rail `diff` viewport |
+| **Harness & swarm orchestration (planes 2 + 5)** | `everyaios-acp`, `everyaios-core` (`multirun.rs`, `worktrees.rs`), `everyaios-blueprint` (`subagent.rs`), `everyaios-agents` | `coordinator` (`chat.ts`), `core-agents` | `screens/AgentsScreen.tsx`, `screens/ChatScreen.tsx` (agent picker), right-rail `diff` viewport |
 | **Module 2: Model Gateway & Encrypted Keyring Vault** | `everyaios-vault`, `everyaios-catalog` | `core-providers`, `core-ai` | `screens/SettingsScreen.tsx` (Providers & Keys, Local Models), `guard.html` unlock modal |
 | **Module 3: Unified Cockpit Shell & Context Compactor** | `everyaios-engine`, `everyaios-ipc`, `src-tauri` (37 command modules) | `coordinator` (`prompt.ts`, `tools.ts`), `core-engine` | `App.tsx`, `Layout.tsx`, multi-control composer, 19 right-rail viewports |
 | **Module 4: Governed MCP & Capability Marketplace** | `everyaios-mcp` | `core-connectors` (`connector_hub`) | `screens/ConnectorsScreen.tsx`, per-agent tool scoping drawer |
 | **Module 5: Work-Native Primitives (Office, Browser, CUA)** | `everyaios-office` (IronCalc 0.8.3, OOXML), `everyaios-browser`, `everyaios-cdp`, `everyaios-desktop` (CUA) | `coordinator` (`tools/browser.ts`, `tools/office.ts`) | Right-rails: `office-xlsx`, `office-docx`, `office-pdf`, `browse`, `desktop` |
-| **Module 6: Durable Work & Cognitive 5-Tier Memory** | `everyaios-memory` (ACT-R), `everyaios-storage`, `everyaios-codeintel` | `core-memory`, `core-files` | `screens/MemoryScreen.tsx`, `screens/ProjectsScreen.tsx`, `screens/FilesScreen.tsx`, right-rail `graph` |
+| **Module 6: Durable Work & Cognitive Memory (four classes)** | `everyaios-memory` (ACT-R), `everyaios-storage`, `everyaios-codeintel` | `core-memory` | `screens/MemoryScreen.tsx`, `screens/ProjectsScreen.tsx`, `screens/FilesScreen.tsx`, right-rail `graph` |
 | **Module 7: Executive Automations & Calendar Daemon** | `everyaios-core` (`automation_runtime.rs`) | `coordinator` (`scheduler.ts`), `core-automations` | `screens/AutomationsScreen.tsx`, `screens/CalendarScreen.tsx`, right-rail `terminal` |
 | **Module 8: Security Guard-2 & Merkle Audit Membrane** | `everyaios-guard` (`netfloor.rs`, `pathfloor.rs`), `everyaios-audit`, `everyaios-script` (rquickjs) | `core-tools` (`trust-ladder`) | `screens/GuardScreen.tsx`, `screens/ActivityScreen.tsx`, Guard approval diff cards |
 
@@ -31,7 +46,7 @@ desktop_app/
 │   ├── everyaios-browser/       ← Tiered browser engine (Lightpanda, Chrome CDP, Scrapling, CloakBrowser)
 │   ├── everyaios-cdp/           ← CDP WebSocket client and protocol types
 │   ├── everyaios-desktop/       ← Computer Use Agent (Windows Graphics Capture, A11y tree, Win32 SendInput)
-│   ├── everyaios-memory/        ← 5-tier memory, ACT-R activation, SQLite FTS5 BM25 search, knowledge graph
+│   ├── everyaios-memory/        ← four memory classes (Context/Episodic/Knowledge/Procedural); ACT-R + FTS5/BM25 + graph are strategies
 │   ├── everyaios-storage/       ← Storage intelligence: work-stealing walker, arena snapshots, 7-stage dedup
 │   ├── everyaios-codeintel/     ← Code intelligence: tree-sitter AST repo-map, PageRank, LSP client
 │   ├── everyaios-mcp/           ← Model Context Protocol client & server (JSON-RPC 2.0 stdio & SSE)
@@ -81,7 +96,7 @@ desktop_app/
 |---|---|---|
 | Agent loop (pi-style) | `core-engine` (stages, risk-compass) | length-guard (fail truncated tool calls), model-swap hook, cost ledger wiring |
 | Blueprint/spec loader | `core-agents` (registry) | `.md` parser → AgentConfig[]; continuous re-write of status blocks |
-| Memory + RAG | `core-memory`, `core-files` (7 algos, hybrid search, embeddings) | multi-signal retrieval fusion (mem0 pattern), procedural memory, Letta-style paging hooks |
+| Memory + RAG | `core-memory`; vectorless FTS5/BM25 + embeddings + chunking live in Rust (`everyaios-memory::bm25`, `everyaios-storage`) — `core-files` was consolidated away (Tier 2c) | multi-signal retrieval fusion (mem0 pattern), procedural memory, Letta-style paging hooks |
 | Connector hub | `core-connectors` (orchestrator, 27+ adapters, composio) | routing engine per doc 13; usage meters; Auth Bridge |
 | **P6 connector transports** | `everyaios-core::connectors` (gmail, calendar, imap_smtp, browser_session) | injectable `HttpTransport`/`CdpSession`/`MailTransport` seams; Gmail API read/send/modify with 401→refresh→retry, Calendar CRUD + ICS export, IMAP/SMTP fallback, browser-session Gmail/Notion/Linear/Outlook DOM reading — 24 tests green |
 | Search/research | `core-search` (cascade, bm25, research-tiers) | deep-research tree runner (doc 07); **tiered cascade + SQLite result cache (G8, Algorithm #33, doc 52)** — cached instant tier → WebSurfx → SearXNG → fallback; parallel top-N fetch cascade |
@@ -101,3 +116,59 @@ desktop_app/
 - `agents/*.md` blueprints (sidecar): per-agent models, subagent limits, tools, permission policy — the "everything is a file" rule (v2.0 §7.6).
 - `providers.toml` (key-ring): provider → key pool → routing weights (03).
 - `.env` fallbacks: `ANTHROPIC_API_KEY` etc. as last-resort single-key fallback (pi pattern, doc 19 §1).
+
+---
+
+## 2.3 Disposition — every existing component (the target action)
+
+> The table this document exists to become. Each row is the *final* action against the target module map in
+> [`CORE.md`](CORE.md) §13. Rows that move authority are the load-bearing ones: a component listed as
+> *shrink*, *thin facade* or *remove authority* currently holds a second copy of state another component
+> owns, which is what I4 forbids. Tracked as `P69.D` in `../TODO.md`.
+
+### Rust crates
+
+| Component | Plane (CORE §13) | Ownership question (CORE §4) | Final action | Why |
+|---|---|---|---|---|
+| `everyaios-core` | 3 Runtime kernel | state · effects | **Shrink / restructure heavily** | keep only the execution kernel: Work · Run · Step · Effect · Event · Receipt · ToolRegistry · Workspace · Work Gateway · checkpoints · effect dispatch · idempotency · observation · verification hooks |
+| `everyaios-types` | 3 Runtime kernel | schemas | **Canonical** | the schema layer — ids, contracts, envelopes |
+| `everyaios-ipc` | 3 Runtime kernel | — (transport) | **Keep, transport only** | no logic, no decisions, no routing |
+| `everyaios-guard` | 3 Runtime kernel | permissions | **Canonical security authority** | the only allow/deny/ask decider |
+| `everyaios-vault` | 3 Runtime kernel | credentials | **Canonical credential authority** | the only holder of key material |
+| `everyaios-audit` | 3 Runtime kernel | events (evidence) | **Canonical evidence authority** | append-only log + receipts |
+| `everyaios-engine` | 2 Agent plane | — (pure policy) | **Keep, pure policy only** | policies and helpers, never a runtime |
+| `everyaios-agents` | 2 Agent plane | agents | **Canonical `AgentRegistry`** | one `AgentDefinition`, one registry |
+| `everyaios-blueprint` | 2 Agent plane | — (declarative plans) | **Shrink to declarative planning** | plans, dependencies, acceptance; no execution |
+| `everyaios-acp` | 5 External agents | — (adapter + bridge) | **Keep — becomes the adapter + AgentBridge** | lifecycle protocol; never a second kernel |
+| `everyaios-mcp` | 4 Capability plane | — (protocol/facade) | **Keep — protocol/facade adapter** | no second permission universe |
+| `everyaios-memory` | 6 Persistent intelligence | memory (storage) | **Keep — the persistent memory implementation** | one memory system, algorithms as strategies |
+| `everyaios-search` | 4 Capability plane | — (capability impl) | **Canonical search implementation** | one cascade |
+| `everyaios-catalog` | 7 Platform | — (metadata) | **Keep, shrink** | metadata only, not a route brain |
+| `everyaios-browser` | 4 Capability plane | — (capability impl) | **Keep** | one `BrowserService` façade |
+| `everyaios-cdp` | 4 Capability plane | — (backend) | **Keep as a backend** | a strategy under the browser façade |
+| `everyaios-desktop` | 4 Capability plane | — (capability impl) | **Keep** | computer use, separate from browser |
+| `everyaios-office` | 4 Capability plane | — (capability impl) | **Keep** | one `OfficeService`, formats underneath |
+| `everyaios-storage` | 4 Capability plane | — (capability impl) | **Keep** | must not own Workspace |
+| `everyaios-codeintel` | 4 Capability plane | — (evidence) | **Keep** | evidence only — never writes, never executes |
+| `everyaios-script` | 4 Capability plane | — (runtime) | **Keep** | embedded deterministic runtime, not a shell |
+| `everyaios-eval` | 7 Platform | — (harness) | **Keep outside the runtime** | no production dependency on evaluation |
+
+### TypeScript packages
+
+| Component | Plane (CORE §13) | Ownership question (CORE §4) | Final action | Why |
+|---|---|---|---|---|
+| `coordinator` | 2 Agent plane | — (turn coordination) | **Rewrite into turn coordination** | owns orchestration, not reasoning and not execution. The loop owner is the selected agent ([AGENT.md](AGENT.md)) |
+| `core-ai` | 2 Agent plane | — (generation contracts) | **Keep / shrink** | context · prompt · generation contracts |
+| `core-engine` | 2 Agent plane | — | **Collapse into pure policy + helpers** | it is currently a competing conversation runtime |
+| `core-agents` | 2 Agent plane | agents (facade) | **Thin facade** | query the canonical registry; own nothing |
+| `core-memory` | 2 Agent plane | memory (reasoning) | **Shrink drastically** | memory *reasoning* only — no storage |
+| `core-providers` | 2 Agent plane | — (metadata/handles) | **Shrink; no vault** | metadata and handle queries; **no credential custody** |
+| `core-tools` | 2 Agent plane | tools (facade) | **Shrink drastically** | model-facing definitions + serialization only |
+| `core-security` | — | permissions (remove) | **Remove as security authority** | crypto utility at most; Guard is the authority |
+| `core-search` | 2 Agent plane | — (facade) | **Thin facade** | no second cascade |
+| `core-connectors` | 4 Capability plane | — (adapter) | **Adapter/facade only** | connector actions produce an `EffectRequest` |
+| `core-domain` | — | schemas (merge) | **Merge / reduce** | must not duplicate `everyaios-types` |
+
+> **Reading the table:** *canonical* means it is the single owner and other components must defer to it.
+> *Shrink* means it currently owns something another component owns. *Thin facade* means it may keep its API
+> and lose its state. A row marked *remove authority* is a defect, not a preference.

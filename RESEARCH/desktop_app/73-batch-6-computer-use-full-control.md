@@ -1,5 +1,8 @@
 # Doc 73 — Batch 6: Computer-Use / Full-Computer Control (2026-08-16)
 
+> **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPEC.md) · delivery: [`../../TODO.md`](../../TODO.md). Frozen by decision **D8** — research docs are **never updated** with code changes, so a dated claim here is not a stale claim.
+
+
 **Date:** 2026-08-16 · **Method:** web-verified (GitHub + docs), cross-checked against docs 09/20/21/34/35/47/48/52/65/66/72.
 **Scope:** 19 repos — vector/search + scraping + UI + models + **computer-use / full-computer control**.
 **User priority:** *"the ability to completely control the entire computer is very important."*

@@ -1,8 +1,15 @@
 # Hotspots
 
+> **Post-thaw authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md)** (27 invariants I1–I27) **+ the subsystem contracts** (`WORK` · `SESSION` · `AGENT` · `EXTERNAL-AGENTS` · `CONTEXT` · `CAPABILITIES` · `MEMORY` · `SECURITY` · `RECOVERY` · `ROUTING` · `UI` · `DESKTOP`). Refreshed post-thaw (TODO **P69.A35**). This artifact remains what it was built to be: accurate about the **code and tests** it indexes — that is its value. Where quoted code wording predates the thaw (legacy `Chief` identifiers, "token economy" module docs), quotations are verbatim and marked as such.
+
+---
+
+
 Graph-derived signals from the codegraph index (commit `c574ea4`, tree-sitter,
 2,203 file-level edges). These are **indicators for where to look and what to
-protect when changing code — not quality scores**.
+protect when changing code — not quality scores**. Post-thaw note: the P69.A35 refresh did **not**
+re-run the indexer — all counts below are carried from the 0dd50da verification (see
+`freshness.json`); re-run `codegraph.py index` to re-verify against the current tree.
 
 ## PageRank top 15 (structural importance)
 
@@ -35,10 +42,11 @@ Reproduce: `.venv/bin/python .agents/skills/codebase-intelligence/scripts/codegr
 - **`src-tauri/src/lib.rs` (out=48, in=35)** — the single fan-out point between
   shell and kernel. Any new command touches it; the `docs-sync` IPC-parity
   checks exist because of this concentration.
-- **`vault/src/lib.rs` (in=24)** — the trust anchor. I2 in
-  [invariants.md](invariants.md) funnels everything through it.
+- **`vault/src/lib.rs` (in=24)** — the trust anchor. CORE I10 (sole vault custody of provider keys)
+  funnels everything through it.
 - **`store.ts` (in=94, out=10)** — UI state hub; also the largest ref surface
-  (4,078 refs), so renames are high-blast-radius.
+  (4,078 refs), so renames are high-blast-radius. Post-thaw direction is to collapse any duplicated
+  Work/session truth out of it (projection/cache/ephemeral only — TODO P69.D24).
 
 ## Cross-crate concentration
 

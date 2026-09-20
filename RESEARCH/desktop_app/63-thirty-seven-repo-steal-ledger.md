@@ -1,5 +1,8 @@
 # 63 — 37-Repo Steal Ledger (harness / browser / office / user-capability clusters)
 
+> **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPEC.md) · delivery: [`../../TODO.md`](../../TODO.md). Frozen by decision **D8** — research docs are **never updated** with code changes, so a dated claim here is not a stale claim.
+
+
 > **Pass:** user-supplied repo list (2026-08-15), all **cloned + source-read** (34 repos) or **web-level verified** (4 giants + LibreOffice core). **Ledger: unchanged at 255 repos — this pass adds 0 repos** (every repo below is either already tracked, already a dependency, or a pattern-source already mapped — no new ledger entries; see §0 verdicts).
 > **Doctrine:** steal = reimplement in our own stack (Rust for crates, TS for coordinator) with source-pattern credit; never vendor/copy code. Rust rewrite of TS/JS patterns is explicitly in-scope (user directive: "rewrite in another lang, say in rust, is quite viable").
 > **Cross-references:** SPEC §0 rows · ARCH/09 · TODO phases · prior ledger docs (27/46/47/48/49/50/52/54/55/56/57/58/59/60/61/62).

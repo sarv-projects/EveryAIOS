@@ -1,5 +1,8 @@
 # 35 — Open WebUI · Vane · Open WebUI Computer (deep-dive)
 
+> **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPEC.md) · delivery: [`../../TODO.md`](../../TODO.md). Frozen by decision **D8** — research docs are **never updated** with code changes, so a dated claim here is not a stale claim.
+
+
 > Added 2026-08-06 on user request: check `ItzCrazyKns/Vane`, `open-webui/open-webui`, and the pasted workspace pitch ("Files, chat, git and code on one screen… Codex, Claude Code, Cursor, Grok, OpenCode, Cline side by side… pick it up from your phone mid-run") — identified as **Open WebUI Computer** (pitch matches the `cptr` README/docs; a young 401★ repo, so treat as design validation — no independent confirmation from other marketing channels yet).
 > Sources: repo READMEs + docs verified live this pass; Vane **source-read** via shallow clone (`/tmp/vane-deep`); Open WebUI structure map already in docs 15/18/26.
 > **License discipline:** Open WebUI + Computer both report `NOASSERTION` (custom/complex licensing) → **learn the patterns (chunk-merge, artifacts UX, harness-driving), never copy code.** Vane is MIT (patterns + code-reference both fine).

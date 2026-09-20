@@ -1,5 +1,8 @@
 # 50 — Generative UI, Image Gen, Voice, Clipboard & Email/Calendar Gaps
 
+> **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPEC.md) · delivery: [`../../TODO.md`](../../TODO.md). Frozen by decision **D8** — research docs are **never updated** with code changes, so a dated claim here is not a stale claim.
+
+
 > **Date:** 2026-08-09 · **Status:** 🟦 web-verified (protocol docs, READMEs, secondary sources)
 > **Repos/protocols:** AG-UI (`ag-ui-protocol/ag-ui`, MIT), CopilotKit, LibreChat (image gen + resumable streams), Piper, sherpa-onnx, espeak-ng, Coqui TTS, openWakeWord, Porcupine, Vosk, whisper.cpp, arboard, imapflow, openonion/email-agent
 > **Purpose:** Close the remaining gap-audit items: generative UI/AG-UI, image generation, clipboard tool, resumable streams, voice output + wake word, email/calendar connectors.

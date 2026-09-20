@@ -1,5 +1,8 @@
 # Doc 83 — Competitor Batch: openworker · cc-switch · skales · deepseek-harness (code-level, cloned + source-read)
 
+> **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPEC.md) · delivery: [`../../TODO.md`](../../TODO.md). Frozen by decision **D8** — research docs are **never updated** with code changes, so a dated claim here is not a stale claim.
+
+
 **Date:** 2026-08-17 · **Sources (cloned + source-read, shallow):** `andrewyng/openworker` (Python 14.7k★, Tauri+aisuite), `farion1231/cc-switch` (Tauri 2, 126k★, 8 agent CLIs), `skalesapp/skales` (BSL 1.1 closed-source, Electron+Next.js, 1.6k★, v12.8.0), `deepseek-ai/deepseek-harness` (MIT, 93k★, Cordis plugin kernel). Cross-checked against our `DESKTOP-APP-SPEC` v3.22, `crates/everyaios-*`, `packages/coordinator`, `ARCH/01`, `ARCH/06`, docs 27 (ledger), 61 (desktop land-grab), 68 (market research), 80–82.
 
 **Question (user):** *"deep-dive these 4 repos — our goals are especially casual users. Analyse capabilities + architecture, compare against current docs, decide what to steal vs build our own."*

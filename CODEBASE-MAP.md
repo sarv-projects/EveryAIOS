@@ -8068,8 +8068,8 @@ same heuristic class as §11, so a script invoked through a variable or a wrappe
 #### `crates/everyaios-core/tests/fixtures/p64_edit_ladder.json` — 1.0 KB · 44 lines
 - data file — 2 top-level keys
 
-#### `docs/codebase/freshness.json` — 5.1 KB · 83 lines
-- data file — 12 top-level keys
+#### `docs/codebase/freshness.json` — 7.3 KB · 115 lines
+- data file — 13 top-level keys
 
 #### `packages/core-providers/src/generated/model-catalog.backup.json` — 94.3 KB · 4,168 lines
 - data file — 6 top-level keys
@@ -8123,14 +8123,14 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 | .agents/skills/codebase-intelligence/references/ | 7 | 466 |
 | .agents/skills/skill-creator/ | 1 | 85 |
 | .agents/templates/ | 1 | 169 |
-| ARCH — the design set (+ DIAGRAMS & ADR) | 20 | 4,626 |
-| RESEARCH/2026-ai-landscape — other research | 11 | 937 |
-| RESEARCH/desktop_app — the prior-art & competitor corpus | 93 | 12,708 |
+| ARCH — the design set (+ DIAGRAMS & ADR) | 20 | 4,906 |
+| RESEARCH/2026-ai-landscape — other research | 11 | 970 |
+| RESEARCH/desktop_app — the prior-art & competitor corpus | 93 | 12,987 |
 | deploy/ — deployment docs | 1 | 105 |
-| docs/codebase/ | 10 | 730 |
-| root — specs, handover, and this map | 12 | 19,461 |
+| docs/codebase/ | 10 | 960 |
+| root — specs, handover, and this map | 12 | 19,848 |
 | ui/ — UI design docs | 1 | 83 |
-| **TOTAL** | **164** | **40,296** |
+| **TOTAL** | **164** | **41,505** |
 
 ### 14.1 .agents/
 
@@ -8226,90 +8226,90 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 
 ### 14.7 ARCH — the design set (+ DIAGRAMS & ADR)
 
-#### `ARCH/00-INDEX.md` — 66 lines · 12.6 KB
-> ARCH — The Desktop Agentic-OS Architecture (8 Full-Stack Modules)
+#### `ARCH/00-INDEX.md` — 109 lines · 16.2 KB
+> ARCH — Derived Index (points at CORE)
 
-- opening: **Status:** Architecture reference. It works alongside the master spec `../DESKTOP-APP-SPEC.md`; this ARCH series defines architecture boundaries, module ownership, and diagrams.
+- opening: **⛭ ROOT AUTHORITY: [`CORE.md`](CORE.md).** Read that first.
 
-#### `ARCH/01-SYSTEM-ARCHITECTURE.md` — 156 lines · 10.9 KB
-> 01 — System Architecture: The 8 Full-Stack Modules
+#### `ARCH/01-SYSTEM-ARCHITECTURE.md` — 156 lines · 12.1 KB
+> 01 — System Architecture: Derived Overview
 
-- opening: **Status:** Architecture Reference. **Core Architectural Principle:** EveryAIOS is the **Universal Agentic OS & Desktop Harness**.
+- opening: **DERIVED DOCUMENT — see [`CORE.md`](CORE.md) first.** This file is a *derived overview* of the module story.
 
-#### `ARCH/02-MODULE-LAYOUT.md` — 104 lines · 34.5 KB
-> 02 — Module Layout (The 8 Full-Stack Modules)
+#### `ARCH/02-MODULE-LAYOUT.md` — 175 lines · 40.6 KB
+> 02 — Module Layout (derived from CORE §4 and §13)
 
-- opening: **The 8 Full-Stack Modules Architecture:** Every module in the repository belongs to exactly one of the 8 Full-Stack Modules.
+- opening: **DERIVED DOCUMENT — see [`CORE.md`](CORE.md) §4 first.** Ownership is defined by CORE's 9-question matrix (one owner per question).
 
-#### `ARCH/03-BYOK-KEYRINGS.md` — 91 lines · 12.4 KB
+#### `ARCH/03-BYOK-KEYRINGS.md` — 119 lines · 14.2 KB
 > 03 — BYOK Key-Rings: Multiple Keys per Provider, Fallback Rotation
 
-- opening: **The user requirement, verbatim:** *"for BYOK, under each provider, add an option that multiple keys under each provider can be added.
+- opening: Three unrelated things get conflated in code and UI, so they are separated here once.
 
-#### `ARCH/04-OFFICE-ENGINE.md` — 75 lines · 8.9 KB
+#### `ARCH/04-OFFICE-ENGINE.md` — 75 lines · 9.2 KB
 > 04 — Office Engine: Open + Edit Word / Excel / PPT / PDF
 
 - opening: **The user requirement, verbatim:** *"must have the capability to open excel, word, ppt, pdf, etc — all types of files, Microsoft files — edit."* Design rules: **surgical, byte-preserving** edits (nev
 
-#### `ARCH/05-TOKEN-ECONOMY.md` — 147 lines · 16.0 KB
-> 05 — Token Economy: Minimize Inputs, Maximize Output Power
+#### `ARCH/05-TOKEN-ECONOMY.md` — 187 lines · 18.5 KB
+> 05 — Context Engineering: Minimize Inputs, Maximize Output Power
 
-- opening: **The user's #1 goal:** *"tokens minimizing, yet greater, more powerful, capable outputs — so control the inputs basically."* This is the entire doc.
+- opening: **SCOPE REDUCED — see [`CORE.md`](CORE.md) §8 and [`CONTEXT.md`](CONTEXT.md) first.** The research here is retained, but its status changed: prefix-cache economics, tool-result size control and pass-b
 
-#### `ARCH/06-SECURITY-GUARDRAILS.md` — 236 lines · 26.6 KB
+#### `ARCH/06-SECURITY-GUARDRAILS.md` — 264 lines · 29.2 KB
 > 06 — Security & Guardrails
 
-- opening: **The user requirement, verbatim:** *"guardrails are very, very important.
+- opening: **DERIVED DOCUMENT — see [`CORE.md`](CORE.md) §6 and [`SECURITY.md`](SECURITY.md) first.** `SECURITY.md` owns the authorization model, the ticket lifecycle, the sandbox-as-mechanism rule, and the hone
 
-#### `ARCH/07-MEMORY-CONTEXT.md` — 164 lines · 12.2 KB
+#### `ARCH/07-MEMORY-CONTEXT.md` — 79 lines · 9.9 KB
 > 07 — Memory & Context System
 
-- opening: **The user requirement, verbatim:** *"memory and context systems"* are a top priority, with token minimization.
+- opening: **SUPERSEDED MODEL — see [`MEMORY.md`](MEMORY.md) first.** The five-tier model is replaced by **four classes** (Context · Episodic · Knowledge · Procedural), and episodic memory is now a *projection o
 
-#### `ARCH/08-BROWSER-LAYER.md` — 144 lines · 19.8 KB
+#### `ARCH/08-BROWSER-LAYER.md` — 113 lines · 13.9 KB
 > 08 — Browser Layer (the agent's real browser)
 
-- opening: **The user requirement, verbatim:** *"don't forget browser.
+- opening: **DERIVED DOCUMENT — see [`CORE.md`](CORE.md) §2 and [`CAPABILITIES.md`](CAPABILITIES.md) first.** Browser is one capability pack behind one `BrowserService` façade with replaceable strategies underne
 
-#### `ARCH/09-FEATURE-MATRIX.md` — 240 lines · 104.6 KB
+#### `ARCH/09-FEATURE-MATRIX.md` — 241 lines · 101.9 KB
 > 09 — Module, Submodule & Function Matrix (the complete derivation)
 
-- opening: This matrix maps each submodule and function across the 8 Modules to its feature shape, implementation home, status, and source reference.
+- opening: **SCOPE NARROWED — see [`CORE.md`](CORE.md) first.** This file’s job is the capability/feature matrix (identity + status) **only**.
 
-#### `ARCH/10-BUILD-PLAN.md` — 97 lines · 20.1 KB
+#### `ARCH/10-BUILD-PLAN.md` — 91 lines · 10.1 KB
 > 10 — Build Plan (phases with exit criteria)
 
-- opening: **Full-Stack Implementation Roadmap:** Coordinates delivery across the 8 Full-Stack Modules (Modules 1 through 8).
+- opening: **Derived from [`CORE.md`](CORE.md) — the root authority; this document specializes, never restates, it.** **SCOPE REDUCED — delivery status lives in [`../TODO.md`](../TODO.md).** This document keeps
 
-#### `ARCH/11-AI-CHAT-FEATURES.md` — 156 lines · 18.6 KB
+#### `ARCH/11-AI-CHAT-FEATURES.md` — 176 lines · 21.8 KB
 > 11 — AI Chat Features: Copy · Convert · Reject (the derivation)
 
-- opening: **Full-Stack Module:** Module 1 & Module 3 — Universal Harness Chief Loop & Cockpit Shell Conversation Features (`packages/coordinator/src/chat.ts`, `prompt.ts`, `chief.ts`).
+- opening: **SPLIT PENDING — see [`CORE.md`](CORE.md) and [`AGENT.md`](AGENT.md) first.** The AI-architecture rationale here is superseded wherever it describes an EveryAIOS-owned reasoning loop: the loop belong
 
-#### `ARCH/12-UI-SPEC.md` — 889 lines · 71.8 KB
+#### `ARCH/12-UI-SPEC.md` — 907 lines · 74.0 KB
 > 12 — UI/UX Specification: Desktop Layout & Interaction Design
 
-- opening: **Full-Stack Module:** Module 3 — Unified Cockpit Shell & Context Compaction Engine (React 19 + Zustand 5 + Tailwind 4, 12 Center Screens & 19 Viewports).
+- opening: **Derived from [`CORE.md`](CORE.md) — the root authority; this document specializes, never restates, it.** **CONTRACT RE-SCOPED — see [`UI.md`](UI.md) first.** This document remains the authority for layout and interaction *detail*.
 
-#### `ARCH/13-PROMPT-ANATOMY.md` — 32 lines · 1.8 KB
+#### `ARCH/13-PROMPT-ANATOMY.md` — 51 lines · 2.9 KB
 > ARCH/13 — Prompt Anatomy
 
-- opening: **Full-Stack Module:** Module 3 — Unified Cockpit Shell & Context Compaction Engine (`packages/coordinator/src/prompt.ts`, 12-segment cache-affine prompt assembler).
+- opening: **Derived from [`CORE.md`](CORE.md) — the root authority; this document specializes, never restates, it.** **ABSORBED — see [`CONTEXT.md`](CONTEXT.md).** The prompt assembler is the *serializer* of Co
 
-#### `ARCH/15-CONNECT-STORE.md` — 137 lines · 9.6 KB
+#### `ARCH/15-CONNECT-STORE.md` — 158 lines · 11.1 KB
 > Connect Store — remote MCP + OAuth connectors (the "click → sign in → use" surface)
 
-- opening: **Full-Stack Module:** Module 4 — Governed MCP & Capability Marketplace (`crates/everyaios-mcp`, stdio & remote SSE MCP client/server).
+- opening: **DERIVED DOCUMENT — see [`CORE.md`](CORE.md) §4 and [`CAPABILITIES.md`](CAPABILITIES.md) first.** Connectors are a capability pack: a connector declares a manifest, authentication, capabilities, prov
 
-#### `ARCH/16-CHAT-LOOP-RUST-PORT.md` — 151 lines · 9.5 KB
+#### `ARCH/16-CHAT-LOOP-RUST-PORT.md` — 186 lines · 12.0 KB
 > ARCH/16 — Porting the async chat loop to Rust (ConversationEngine `run()` + `runChatStream`)
 
-- opening: **Status: DE-PRIORITIZED / FROZEN (2026-09-17 Architecture Freeze).** Under the 8 Full-Stack Module architecture, EveryAIOS is finalized as the **Universal Agent Harness and Desktop Cowork OS**.
+- opening: **Derived from [`CORE.md`](CORE.md) — the root authority; this document specializes, never restates, it.** **SUPERSEDED IN PART — see [`AGENT.md`](AGENT.md).** The premise of this document is that EveryAIOS owns the chat loop.
 
-#### `ARCH/17-NATIVE-AGENT.md` — 573 lines · 43.1 KB
-> ARCH/17 — The EveryAIOS Native Agent (frozen)
+#### `ARCH/17-NATIVE-AGENT.md` — 609 lines · 46.1 KB
+> ARCH/17 — The EveryAIOS Native Agent (frozen status lifted by ADR/0003)
 
-- opening: **Status:** Architecture contract, frozen 2026-09-15 (two-plane contract v3.75; native-plane rows **B10/B11/C14/C15/F16/I14–I17** in v3.76; Settings Control Center v3.77; Windows-first runtime/picker/cowork evidence contract v3.78).
+- opening: **PARTLY SUPERSEDED — read [`CORE.md`](CORE.md), [`AGENT.md`](AGENT.md) and [`EXTERNAL-AGENTS.md`](EXTERNAL-AGENTS.md) first.** The **frozen** status of this document is lifted by `ADR/0003`.
 
 #### `ARCH/ADR/0001-connector-platform-mcp-first.md` — 32 lines · 1.3 KB
 > ADR-0001 — MCP is the connector platform; no third-party aggregator
@@ -8321,534 +8321,534 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 
 - opening: - **Status:** accepted - **Date:** 2026-08-16 - **Applies to:** `ui/`, `TODO.md` UI sections, `ARCH/12-UI-SPEC.md`
 
-#### `ARCH/DIAGRAMS.md` — 1,102 lines · 42.8 KB
+#### `ARCH/DIAGRAMS.md` — 1,144 lines · 45.7 KB
 > EveryAIOS — Architecture & Flow Diagrams (Mermaid)
 
-- opening: **Generated:** 2026-09-15 · **Spec version:** v3.78 (current contract; the two-plane content in diagram 27 froze at v3.75 — see `SPEC-CHANGELOG.md`) · **Diagrams:** 27 **Purpose:** Every major system flow visualized.
+- opening: **Generated:** 2026-09-15 · **Spec version:** v3.78 (current contract; the two-plane content in diagram 27 froze at v3.75 — see `SPEC-CHANGELOG.md`) · **Diagrams:** 28 (diagram 0 is the canonical back
 
 ### 14.8 RESEARCH/2026-ai-landscape — other research
 
-#### `RESEARCH/2026-ai-landscape/00-INDEX.md` — 48 lines · 3.4 KB
+#### `RESEARCH/2026-ai-landscape/00-INDEX.md` — 51 lines · 3.8 KB
 > 2026 AI Landscape — Research Archive Index
 
-- opening: **Purpose:** Permanent reference for all research conducted for the open-source desktop AI app (browser + chat + coding + research + reader + editor in one).
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/2026-ai-landscape/01-master-landscape-2026.md` — 145 lines · 12.0 KB
+#### `RESEARCH/2026-ai-landscape/01-master-landscape-2026.md` — 148 lines · 12.4 KB
 > 01 · Master Landscape 2026 — Every Project Researched
 
-- opening: Complete reference of every open-source project, framework, and repo examined for the desktop AI app.
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/2026-ai-landscape/02-search-landscape.md` — 113 lines · 7.2 KB
+#### `RESEARCH/2026-ai-landscape/02-search-landscape.md` — 116 lines · 7.6 KB
 > 02 · Search Landscape — Keyless Options + BYOK APIs
 
-- opening: Research goal: **extremely powerful web search + deep research, with ZERO mandatory API keys.** Optional API keys (BYOK) just add more/richer results.
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/2026-ai-landscape/03-deep-research-engines.md` — 106 lines · 6.0 KB
+#### `RESEARCH/2026-ai-landscape/03-deep-research-engines.md` — 109 lines · 6.4 KB
 > 03 · Deep Research Engines — Architecture Deep-Dives
 
-- opening: The open-source deep research agent landscape, focused on: (1) search loop design, (2) keyless operation via SearXNG, (3) local-model capability.
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/2026-ai-landscape/04-desktop-apps-deep-dive.md` — 103 lines · 5.6 KB
+#### `RESEARCH/2026-ai-landscape/04-desktop-apps-deep-dive.md` — 106 lines · 6.0 KB
 > 04 · Desktop Apps Deep-Dive — AnythingLLM, Jan, PyGPT, Leon, GenOffice, Vellum
 
-- opening: ---
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/2026-ai-landscape/05-agent-os-computer-use.md` — 79 lines · 3.9 KB
+#### `RESEARCH/2026-ai-landscape/05-agent-os-computer-use.md` — 82 lines · 4.3 KB
 > 05 · Agent OS + Computer-Use Layer
 
-- opening: Research on "LLM as the CPU" projects: agent operating systems, desktop/computer-use control, and the Linux-dev → Windows-deploy strategy.
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/2026-ai-landscape/06-local-model-stack.md` — 68 lines · 3.3 KB
+#### `RESEARCH/2026-ai-landscape/06-local-model-stack.md` — 71 lines · 3.7 KB
 > 06 · Local Model Stack — Ollama, Open WebUI, llama.cpp, LM Studio
 
-- opening: For the desktop app: users should be able to run local models (privacy, offline, no cost) alongside BYOK cloud providers.
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/2026-ai-landscape/07-composio-deep-dive.md` — 62 lines · 3.0 KB
+#### `RESEARCH/2026-ai-landscape/07-composio-deep-dive.md` — 65 lines · 3.3 KB
 > 07 · Composio Deep-Dive + Our Existing Integration
 
-- opening: Research: Composio (composio.dev, github.com/ComposioHQ/composio) for per-user-key desktop integration.
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/2026-ai-landscape/08-automation-architectures.md` — 98 lines · 4.1 KB
+#### `RESEARCH/2026-ai-landscape/08-automation-architectures.md` — 101 lines · 4.4 KB
 > 08 · Automation Architectures — Desktop Scheduling Options
 
-- opening: Research: how automations (reminders, daily briefs, workflow runs) execute on a desktop app where everything runs on the user's machine — NO server, NO push, open-source and user-dependent.
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/2026-ai-landscape/09-repo-reality-check.md` — 40 lines · 2.8 KB
+#### `RESEARCH/2026-ai-landscape/09-repo-reality-check.md` — 43 lines · 3.2 KB
 > 09 · Repo Reality-Check — 10-Repo Verification (GitHub API)
 
-- opening: A pasted list of "top repos" was reality-checked against the GitHub API (Aug 2026).
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/2026-ai-landscape/10-steal-shortlist.md` — 75 lines · 5.8 KB
+#### `RESEARCH/2026-ai-landscape/10-steal-shortlist.md` — 78 lines · 6.2 KB
 > 10 · Steal-Shortlist — What to Build From, What to Skip
 
-- opening: Consolidated action list distilled from ALL research docs in this archive.
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 ### 14.9 RESEARCH/desktop_app — the prior-art & competitor corpus
 
-#### `RESEARCH/desktop_app/00-INDEX.md` — 115 lines · 86.7 KB
+#### `RESEARCH/desktop_app/00-INDEX.md` — 118 lines · 87.1 KB
 > RESEARCH — Master Index
 
-- opening: All research for the desktop app product.
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/01-anythingllm-feature-blueprint.md` — 249 lines · 16.9 KB
+#### `RESEARCH/desktop_app/01-anythingllm-feature-blueprint.md` — 252 lines · 17.3 KB
 > AnythingLLM Feature Blueprint — How Each Feature Was Built
 
-- opening: Source: docs.anythingllm.com (accessed 2026-08-05) + Mintplex-Labs/anything-llm GitHub repo (code-level read of `server/`, `collector/`, `frontend/`).
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/02-hermes-agent-feature-blueprint.md` — 145 lines · 14.9 KB
+#### `RESEARCH/desktop_app/02-hermes-agent-feature-blueprint.md` — 148 lines · 15.3 KB
 > Hermes Agent Feature Blueprint — How the Six Flagship Features Were Built
 
-- opening: Source: github.com/nousresearch/hermes-agent (Python, ~225K⭐, MIT) — code-level read of `gateway/`, `agent/`, `tools/`, `cron/`, `plugins/`, `skills/`.
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/03-ultra-agentic-evolvable-orchestration.md` — 175 lines · 12.6 KB
+#### `RESEARCH/desktop_app/03-ultra-agentic-evolvable-orchestration.md` — 178 lines · 12.9 KB
 > Ultra-Agentic Evolvable Orchestration — Research Blueprint
 
-- opening: Research: how "no upper limit" agent systems actually work in 2026 — self-evolution, spec-driven orchestration, per-agent model assignment, continuous autonomous loops, weak-tool-model resilience, cyber use-cases.
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/04-reality-check-pasted-blueprint.md` — 44 lines · 4.2 KB
+#### `RESEARCH/desktop_app/04-reality-check-pasted-blueprint.md` — 47 lines · 4.6 KB
 > 04 — Reality-Check: The Circulating "Agentic OS" Blueprint (code-verified)
 
-- opening: Date: 2026-08-05 · Verdict: the paste was **~40% your own shipped code, ~20% real ecosystem, ~20% misrepresented repos, ~20% invented claims.**
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/05-coding-agents-comparison.md` — 168 lines · 15.1 KB
+#### `RESEARCH/desktop_app/05-coding-agents-comparison.md` — 171 lines · 15.5 KB
 > Coding Agent Comparison — opencode, pi, Claude Code, Hermes, AnythingLLM, Reasonix
 
-- opening: Research date: 2026-08-05. GitHub star counts verified via GitHub API.
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/06-browser-automation-and-scraping.md` — 43 lines · 3.8 KB
+#### `RESEARCH/desktop_app/06-browser-automation-and-scraping.md` — 46 lines · 4.2 KB
 > 06 — Browser Automation & Web Scraping for the Desktop App
 
-- opening: Verified 2026-08-05 via GitHub API + docs.
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/07-deep-research-and-data-analysis.md` — 28 lines · 3.5 KB
+#### `RESEARCH/desktop_app/07-deep-research-and-data-analysis.md` — 31 lines · 3.9 KB
 > 07 — Deep Research & Autonomous Data Analysis Engines
 
-- opening: Verified 2026-08-05. Stars live. **This is the "deep research / data analysis" pillar — replacing Perplexity-class paid tools with free local loops.**
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/08-desktop-ai-app-competitor-landscape.md` — 35 lines · 4.9 KB
+#### `RESEARCH/desktop_app/08-desktop-ai-app-competitor-landscape.md` — 38 lines · 5.3 KB
 > 08 — Desktop AI App Competitor Landscape (2026)
 
-- opening: Verified 2026-08-05 (GitHub API + docs). This is the "will we stand out?" + lightweight-benchmark pillar.
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/09-agentic-os-and-computer-use.md` — 35 lines · 4.1 KB
+#### `RESEARCH/desktop_app/09-agentic-os-and-computer-use.md` — 38 lines · 4.4 KB
 > 09 — Agentic OS & Computer-Use Layer
 
-- opening: Verified 2026-08-05 (GitHub API). **This is the "LLM as the CPU / no upper limit" pillar's infrastructure.**
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/10-business-automation-tool-kit.md` — 66 lines · 7.0 KB
+#### `RESEARCH/desktop_app/10-business-automation-tool-kit.md` — 69 lines · 7.4 KB
 > 10 — Business-Automation Tool-Kit, Composio & MCP Ecosystem
 
-- opening: Verified 2026-08-05 (GitHub API — stars live; several numbers in the original paste were wrong and are corrected here).
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/11-rest-of-the-chat-mentions-ledger.md` — 48 lines · 4.4 KB
+#### `RESEARCH/desktop_app/11-rest-of-the-chat-mentions-ledger.md` — 51 lines · 4.8 KB
 > 11 — The Rest of the Chat: Final Sweep + Complete Mentions Ledger
 
-- opening: Verified 2026-08-05. This doc closes the loop on **every** repo/framework mentioned anywhere in the conversation so nothing is left unresearched.
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/12-composio-vs-nango-connector-infrastructure.md` — 85 lines · 8.2 KB
+#### `RESEARCH/desktop_app/12-composio-vs-nango-connector-infrastructure.md` — 88 lines · 8.6 KB
 > 12 — Connector Infrastructure: Composio vs Nango (deep dive)
 
-- opening: Verified 2026-08-05 (GitHub API live + repo structure + docs).
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/13-connector-hub-design.md` — 154 lines · 11.7 KB
+#### `RESEARCH/desktop_app/13-connector-hub-design.md` — 157 lines · 12.1 KB
 > 13 — Connector Hub Design (the unified connection layer)
 
-- opening: Date: 2026-08-05 · Builds on doc 10 (Unified Tool Registry), doc 12 (Composio vs Nango), and fresh Zapier research.
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/14-repo-implementation-ledger-1-agents-coding.md` — 212 lines · 21.5 KB
+#### `RESEARCH/desktop_app/14-repo-implementation-ledger-1-agents-coding.md` — 215 lines · 21.8 KB
 > 14 — Repo Implementation Ledger, Part 1: Agents, Coding, Orchestration, Cyber
 
-- opening: Compiled 2026-08-06. Every repo mentioned in docs 01–13 was accessed (repo + README + docs + key source files).
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/15-repo-implementation-ledger-2-apps-tools-connectors.md` — 267 lines · 25.0 KB
+#### `RESEARCH/desktop_app/15-repo-implementation-ledger-2-apps-tools-connectors.md` — 270 lines · 25.3 KB
 > 15 — Repo Implementation Ledger, Part 2: Desktop Apps, Scraping, Deep Research, Business Tools, Connectors
 
-- opening: Compiled 2026-08-06. Part 2 of the implementation ledger — every repo from docs 01–13 in these domains, with URLs, docs links, and how features are actually implemented.
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/16-feature-implementation-tier1-agents.md` — 157 lines · 17.5 KB
+#### `RESEARCH/desktop_app/16-feature-implementation-tier1-agents.md` — 160 lines · 17.9 KB
 > 16 — Tier-1 Feature Implementation: Agents & Coding (feature-by-feature, code-level)
 
-- opening: Compiled 2026-08-06. Tier-1 = full code-level breakdown: **every major feature, HOW it's implemented (real code paths, classes, functions), plus URLs**.
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/17-feature-implementation-tier1-web-connectors.md` — 162 lines · 13.3 KB
+#### `RESEARCH/desktop_app/17-feature-implementation-tier1-web-connectors.md` — 165 lines · 13.7 KB
 > 17 — Tier-1 Feature Implementation: Web, Research & Connectors (feature-by-feature, code-level)
 
-- opening: Compiled 2026-08-06. Tier-1 code-level breakdown for: browser-use, firecrawl, crawl4ai, deep-research family (dzhng, open_deep_research, local-deep-research), Composio, Nango, Zapier connectors, Jan, Vellum.
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/18-feature-implementation-tier2-medium.md` — 96 lines · 9.5 KB
+#### `RESEARCH/desktop_app/18-feature-implementation-tier2-medium.md` — 99 lines · 9.8 KB
 > 18 — Tier-2 Feature Implementation: Medium-depth maps (frameworks, desktop apps, cyber, business tools)
 
-- opening: Compiled 2026-08-06. Tier-2 = medium depth: per-repo **feature list → where/how implemented** (code paths where known) + URLs.
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/19-byok-provider-implementation-reference.md` — 92 lines · 7.6 KB
+#### `RESEARCH/desktop_app/19-byok-provider-implementation-reference.md` — 95 lines · 8.0 KB
 > 19 — BYOK Provider Implementation Reference (the copy-this doc)
 
-- opening: Compiled 2026-08-06. Goal: **we don't build multi-provider/BYOK from scratch** — we copy the provider abstractions that pi, LiteLLM, LibreChat, AnythingLLM, and Reasonix already ship.
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/20-infra-libs-new-ledger.md` — 107 lines · 6.9 KB
+#### `RESEARCH/desktop_app/20-infra-libs-new-ledger.md` — 110 lines · 7.3 KB
 > 20 — New Infra Libraries Ledger (requested 2026-08-06)
 
-- opening: New repos the user asked to research. URLs + what they are + how they fit our build.
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/21-agents-search-scraping-new-ledger.md` — 153 lines · 10.5 KB
+#### `RESEARCH/desktop_app/21-agents-search-scraping-new-ledger.md` — 156 lines · 10.9 KB
 > 21 — New Agents, Search & Scraping Ledger (requested 2026-08-06)
 
-- opening: New repos the user asked to research. URLs + what they are + how they fit.
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/22-skills-specials-and-v2-bucket.md` — 82 lines · 8.4 KB
+#### `RESEARCH/desktop_app/22-skills-specials-and-v2-bucket.md` — 85 lines · 8.8 KB
 > 22 — Skills, Checklists, Special Deep-Dives & V2 Bucket (requested 2026-08-06)
 
-- opening: ---
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/23-deep-dive-partial-and-not-done-repos.md` — 187 lines · 15.7 KB
+#### `RESEARCH/desktop_app/23-deep-dive-partial-and-not-done-repos.md` — 190 lines · 16.1 KB
 > 23 — Deep-Dive: Previously Partial / Not-Done Repos (2026-08-06 second pass)
 
-- opening: This doc completes the ❌ NOT-DONE and ⚠️ PARTIAL repos from the audit.
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/24-completion-pass-resolutions.md` — 98 lines · 11.9 KB
+#### `RESEARCH/desktop_app/24-completion-pass-resolutions.md` — 101 lines · 12.3 KB
 > 24 — Completion Pass: Stage-1 + Stage-2 Flags Resolved (2026-08-06)
 
-- opening: Round-2 verification pass. Every item previously flagged 🔴/🟠 was re-checked against live sources (GitHub API, raw files, docs sites).
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/25-deep-code-gap-resolutions.md` — 81 lines · 9.1 KB
+#### `RESEARCH/desktop_app/25-deep-code-gap-resolutions.md` — 84 lines · 9.5 KB
 > 25 — Deep-Code Gap Resolutions + Found Repos (2026-08-06, pass 2)
 
-- opening: Source-level reads closing every remaining deep-code gap.
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/26-tier2-code-level-upgrade.md` — 68 lines · 6.4 KB
+#### `RESEARCH/desktop_app/26-tier2-code-level-upgrade.md` — 71 lines · 6.7 KB
 > 26 — Tier-2 Code-Level Upgrade (2026-08-06)
 
-- opening: Live structure verification for every tier-2 repo in doc 18 (structures fetched from GitHub this pass).
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/27-master-repo-ledger.md` — 494 lines · 93.0 KB
+#### `RESEARCH/desktop_app/27-master-repo-ledger.md` — 497 lines · 93.4 KB
 > 27 — MASTER REPO LEDGER (all repos ever added, live-verified 2026-08-06; sections 20–28 added 2026-08-09/10/13)
 
-- opening: **Every repo ever added across docs 01–86**, deduplicated, **live-verified** (docs 68–82 add 0 new repos; doc 86 adds 4) (HTTP + `stargazerCount` scraped from github.com).
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/28-genoffice-deep-dive.md` — 125 lines · 10.4 KB
+#### `RESEARCH/desktop_app/28-genoffice-deep-dive.md` — 128 lines · 10.8 KB
 > 28 — GenOffice Deep-Dive (source-verified 2026-08-06)
 
-- opening: **Repo:** https://github.com/genspark-ai/genoffice (Apache-2.0, ~1.9K⭐) — AI-native office suite: **docs, sheets, slides, pdf** + shell.
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/29-libreoffice-core-deep-dive.md` — 64 lines · 8.3 KB
+#### `RESEARCH/desktop_app/29-libreoffice-core-deep-dive.md` — 67 lines · 8.7 KB
 > 29 — LibreOffice Core Deep-Dive (verified 2026-08-06)
 
-- opening: **Repo:** https://github.com/LibreOffice/core (C++, 4,197⭐ live) — the reference implementation of office documents.
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/30-agent-os-family-deep-dive.md` — 190 lines · 15.9 KB
+#### `RESEARCH/desktop_app/30-agent-os-family-deep-dive.md` — 193 lines · 16.3 KB
 > 30 — Agent-OS Family Deep-Dive: ZeroClaw · IronClaw · BrowserOS · EverOS · MemOS · stereOS · PhyAgentOS
 
-- opening: Fetched live 2026-08-06. Depth: **🟦 structure-verified** (official mdBook/README architecture, not source-read) for ZeroClaw/IronClaw/BrowserOS; 🟩 README-level for EverOS/MemOS/stereOS/PhyAgentOS.
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/31-context-compression-family-deep-dive.md` — 163 lines · 14.1 KB
+#### `RESEARCH/desktop_app/31-context-compression-family-deep-dive.md` — 166 lines · 14.5 KB
 > 31 — Context-Compression Family Deep-Dive: Headroom · Glyphdown · Terse · Janus · DarwinCaveman · Repomix
 
-- opening: Fetched live 2026-08-06. Theme of this batch: **token reduction & context compaction** — the exact pillar doc 03 §7 calls *Lossless Prompt Compaction & System Daemons* (and doc 20/23's `rtk` bash-output cut).
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/32-context-mode-and-tokenmining.md` — 111 lines · 12.2 KB
+#### `RESEARCH/desktop_app/32-context-mode-and-tokenmining.md` — 114 lines · 12.6 KB
 > 32 — Context-Mode Deep-Dive + The Tokenmining Principle
 
-- opening: Fetched live 2026-08-06. `mksglu/context-mode` was previously logged at **~1.8K⭐ / "confirmed"** (docs 24/25) — it has since **exploded to 19,654⭐** (HN #1, 570+ pts; "used across teams at" Microsoft/Google/Meta/Amazon/NVIDIA/…).
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/33-browseros-deep-dive.md` — 320 lines · 34.2 KB
+#### `RESEARCH/desktop_app/33-browseros-deep-dive.md` — 323 lines · 34.6 KB
 > 33 — BrowserOS (browseros-ai/BrowserOS) Source Deep-Dive: The Agent Browser
 
-- opening: Fetched live 2026-08-06 via **shallow git clone** (`/tmp/browseros-deep`, 344MB, 3,248 tracked files / 3,243 present — only 5 LFS media files missing).
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/34-final-pass-and-sota-2026.md` — 50 lines · 6.3 KB
+#### `RESEARCH/desktop_app/34-final-pass-and-sota-2026.md` — 53 lines · 6.6 KB
 > 34 — Final Pass: Gap Closure + 2026 SOTA Validations (2026-08-06)
 
-- opening: The closing research pass before the spec.
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/35-openwebui-vane-computer-deep-dive.md` — 97 lines · 9.1 KB
+#### `RESEARCH/desktop_app/35-openwebui-vane-computer-deep-dive.md` — 100 lines · 9.5 KB
 > 35 — Open WebUI · Vane · Open WebUI Computer (deep-dive)
 
-- opening: Added 2026-08-06 on user request: check `ItzCrazyKns/Vane`, `open-webui/open-webui`, and the pasted workspace pitch ("Files, chat, git and code on one screen… Codex, Claude Code, Cursor, Grok, OpenCod
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/36-composio-community-batch.md` — 69 lines · 6.4 KB
+#### `RESEARCH/desktop_app/36-composio-community-batch.md` — 72 lines · 6.8 KB
 > 36 — Composio-community batch: Open ChatGPT Atlas · Secure OpenClaw · Awesome Claude Plugins · Awesome Codex Skills
 
-- opening: Added 2026-08-06 on user request. All four live-verified this pass (GitHub API + READMEs + API tree listings; atlas tree read via `git/trees` API, secure-openclaw tree via shallow sparse clone).
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/37-command-code-taste-deep-dive.md` — 76 lines · 7.4 KB
+#### `RESEARCH/desktop_app/37-command-code-taste-deep-dive.md` — 79 lines · 7.8 KB
 > 37 — Command Code (`CommandCodeAI`) & the `taste-1` preference-learning pattern
 
-- opening: Added 2026-08-06 on user request: *"check the taste part — to add or not?
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/38-opencode-hermes-code-re-read.md` — 117 lines · 10.8 KB
+#### `RESEARCH/desktop_app/38-opencode-hermes-code-re-read.md` — 120 lines · 11.1 KB
 > 38 — opencode & Hermes: full code re-read (subagents · token tracking · compaction)
 
-- opening: Added 2026-08-06 on user request: *"opencode, hermes, once again, read their entire repos… esp its subagents, its cli mode → how it tracks tokens… not the cli, but its internal algos, codes."* **Metho
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/39-nooa-deep-dive.md` — 95 lines · 10.4 KB
+#### `RESEARCH/desktop_app/39-nooa-deep-dive.md` — 98 lines · 10.8 KB
 > 39 — NVIDIA NOOA (Object-Oriented Agents) deep-dive + audit resolutions
 
-- opening: Added 2026-08-06 on user request: *"reread all, upgrade final all… then check https://github.com/NVIDIA-NeMo/labs-OO-Agents"*.
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/40-new-repos-and-platform-notes.md` — 250 lines · 13.0 KB
+#### `RESEARCH/desktop_app/40-new-repos-and-platform-notes.md` — 253 lines · 13.3 KB
 > Doc 40 — New Repos Deep-Read + Platform Deployment Notes
 
-- opening: **Date:** 2026-08-06 **Status:** Source-read verified (key files) for critical repos
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/41-steal-vs-reference-master-index.md` — 329 lines · 28.6 KB
+#### `RESEARCH/desktop_app/41-steal-vs-reference-master-index.md` — 332 lines · 29.0 KB
 > Doc 41 — Master Steal vs Reference Index
 
-- opening: **Final synthesis across docs 01–40. Every repo classified, every steal traced to source files.**
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/42-ipc-architecture-validation.md` — 306 lines · 17.1 KB
+#### `RESEARCH/desktop_app/42-ipc-architecture-validation.md` — 309 lines · 17.5 KB
 > Doc 42 — IPC Architecture Validation & Agentic OS Axioms
 
-- opening: **Reconciling the external IPC analysis with our existing spec.
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/43-landmines-reinforcement-landscape.md` — 556 lines · 28.5 KB
+#### `RESEARCH/desktop_app/43-landmines-reinforcement-landscape.md` — 559 lines · 28.8 KB
 > Doc 43 — Landmines Reinforcement Landscape
 
-- opening: **The 4 landmine categories in our architecture, each with a code-verified workaround + concrete spec patch.**
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/44-modularity-deep-dive-vscode-zed-hermes.md` — 196 lines · 20.1 KB
+#### `RESEARCH/desktop_app/44-modularity-deep-dive-vscode-zed-hermes.md` — 199 lines · 20.5 KB
 > 44 — Modularity Deep-Dive: VS Code, Zed, Hermes, Agentic Apps (source-verified)
 
-- opening: **Date:** 2026-08-07 · **Purpose:** answer "how did these apps make themselves 100% modular / future-expandable?" — then extract the exact mechanisms we copy into our **Extension ABI** (doc 44b proposal → spec §0 hardening of P8).
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/45-acp-agent-client-protocol-deep-dive.md` — 197 lines · 15.4 KB
+#### `RESEARCH/desktop_app/45-acp-agent-client-protocol-deep-dive.md` — 200 lines · 15.8 KB
 > 45 — Agent Client Protocol (ACP) Deep-Dive (source-verified)
 
-- opening: **Date:** 2026-08-07 · **Purpose:** the missing piece for **harness-driving (F12)** — hosting Claude Code / Codex / Cursor / OpenCode / Cline side-by-side as audited workers.
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/46-aider-devin-deep-dive.md` — 396 lines · 18.5 KB
+#### `RESEARCH/desktop_app/46-aider-devin-deep-dive.md` — 399 lines · 18.9 KB
 > 46 — Aider + Devin Cloud Deep Dive
 
-- opening: **Date:** 2026-08-08 **Repos:** Aider-AI/aider (48K⭐, Apache-2.0, Python), Devin Cloud (proprietary, Cognition AI) **Purpose:** Code-level feature extraction for EveryAIOS steal/adapt/refer decisions
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/47-terminal-agents-ide-extensions-deep-dive.md` — 166 lines · 8.3 KB
+#### `RESEARCH/desktop_app/47-terminal-agents-ide-extensions-deep-dive.md` — 169 lines · 8.7 KB
 > 47 — Terminal Agents & IDE Extensions Deep Dive
 
-- opening: **Date:** 2026-08-08 **Repos:** Goose (52.6K), OpenHands (83.5K), Cline (65.9K), Continue (35.4K), Amp (proprietary) **Also verified:** Mentat (2.5K, archived), Roo Code (24.4K, archived), Twinny (3.6
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/48-computer-use-agents-deep-dive.md` — 133 lines · 6.7 KB
+#### `RESEARCH/desktop_app/48-computer-use-agents-deep-dive.md` — 136 lines · 7.1 KB
 > 48 — Computer-Use Agents Deep Dive
 
-- opening: **Date:** 2026-08-08 **Repos:** OmniParser (25.2K), UI-TARS-desktop (38.5K), UI-TARS (11.3K), Skyvern (22.7K), self-operating-computer (10.3K) **Also referenced:** anthropics/anthropic-quickstarts (17
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/49-storage-intelligence-deep-dive.md` — 123 lines · 10.0 KB
+#### `RESEARCH/desktop_app/49-storage-intelligence-deep-dive.md` — 126 lines · 10.4 KB
 > 49 — Storage Intelligence Deep Dive (eDirStat / UltraSearch / WinDirStat / fclones)
 
-- opening: **Date:** 2026-08-09 · **Status:** 🟦 web-verified (README + docs + secondary sources; not a full source read) **Repos:** eDirStat (`xangelix/edirstat`, MIT, Rust), UltraSearch (`Dicklesworthstone/ult
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/50-generative-ui-image-voice-gaps.md` — 113 lines · 10.0 KB
+#### `RESEARCH/desktop_app/50-generative-ui-image-voice-gaps.md` — 116 lines · 10.4 KB
 > 50 — Generative UI, Image Gen, Voice, Clipboard & Email/Calendar Gaps
 
-- opening: **Date:** 2026-08-09 · **Status:** 🟦 web-verified (protocol docs, READMEs, secondary sources) **Repos/protocols:** AG-UI (`ag-ui-protocol/ag-ui`, MIT), CopilotKit, LibreChat (image gen + resumable st
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/51-aider-recheck-2026-08.md` — 48 lines · 5.0 KB
+#### `RESEARCH/desktop_app/51-aider-recheck-2026-08.md` — 51 lines · 5.4 KB
 > 51 — Aider Recheck (2026-08) — doc 46 claims vs primary sources
 
-- opening: **Date:** 2026-08-09 · **Status:** 🟦 primary-source verified (aider.chat docs + GitHub; web-researched 2026 state) **Purpose:** Re-verify every Aider claim made in **doc 46** (`Aider-AI/aider`, 48K⭐,
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/52-gap-pass-2-analysis.md` — 87 lines · 11.4 KB
+#### `RESEARCH/desktop_app/52-gap-pass-2-analysis.md` — 90 lines · 11.8 KB
 > 52 — Gap Pass 2: Hierarchy, Escalation, Computer-Use & the Tiered Web-Search Stack
 
-- opening: **Date:** 2026-08-09 · **Status:** 🟦 web-verified (GitHub API live-checked 2026-08-09; docs/README level) **Input:** an external AI's v3.7 review (Aider-hierarchy, storage, escalation) + its web-rese
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/53-formalization-gaps.md` — 144 lines · 9.2 KB
+#### `RESEARCH/desktop_app/53-formalization-gaps.md` — 147 lines · 9.6 KB
 > 53 — Formalization Gaps: Credential Broker · Ticket Contract · Durable Events · Shortest-Path Routing
 
-- opening: **Date:** 2026-08-09 · **Trigger:** an external architecture review (2026-08) audited the v3.9 spec.
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/54-third-party-dep-audit.md` — 54 lines · 4.7 KB
+#### `RESEARCH/desktop_app/54-third-party-dep-audit.md` — 57 lines · 5.1 KB
 > 54 — Third-Party Dependency & Catalog Verification Audit
 
-- opening: **Date:** 2026-08-09 · **Method:** every load-bearing third-party name in the corpus re-verified live (GitHub API + crates.io, 2026-08-09).
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/55-agent-browser-obscura-steel-deep-dive.md` — 172 lines · 18.9 KB
+#### `RESEARCH/desktop_app/55-agent-browser-obscura-steel-deep-dive.md` — 175 lines · 19.3 KB
 > 55 — Agent Browser Ecosystem Deep-Dive: agent-browser / Obscura / Steel (source-verified) + the 2026 Market Map
 
-- opening: **Date:** 2026-08-10 · **Status:** ⬛/🟦 — all three repos **cloned and key files source-read** (not README-paraphrased); star counts **live-verified via GitHub API 2026-08-10**; the Medium article rea
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/56-warp-cowork-cronflow-copilot-devin.md` — 178 lines · 21.4 KB
+#### `RESEARCH/desktop_app/56-warp-cowork-cronflow-copilot-devin.md` — 181 lines · 21.8 KB
 > 56 — Warp / cowork-forge / cronflow / Copilot-CLI / Devin-API deep-dive (agentic dev-environment, workflow engine, close
 
-- opening: **Repos:** `warpdotdev/warp` (64,107★, AGPL-3.0 + MIT warpui, Rust) · `sopaco/cowork-forge` (83★, MIT, Rust) · `dali-benothmen/cronflow` (125★, **no LICENSE file** — NOASSERTION, Rust) · `github/copil
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/57-acp-registry-subscription-auth.md` — 94 lines · 11.7 KB
+#### `RESEARCH/desktop_app/57-acp-registry-subscription-auth.md` — 97 lines · 12.1 KB
 > 57 — ACP Registry & BYO-Agent Subscription Auth (finalize)
 
-- opening: Live-verified 2026-08-10. Answers the user question: *"why can't we copy what Zed and Hermes do — use an ACP registry to use any agent?
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/58-repo-batch-2-omniroute-forge-office.md` — 235 lines · 25.7 KB
+#### `RESEARCH/desktop_app/58-repo-batch-2-omniroute-forge-office.md` — 238 lines · 26.1 KB
 > 58 — Repo Batch 2: OmniRoute + Forge-intel + Office + Skills + Agent-workspaces
 
-- opening: Added 2026-08-13 on user request (44-repo list).
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/59-omniroute-deep-dive.md` — 144 lines · 10.2 KB
+#### `RESEARCH/desktop_app/59-omniroute-deep-dive.md` — 147 lines · 10.6 KB
 > 59 — OmniRoute Deep-Dive (routing + scoring business logic)
 
-- opening: Added 2026-08-13. Source-level read of OmniRoute's routing internals (`docs/routing/AUTO-COMBO.md`, `PROVIDER_REFERENCE.md`, README) — extracted for **steal/reimplement**, not vendor.
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/60-tencentdb-agent-memory-deep-dive.md` — 118 lines · 8.9 KB
+#### `RESEARCH/desktop_app/60-tencentdb-agent-memory-deep-dive.md` — 121 lines · 9.3 KB
 > 60 — TencentDB Agent Memory Deep-Dive (memory-asset governance + distillation pipeline)
 
-- opening: Added 2026-08-13. Source-level read of TencentDB-Agent-Memory README/INSTALL (live-verified via GitHub API: **21,002⭐, MIT**, created 2026-04-07, pushed 2026-08-11, current release **v2.0.0**).
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/61-desktop-agent-land-grab-2026.md` — 151 lines · 16.6 KB
+#### `RESEARCH/desktop_app/61-desktop-agent-land-grab-2026.md` — 154 lines · 17.0 KB
 > 61 — Desktop Agent Land-Grab 2026 (market + harness/memory/model/protocol batch)
 
-- opening: **Pass:** user-supplied "Desktop Agent Wars" research (Aug 2026) + repo list, cross-checked against docs 01–60 and live-verified via GitHub API 2026-08-14 (⭐ + SPDX + pushed_at).
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/62-cost-optimization-event-driven-eval.md` — 84 lines · 8.4 KB
+#### `RESEARCH/desktop_app/62-cost-optimization-event-driven-eval.md` — 87 lines · 8.8 KB
 > 62 — Cost Optimization + Event-Driven Orchestration + Eval Reality Check
 
-- opening: **Pass:** user-supplied "cost optimization / autonomous IDE / orchestration" research, cross-checked and live-verified 2026-08-14 (web + GitHub API).
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/63-thirty-seven-repo-steal-ledger.md` — 148 lines · 16.8 KB
+#### `RESEARCH/desktop_app/63-thirty-seven-repo-steal-ledger.md` — 151 lines · 17.1 KB
 > 63 — 37-Repo Steal Ledger (harness / browser / office / user-capability clusters)
 
-- opening: **Pass:** user-supplied repo list (2026-08-15), all **cloned + source-read** (34 repos) or **web-level verified** (4 giants + LibreOffice core).
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/64-giants-code-level-deep-dive.md` — 235 lines · 30.6 KB
+#### `RESEARCH/desktop_app/64-giants-code-level-deep-dive.md` — 238 lines · 30.9 KB
 > 64 — Giants Code-Level Deep-Dive (rustdesk · ladybird · serenity · brave · chromium + lightpanda re-read)
 
-- opening: **Pass:** 2026-08-15 — the five repos previously only web-level checked are now **cloned + source-read at code level** (per user directive "deep-dive the remaining web-level repos to code level and ex
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/65-batch-3-agents-scraping-search-ui-deep-dive.md` — 207 lines · 15.1 KB
+#### `RESEARCH/desktop_app/65-batch-3-agents-scraping-search-ui-deep-dive.md` — 210 lines · 15.5 KB
 > Doc 65 — Batch 3: Agent Infra, Scraping, Search & UI Deep-Dive
 
-- opening: **Date:** 2026-08-15 **Scope:** The 37-repo list (AI-agent infra / web automation / data extraction / vector+lexical search / UI & docs / misc).
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/66-anomalyco-org-deep-dive.md` — 142 lines · 8.8 KB
+#### `RESEARCH/desktop_app/66-anomalyco-org-deep-dive.md` — 145 lines · 9.2 KB
 > Doc 66 — anomalyco Org Deep-Dive: models.dev Catalog + opencode + opentui (2026-08-15)
 
-- opening: **Scope:** the anomalyco org's main repos — **opencode** (197,724★), **models.dev** (6,413★), **opentui** (13,015★), **sst** (26,234★) + **openauth** (7,339★, bonus REF).
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/67-capability-deltas-sites-heartbeat-ui-final.md` — 148 lines · 12.8 KB
+#### `RESEARCH/desktop_app/67-capability-deltas-sites-heartbeat-ui-final.md` — 151 lines · 13.2 KB
 > Doc 67 — Capability Deltas: Sites / Heartbeat / Proactivity / Inline-Edit / Kanban-ACP + UI/UX Finalization (2026-08-15)
 
-- opening: **Scope:** the 5 capability deltas flagged from competitor research (ChatGPT Work / Claude Cowork / Devin Desktop / Cursor 3) → checked against the 278-repo ledger → **bolt.diy + Hatchet + durable-exe
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/68-final-all-rounder-market-research.md` — 103 lines · 10.5 KB
+#### `RESEARCH/desktop_app/68-final-all-rounder-market-research.md` — 106 lines · 10.9 KB
 > 68 — Final All-Rounder Market Research (2026) & Capability Scorecard
 
-- opening: **Date:** 2026-08-15 · **Method:** web-verified against primary sources (vendor help centers, official announcements, JetBrains Apr-2026 survey) + cross-checked against our own docs 66–67 + ARCH/12 v2.0.
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/69-acp-agent-ecosystem-harness-deep-dive.md` — 166 lines · 9.9 KB
+#### `RESEARCH/desktop_app/69-acp-agent-ecosystem-harness-deep-dive.md` — 169 lines · 10.3 KB
 > Doc 69 — ACP Agent Ecosystem + Harness Deep-Dive (2026-08-16)
 
-- opening: Goal: make **every** major coding agent usable through our app via ACP ("same chat bar, agent differs"), and record what to steal from each.
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/70-mcp-directory-inbuilt-analysis.md` — 100 lines · 6.2 KB
+#### `RESEARCH/desktop_app/70-mcp-directory-inbuilt-analysis.md` — 103 lines · 6.5 KB
 > Doc 70 — MCP Directory Inbuilt Analysis (mcpservers.org)
 
-- opening: **Date:** 2026-08-16 · **Source:** `https://mcpservers.org/all` (11,054 servers, 18 categories) **Sampled:** `/all` (newest 30), `/category/productivity` (1,787), `/category/web-scraping` (436), `/cat
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/71-batch-4-coding-agents-skills-harnesses.md` — 107 lines · 6.7 KB
+#### `RESEARCH/desktop_app/71-batch-4-coding-agents-skills-harnesses.md` — 110 lines · 7.1 KB
 > Doc 71 — Batch 4: Coding Agents, Skills, Plugins, Agentic Cores (2026-08-16)
 
-- opening: **Date:** 2026-08-16 · **Method:** web-verified (GitHub + ecosystem), cross-checked against docs 02/05/14/21/22/38/65/69.
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/72-batch-5-codeintel-parallel-search.md` — 70 lines · 4.0 KB
+#### `RESEARCH/desktop_app/72-batch-5-codeintel-parallel-search.md` — 73 lines · 4.4 KB
 > Doc 72 — Batch 5: Code-Intelligence, Parallel Agents, Search Libs (2026-08-16)
 
-- opening: **Date:** 2026-08-16 · **Method:** web-verified (GitHub + crates.io + docs), cross-checked against docs 20/23/65.
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/73-batch-6-computer-use-full-control.md` — 93 lines · 5.5 KB
+#### `RESEARCH/desktop_app/73-batch-6-computer-use-full-control.md` — 96 lines · 5.9 KB
 > Doc 73 — Batch 6: Computer-Use / Full-Computer Control (2026-08-16)
 
-- opening: **Date:** 2026-08-16 · **Method:** web-verified (GitHub + docs), cross-checked against docs 09/20/21/34/35/47/48/52/65/66/72.
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/74-mcp-server-manager-builtin.md` — 88 lines · 8.8 KB
+#### `RESEARCH/desktop_app/74-mcp-server-manager-builtin.md` — 91 lines · 9.2 KB
 > Doc 74 — Built-In MCP Server Manager (mcpservers.org, second pass)
 
-- opening: **Date:** 2026-08-16 · **Source:** `https://mcpservers.org/` (homepage — now **9,800+** official + community servers, 18 categories: Featured / Official 🌟 / Development / Productivity / Database / Se
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/75-anthropic-skills-plugins-cowork.md` — 71 lines · 8.2 KB
+#### `RESEARCH/desktop_app/75-anthropic-skills-plugins-cowork.md` — 74 lines · 8.6 KB
 > Doc 75 — Anthropic Skills / Plugins / Cowork Deep-Dive
 
-- opening: **Date:** 2026-08-16 · **Sources (web-verified):** `github.com/anthropics/skills` (+ `agentskills.io` spec), `github.com/anthropics/claude-plugins-official`, `code.claude.com/docs/en/plugins-reference
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/76-batch-7-design-browser-selfheal.md` — 53 lines · 5.2 KB
+#### `RESEARCH/desktop_app/76-batch-7-design-browser-selfheal.md` — 56 lines · 5.6 KB
 > Doc 76 — Batch 7: Design / Browser Self-Healing / Computer-Use (2026-08-16)
 
-- opening: **Date:** 2026-08-16 · **Sources (web-verified):** `nexu-io/open-design` (57–68K★ in ~8 weeks), `browser-use/browser-harness` (16.7K★), `microsoft/magentic-ui` (MagenticLite, 10K★), `web-infra-dev/mid
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/77-batch-8-workflows-graphify-browser.md` — 59 lines · 6.1 KB
+#### `RESEARCH/desktop_app/77-batch-8-workflows-graphify-browser.md` — 62 lines · 6.5 KB
 > Doc 77 — Batch 8: Programmable Workflows / Knowledge Graph / Browser (2026-08-16)
 
-- opening: **Date:** 2026-08-16 · **Sources (web-verified):** `apache/airflow`, `Graphify-Labs/graphify` (106.8K★), `addyosmani/agent-skills` (MIT), `Tencent/BrowserSkill`, `AIPexStudio/AIPex`, `browserable/brow
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/78-batch-9-marketplace-gws-jobs.md` — 47 lines · 4.4 KB
+#### `RESEARCH/desktop_app/78-batch-9-marketplace-gws-jobs.md` — 50 lines · 4.8 KB
 > Doc 78 — Batch 9: Multi-Harness Marketplace / Google Workspace / Jobs Vertical (2026-08-16)
 
-- opening: **Date:** 2026-08-16 · **Sources (web-verified):** `wshobson/agents` (94 plugins / 203 agents / 175 skills), `googleworkspace/cli` (`gws`, Google's official Workspace CLI), `feder-cr/Jobs_Applier_AI_A
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/79-local-model-fetch-download-core.md` — 86 lines · 6.8 KB
+#### `RESEARCH/desktop_app/79-local-model-fetch-download-core.md` — 89 lines · 7.1 KB
 > Doc 79 — Local Model Fetch / Download Core (HF · LM Studio · Ollama · Open WebUI)
 
-- opening: **Date:** 2026-08-16 · **Sources (web-verified):** HuggingFace Hub (GGUF/`hf` docs, resumable-download threads), LM Studio model store (`~/.cache/lm-studio/models`), Ollama storage internals (blobs/ma
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/80-competitive-positioning-review.md` — 159 lines · 16.1 KB
+#### `RESEARCH/desktop_app/80-competitive-positioning-review.md` — 162 lines · 16.5 KB
 > 80 — Competitive Positioning Review: EveryAIOS vs. the Global Desktop-AI Landscape (external benchmark, reviewed & corre
 
-- opening: **Source:** external product benchmark provided 2026-08-17 — a **forward-looking** assessment of EveryAIOS at *full v3.21 spec build* (explicitly not a claim of current production state).
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/81-non-model-moat-roadmap.md` — 107 lines · 11.0 KB
+#### `RESEARCH/desktop_app/81-non-model-moat-roadmap.md` — 110 lines · 11.4 KB
 > 81 — Non-Model Moat Roadmap + Primary-Source Notes (reviewed, corrected, and repo-mapped)
 
-- opening: **Source:** external strategy artifacts provided 2026-08-17: (a) *EveryAIOS — Non-Model Moat Roadmap* (K1–K6 proof-carrying work, reversible change sets, demo compiler, work graph/passports, data-rele
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/82-innovation-priority-decisions.md` — 86 lines · 7.9 KB
+#### `RESEARCH/desktop_app/82-innovation-priority-decisions.md` — 89 lines · 8.2 KB
 > 82 — Innovation Priority Stack (decision-applied: add / avoid / ignore / defer)
 
-- opening: **Source:** external scorecard provided 2026-08-17 — 23 capabilities rated on user pull / moat / leverage / complexity, 6 "must-win" bets, architecture gates A–E, and a features-to-decline list.
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/83-competitor-batch-openworker-ccswitch-skales-dsh.md` — 143 lines · 18.8 KB
+#### `RESEARCH/desktop_app/83-competitor-batch-openworker-ccswitch-skales-dsh.md` — 146 lines · 19.2 KB
 > Doc 83 — Competitor Batch: openworker · cc-switch · skales · deepseek-harness (code-level, cloned + source-read)
 
-- opening: **Date:** 2026-08-17 · **Sources (cloned + source-read, shallow):** `andrewyng/openworker` (Python 14.7k★, Tauri+aisuite), `farion1231/cc-switch` (Tauri 2, 126k★, 8 agent CLIs), `skalesapp/skales` (BS
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/84-casual-vs-power-user-ux.md` — 115 lines · 11.4 KB
+#### `RESEARCH/desktop_app/84-casual-vs-power-user-ux.md` — 118 lines · 11.8 KB
 > EveryAIOS — Casual vs Power User UX: What Each Group Actually Wants
 
-- opening: **Question addressed:** What do casual (non-technical) users and power (technical) users each *exactly* want from a local-first AI desktop workspace — and what does that mean for the EveryAIOS UI?
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/85-work-gateway-durable-session-cowork-openclaw-podium-codex.md` — 81 lines · 10.4 KB
+#### `RESEARCH/desktop_app/85-work-gateway-durable-session-cowork-openclaw-podium-codex.md` — 84 lines · 10.8 KB
 > 85 — Work Gateway / Durable Session Layer (Claude Cowork · OpenClaw · Podium · Codex)
 
-- opening: **Added 2026-08-30** — the cross-surface durable-session research that drove **spec v3.64 (Work Gateway / Session Runtime) + v3.65 (hardening) + v3.66 (final reconciliation)**.
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/86-competitor-desktop-deep-dive-2026-09.md` — 158 lines · 31.8 KB
+#### `RESEARCH/desktop_app/86-competitor-desktop-deep-dive-2026-09.md` — 161 lines · 32.2 KB
 > 86 — Competitor desktop deep-dive (P12.1 live research, 2026-09-04)
 
-- opening: **Method:** six parallel web-research passes 2026-09-04 (WebFetch + WebSearch against live repos, docs sites, release notes; source files read raw where it mattered).
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/87-local-models-composer-chat-ui-2026-09.md` — 75 lines · 20.2 KB
+#### `RESEARCH/desktop_app/87-local-models-composer-chat-ui-2026-09.md` — 78 lines · 20.6 KB
 > 87 — Local-model UX + chat-bar/UI deep-dive (A5/C/H research, 2026-09-04)
 
-- opening: **Method:** three parallel live passes 2026-09-04 (WebFetch + WebSearch, repos + docs + releases read raw where it mattered).
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/88-first-five-minutes-casual-surface-audit-2026-09.md` — 74 lines · 9.7 KB
+#### `RESEARCH/desktop_app/88-first-five-minutes-casual-surface-audit-2026-09.md` — 77 lines · 10.1 KB
 > 88 — Casual surface / first-five-minutes UX audit (2026-09-13)
 
-- opening: **Method:** one external research pass (2026-09-13) over agentic-desktop products + 2026 activation/approval literature, then every load-bearing claim **checked against this repo's code** before it was acted on.
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/89-guard-network-and-config-floor-audit-2026-09.md` — 61 lines · 9.0 KB
+#### `RESEARCH/desktop_app/89-guard-network-and-config-floor-audit-2026-09.md` — 64 lines · 9.3 KB
 > 89 — Guard network-destination + agent-config floor audit (2026-09-13)
 
-- opening: **Method:** a **code-level audit of this repository's own guard floors** (read 2026-09-13), then the fix recorded as the **P62** queue.
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/90-native-agent-peer-schemas-2026-09.md` — 54 lines · 6.5 KB
+#### `RESEARCH/desktop_app/90-native-agent-peer-schemas-2026-09.md` — 57 lines · 6.9 KB
 > Doc 90 — Native agent peer schemas & loops (2026-09-15)
 
-- opening: **Purpose:** research provenance for **ARCH/17-NATIVE-AGENT.md** (two-plane contract frozen in spec v3.75; nine native-plane rows landed in v3.76; Settings Control Center composition added in v3.77).
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/91-windows-agent-cowork-ui-2026-09.md` — 54 lines · 5.5 KB
+#### `RESEARCH/desktop_app/91-windows-agent-cowork-ui-2026-09.md` — 57 lines · 5.9 KB
 > Doc 91 — Windows-first agent discovery, picker, and cowork readiness (2026-09-15)
 
-- opening: **Purpose:** implementation provenance for the Windows-first UI and runtime follow-up (`TODO.md` P66).
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
-#### `RESEARCH/desktop_app/DESKTOP-APP-SPEC.md` — 221 lines · 25.3 KB
+#### `RESEARCH/desktop_app/DESKTOP-APP-SPEC.md` — 224 lines · 25.7 KB
 > ⛔ SUPERSEDED — DO NOT USE AS THE BUILD SPEC
 
-- opening: **This file is an ARCHIVED draft** (final synthesis of docs 01–34, 2026-08-06, 142 repos, all-Rust-leaning).
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 ### 14.10 deploy/ — deployment docs
 
@@ -8859,64 +8859,64 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 
 ### 14.11 docs/codebase/
 
-#### `docs/codebase/README.md` — 73 lines · 3.6 KB
+#### `docs/codebase/README.md` — 88 lines · 5.4 KB
 > EveryAIOS — Codebase Understanding
 
-- opening: Generated understanding artifacts for the EveryAIOS desktop harness.
+- opening: **Post-thaw authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md)** (27 invariants I1–I27) **+ the subsystem contracts** (`WORK` · `SESSION` · `AGENT` · `EXTERNAL-AGENTS` · `CONTEXT` · `CAPABILITIES`
 
-#### `docs/codebase/architecture.md` — 70 lines · 4.2 KB
+#### `docs/codebase/architecture.md` — 107 lines · 7.9 KB
 > Architecture
 
-- opening: flowchart TD UI["L4 Cockpit — ui/ (React 19, Zustand 5, Tailwind 4)"] -->|"nativeCall() — Tauri IPC, protocol v1"| TAURI["L3 Tauri shell — src-tauri/ (339 commands, ~46 *_cmds.rs)"] TAURI -->|"direct
+- opening: **Post-thaw authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md)** (27 invariants I1–I27) **+ the subsystem contracts** (`WORK` · `SESSION` · `AGENT` · `EXTERNAL-AGENTS` · `CONTEXT` · `CAPABILITIES`
 
-#### `docs/codebase/components.md` — 95 lines · 6.1 KB
+#### `docs/codebase/components.md` — 111 lines · 8.8 KB
 > Components
 
-- opening: Responsibilities are quoted from each crate's `//!` module doc where one exists.
+- opening: **Post-thaw authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md)** (27 invariants I1–I27) **+ the subsystem contracts** (`WORK` · `SESSION` · `AGENT` · `EXTERNAL-AGENTS` · `CONTEXT` · `CAPABILITIES`
 
-#### `docs/codebase/data-and-state.md` — 50 lines · 3.2 KB
+#### `docs/codebase/data-and-state.md` — 59 lines · 4.8 KB
 > Data and State
 
-- opening: - **Event ledger replay:** session state (plan, checkpoints, receipts, approvals) is durable in the ledger, so restarts resume from the last completed turn rather than model memory — `DESKTOP-APP-SPEC
+- opening: **Post-thaw authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md)** (27 invariants I1–I27) **+ the subsystem contracts** (`WORK` · `SESSION` · `AGENT` · `EXTERNAL-AGENTS` · `CONTEXT` · `CAPABILITIES`
 
-#### `docs/codebase/decisions.md` — 84 lines · 3.8 KB
+#### `docs/codebase/decisions.md` — 129 lines · 8.1 KB
 > Decisions
 
-- opening: Architectural rationale with provenance. Where rationale cannot be proven from docs, code, or Git history, that is stated explicitly.
+- opening: **Post-thaw authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md)** (27 invariants I1–I27) **+ the subsystem contracts** (`WORK` · `SESSION` · `AGENT` · `EXTERNAL-AGENTS` · `CONTEXT` · `CAPABILITIES`
 
-#### `docs/codebase/external-systems.md` — 54 lines · 2.6 KB
+#### `docs/codebase/external-systems.md` — 73 lines · 4.8 KB
 > External Systems
 
-- opening: - **Credential custody:** SQLCipher key-ring in `crates/everyaios-vault` (ARCH/03, J8).
+- opening: **Post-thaw authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md)** (27 invariants I1–I27) **+ the subsystem contracts** (`WORK` · `SESSION` · `AGENT` · `EXTERNAL-AGENTS` · `CONTEXT` · `CAPABILITIES`
 
-#### `docs/codebase/flows.md` — 80 lines · 4.4 KB
+#### `docs/codebase/flows.md` — 111 lines · 7.2 KB
 > Flows
 
-- opening: Execution paths at file granularity. Evidence type is stated per step: **[G]** = file-level graph edge (codegraph, confidence B), **[S]** = read from source, **[D]** = from repo docs (`AGENTS.md`, `ARCH/`, `DESKTOP-APP-SPEC.md`).
+- opening: **Post-thaw authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md)** (27 invariants I1–I27) **+ the subsystem contracts** (`WORK` · `SESSION` · `AGENT` · `EXTERNAL-AGENTS` · `CONTEXT` · `CAPABILITIES`
 
-#### `docs/codebase/hotspots.md` — 84 lines · 3.9 KB
+#### `docs/codebase/hotspots.md` — 92 lines · 4.9 KB
 > Hotspots
 
-- opening: Graph-derived signals from the codegraph index (commit `c574ea4`, tree-sitter, 2,203 file-level edges).
+- opening: **Post-thaw authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md)** (27 invariants I1–I27) **+ the subsystem contracts** (`WORK` · `SESSION` · `AGENT` · `EXTERNAL-AGENTS` · `CONTEXT` · `CAPABILITIES`
 
-#### `docs/codebase/invariants.md` — 75 lines · 3.4 KB
+#### `docs/codebase/invariants.md` — 99 lines · 5.2 KB
 > Invariants
 
-- opening: Only rules the implementation or tests actually support.
+- opening: **Post-thaw authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md)** (27 invariants I1–I27) **+ the subsystem contracts** (`WORK` · `SESSION` · `AGENT` · `EXTERNAL-AGENTS` · `CONTEXT` · `CAPABILITIES`
 
-#### `docs/codebase/tests-and-verification.md` — 65 lines · 2.8 KB
+#### `docs/codebase/tests-and-verification.md` — 91 lines · 5.0 KB
 > Tests and Verification
 
-- opening: cargo test # all Rust unit + integration tests cargo test -p everyaios-core # single crate pnpm test # all Vitest suites pnpm --filter ui tsc --noEmit # UI typecheck
+- opening: **Post-thaw authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md)** (27 invariants I1–I27) **+ the subsystem contracts** (`WORK` · `SESSION` · `AGENT` · `EXTERNAL-AGENTS` · `CONTEXT` · `CAPABILITIES`
 
 ### 14.12 root — specs, handover, and this map
 
-#### `AGENTS.md` — 263 lines · 10.6 KB
+#### `AGENTS.md` — 264 lines · 10.7 KB
 > Repository Agent Instructions
 
 - opening: This file is intentionally **agent-agnostic**.
 
-#### `CODEBASE-MAP.md` — 9,575 lines · 871.6 KB
+#### `CODEBASE-MAP.md` — 9,575 lines · 878.7 KB
 > EveryAIOS — Complete Codebase Map (HLD + LLD)
 
 - opening: **Generated by:** `node scripts/gen-codebase-map.mjs` (regenerates §9–§15; the narrative in §1–§8 is hand-authored).
@@ -8926,37 +8926,37 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 
 - opening: **Status:** research verdicts folded from doc 68 §2/§3 into the P12.1 GTM competitive analysis (P12 queue).
 
-#### `CURRENT_RUN.md` — 2,214 lines · 222.6 KB
+#### `CURRENT_RUN.md` — 2,221 lines · 224.3 KB
 > CURRENT RUN STATE — Task Handover & Checkpoint
 
-- opening: **INSTRUCTION FOR ALL CODING AGENTS**: 1.
+- opening: **⚠ SESSION HANDOVER ONLY — this file carries no architecture and no scale claims.** Since the 2026-09-20 thaw (`ARCH/ADR/0003`), architecture belongs to [`ARCH/CORE.md`](ARCH/CORE.md) and its subsyst
 
-#### `DESKTOP-APP-SPEC.md` — 1,531 lines · 327.2 KB
+#### `DESKTOP-APP-SPEC.md` — 1,553 lines · 330.4 KB
 > DESKTOP-APP-SPEC.md — Complete Product Specification
 
-- opening: **Current provider/catalog contract (2026-09-12):** The shell resolves endpoints from user profiles, the live models.dev snapshot, and the vendored registry, including supported wire transport.
+- opening: **Architecture authority: [`ARCH/CORE.md`](ARCH/CORE.md).** This document is the **product contract** — behavior, UI, schemas, invariants.
 
-#### `README.md` — 270 lines · 16.9 KB
+#### `README.md` — 308 lines · 20.9 KB
 > <p align="center">
 
 - opening: <p align="center"> <img src="src-tauri/icons/128x128.png" width="88" alt="EveryAIOS" /> </p>
 
-#### `SPEC-CHANGELOG.md` — 1,358 lines · 460.2 KB
+#### `SPEC-CHANGELOG.md` — 1,404 lines · 464.0 KB
 > DESKTOP-APP-SPEC.md — Specification Changelog
 
 - opening: This file records historical decisions, research transfers, implementation updates, and verification evidence for `DESKTOP-APP-SPEC.md`.
 
-#### `TEST-CASES.md` — 979 lines · 84.2 KB
+#### `TEST-CASES.md` — 979 lines · 84.3 KB
 > Enterprise MNC Master Test Cases Specification: EveryAIOS
 
 - opening: **Standard**: ISO/IEC/IEEE 29119 Software Testing Standard & IEEE 829 Test Documentation **Target System**: EveryAIOS — Universal Agentic OS & Desktop Harness **Release Target**: Windows 11 Desktop (P
 
-#### `TODO.md` — 2,425 lines · 702.0 KB
+#### `TODO.md` — 2,698 lines · 760.9 KB
 > EveryAIOS — Master Implementation TODO
 
 - opening: **Documentation ownership:** `DESKTOP-APP-SPEC.md` is the **product contract only** (behavior, schemas, UI layouts, invariants — not a build plan).
 
-#### `UI-DESIGN-PROMPT.md` — 360 lines · 45.7 KB
+#### `UI-DESIGN-PROMPT.md` — 360 lines · 46.0 KB
 > EveryAIOS — Production UI Design Specification
 
 - opening: **Canonical UI spec.** `ui/src` implements this document (ARCH/12 §2.1: when ARCH/12 and this file disagree on pixels, **this file wins**).
@@ -8966,7 +8966,7 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 
 - opening: Plan for the alpha → beta → RC user-testing rounds.
 
-#### `testcases.md` — 341 lines · 24.4 KB
+#### `testcases.md` — 341 lines · 24.5 KB
 > EveryAIOS Verification & Cowork Capability Test Cases Report
 
 - opening: **Date**: September 16, 2026 **Target**: EveryAIOS Desktop Cowork Runtime & Multi-Agent Swarm Subsystems **Scope**: Two-Plane Native Architecture, External Agent Swapping (OpenCode, Grok Build, Codex,
@@ -9552,7 +9552,7 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 | `.css` | 1 |
 | **TOTAL tracked** | **1447** |
 
-Lines counted across the 1441 tracked text files at generation time: **411,059**.
+Lines counted across the 1441 tracked text files at generation time: **412,300**.
 
 ### 15.5 Coverage audit — is any tracked file unaccounted for?
 

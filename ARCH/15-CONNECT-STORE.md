@@ -1,5 +1,26 @@
 # Connect Store — remote MCP + OAuth connectors (the "click → sign in → use" surface)
 
+> **DERIVED DOCUMENT — see [`CORE.md`](CORE.md) §4 and [`CAPABILITIES.md`](CAPABILITIES.md) first.**
+> Connectors are a capability pack: a connector declares a manifest, authentication, capabilities, provider
+> transport and action definitions, and its actions produce a canonical `EffectRequest` that passes
+> `Guard → Executor` like any other effect. A connector may not own a permission model, an audit bypass, an
+> independent effect commit, or connector-scoped Work state.
+> **Pending rewrite: `P69.A15`-adjacent consolidation `P69.D17`.**
+
+## Capability-pack contract — connectors under CORE (`P69.D17`)
+
+> Authoritative: [`CORE.md`](CORE.md) §4 · [`CAPABILITIES.md`](CAPABILITIES.md) · [`SECURITY.md`](SECURITY.md).
+> A connector is a **capability pack**: manifest + authentication + declared capabilities + provider transport
+> + action definitions. Every connector action produces a canonical **`EffectRequest`** and travels
+> `Guard → Executor` like any other effect; the store catalog (`store_catalog`) is *what to show*, never a
+> permission. No connector-scoped permission model, audit bypass, independent effect commit, or
+> connector-scoped Work state. Raw OAuth tokens stay in the vault and are never handed to an agent.
+> External MCP tools normalize into the same canonical capability model (adapter, never a second permission
+> universe — `P69.D18`); they never bypass the executor.
+
+---
+
+
 > **Full-Stack Module:** Module 4 — Governed MCP & Capability Marketplace (`crates/everyaios-mcp`, stdio & remote SSE MCP client/server).
 > **Status:** v1.6 (2026-09-03 — the notes below reach v1.6; the header previously read v1.2). Companion to `manager.rs` (local stdio MCP installs)
 > and `everyaios-vault::oauth` (PKCE + device-flow OAuth). **New file `everyaios-mcp/src/store.rs`.**
@@ -12,7 +33,7 @@
 > others use community/known public client IDs (override anytime). 4 new vault
 > oauth tests (110 vault tests total).
 >
-> **Settings ownership (ARCH/17 §17.12):** this document defines the shared connector/store backend; the Settings Control Center composes its `ConnectionRecord` read model and must not create a second connector registry. The connect store, its OAuth providers and the MCP
+> **Settings ownership (ARCH/17 §17.12 — read models move with the `P69.A26` split → AGENT.md + EXTERNAL-AGENTS.md):** this document defines the shared connector/store backend; the Settings Control Center composes its `ConnectionRecord` read model and must not create a second connector registry. The connect store, its OAuth providers and the MCP
 > children it instals are **Shared Cowork Plane** — connector capabilities are
 > borrowed by every agent (Native included) through the shared façade, and raw
 > OAuth tokens never leave the vault for an agent. The monitored-transport note
@@ -133,5 +154,5 @@ sandboxed (a tested concrete monitored backend primitive; currently Linux `bwrap
 
 Tools from connected servers are merged into the unified catalog surface
 (`manager::merge_into_catalog`); the coordinator's model-facing tool list is the
-*sid*car's concern and unchanged here. Memory indexing from connectors
+sidecar's concern and unchanged here. Memory indexing from connectors
 (`indexes_into_memory`) is an explicit per-entry flag the consent card shows.

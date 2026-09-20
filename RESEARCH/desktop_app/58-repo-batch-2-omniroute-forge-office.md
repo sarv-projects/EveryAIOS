@@ -1,5 +1,8 @@
 # 58 — Repo Batch 2: OmniRoute + Forge-intel + Office + Skills + Agent-workspaces
 
+> **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPEC.md) · delivery: [`../../TODO.md`](../../TODO.md). Frozen by decision **D8** — research docs are **never updated** with code changes, so a dated claim here is not a stale claim.
+
+
 > Added 2026-08-13 on user request (44-repo list). All repos **live-verified** via GitHub API 2026-08-13 (⭐ + SPDX license + `pushed_at`). Cross-referenced against docs 01–57 first: anything-llm (01), hermes-agent (02/38), MetaGPT (03/18/26), headroom (22/31), khoj (21/23), agentmemory (21/23), nanobot (23), websurfx (52), Vane (35), steel-browser/agent-browser (55), cherry-studio (18), jan (08/24), leon-ai (18), py-gpt (18), Agent-Reach (23/31), UI-TARS-desktop (48), google-ai-mode-scraper/oxylabs (23/31), local-deep-research (07) are **already covered** — not repeated here.
 >
 > **New here (21 repos):** OmniRoute · better-harness · GenericAgent · crux · taste-skill · codebase-memory-mcp · univer · ppt-master · guizang-ppt-skill · holaOS · QwenPaw · worldmonitor · llmfit · deepwiki-open · DeepSeek-TUI (correction) · huginn · microsoft/agent-framework (deep-dive fill) · unsloth · coolify · awesome-rust · google-ai-mode-mcp.

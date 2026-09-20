@@ -1,5 +1,8 @@
 # Doc 75 — Anthropic Skills / Plugins / Cowork Deep-Dive
 
+> **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPEC.md) · delivery: [`../../TODO.md`](../../TODO.md). Frozen by decision **D8** — research docs are **never updated** with code changes, so a dated claim here is not a stale claim.
+
+
 **Date:** 2026-08-16 · **Sources (web-verified):** `github.com/anthropics/skills` (+ `agentskills.io` spec), `github.com/anthropics/claude-plugins-official`, `code.claude.com/docs/en/plugins-reference`, `github.com/OpenCoworkAI/open-cowork`, `github.com/hesreallyhim/awesome-claude-code`; cross-checked against docs 22/45/63/65/69/71.
 
 **Question:** which Claude **skills / capabilities** should ship **inbuilt**, and which should be **user-addable via an "Add" button**? Also re-check the **Cowork** concept.

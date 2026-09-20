@@ -1,5 +1,8 @@
 # 56 — Warp / cowork-forge / cronflow / Copilot-CLI / Devin-API deep-dive (agentic dev-environment, workflow engine, closed-source agents)
 
+> **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPEC.md) · delivery: [`../../TODO.md`](../../TODO.md). Frozen by decision **D8** — research docs are **never updated** with code changes, so a dated claim here is not a stale claim.
+
+
 > **Repos:** `warpdotdev/warp` (64,107★, AGPL-3.0 + MIT warpui, Rust) · `sopaco/cowork-forge` (83★, MIT, Rust) · `dali-benothmen/cronflow` (125★, **no LICENSE file** — NOASSERTION, Rust) · `github/copilot-cli` (11,073★, custom license, **closed** — binary distribution wrapper) · Devin (Cognition — **fully proprietary**; API v3 + MCP server + DeepWiki patterns).
 > **All live-verified 2026-08-10** (GitHub API: stars/license/lang/pushed). warp + cowork-forge + cronflow **cloned (`/tmp/repocheck2`) + key files source-read**; copilot-cli + Devin web/docs-verified (closed source → pattern-only).
 > **Verdict upfront:** of the user's 7 targets, **4 were already in the corpus** (rtk, open-interpreter, cc-switch, tauri — all ⬛ source-read; only star counts drift); **3 are NEW** (warp — the major find, now open-sourced; cowork-forge — MIT, copyable; cronflow — reference-only). **Copilot + Devin are closed → we build the equivalents ourselves; their patterns are stolen, their code never.**

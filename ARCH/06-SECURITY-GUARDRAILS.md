@@ -1,22 +1,42 @@
 # 06 — Security & Guardrails
 
+> **DERIVED DOCUMENT — see [`CORE.md`](CORE.md) §6 and [`SECURITY.md`](SECURITY.md) first.** `SECURITY.md` owns
+> the authorization model, the ticket lifecycle, the sandbox-as-mechanism rule, and the honesty contract about
+> what Guard does *not* control. The trust ladder described here survives as a **policy input**, not an
+> authority. Any wording implying “every mutation is ticketed” is superseded by the
+> authorization-provenance rule. **Rewritten `P69.A17` (done 2026-09-20).**
+
+---
+
+
 > **The user requirement, verbatim:** *"guardrails are very, very important. research on that."* Synthesized from: v2.0 §P8 (Trust Ladder + dual-guard, built in core-tools), doc 03 §8, ZeroClaw security-first (doc 30 §1), BrowserOS ownership + guards/effects pipeline (doc 33 §4.3, §6.3), Hermes prompt-injection scan + FTS5 trust scoring (doc 16), ECC AgentShield + plan-before-build (doc 09), OpenFang WASM metering (doc 09), microsandbox (doc 23), cyber-agent red-team corpus (doc 26 — use their attack patterns as our test suite).
 
-**v3.39:** a `ManagedResource` may be discovered, installed, and healthy without permission to mutate anything. Start/health is process lifecycle. **Every real effect still requires a ticket.** Installing an MCP server is not executing a tool.
-> **Full-Stack Module:** Module 8 — Security Guard-2 & Merkle Audit Membrane (`crates/everyaios-guard`, `crates/everyaios-audit`, `netfloor`, `pathfloor`).
-> **Plane (ARCH/17 §17.1):** Guard, tickets, vault, pathfloor/netfloor and the Merkle audit are the **execution kernel beneath both planes**. The boundary does not change with the caller: a Native tool call and an external agent's mediated effect pass the same permit → execute → verify → record path, and carry the same provenance requirement (machine/agent ticket vs. human gesture from the guard window).
+**v3.39:** a `ManagedResource` may be discovered, installed, and healthy without permission to mutate anything. Start/health is process lifecycle. **Every real effect carries authorization provenance** (CORE §5.1): an agent/automation mutation carries an `AuthorizationTicket`; a human UI mutation carries trusted user-gesture provenance. Installing an MCP server is not executing a tool.
+> **Full-Stack Module:** Module 8 — Security Guard & Merkle Audit Membrane (`crates/everyaios-guard`, `crates/everyaios-audit`, `netfloor`, `pathfloor`).
+> **Ownership ([`CORE.md`](CORE.md) §4, §6):** Guard, tickets, vault, pathfloor/netfloor and the Merkle audit are the **execution kernel beneath every caller**. The boundary does not change with the caller: a built-in tool call and an external agent’s mediated effect pass the same permit → execute → verify → record path, and carry the same provenance requirement (agent/automation ticket vs. human gesture). **Honest scope:** this governs EveryAIOS capabilities only — an external agent’s own tools are governed by its own permissions plus the outer sandbox ([`SECURITY.md`](SECURITY.md) §9).
 
-## 6.1 Defense in depth (every path, every layer)
+## 6.1 Defense in depth (every path, every layer — one gate)
+
+`everyaios-guard` is the sole authorization authority ([`SECURITY.md`](SECURITY.md) §4; I12). Every layer below either proposes to Guard, enforces Guard's decision, or records it — no layer decides permissions for itself.
 
 ```
-LLM output ──► [1] Trust Ladder policy (sidecar, proposes)
-            ──► [2] Grammar extractor (sidecar, structure)
-            ──► [3] Deterministic regex interceptor (Rust everyaios-guard)
-            ──► [4] Path/scope floors (Rust everyaios-guard)
-            ──► [5] Human diff-card (Rust — escalated ops only, real click)
-            ──► [6] Sandbox execution (subprocess jail / WASM / browser ownership)
-            ──► [7] Append-only audit (Rust everyaios-audit)
+LLM output ──► [1] Trust Ladder policy (sidecar, proposes — a policy INPUT, never an authority)
+             ──► [2] Grammar extractor (sidecar, structure)
+             ──► [3] Deterministic regex interceptor (Rust everyaios-guard)
+             ──► [4] Path/scope floors (Rust everyaios-guard)
+             ──► [5] Human diff-card (Rust — escalated ops only, real click)
+             ──► [6] Sandbox execution (mechanism: enforces isolation, decides nothing)
+             ──► [7] Append-only audit (Rust everyaios-audit)
 ```
+
+**Authorization provenance — the three values on every mutation audit row** (CORE §5.1; the obsolete
+"every mutation is ticketed" phrasing must not be used):
+
+| Path | Provenance | Stamped by |
+|---|---|---|
+| Agent mutation | `agent_ticket` — single-use, argument-bound `AuthorizationTicket` | Guard mints; the executor consumes |
+| Automation mutation | `automation_ticket` — single-use, argument-bound `AuthorizationTicket` | Guard mints; the executor consumes |
+| Human UI mutation | `human_gesture` — trusted native-gesture provenance | Rust call sites only, from a native UI-event origin, via a typed argument (never a serde value from UI/agent input — a machine cannot manufacture human authorization) |
 
 **2026-09-10 (guard-UX wave):** three additions to this pipeline, all implemented in `everyaios-guard::guard_service` and wired to the Tauri shell + UI:
 
@@ -24,10 +44,10 @@ LLM output ──► [1] Trust Ladder policy (sidecar, proposes)
 - **Card lifecycle is pushed, not polled.** `GuardService::subscribe_lifecycle()` emits a batched `GuardLifecycle` event (minted / approved / rejected / expired, per ticket and batch) on every state transition; the shell bridges it to the `guard-event` Tauri event so open guard windows refresh on push (a short poll remains as fallback only). Expiry transitions originate from the same service — no second expiry clock in the UI.
 - **TTL extend is a control-plane-only RPC** (`guard/extend_ttl` — explicitly denied to the coordinator sidecar): Pending-gated (approved/rejected/expired cards never extend), caps each extension at 60s and total lifetime at 5 minutes, and **re-mints the card nonce on every extend — the previously displayed card dies immediately** (stale-window and replay surface stay closed).
 
-## 6.2 The Trust Ladder (kept from core-tools, 0–100)
+## 6.2 The Trust Ladder (a policy input, not an authority — kept from core-tools, 0–100)
 
 - Score grows from successful task completions; decays slowly on repeated failures.
-- Tiers: reads (any) · local-write in workspace (≥25) · local-write outside workspace (≥50 + path grant) · external writes / network sends (≥75 + diff-card) · destructive (100 still **requires** diff-card — never auto). The ladder raises *convenience*, never overrides the hard guards.
+- Tiers: reads (any) · local-write in workspace (≥25) · local-write outside workspace (≥50 + path grant) · external writes / network sends (≥75 + diff-card) · destructive (100 still **requires** diff-card — never auto). The ladder raises *convenience*, never overrides the hard guards. **Guard alone decides allow / deny / ask** ([`SECURITY.md`](SECURITY.md) §4; I12) — a ladder score is one input to that decision, and a second permission engine anywhere (TS trust-ladder authority, UI-side approval, connector-specific models, ACP-specific logic) is a defect, not a preference.
 - Per-agent override (blueprints): role isolation — subagents inherit a capped ladder + `DELEGATE_BLOCKED_TOOLS` (Hermes, doc 16).
 
 ## 6.3 Guard 1 — deterministic regex interceptors (Rust)
@@ -53,7 +73,15 @@ Escalated actions freeze the loop and render a human approval card (not LLM-gene
 - **Tool-result sanitization**: tool outputs are treated as untrusted data — rendered as text/JSON, never as UI markup, never as instructions (they can't call the next tool directly; the loop always re-validates).
 - **Escape hatches**: `estop` (global stop, tray-accessible), optional OTP for destructive ops (ZeroClaw, doc 30), per-session "YOLO mode" off by default with a loud warning.
 
-## 6.6 Sandboxes (execution isolation)
+## 6.6 Sandboxes — an execution mechanism, not the security architecture (I13)
+
+```
+Guard decides policy → Sandbox enforces isolation → Executor performs the action
+```
+
+Sandboxing is not a substitute for authorization, and not every effect needs a heavyweight sandbox.
+Confusing "isolated" with "authorized" produces systems that are neither. A confinement request **fails
+closed**: if the requested posture cannot be achieved, that is an error, never a silent downgrade.
 
 | Runner | For | Boundaries |
 |---|---|---|

@@ -1,5 +1,8 @@
 # 28 — GenOffice Deep-Dive (source-verified 2026-08-06)
 
+> **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPEC.md) · delivery: [`../../TODO.md`](../../TODO.md). Frozen by decision **D8** — research docs are **never updated** with code changes, so a dated claim here is not a stale claim.
+
+
 > **Repo:** https://github.com/genspark-ai/genoffice (Apache-2.0, ~1.9K⭐) — AI-native office suite: **docs, sheets, slides, pdf** + shell. Five Electron apps sharing one engine layer; AI editing as first-class workflow. **THE reference for our document-editing pillars.**
 > All file paths below fetched live this pass.
 

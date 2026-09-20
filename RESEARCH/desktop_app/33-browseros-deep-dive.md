@@ -1,5 +1,8 @@
 # 33 — BrowserOS (browseros-ai/BrowserOS) Source Deep-Dive: The Agent Browser
 
+> **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPEC.md) · delivery: [`../../TODO.md`](../../TODO.md). Frozen by decision **D8** — research docs are **never updated** with code changes, so a dated claim here is not a stale claim.
+
+
 > Fetched live 2026-08-06 via **shallow git clone** (`/tmp/browseros-deep`, 344MB, 3,248 tracked files / 3,243 present — only 5 LFS media files missing). Depth: **⬛ code-level** — the README/docs claim in doc 30 §3 is now superseded by source reads of the monorepo, the Rust workspace, the Bun server, and the Chromium-fork build manifest.
 > ⚠️ **License: AGPL-3.0** (plus a separate `LICENSE.ungoogled_chromium` for the fork base). We **learn the architecture, never copy code** into a MIT/Apache project. Everything below is a *design* map + what-to-steal *conceptually*.
 > ⚠️ Honest limits: (a) the **recording-capture side lives inside the Chromium checkout** (`chrome/browser/browseros/*`, applied as patches at build time) — its `.cc`/`.ts` are **not in this repo**, so capture internals are inferred from the ingest contract + `.features.yaml` paths, not source-read; (b) the private `.internal-docs` submodule is unreachable (git@ URL); (c) `packages/archive/` unexamined.

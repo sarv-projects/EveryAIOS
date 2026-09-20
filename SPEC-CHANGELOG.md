@@ -17,6 +17,52 @@ Each entry records the date or release marker, change category, affected section
 - A citation or implementation detail may remain in the spec only when it is itself a current behavioral constraint; its historical or evidentiary explanation belongs here.
 
 ---
+## 2026-09-20 — Architecture thaw: `ARCH/CORE.md` becomes the root authority
+
+**Category:** architecture/contract. **Flipped:** no capability checkbox changes — this entry records an
+architecture re-basing. Capability identity is unchanged (`capabilities.yaml` == `ARCH/09` == spec §0).
+
+**Decision.** The freeze declared at v3.64 (`“no more architecture expansion”`) is **re-opened and re-frozen**
+under a single root authority, `ARCH/CORE.md`: 16 canonical primitives, a 9-question ownership matrix, and 26
+invariants, with a subsystem contract per area (`WORK` · `SESSION` · `AGENT` · `EXTERNAL-AGENTS` · `CONTEXT` ·
+`CAPABILITIES` · `MEMORY` · `SECURITY` · `RECOVERY` · `ROUTING` · `UI` · `DESKTOP`). Recorded in
+`ARCH/ADR/0003-architecture-thaw-core-authority.md`; work is `TODO.md` **P69** (consolidation, defects, CI
+checks, migration) and **P70** (v1 release: packaging, signing, updater, qualification, launch).
+
+**Concept retired: “Chief”.** The word conflated two roles — the *loop owner* (reasoning, planning, tool
+selection) and *turn coordination* (state loading, context building, tool projection, event emission,
+recovery). The first belongs to the **selected agent** and becomes `AgentBinding`; the second belongs to
+EveryAIOS and is not reasoning. A built-in runtime may ship as one binding for zero-install first run but is
+**not privileged** and nothing may depend on it. The identifiers `primary_chief`, `ChiefAdapter`, `ChiefError`,
+`ChiefEvent`, `KNOWN_CHIEFS`, `chief.ts`, `userDefaultChief` and the `chief` field of `RuntimeManifest` remain
+as **names awaiting migration** (`TODO.md` P69.A30) — never as a claim that EveryAIOS owns a brain.
+
+**Slogan corrected.** The stale “every mutation is ticketed” wording is replaced by the
+**authorization-provenance** rule everywhere it survives: agent/automation mutations consume an
+`AuthorizationTicket`; human UI mutations carry trusted user-gesture provenance; both feed the same
+verify → receipt → audit path. (This had already been corrected in §4.3; the correction is now propagated to
+the derived artifacts and the ARCH set.)
+
+**Defects verified in source and queued (`P69.C`).** (1) The ACP permission path grants approval without
+consulting Guard — `crates/everyaios-acp/src/chief.rs:417` returns `Approval::allow()` on the host side.
+(2) ACP `fs/*` and `terminal/*` are unhandled — `crates/everyaios-acp/src/client.rs:521` implements only
+`session/request_permission`; everything else returns `-32601 method not found` (`client.rs:538`), so mediated
+mode has no filesystem or terminal path. (3) Mediated mode is not the default — `chief.rs:373`
+(`advertise_fs_terminal: false`). (4) **Most severe:** a TypeScript package stores provider credentials —
+`packages/core-providers/src/vault.ts` seals/unseals API keys via `@personal-ai/core-security`, against the
+rule that keys live only in `everyaios-vault`. *(A second `Approval::allow()` at `chief.rs:663` is a
+test-driver fixture, not a production path, and is not counted as a defect.)*
+
+**Documentation.** 14 new architecture documents (13 subsystem contracts + the root authority) + ADR-0003; all
+13 legacy ARCH documents **downgraded with authoritative banners** naming exactly which claims are superseded
+and which are preserved; `ARCH/02` gained the per-component disposition table; the spec gained an
+architecture-authority banner, a legacy-identifier note at §4.2.5a, and Chat/Session vocabulary guidance; the
+`RESEARCH/` corpus is now explicitly labelled non-normative in every file; `docs/codebase/` carries a pre-thaw
+banner and a new decision **D9**. **Architecture-side rewrite of the 13 downgraded bodies remains open**
+(P69.A13–A27, marked `PARTIAL`).
+
+**Verification.** `check-doc-sync.mjs` exit 0 (166 capabilities in sync; TODO.md live count matches header;
+kernel gate clear) and `gen-codebase-map.mjs --check` exit 0, both after every edit in this entry.
 ## 2026-09-19 — V1 Acceptance Evidence Suites (Tracks 2/3/5) + Explicit Windows-Incomplete Status
 
 **Category:** verification/evidence. **Flipped:** none — no capability checkbox changes. This entry adds reproducible acceptance harnesses over already-landed engines and states the platform gaps explicitly (evidence-gated readiness §17.12.6).

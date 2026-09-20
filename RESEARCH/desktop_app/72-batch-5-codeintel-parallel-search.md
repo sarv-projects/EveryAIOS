@@ -1,5 +1,8 @@
 # Doc 72 — Batch 5: Code-Intelligence, Parallel Agents, Search Libs (2026-08-16)
 
+> **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPEC.md) · delivery: [`../../TODO.md`](../../TODO.md). Frozen by decision **D8** — research docs are **never updated** with code changes, so a dated claim here is not a stale claim.
+
+
 **Date:** 2026-08-16 · **Method:** web-verified (GitHub + crates.io + docs), cross-checked against docs 20/23/65.
 **Scope:** 10 repos — code-intelligence graphs, MCP coding toolkits, parallel-agent IDE, loop
 engineering, token metering, internet access, vector/lexical search.

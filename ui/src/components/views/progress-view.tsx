@@ -408,7 +408,7 @@ export default function ProgressView() {
             <div className="text-xs font-medium">Progress</div>
             <p className="text-[10px] text-muted-foreground">
               {events.length === 0
-                ? 'Tasks and todos for this session land here as they run.'
+                ? 'Tasks and todos for this chat land here as they run.'
                 : `${doneCount} of ${events.length} entries complete.`}
             </p>
           </div>

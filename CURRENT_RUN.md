@@ -1,5 +1,13 @@
 # CURRENT RUN STATE — Task Handover & Checkpoint
 
+> **⚠ SESSION HANDOVER ONLY — this file carries no architecture and no scale claims.** Since the 2026-09-20
+> thaw (`ARCH/ADR/0003`), architecture belongs to [`ARCH/CORE.md`](ARCH/CORE.md) and its subsystem contracts, the
+> product contract to [`DESKTOP-APP-SPEC.md`](DESKTOP-APP-SPEC.md), and delivery/open work to [`TODO.md`](TODO.md).
+> Any dated measurement, architecture statement, “frozen” claim or census below is **historical evidence from
+> the date it carries** — not current state. Do not derive a decision from this file. (Tracked as P69.A33.)
+>
+> **Stale pointers repaired (2026-09-20):** two references to `AGENTS.md` in this file targeted a **superseded revision** of that document and have been repointed — the architecture-status reference now names [`ARCH/CORE.md`](ARCH/CORE.md) + [`ARCH/ADR/0003`](ARCH/ADR/0003-architecture-thaw-core-authority.md), and the secrets-in-logs reference now names the security rule (`AGENTS.md` §15 Security Rules, [`ARCH/SECURITY.md`](ARCH/SECURITY.md)). The current `AGENTS.md` puts architecture at §10 and security rules at §15, and the architecture authority is [`ARCH/CORE.md`](ARCH/CORE.md).
+
 > **INSTRUCTION FOR ALL CODING AGENTS**: 
 > 1. Read this file **first** before starting any task. 
 > 2. Update this file **after every completed or partially completed task** before handing off.
@@ -228,6 +236,7 @@
   - Rust workspace cargo tests: all unit tests passing (`p51_29_mcp_external`, `npx::tests`, `p60_`, `p59_`, `p64_`, `cua::`).
   - UI `bun test` and Coordinator `bun test` passing.
 - **Current Census**: **1,429 total = 1,264 done + 165 open** across 1,346 tracked files / 366,004 lines.
+> **⚠ SUPERSEDED (2026-09-20):** the counts below were accurate on 2026-09-16 but are **no longer current** — the tree has since grown past them, and this file must not carry architectural or scale claims (see `TODO.md` P69.A33). Kept as dated evidence only. Current structural facts live in `CODEBASE-MAP.md` and the codegraph index.
 - **Current session reconnaissance (read-only, re-measured 2026-09-16):** `desktop_app` only. True scale measured with `git ls-files`: **1,346 tracked files / 366,004 lines** (`rs` 490 files/185,969 lines · `ts` 425/62,625 · `tsx` 144/40,932 · `md` 136/24,283 · `json` 40/24,348 · `mjs` 14/2,081 · `css` 1/712), plus 21 ARCH docs (00–17 + DIAGRAMS + 2 ADR), 93 RESEARCH docs, 47 `src-tauri` files, 141 UI component files, 331 `#[tauri::command]` functions, 2,764 Rust `#[test]` fns, 27 Rust integration-test files, and 134 TS/TSX test files. (Previous entry said 1,331/361,083 and "310 test files" — superseded by this measurement.)
 - **Fully or substantially read this session:** all 10 `.agents/skills/*/SKILL.md`; root `AGENTS.md`; `README.md`; `package.json`/`pnpm-workspace.yaml`/`tsconfig.json`/`capabilities.yaml`/`.pre-commit-config.yaml`; all 22 crate `Cargo.toml`s + workspace manifest; all 11 package `package.json`s; `tauri.conf.json`; `ARCH/00`–`ARCH/17`, `DIAGRAMS.md`, `ARCH/ADR/0001`+`0002`; `TODO.md`; substantial portions of `DESKTOP-APP-SPEC.md`, `SPEC-CHANGELOG.md`, `capabilities.yaml`; `src-tauri/src/{lib,state,commands,catalog_cmds,acp_cmds}.rs`; every crate's `lib.rs` module map; `crates/everyaios-core/src/{tools,guard_service,execution}.rs`; `crates/everyaios-guard/src/sandbox.rs`; `crates/everyaios-audit/src/session_log.rs`; `crates/everyaios-memory/src/compaction.rs`; `crates/everyaios-vault/src/broker.rs` (partial); `packages/coordinator/src/{index,chat,plan,tools,router}.ts`; `packages/core-ai/src/{chat/system-prompt,context/tiered-compaction}.ts`; `packages/core-tools/src/{permission-gate,trust-ladder}.ts`; `ui/src/{main,App}.tsx`, `ui/src/lib/{bridge,runtime,tauri}.ts`, `ui/src/lib/store.ts` (partial, 450/2947).
 - **Core-code map pass (this wave):** extracted the module-doc header + line count of **every** `.rs`, `.ts` and `.tsx` file in the repo (from each file's own `//!` / leading block comment) to build a verified map, then read in full: `crates/everyaios-ipc/src/{lib,frame,message,channel,handle,budget,socket}.rs` (the whole process contract), `crates/everyaios-types/src/lib.rs`, `crates/everyaios-core/src/{lib,version,capability_manifest,adapter}.rs`, `crates/everyaios-guard/src/{lib,sandbox}.rs`, `crates/everyaios-audit/src/{lib,merkle,session_log}.rs`, `crates/everyaios-memory/src/compaction.rs`, `crates/everyaios-acp/src/acp_cmds`-adjacent domain, `src-tauri/src/{commands,catalog_cmds}.rs`; plus windows of `everyaios-core/src/{chat,guard_service,tools,execution}.rs`, `everyaios-vault/src/broker.rs`, `packages/coordinator/src/{chat,plan,tools,router,index}.ts`, `packages/core-ai/src/{chat/system-prompt,context/tiered-compaction}.ts`, `packages/core-tools/src/{permission-gate,trust-ladder}.ts`.
@@ -608,8 +617,7 @@ with each claim tagged `[VERIFIED]` (line-level, re-checked) or `[READ]`
 **Why it exists:** the user's challenge was correct. All prior "verification" in
 this repo — including my own in waves 2D/2E — was gate-driven (`cargo test`,
 clippy, `ipc-parity`, doc-sync). That proves a function is *correct*; it does not
-prove a *capability is reached*. `AGENTS.md` §3.2 declares the architecture
-"frozen", and "frozen" was being read as "correct". This audit separates them.
+prove a *capability is reached*. the architecture was declared "frozen" (in a now-superseded `AGENTS.md` revision — the current authority is [`ARCH/CORE.md`](ARCH/CORE.md), whose freeze was lifted by [`ARCH/ADR/0003`](ARCH/ADR/0003-architecture-thaw-core-authority.md)), and "frozen" was being read as "correct". This audit separates them.
 
 **ALL 26 UNITS COMPLETE (2026-09-17).** 24 Rust crates, 11 TS packages, 45 host
 modules, 137 UI components, ~212,000 LOC. §26 (line ~2640 of the ledger) holds the
@@ -689,8 +697,7 @@ had to hand-build four times.
    bleed, presented as a completed turn. The `readOnlyTurn` guard reasons about
    *mutation*; the hazard is *substitution*.
 4. **The live WebMCP bearer token is printed to stderr at boot `[VERIFIED]`**
-   (`boot.rs:70`, called from `lib.rs:865`) — a direct `AGENTS.md` §11 violation
-   ("never expose in logs"). Latent today (the executor is a `NotAttached` stub)
+   (`boot.rs:70`, called from `lib.rs:865`) — a direct violation of the rule that secrets never reach logs ([`AGENTS.md`](../AGENTS.md) §15 Security Rules; [`ARCH/SECURITY.md`](ARCH/SECURITY.md)). Latent today (the executor is a `NotAttached` stub)
    and it becomes real the moment a CDP session is attached. Its doc comment
    also asserts a "caller filter" that does not exist (no `peer_addr`/
    `SO_PEERCRED` anywhere), and claims "128 bits of entropy" from two hashers

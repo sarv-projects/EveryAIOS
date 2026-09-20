@@ -152,7 +152,7 @@ L0  External Agents    Claude Code, Codex, OpenCode, MCP servers, Chrome
 # Build (requires: Rust 1.98+, Node 22+, Bun, pnpm 11+)
 cargo build                       # Rust kernel
 pnpm install                      # JS workspace
-pnpm --filter @personal-ai/coordinator build  # Sidecar
+pnpm --filter @everyaios/coordinator build  # Sidecar
 
 # Test
 cargo test                        # All Rust tests
@@ -214,7 +214,8 @@ packages/                        # 11 TypeScript packages (the sidecar)
 
 ui/                              # React 19 SPA (the cockpit)
 src-tauri/                       # Tauri v2 shell (thin Rust layer)
-ARCH/                            # Architecture docs (00–17)
+ARCH/                            # Architecture docs — CORE.md is the root authority;
+                                 #   subsystem contracts (WORK/SESSION/AGENT/…) derive from it
 deploy/                          # Docker, systemd, launchd, Fly.io
 scripts/                         # CI gates, codegen, tools
 ```

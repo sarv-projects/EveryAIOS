@@ -1,5 +1,8 @@
 # Doc 79 — Local Model Fetch / Download Core (HF · LM Studio · Ollama · Open WebUI)
 
+> **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPEC.md) · delivery: [`../../TODO.md`](../../TODO.md). Frozen by decision **D8** — research docs are **never updated** with code changes, so a dated claim here is not a stale claim.
+
+
 **Date:** 2026-08-16 · **Sources (web-verified):** HuggingFace Hub (GGUF/`hf` docs, resumable-download threads), LM Studio model store (`~/.cache/lm-studio/models`), Ollama storage internals (blobs/manifests, `registry.ollama.ai`), Open WebUI (Ollama-backed); cross-checked against `everyaios-core::local.rs` (P1.8/A5), `hwfit` (A5), `catalog.ts` + `everyaios-catalog` (A6/P14), broker local routing.
 
 **Question (user):** *"get the core for any model downloads from HuggingFace, from LM Studio itself — the entire core of model fetch, details, download, and where to store the model; it becomes part of the local model URL so multiple models appear under a Local → dropdown."*

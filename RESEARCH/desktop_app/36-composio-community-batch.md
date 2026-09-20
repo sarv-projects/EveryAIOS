@@ -1,5 +1,8 @@
 # 36 — Composio-community batch: Open ChatGPT Atlas · Secure OpenClaw · Awesome Claude Plugins · Awesome Codex Skills
 
+> **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPEC.md) · delivery: [`../../TODO.md`](../../TODO.md). Frozen by decision **D8** — research docs are **never updated** with code changes, so a dated claim here is not a stale claim.
+
+
 > Added 2026-08-06 on user request. All four live-verified this pass (GitHub API + READMEs + API tree listings; atlas tree read via `git/trees` API, secure-openclaw tree via shallow sparse clone).
 
 > 🔗 **Repos:** https://github.com/composio-community/open-chatgpt-atlas (447⭐) · https://github.com/composio-community/secure-openclaw (1,194⭐, MIT) · https://github.com/composio-community/awesome-claude-plugins (1.9K⭐) · https://github.com/composio-community/awesome-codex-skills (15.7K⭐)

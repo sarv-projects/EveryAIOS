@@ -19,6 +19,10 @@
 
 ---
 
+**Jump to:** [What you can do](#what-can-you-actually-do-with-it) · [Run it today](#-run-it-today-from-source) · [What's ready vs. coming](#whats-ready-today-and-whats-not) · [How it compares](#how-it-compares) · [FAQ](#frequently-asked-questions)
+
+---
+
 EveryAIOS is a **free, open-source desktop app** that brings all of your AI tools, agents, and workflows into one place — on your own computer, with your own keys, with your data staying local.
 
 Think of it as a home base for everything AI: you can chat with any model you want, connect your favorite coding agents, work with real Office documents, automate repetitive tasks on a schedule, and browse the web — all from a single, fast, native desktop cockpit.
@@ -62,12 +66,12 @@ A built-in security layer reviews every potentially dangerous action before it r
 | **Fully offline** | Ollama, LM Studio, vLLM, llama.cpp, Apple MLX — zero network traffic when using local models. |
 | **Bring your own key** | Keys stay in an AES-256 encrypted local vault. Auto-rotates to a backup key on rate limits. |
 | **External agent hosting** | Run Claude Code, OpenAI Codex, Aider, Cline, Grok Build via open ACP stdio. They keep their own tools. |
-| **Multi-agent swarms** | Up to 20–30 parallel subagents in isolated Git worktrees, no file conflicts, automatic 3-way merge. |
+| **Parallel subagents** | Up to **3 at once** (6 per task, nesting depth 2 — the shipped `SubAgentLimits`), each in its own Git worktree so files never collide, with automatic merge. |
 | **Real spreadsheet engine** | IronCalc 0.8.3 — 300+ Excel formulas recalculated natively in Rust. Zero hallucinated numbers. |
 | **Surgical document editing** | Word, PowerPoint, PDF — patches only the changed XML nodes, preserves formatting, macros, styles. |
 | **3-tier browser automation** | Lightpanda (fast headless) → stealth scraping → full Chrome CDP with 37 tools. All local. |
 | **Native desktop computer use** | Control real OS windows via accessibility tree + Win32 / macOS AX / Linux X11. Hardware emergency stop. |
-| **5-tier cognitive memory** | Working context → episodic logs → semantic search → knowledge graph → failure avoidance. Persists across sessions. |
+| **Four-class memory** | **Context** (this turn) · **Episodic** (what happened — derived from your Work history, not a second log) · **Knowledge** (facts, entities, preferences) · **Procedural** (skills and learned workflows). Persists across sessions. |
 | **Background automations** | 5-field cron scheduler runs 24/7, even when the app window is closed. |
 | **Security review layer** | Every dangerous action gets a visual diff card and waits for your approval. Tamper-evident Merkle audit log. |
 | **51 governed tools** | Browser (37), Office (4), Memory (3), Search (2), Storage (5) — all in-process, zero IPC overhead. |
@@ -84,58 +88,88 @@ A built-in security layer reviews every potentially dangerous action before it r
 | **Primary Role** | **Universal Desktop OS & Agent Harness** | Knowledge work & conversational assistant | Developer workstation & coding agent | Terminal-first coding agent CLI | AI-first code editor (IDE) |
 | **Model Freedom & Privacy** | **100+ models + 100% offline** (Ollama, MLX, BYOK); AES-256 local vault | Anthropic Claude only; cloud-hosted data | OpenAI models only; cloud/hybrid execution | Anthropic Claude only; cloud inference | Curated cloud models + limited BYOK |
 | **External Agent Hosting** | **Yes** — hosts Claude Code, Codex, Aider, Cline via ACP stdio | ❌ None (closed Anthropic loop) | ❌ None (closed OpenAI loop) | N/A (runs as agent; hostable in EveryAIOS) | ❌ None (closed editor composer) |
-| **Multi-Agent Parallel Swarms** | **20–30 subagents** in isolated Git worktrees with 3-way merge | ❌ Single linear session | ⚠️ Background task execution (linear) | ❌ Single terminal loop | ❌ Single composer session |
+| **Parallel Subagents** | **Up to 3 at once** (6 per task, depth 2) in isolated Git worktrees, auto-merged | ❌ Single linear session | ⚠️ Background task execution (linear) | ❌ Single terminal loop | ❌ Single composer session |
 | **Office & Spreadsheet Engine** | **Native IronCalc 0.8.3** (300+ Excel formulas) + surgical OOXML patcher | Claude Docs & Slides (text/markdown; no formula DAG) | Scripted file generation (Python) | ❌ Code/text edits only | ❌ Code files only |
 | **Browser & Computer Use (CUA)** | **Tiered local browser** (Lightpanda + Chrome CDP) + Win32/A11y OS control | Cloud-rendered browser; remote VM preview | Cloud browsing tool; developer environment | CLI bash & web fetch tools | Basic web fetch / doc scraping |
 | **Background Automations** | **24/7 background cron daemon** (runs with window closed) | ❌ Active session only | ⚠️ CLI background tasks | ❌ Active terminal only | ❌ Active editor session only |
 | **Security & Governance** | **7-layer Guard-2**: zero-I/O SSRF firewall, diff cards, Merkle audit | Cloud safety filters & permissions | Sandbox execution & confirmation prompts | Terminal permission prompts (allow/ask/deny) | Standard IDE file permissions |
 | **Cost & Licensing** | **Free & open-source** (MIT/Apache-2.0); pay raw tokens or \$0 offline | \$20–\$100+/month subscription | \$20–\$30/month or API tokens | Anthropic API tokens or subscription | \$20/month subscription + usage |
 
-> 💡 **The Universal Harness Advantage:** EveryAIOS does not force you to choose. Because it acts as an open operating layer, you can run specialized developer tools like Claude Code or OpenAI Codex *inside* EveryAIOS. They retain 100% of their native prompts, tools, and reasoning, while gaining EveryAIOS's native superpowers: in-process Excel formula recalculation, surgical Word/PDF part-patching, local browser automation, 5-tier cognitive memory, and a 24/7 background daemon.
+> 💡 **The Universal Harness Advantage:** EveryAIOS does not force you to choose. Because it acts as an open operating layer, you can run specialized developer tools like Claude Code or OpenAI Codex *inside* EveryAIOS. They retain 100% of their native prompts, tools, and reasoning, while gaining EveryAIOS's native superpowers: in-process Excel formula recalculation, surgical Word/PDF part-patching, local browser automation, four-class durable memory, and a 24/7 background daemon.
 
 ---
 
-## 📦 Desktop Installers — Coming Soon
+## 📦 Desktop installers — not yet available
 
-We're putting the finishing touches on signed, auto-updating desktop installers.
+Everything in this README runs **today if you build from source**. There is no signed installer yet.
 
 | Platform | Format | Status |
 | :--- | :--- | :---: |
-| **Windows 11 / 10** | `.msi` / `.exe` (x64 & ARM64) | 🟡 Coming Soon |
-| **macOS (Apple Silicon)** | `.dmg` (M1 – M4, Universal) | 🟡 Coming Soon |
-| **macOS (Intel)** | `.dmg` (x86_64) | 🟡 Coming Soon |
-| **Linux (Ubuntu / Debian)** | `.deb` / `.AppImage` | 🟡 Coming Soon |
+| **Windows 11 / 10** | `.msi` / `.exe` (x64 & ARM64) | ⏳ planned |
+| **macOS (Apple Silicon)** | `.dmg` (M1 – M4, Universal) | ⏳ planned |
+| **macOS (Intel)** | `.dmg` (x86_64) | ⏳ planned |
+| **Linux (Ubuntu / Debian)** | `.deb` / `.AppImage` | ⏳ planned |
 
-> ⭐ **Star and watch this repo** to get notified the moment installers go live.
+Packaging, code-signing, the auto-updater and release qualification are a defined but **unstarted** workstream ([`TODO.md`](TODO.md) → **P70**). We'd rather say that plainly than ship a first run we aren't happy with.
 
-The full codebase is open-source and builds from source today — [jump to the quickstart](#-run-from-source-today) if you want to try it now.
+> ⭐ **Star and watch this repo** to get notified when installers go live.
+
+→ [**Run it today from source**](#-run-it-today-from-source) — about 10 minutes.
 
 ---
 
-## 🛠️ Run from Source Today
+## What's ready today, and what's not
 
-Don't want to wait? You can clone and run EveryAIOS locally right now.
+We'd rather you know before you install than discover it later.
 
-**You'll need:**
-- [Rust](https://rustup.rs/) (`cargo` 1.80+)
-- [Node.js](https://nodejs.org/) v20+ and [pnpm](https://pnpm.io/) (`npm install -g pnpm`)
-- Tauri build deps for your OS — see the [official Tauri prerequisites guide](https://v2.tauri.app/start/prerequisites/)
+**Ready and working** — the local encrypted key vault (BYOK, multi-key failover), chat across 100+ models plus local runtimes, hosting external agents via ACP, the native spreadsheet engine, surgical Word/PDF editing, browser automation, computer use, memory, scheduled automations, and the approval/audit layer.
+
+**Not finished** — packaged installers (above), and the architecture-consolidation work tracked as [P69](TODO.md) in `TODO.md`. That work is about tightening ownership inside the codebase, not about features you'd miss.
+
+**One caveat worth reading: what EveryAIOS can and can't see.**
+
+| | EveryAIOS fully governs | Your agent's own tools |
+| :--- | :--- | :--- |
+| **What it is** | anything reached through EveryAIOS — Office, browser, computer use, memory, search, connectors, files | an external agent's built-in shell, file editor, or its own network calls |
+| **Coverage** | every action is authorized, executed and recorded by EveryAIOS | governed by **that agent's own permissions** plus your operating system's sandbox |
+| **Honest claim** | full audit trail | EveryAIOS does **not** claim an audit trail here |
+
+The app shows you which mode is in force rather than pretending both are identical. If you'd like the full detail, it's in [`ARCH/EXTERNAL-AGENTS.md`](ARCH/EXTERNAL-AGENTS.md) §5.
+
+---
+
+## 🛠️ Run it today (from source)
+
+No installer needed — clone it and run it. About 10 minutes end to end, most of it compiling.
+
+**1. Install the toolchain**
+
+| You need | Version | Why |
+| :--- | :--- | :--- |
+| [Rust](https://rustup.rs/) | **1.98+** | the crates use edition 2024 |
+| [Node.js](https://nodejs.org/) | **v22+** | the UI and sidecar |
+| [pnpm](https://pnpm.io/) | **11+** (`npm install -g pnpm`) | workspace manager |
+| [Bun](https://bun.sh/) | latest | builds the sidecar |
+| Tauri build deps | — | [official prerequisites guide](https://v2.tauri.app/start/prerequisites/) (on Linux this is the step people miss) |
+
+**2. Clone and build**
 
 ```bash
-# Clone
 git clone https://github.com/sarv-projects/EveryAIOS.git
 cd EveryAIOS/desktop_app
 
-# Install dependencies
-pnpm install
+pnpm install                                    # JS workspace
 
-# Build the coordinator sidecar
-pnpm --filter @everyaios/coordinator build
-mkdir -p src-tauri/bin && cp packages/coordinator/dist/coordinator src-tauri/bin/coordinator
+pnpm --filter @everyaios/coordinator build      # build the sidecar
+mkdir -p src-tauri/bin
+cp packages/coordinator/dist/coordinator src-tauri/bin/coordinator
 
-# Launch the desktop app
-cd src-tauri && cargo tauri dev
+cd src-tauri && cargo tauri dev                 # launch
 ```
+
+**3. First run** — open **Settings → Providers**, add a key (or point at a local model such as Ollama), then start a chat. To bring in Claude Code, Codex or another CLI, open the agent picker; EveryAIOS discovers what you already have installed and offers the rest from the [ACP registry](https://agentclientprotocol.com/registry).
+
+> **Stuck?** If `cargo tauri dev` fails on a native dependency, that's almost always the Tauri prerequisites in step 1. If the app opens with no models, the vault needs a provider added first (Settings → Providers).
 
 ---
 
@@ -150,25 +184,29 @@ EveryAIOS is built on 22 Rust core modules, 11 TypeScript coordination packages,
 | **Desktop Shell** | Fast, native cockpit with 12 screens and 19 side panels. Built for real work, not demos. |
 | **MCP Tools** | 51 governed in-process tools covering browser, office, memory, search, and storage. |
 | **Office & Browser** | Real spreadsheet engine, surgical document editing, and 3-tier browser automation — all local. |
-| **Memory & Work** | Persistent cognitive memory across sessions. Learns your preferences and avoids past mistakes. |
+| **Memory & Work** | Four-class memory that persists across sessions. Learns your preferences and avoids past mistakes. |
 | **Automations** | Schedule recurring tasks. Background cron daemon runs even when the app is closed. |
 | **Security** | 7-layer review membrane. Every destructive action requires your approval. Tamper-evident audit log. |
 
 <details>
 <summary><strong>See the full technical architecture →</strong></summary>
 
-EveryAIOS is structured as two planes — the **Agent-Native Plane** (where external coding agents like Claude Code, Codex, and Aider run with their own loops and tools) and the **Shared Cowork Plane** (the native EveryAIOS services: Office engine, browser, computer use, memory, security, automations).
+EveryAIOS is built on an **ownership split between two planes**. The **agent plane** belongs to whichever agent you bind — Claude Code, Codex, Aider and friends keep their own loop, tools, model and account, and no binding is privileged (the optional built-in engine is one binding among equals). The **shared plane** belongs to EveryAIOS: Office engine, browser, computer use, memory, capabilities, security and automations, offered to *any* agent through one stable interface.
 
-The architecture is documented in detail in [`ARCH/00-INDEX.md`](ARCH/00-INDEX.md). Key documents:
+The architecture is documented in detail starting from [`ARCH/CORE.md`](ARCH/CORE.md) — the single root authority — and the index at [`ARCH/00-INDEX.md`](ARCH/00-INDEX.md). Start here:
 
-- [`ARCH/01-SYSTEM-ARCHITECTURE.md`](ARCH/01-SYSTEM-ARCHITECTURE.md) — Process topology, the 8 full-stack modules, IPC boundaries
-- [`ARCH/02-MODULE-LAYOUT.md`](ARCH/02-MODULE-LAYOUT.md) — Ownership matrix for all 22 Rust crates and 11 TypeScript packages
-- [`ARCH/06-SECURITY-GUARDRAILS.md`](ARCH/06-SECURITY-GUARDRAILS.md) — The full 7-layer security design
-- [`ARCH/07-MEMORY-CONTEXT.md`](ARCH/07-MEMORY-CONTEXT.md) — 5-tier cognitive memory and ACT-R activation
-- [`ARCH/09-FEATURE-MATRIX.md`](ARCH/09-FEATURE-MATRIX.md) — 166-submodule capability matrix
-- [`ARCH/17-NATIVE-AGENT.md`](ARCH/17-NATIVE-AGENT.md) — The two-plane contract: what belongs to the agent vs. EveryAIOS
-- [`DESKTOP-APP-SPEC.md`](DESKTOP-APP-SPEC.md) — The normative product contract and security invariants
-- [`TODO.md`](TODO.md) — Implementation census (1,429 items; 1,221 completed)
+- ⭐ [`ARCH/CORE.md`](ARCH/CORE.md) — **the root authority.** The primitives (Work · Run · Step · Effect · Receipt · Event), who owns what, and the 27 invariants everything else must obey
+- [`ARCH/00-INDEX.md`](ARCH/00-INDEX.md) — the index, plus a reading path through the whole set
+- [`ARCH/WORK.md`](ARCH/WORK.md) · [`ARCH/SESSION.md`](ARCH/SESSION.md) · [`ARCH/AGENT.md`](ARCH/AGENT.md) · [`ARCH/CONTEXT.md`](ARCH/CONTEXT.md) — the subsystem contracts (durable Work, Chats, agent hosting, context engineering)
+- [`ARCH/CAPABILITIES.md`](ARCH/CAPABILITIES.md) — capability packs, skills and the File Workbench viewers
+- [`ARCH/02-MODULE-LAYOUT.md`](ARCH/02-MODULE-LAYOUT.md) — ownership matrix for all 22 Rust crates and 11 TypeScript packages
+- [`ARCH/SECURITY.md`](ARCH/SECURITY.md) — the sole-authorization-gate design and the authorization-provenance rule
+- [`ARCH/MEMORY.md`](ARCH/MEMORY.md) — four memory classes (Context · Episodic · Knowledge · Procedural), with ACT-R as a strategy
+- [`ARCH/EXTERNAL-AGENTS.md`](ARCH/EXTERNAL-AGENTS.md) — ACP/MCP surfaces, the agent bridge, and what governance can honestly be claimed
+- [`ARCH/09-FEATURE-MATRIX.md`](ARCH/09-FEATURE-MATRIX.md) — the 166-row capability matrix
+- [`ARCH/17-NATIVE-AGENT.md`](ARCH/17-NATIVE-AGENT.md) — the two-plane model: what belongs to the agent vs. what belongs to EveryAIOS *(its original "frozen" status is lifted by [`ARCH/ADR/0003`](ARCH/ADR/0003-architecture-thaw-core-authority.md); `CORE.md` supersedes it)*
+- [`DESKTOP-APP-SPEC.md`](DESKTOP-APP-SPEC.md) — the normative product contract
+- [`TODO.md`](TODO.md) — implementation census (1,607 items; 1,304 completed)
 
 </details>
 
@@ -218,7 +256,7 @@ You don't have to choose. EveryAIOS can host those agents inside itself — they
 <summary><strong>How does the multi-agent swarm feature work?</strong></summary>
 <br/>
 
-EveryAIOS can spin up 20–30 subagents running in parallel, each in its own isolated Git worktree. They can work on different parts of a codebase simultaneously without causing file conflicts, then merge their results together. A central "Chief" agent coordinates routing and merging. You watch the whole thing in the Activity view.
+EveryAIOS runs up to **3 subagents at once** (6 per task, nesting depth 2 — the limits the shipped code actually enforces), each in its own isolated Git worktree. They can work on different parts of a codebase simultaneously without file conflicts, then merge their results together. A central agent-binding slot coordinates routing and merging. You watch the whole thing in the Activity view.
 
 </details>
 
@@ -250,7 +288,7 @@ Before any agent can do something potentially dangerous — write to a file, run
 <summary><strong>Is EveryAIOS production-ready?</strong></summary>
 <br/>
 
-The core architecture is complete and battle-tested. The packaged desktop installers are in final qualification (see the status table above). If you're comfortable building from source, everything runs and works today. We're being careful about the packaged release because we want the first-run experience to be great, especially on Windows.
+The core architecture is complete and documented, and the whole app runs from source today. **The packaged installers are not finished** — signing, the auto-updater and release qualification are a defined, unstarted workstream ([`TODO.md`](TODO.md) → **P70**). We're doing it in the open rather than shipping a half-finished first run. If you build from source you get everything described above.
 
 </details>
 

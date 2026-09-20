@@ -284,7 +284,7 @@ export function TurnCheckpoint({
 
           {shellUnavailable && (
             <p className="py-1 text-[11px] leading-relaxed text-muted-foreground" role="status">
-              Restore needs the desktop app — open this session in Tauri to restore saved files.
+              Restore needs the desktop app — open this chat in Tauri to restore saved files.
             </p>
           )}
 
@@ -340,7 +340,7 @@ export function TurnCheckpoint({
                 </p>
               )}
               <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
-                The shell keeps one saved copy per file for this session — restoring writes
+                The shell keeps one saved copy per file for this chat — restoring writes
                 those copies back.
               </p>
 

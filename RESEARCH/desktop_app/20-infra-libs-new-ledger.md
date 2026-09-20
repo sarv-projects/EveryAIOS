@@ -1,5 +1,8 @@
 # 20 — New Infra Libraries Ledger (requested 2026-08-06)
 
+> **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPEC.md) · delivery: [`../../TODO.md`](../../TODO.md). Frozen by decision **D8** — research docs are **never updated** with code changes, so a dated claim here is not a stale claim.
+
+
 > New repos the user asked to research. URLs + what they are + how they fit our build. For the BYOK provider abstraction see doc 19.
 
 ---

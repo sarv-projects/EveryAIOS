@@ -1208,7 +1208,7 @@ export function RulesSection() {
   const [mem, setMem] = usePref('rules.memoryOn', true)
   return (
     <SectionShell title="Rules & memory" desc="AGENTS.md and CLAUDE.md are project instructions the lead agent reads on folder open">
-      <Row label="Memory" desc="Off = this session does not write long-term facts">
+      <Row label="Memory" desc="Off = this chat does not write long-term facts">
         <Switch checked={mem} onCheckedChange={setMem} />
       </Row>
       <div className="space-y-1">
@@ -1861,7 +1861,7 @@ export function GeneralExtras() {
       <Row label="Keep running in tray">
         <Switch checked={tray} onCheckedChange={setTray} />
       </Row>
-      <Row label="Archive idle sessions after">
+      <Row label="Archive idle chats after">
         <div className="flex w-56 items-center gap-3">
           <Slider value={[archive]} min={7} max={365} step={1} onValueChange={(v) => setArchive(v[0])} />
           <span className="w-12 font-mono text-xs text-brand">{archive}d</span>

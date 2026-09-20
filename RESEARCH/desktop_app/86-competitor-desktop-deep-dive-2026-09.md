@@ -1,5 +1,8 @@
 # 86 — Competitor desktop deep-dive (P12.1 live research, 2026-09-04)
 
+> **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPEC.md) · delivery: [`../../TODO.md`](../../TODO.md). Frozen by decision **D8** — research docs are **never updated** with code changes, so a dated claim here is not a stale claim.
+
+
 > **Method:** six parallel web-research passes 2026-09-04 (WebFetch + WebSearch against live repos, docs sites, release notes; source files read raw where it mattered). **No installs** — there is no GUI/display in this environment, so every hands-on install/test leg stays open (see §13). VERIFIED = fetched this session (key URLs in §9). Prior docs re-verified, not re-assumed; corrections in §1.
 > 🔗 **Repos:** `anomalyco/opencode` · `OpenCoworkAI/open-cowork` · `NousResearch/hermes-agent` (+`apps/desktop`) · `fathah/hermes-desktop` · `Mintplex-Labs/anything-llm` · `janhq/jan` · `CherryHQ/cherry-studio` · `chatboxai/chatbox` · `andrewyng/openworker` · `open-webui/open-webui` (+`desktop`, +`computer`) · `holaboss-ai/holaOS` · `openchamber/openchamber` · `openclaw/openclaw` (+`acpx`) · `charmbracelet/crush` · Anthropic Claude Cowork (product, no repo) · Zed (docs) · Cursor (docs+reviews).
 

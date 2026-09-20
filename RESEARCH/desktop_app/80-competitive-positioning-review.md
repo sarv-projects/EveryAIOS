@@ -1,5 +1,8 @@
 # 80 — Competitive Positioning Review: EveryAIOS vs. the Global Desktop-AI Landscape (external benchmark, reviewed & corrected)
 
+> **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPEC.md) · delivery: [`../../TODO.md`](../../TODO.md). Frozen by decision **D8** — research docs are **never updated** with code changes, so a dated claim here is not a stale claim.
+
+
 > **Source:** external product benchmark provided 2026-08-17 — a **forward-looking** assessment of EveryAIOS at *full v3.21 spec build* (explicitly not a claim of current production state). This doc is the fact-checked, corrected, repo-mapped version.
 > **Verification:** competitor claims live web-verified 2026-08-17 against first-party pages/docs (sources §7). EveryAIOS claims cross-checked against the actual codebase (`DESKTOP-APP-SPEC.md` v3.21, `crates/`, `src-tauri/`, `ui/`, `TODO.md`).
 > **Repos:** 0 new repos — **ledger unchanged 281**.

@@ -1,5 +1,8 @@
 # 24 — Completion Pass: Stage-1 + Stage-2 Flags Resolved (2026-08-06)
 
+> **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPEC.md) · delivery: [`../../TODO.md`](../../TODO.md). Frozen by decision **D8** — research docs are **never updated** with code changes, so a dated claim here is not a stale claim.
+
+
 > Round-2 verification pass. Every item previously flagged 🔴/🟠 was re-checked against live sources (GitHub API, raw files, docs sites). **Verdict per item below, with the evidence.** Tier-3 (doc-18 tier-2 repos) re-verified against live READMEs — code paths cited in doc 18 confirmed.
 
 ---

@@ -1,9 +1,37 @@
 # 03 — BYOK Key-Rings: Multiple Keys per Provider, Fallback Rotation
 
+## 3.0 Auth-mode taxonomy — `local` means **local models**, nothing else
+
+Three unrelated things get conflated in code and UI, so they are separated here once.
+
+| Auth mode | Means | Examples |
+|---|---|---|
+| `subscription` | The agent uses **its own** subscription login. EveryAIOS never copies or harvests that credential | Claude Agent, Codex, Cursor, Devin, Copilot, Grok |
+| `api_key` | **BYOK** — the user's own keys, drawn from this document's key-rings. Cloud inference, user's credential | Qwen Code, Kimi CLI, goose, fast-agent, GLM Agent, DeepAgents |
+| `local` | **Local inference on this machine.** No cloud, no account. Ollama / llamafile / on-device | siGit Code (on-device via Onde) |
+
+**What `local` does NOT mean, and must never be set to:**
+
+- **"open source"** — a *license* property, orthogonal to authentication. gemini-cli and Qwen Code are
+  Apache-2.0 and still need an account or an API key; `amp` is a frontier commercial agent. Mapping
+  "open license ⇒ local" is a category error that mislabels ~20 agents (`V5`).
+- **"not a known subscription vendor"** — the absence of a subscription is not evidence of local inference.
+- A catch-all for "unknown". Unknown is `unknown`, and it renders as unknown (`AGENT.md` §5).
+
+This matters because **`local` is a first-class product concept with its own UI surface**
+(`local-models-panel.tsx`): it is the "run everything on my machine" story. Overloading it with
+"open-source agent" breaks that story and the panel's meaning.
+
+> **Rule.** `local` is set only from evidence of **on-device inference**. Otherwise prefer `api_key`
+> (BYOK) for anything needing user credentials, and `unknown` when the source is silent — never guess
+> from a license (`V5`).
+
+## 3.1 The model: provider → key pool → routing
+
 > **The user requirement, verbatim:** *"for BYOK, under each provider, add an option that multiple keys under each provider can be added. Each acts as a fallback — as soon as one rate-limits, switch. Technically users can have multiple accounts without ever changing keys."*
 > This doc is the design. Patterns sourced from: LiteLLM key management (web, 2026), OpenRouter multi-BYOK (web), pi + `pi-keyrouter` (doc 19 §1), Reasonix cost discipline (doc 05 §6), BrowserOS OAuth token store (doc 33 §7.4), vault/CES (doc 19 §7, v2.0 §P8).
 > **Full-Stack Module:** Module 2 — Model Gateway & Encrypted Keyring Vault (`crates/everyaios-vault`, `crates/everyaios-catalog`).
-> **Plane (ARCH/17 §17.1):** the vault/BYOK broker is **shared execution-kernel infrastructure**, not a plane of its own. Key pools, 429 failover and key affinity are consumed by the Native agent plane's routing; they are never pushed into an external agent. An external ACP agent keeps its own model/account, and EveryAIOS copies **no** subscription credential — a native agent receives only the spawn-env the user explicitly configured.
+> **Ownership ([`CORE.md`](CORE.md) §4, §7.1):** the vault/BYOK broker is **shared execution-kernel infrastructure**, not a plane of its own. Key pools, 429 failover and key affinity are consumed by the *resolved route* ([`ROUTING.md`](ROUTING.md)) — not by a “Native agent plane”, which is retired as an owning entity (`ADR/0003`); they are never pushed into an external agent. An external ACP agent keeps its own model/account, and EveryAIOS copies **no** subscription credential — a native agent receives only the spawn-env the user explicitly configured.
 
 ## 3.1 The model: provider → key pool → routing
 

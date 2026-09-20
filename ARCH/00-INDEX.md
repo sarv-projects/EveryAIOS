@@ -1,42 +1,39 @@
-# ARCH — The Desktop Agentic-OS Architecture (8 Full-Stack Modules)
+# ARCH — Derived Index (points at CORE)
 
-> **Status:** Architecture reference. It works alongside the master spec `../DESKTOP-APP-SPEC.md`; this ARCH series defines architecture boundaries, module ownership, and diagrams. Function identity is mirrored in `09-FEATURE-MATRIX.md`; historical decisions are recorded in `../SPEC-CHANGELOG.md`. Delivery status remains in `../TODO.md`.
-> **The 8 Full-Stack Modules Architecture:** EveryAIOS is structured into 8 cohesive Full-Stack Modules, each spanning native Rust kernel logic, TypeScript coordination, and React 19 cockpit surfaces. EveryAIOS rejects the proprietary coding agent trap and operates as the **Universal Agentic OS & Desktop Harness**, driving external specialist agents (Claude Code, OpenAI Codex, OpenCode, Grok Build) while providing native Office primitives, tiered browsers, computer use, durable worktrees, and 7-layer Guard-2 security.
-> **Docs:** 00–17 define the architecture, module layout, security, routing, memory, caching, office, browser, MCP, algorithms, repository map, UI surfaces, prompt anatomy, connector store, the chat-loop Rust port scope, and **17 = the frozen Native agent plane (two-plane model + tool/agent schema catalog)**.
+> **⛭ ROOT AUTHORITY: [`CORE.md`](CORE.md).** Read that first. It owns the canonical primitives, the
+> ownership matrix and the invariants, and **every document in this directory derives from it and may not
+> weaken it**. This index is a *derived* map, not an authority. The thaw that made `CORE.md` the root is
+> recorded in [`ADR/0003-architecture-thaw-core-authority.md`](ADR/0003-architecture-thaw-core-authority.md).
+>
+> **Status:** Architecture reference, derived from `CORE.md`. It works alongside the master spec `../DESKTOP-APP-SPEC.md` (**note:** spec §4.3 "Final architecture — the agent control plane", §4.4 Work Gateway / Session Runtime and §9's principles already carry a large part of the control-plane contract, so much of this directory is the *elaboration* of that contract rather than a competing statement of it); this ARCH series defines architecture boundaries, module ownership, and diagrams. Function identity is mirrored in `09-FEATURE-MATRIX.md`; historical decisions are recorded in `../SPEC-CHANGELOG.md`. Delivery status remains in `../TODO.md` (architecture-thaw work is **P69**; v1 release is **P70**).
 > **Decision (user-confirmed):** **Hybrid & Decoupled** — the `@personal-ai/core-*` TypeScript engine stays as a supervised Bun-compiled sidecar; a **Rust layer owns the paths where research proved Rust wins**: browser/CDP control, script-eval sandbox (rquickjs), security guards, audit/replay ingest, **storage intelligence** (`everyaios-storage`), IronCalc spreadsheet recalculation (`everyaios-office`), and memory graph (`everyaios-memory`). External coding agents run decoupled as out-of-process ACP stdio children.
+> **Rewritten `P69.A13` (done 2026-09-20) — this file is the derived index. It points at CORE and the subsystem contracts; it states no primitives, no ownership, and no invariants of its own.**
 
-## The 8 Sublimated Full-Stack Modules
+## What this index is
 
-1. **Module 1: Universal Agent Harness & Swarm Orchestrator** — External agent driver (ACP stdio JSON-RPC), multi-run fan-out (up to 5 parallel models), Git worktree isolation (`worktrees.rs`), shadow preflight, 3-way merge fusion, and task DAG circuit breakers. Cockpit: `agents` dashboard, dynamic Chief dropdown, right-rail `diff` viewport.
-2. **Module 2: Model Gateway & Encrypted Keyring Vault** — SQLCipher AES-256 vault, BYOK credential broker (OpenAI, Anthropic, Bedrock, Vertex, OpenCode Zen/Go/Free, local GGUF/Ollama), multi-key rings with 429-only failover, 4h models.dev catalog sync. Cockpit: `settings` Providers & Keys tab, `guard.html` unlock modal.
-3. **Module 3: Unified Cockpit Shell & Context Compaction Engine** — React 19 + Tailwind 4 shell, 12-segment cache-affine prompt assembler (`CACHE_BOUNDARY`), token budget compaction (50KB cap, pass-by-ref), 33ms batched streaming, 37 Tauri command modules. Cockpit: multi-control composer, CoT rollup, 19 right-rail viewports.
-4. **Module 4: Governed MCP & Capability Marketplace** — JSON-RPC 2.0 MCP client/server (stdio & SSE), tool schema validation, Guard-2 ticket interception, curated MCP marketplace. Cockpit: `connectors` screen, per-agent tool scoping drawer.
-5. **Module 5: Work-Native Primitives (Office, Browser, CUA)** — Embedded IronCalc 0.8.3 spreadsheet DAG recalculation (300+ functions), surgical OOXML part patcher (DOCX/XLSX/PPTX byte-preservation), tiered browser (Lightpanda + Chrome CDP + Scrapling + CloakBrowser), OS Computer Use (Windows Graphics Capture, A11y tree, Win32 `SendInput`). Cockpit: right-rail `office-xlsx`, `office-docx`, `office-pdf`, `browse`, `desktop`.
-6. **Module 6: Durable Work & Cognitive 5-Tier Memory Subsystem** — Crash-resilient session ledger, task checkpoints, 5-tier memory (Working, Episodic, Semantic FTS5, Procedural skills, Entity Knowledge Graph), ACT-R mathematical cognitive activation ($A_i = B_i + \sum W_j S_{ji}$), tree-sitter repo-map. Cockpit: `memory` screen, `projects` & `files` screens, right-rail `graph`.
-7. **Module 7: Executive Automations & 24/7 Calendar Daemon** — 24/7 background scheduler evaluating 5-field crons, heartbeat lease model, sleep-prevention during active runs, bidirectional calendar sync (Google, Outlook, iCal), meeting prep workflows. Cockpit: `automations` screen, `calendar` screen, right-rail `terminal`.
-8. **Module 8: Security Guard-2 & Merkle Audit Membrane** — 7-layer defense: prompt injection J6 `<user_document>`, zero-I/O SSRF `netfloor`, lexical `pathfloor`, Guard-2 TTL authorization tickets, OS sandboxes (Job Objects, bwrap, Seatbelt), Merkle tree audit log. Cockpit: `guard` dashboard, `activity` audit viewer, isolated Guard approval diff cards.
+`CORE.md` owns: the 16 primitives (§3), the ownership matrix (§4), the 27 invariants I1–I27 (§6), and the 7 planes (§2, §13). The subsystem contracts own their boundaries: [`WORK.md`](WORK.md) · [`SESSION.md`](SESSION.md) · [`AGENT.md`](AGENT.md) · [`EXTERNAL-AGENTS.md`](EXTERNAL-AGENTS.md) · [`CONTEXT.md`](CONTEXT.md) · [`CAPABILITIES.md`](CAPABILITIES.md) · [`MEMORY.md`](MEMORY.md) · [`SECURITY.md`](SECURITY.md) · [`RECOVERY.md`](RECOVERY.md) · [`ROUTING.md`](ROUTING.md) · [`UI.md`](UI.md) · [`DESKTOP.md`](DESKTOP.md).
 
-## Reading order
+This file owns nothing except the reading path. Where any row below appears to restate a primitive, owner, or invariant, CORE wins.
 
-> **Product invariants (from SPEC §1 — every ARCH doc must preserve them):** one project = one folder + one session tree · one effect-authorization model (ARCH/06 §6.10) as the mutation gate — agent/automation = `AuthorizationTicket`, human UI = trusted native gesture, both on the one audit · one append-only event log (doc 53's 10 event types) · one Progress timeline that tabs/panels disclose rather than duplicate.
+## Reading order (derived documents, not authorities)
 
-1. **01-SYSTEM-ARCHITECTURE.md** — processes, layers, IPC, lifecycle, and the 8 Full-Stack Modules (the map)
-2. **02-MODULE-LAYOUT.md** — Rust crates + TS packages, ownership mapped to the 8 Modules
+1. **01-SYSTEM-ARCHITECTURE.md** — derived overview: the module story mapped onto CORE's 7 planes (the map)
+2. **02-MODULE-LAYOUT.md** — crate/package → owning plane → ownership question, plus the disposition table (canonical / shrink / merge / remove)
 3. **03-BYOK-KEYRINGS.md** — multi-key per provider, **429-only** failover (5xx does not rotate), 4h models.dev catalog, OpenCode custom inference, **OpenCode Zen / Go / Free** (three rows), OAuth subscriptions
 4. **04-OFFICE-ENGINE.md** — open + edit Word/Excel/PPT/PDF (surgical, byte-preserving, IronCalc DAG)
-5. **05-TOKEN-ECONOMY.md** — input control: prefix-cache, compaction, snip, budgets, crystallization
-6. **06-SECURITY-GUARDRAILS.md** — trust ladder, dual-guard, sandboxes, ownership, audit, injection defense
-7. **07-MEMORY-CONTEXT.md** — 5-tier memory, 7 algorithms, multi-scope, SOTA retrieval, ACT-R activation
+5. **05-TOKEN-ECONOMY.md** — context-engineering strategies (prefix-cache, tool-result control, pass-by-reference); the architecture is the six contracts in `CONTEXT.md` §5 plus the optimization order in §3
+6. **06-SECURITY-GUARDRAILS.md** — sole-Guard ownership per `SECURITY.md`; trust ladder as policy input; authorization provenance; sandbox as mechanism
+7. **07-MEMORY-CONTEXT.md** — keeps the algorithms, multi-scope and SOTA retrieval as **strategies** under the four memory classes in `MEMORY.md`
 8. **08-BROWSER-LAYER.md** — tiered CDP Browse (Lightpanda + Chrome CDP + stealth). E9 computer use is the real OS (vision + A11y + DAG)
 9. **09-FEATURE-MATRIX.md** — the complete submodule & function matrix
 10. **10-BUILD-PLAN.md** — phases with exit criteria
 11. **11-AI-CHAT-FEATURES.md** — AI chat derivation: copy (from APP engine + Hermes/etc.), convert, reject
 12. **12-UI-SPEC.md** — UI/UX specification **v3.10**: Windows-first runtime provenance + two-pane agent picker + agent-owned models + session function loadout; rail Folder/Shell/Browse/**Computer use**/Code + Office flyout; CUA see-pane + vision modal + DAG on Progress
-13. **13-PROMPT-ANATOMY.md** — the assembled desktop prompt (`packages/coordinator/src/prompt.ts`): identity/persona scanned before insertion, third-party retrieval as data-only content, `<user_document>` delimiting, byte-stable prefix above `CACHE_BOUNDARY`, prompt-is-not-permission (P1.5)
+13. **13-PROMPT-ANATOMY.md** — the assembled desktop prompt (`packages/coordinator/src/prompt.ts`): identity/persona scanned before insertion, third-party retrieval as data-only content, `<user_document>` delimiting, byte-stable prefix above `CACHE_BOUNDARY`, prompt-is-not-permission (P1.5). Absorbed into `CONTEXT.md` (`P69.A24`): the assembler serializes Context, it does not own policy (I22)
 14. **15-CONNECT-STORE.md** — the Connect Store (v1.0, 2026-08-29): the curated "click → sign in → use" connector surface — remote MCP + OAuth 2.1 (`everyaios-mcp::store`), device-flow/loopback PKCE for the big four (GitHub/Google/Microsoft/Slack), Guard-2 consent payloads (`ConnectConsent`), first-class remote MCP via `remote_plan`
-16. **spec §4.5** — `CapabilityBackend` (Local / Wsl / Remote); H36 terminal profiles; user-owned cloud slot. Not a new ARCH file — lives in the spec.
-17. **17-NATIVE-AGENT.md** — **frozen 2026-09-15 (spec v3.75; its rows B10/B11/C14/C15/F16/I14–I17 in v3.76; Settings Control Center in v3.77; Windows-first runtime/picker/cowork evidence contract in v3.78):** the EveryAIOS **Native agent plane** vs the **shared cowork plane** — the one invariant (native plane belongs to the agent; shared plane belongs to EveryAIOS), the capability-resolution policy (native-first, augmentation-second), the module-ownership map (one plane + one contract per module), the Chief loop and its edge cases, the **schema contract for every native tool (`RegisteredTool`), shared façade, agent type, sub-agent spec, prompt segment, routing rule, and Settings read model**.
-18. **16-CHAT-LOOP-RUST-PORT.md** — SCOPE (2026-08-29, not implemented): porting `ConversationEngine.run()` + `runChatStream` to Rust — the verified scope is ~2,770 TS lines (engine.ts + chat.ts orchestration + prompt.ts 12-segment assembler) ≈ ~3,400 Rust + ~1,200 tests, because every I/O dep (broker, ToolService+Guard, MemoryService, gate/risk/plan/contract) already lives in Rust; M0–M4 migration with a keep-TS-behind-toggle cut-over + the two hard seams (P30.8 context-audit parity, A9 cache-affine byte-stability)
+15. **spec §4.5** — `CapabilityBackend` (Local / Wsl / Remote); H36 terminal profiles; user-owned cloud slot. Not a new ARCH file — lives in the spec.
+16. **17-NATIVE-AGENT.md** — historical context: v3.75 two-plane contract; its rows B10/B11/C14/C15/F16/I14–I17 in v3.76; Settings Control Center in v3.77; Windows-first runtime/picker/cowork evidence contract in v3.78. Retains: the EveryAIOS **Native agent plane** vs the **shared cowork plane** — the one invariant (native plane belongs to the agent; shared plane belongs to EveryAIOS), the capability-resolution policy (native-first, augmentation-second), the module-ownership map (one plane + one contract per module), the agent loop and its edge cases, the **schema contract for every native tool (`RegisteredTool`), shared façade, agent type, sub-agent spec, prompt segment, routing rule, and Settings read model**. Per [`ADR/0003`](ADR/0003-architecture-thaw-core-authority.md) and [`CORE.md`](CORE.md) §7.1, the loop-owner role is `AgentBinding` and coordination is the Turn Coordinator — the retired term is not used as a concept in new text.
+17. **16-CHAT-LOOP-RUST-PORT.md** — SCOPE (2026-08-29, not implemented): porting `ConversationEngine.run()` + `runChatStream` to Rust — the verified scope is ~2,770 TS lines (engine.ts + chat.ts orchestration + prompt.ts 12-segment assembler) ≈ ~3,400 Rust + ~1,200 tests, because every I/O dep (broker, ToolService+Guard, MemoryService, gate/risk/plan/contract) already lives in Rust; M0–M4 migration with a keep-TS-behind-toggle cut-over + the two hard seams (P30.8 context-audit parity, A9 cache-affine byte-stability)
 18. **research docs 49–51** — storage intelligence (49: eDirStat/UltraSearch/WinDirStat/fclones → `everyaios-storage` + matrix D9–D11/G7), generative UI/image/voice/email gaps (50: AG-UI → H25, A10, F14–F15, H26–H28, H15 ext), aider recheck (51: doc 46 corrections — edit formats ~9, providers 100+, "4.2×/71%" flagged third-party)
 19. **research doc 52** — gap pass 2 (Aider-in-F12 + surgical hierarchy, J21 escalation rules & decision packages, D12 storage health, G8 tiered search cascade + Algorithm #33, E9/J14 refs; 26 repos live-verified, 8 hallucinated flagged → ledger 218)
 20. **research doc 53** — formalization of 4 review gaps (credential broker, ticket contract, durable events + idempotency, shortest-path routing) → SPEC v3.10 + ARCH/06 §6.9–6.11
@@ -49,6 +46,50 @@
 27. **research doc 60** — TencentDB Agent Memory deep-dive (4-asset taxonomy + L0→L3 distillation + governance + agent-loadout) → C1/C2/C3/C7/C8/I2/I7 + F12/J17, 1 repo → ledger
 28. **research docs 88–89** — the two 2026-09 provenance docs that drove the current UI/security queues: **88** casual-surface / first-five-minutes audit → **TODO P61**, **89** guard network-destination + agent-config floor audit (a code-level audit of this repo, not market research) → **TODO P62**. (Docs 61–87 are rowed in `RESEARCH/desktop_app/00-INDEX.md`; this list is a reading path, not the full corpus.)
 
+## Document accounting — every document's role (nothing unaccounted)
+
+`CORE.md` describes the system; this table accounts for the **documents** that describe it, so no
+Markdown file in this repository is orphaned from the architecture. If a file is not in this table, it is
+not architectural — and if a *new* architectural document appears, it belongs in a row here.
+
+**HLD — high-level design (what the system is, and what owns what)**
+
+| Role | Documents |
+|---|---|
+| **Root authority** | [`CORE.md`](CORE.md) — primitives · ownership matrix · 27 invariants · planes |
+| **Subsystem contracts** (13) | [`WORK.md`](WORK.md) · [`SESSION.md`](SESSION.md) · [`AGENT.md`](AGENT.md) · [`EXTERNAL-AGENTS.md`](EXTERNAL-AGENTS.md) · [`CONTEXT.md`](CONTEXT.md) · [`CAPABILITIES.md`](CAPABILITIES.md) · [`MEMORY.md`](MEMORY.md) · [`SECURITY.md`](SECURITY.md) · [`RECOVERY.md`](RECOVERY.md) · [`ROUTING.md`](ROUTING.md) · [`UI.md`](UI.md) · [`DESKTOP.md`](DESKTOP.md) |
+| **Decisions** | [`ADR/0001`](ADR/0001-connector-platform-mcp-first.md) · [`0002`](ADR/0002-ui-v2-cockpit-replaces-v1-router-pages.md) · [`0003`](ADR/0003-architecture-thaw-core-authority.md) (thaw) · [`0004`](ADR/0004-behaviour-profile-invariant.md) (I27) |
+| **Product contract** | `../DESKTOP-APP-SPEC.md` (§4.3 control plane · §4.4 Work Gateway · §4.6 two-plane model · §9 principles · §0 capability index) |
+| **Derived architecture** (downgraded, each bannered) | this file · [`01`](01-SYSTEM-ARCHITECTURE.md) · [`02`](02-MODULE-LAYOUT.md) · [`03`](03-BYOK-KEYRINGS.md) · [`04`](04-OFFICE-ENGINE.md) · [`05`](05-TOKEN-ECONOMY.md) · [`06`](06-SECURITY-GUARDRAILS.md) · [`07`](07-MEMORY-CONTEXT.md) · [`08`](08-BROWSER-LAYER.md) · [`09`](09-FEATURE-MATRIX.md) · [`10`](10-BUILD-PLAN.md) · [`11`](11-AI-CHAT-FEATURES.md) · [`12`](12-UI-SPEC.md) · [`13`](13-PROMPT-ANATOMY.md) · [`15`](15-CONNECT-STORE.md) · [`16`](16-CHAT-LOOP-RUST-PORT.md) · [`17`](17-NATIVE-AGENT.md) · [`DIAGRAMS.md`](DIAGRAMS.md) |
+
+**LLD — low-level design (how the code is actually built)**
+
+| Role | Documents |
+|---|---|
+| **Code-level understanding artifacts** | `../docs/codebase/` — [`README`](../docs/codebase/README.md) · [`architecture`](../docs/codebase/architecture.md) (layers, boundaries) · [`components`](../docs/codebase/components.md) (per-subsystem entry points) · [`flows`](../docs/codebase/flows.md) (execution paths, with tiers) · [`data-and-state`](../docs/codebase/data-and-state.md) (state ownership) · [`external-systems`](../docs/codebase/external-systems.md) (L0 agents, egress) · [`tests-and-verification`](../docs/codebase/tests-and-verification.md) · [`invariants`](../docs/codebase/invariants.md) (**`CE1–CE9`** code-evidenced, deliberately *not* CORE's `I1–I27`) · [`decisions`](../docs/codebase/decisions.md) (`D1–D10`) · [`hotspots`](../docs/codebase/hotspots.md) · `freshness.json` |
+| **UI design** | [`12-UI-SPEC.md`](12-UI-SPEC.md) (pixels) · `../UI-DESIGN-PROMPT.md` (canonical UI spec) · `../ui/DESIGN-SYSTEM.md` (tokens/layouts) |
+| **Test evidence** | `../TEST-CASES.md` (acceptance suite) · `../testcases.md` (scenarios) · `../UX-TESTING-PLAN.md` (UX criteria) |
+| **Generated** | `../CODEBASE-MAP.md` (every tracked file; `--check` gates it) · `hotspots` numbers (codegraph) |
+
+**Truth sources and process**
+
+| Role | Documents |
+|---|---|
+| **Delivery truth** | `../TODO.md` (the only implementation status) · `../SPEC-CHANGELOG.md` (dated history) · `../CURRENT_RUN.md` (handover, **no architectural authority**) |
+| **Capability identity** (one triple) | `../capabilities.yaml` == [`09-FEATURE-MATRIX.md`](09-FEATURE-MATRIX.md) == spec §0 — **166** ids, CI-enforced |
+| **Repository instructions** | `../AGENTS.md` (the agent contract) · `../.agents/` (agent kit: `README` · `docs/` · `templates/AGENTS.template.md` · `skills/codebase-intelligence/**` · `skills/skill-creator/SKILL.md`) — tooling, not architecture |
+| **Product narrative** | `../README.md` (user-facing; surfaces the same governance boundary as [`EXTERNAL-AGENTS.md`](EXTERNAL-AGENTS.md) §5) · `../COMPETITIVE-POSITIONING.md` |
+| **Operations** | `../deploy/BYO-HOST.md` (self-host deployment) |
+| **Non-normative** | `../RESEARCH/**` (104 docs, frozen by decision `D8`; every file carries a non-normative label — **not a contract, and never updated with code**) |
+
+> **The accounting rule.** A document that states architecture must be reachable from this file, and a
+> document that states architecture must derive from `CORE.md`. Anything else is evidence, history, tooling
+> or narrative — useful, and deliberately outside the authority chain.
+
+
+
+One project = one folder + one session tree · one effect-authorization model (ARCH/06 §6.10) as the mutation gate — agent/automation = `AuthorizationTicket`, human UI = trusted native gesture, both on the one audit · one append-only event log (doc 53's 10 event types) · one Progress timeline that tabs/panels disclose rather than duplicate.
+
 ## ADRs (accepted architecture decisions)
 
 Decisions that used to live as monolithic blockquotes in `TODO.md`'s header
@@ -59,6 +100,8 @@ consequences; `TODO.md` links them instead of duplicating the text.
 |---|---|
 | [`0001`](ADR/0001-connector-platform-mcp-first.md) | MCP is the connector platform; Composio/Zapier/Nango aggregator removed |
 | [`0002`](ADR/0002-ui-v2-cockpit-replaces-v1-router-pages.md) | UI v2 cockpit replaces v1 router pages (capability map) |
+| [`0003`](ADR/0003-architecture-thaw-core-authority.md) | Architecture thaw: `ARCH/CORE.md` becomes the root authority (retires the old executive-loop term; opens the v3.64 freeze) |
+| [`0004`](ADR/0004-behaviour-profile-invariant.md) | Add **I27**: behavioural policy is declared once and compiled per adapter; an uncompilable clause is reported `unenforceable` |
 
 ## Grounding
 

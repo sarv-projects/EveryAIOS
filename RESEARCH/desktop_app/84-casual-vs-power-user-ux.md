@@ -1,5 +1,8 @@
 # EveryAIOS — Casual vs Power User UX: What Each Group Actually Wants
 
+> **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPEC.md) · delivery: [`../../TODO.md`](../../TODO.md). Frozen by decision **D8** — research docs are **never updated** with code changes, so a dated claim here is not a stale claim.
+
+
 **Question addressed:** What do casual (non-technical) users and power (technical) users each *exactly* want from a local-first AI desktop workspace — and what does that mean for the EveryAIOS UI?
 
 **Research date:** 17 August 2026. Sources: Wharton Blueprint for AI Agent Adoption (2026-04), Jakob Nielsen's 2026 AI/UX predictions + mid-year reality check (2026-07), NN/g progressive disclosure, 2026 AI-tool buyer's guides, and the code-level competitor research already in doc 83 (openworker / cc-switch / skales / deepseek-harness).

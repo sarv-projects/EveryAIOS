@@ -200,7 +200,7 @@ export default function AuditView() {
           onKeyDown={(e) => {
             if (e.key === 'Enter') loadSessions(query)
           }}
-          placeholder="Search sessions (doc id, tab id)…"
+          placeholder="Search chats (doc id, tab id)…"
           className="h-7 max-w-xs font-mono text-xs"
           data-debounced
         />
@@ -208,7 +208,7 @@ export default function AuditView() {
           Search
         </Button>
         <div className="ml-auto flex items-center gap-1 text-[10px] text-muted-foreground">
-          <span className="font-mono">{sessions.length} sessions</span>
+          <span className="font-mono">{sessions.length} chats</span>
         </div>
       </div>
 
@@ -241,7 +241,7 @@ export default function AuditView() {
             </div>
           ) : rows.length === 0 ? (
             <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
-              No events in this session.
+              No events in this chat.
             </div>
           ) : (
             <table className="w-full font-mono text-[11px]">

@@ -1,5 +1,8 @@
 # 25 — Deep-Code Gap Resolutions + Found Repos (2026-08-06, pass 2)
 
+> **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPEC.md) · delivery: [`../../TODO.md`](../../TODO.md). Frozen by decision **D8** — research docs are **never updated** with code changes, so a dated claim here is not a stale claim.
+
+
 > Source-level reads closing every remaining deep-code gap. All file paths below were fetched from live repos this pass.
 
 ---

@@ -148,7 +148,7 @@ export default function DiffView() {
       <EmptyState
         icon={GitCompareArrows}
         title="No pending patches"
-        description="Files the agent mutated this session appear here with their undo snapshots."
+        description="Files the agent mutated in this chat appear here with their undo snapshots."
       />
     )
   }
@@ -165,7 +165,7 @@ export default function DiffView() {
             'ml-2 rounded px-1.5 py-0.5 text-[10px] transition-colors',
             lastTurnOnly ? 'bg-brand/15 text-brand' : 'text-muted-foreground hover:bg-accent/40',
           )}
-          title="P52.17 — narrow to the active session's patches"
+          title="P52.17 — narrow to the active chat's patches"
         >
           last turn only
         </button>

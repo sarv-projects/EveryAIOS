@@ -1,5 +1,8 @@
 # 53 — Formalization Gaps: Credential Broker · Ticket Contract · Durable Events · Shortest-Path Routing
 
+> **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPEC.md) · delivery: [`../../TODO.md`](../../TODO.md). Frozen by decision **D8** — research docs are **never updated** with code changes, so a dated claim here is not a stale claim.
+
+
 > **Date:** 2026-08-09 · **Trigger:** an external architecture review (2026-08) audited the v3.9 spec. Four of its points were **correct gaps in formalization** — not new capabilities. Every one formalizes an existing row/pillar; no matrix change (138 rows, 33 algorithms). The review's over-reaches are kept out (§6).
 > **Wired into:** SPEC v3.10 (P2/P3 bullets, J5/J21 rows) · ARCH/06 §6.9–6.11 · ARCH/09 (J5/J21 mirrors) · TODO (P1.2, P2.10, P6.10, P7.4).
 

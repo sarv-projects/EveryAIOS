@@ -17,8 +17,8 @@ import { ChartCard, ModelLeaderboard, SessionsTable, AgentBreakdown } from './an
 const KPIS = [
   { label: 'Total spent', value: '$5.42', icon: DollarSign, tone: 'text-brand' },
   { label: 'Tokens used', value: '1.2M', icon: Cpu, tone: 'text-sky-300' },
-  { label: 'Sessions', value: '12', icon: Layers, tone: 'text-foreground' },
-  { label: 'Avg cost/session', value: '$0.45', icon: Timer, tone: 'text-emerald-300' },
+  { label: 'Chats', value: '12', icon: Layers, tone: 'text-foreground' },
+  { label: 'Avg cost/chat', value: '$0.45', icon: Timer, tone: 'text-emerald-300' },
 ]
 
 const SPEND_30D = Array.from({ length: 30 }, (_, i) => ({
@@ -105,8 +105,8 @@ export default function AnalyticsPanel() {
     ? [
         { label: 'Total spent', value: `$${live.spent.toFixed(2)}`, icon: DollarSign, tone: 'text-brand' },
         { label: 'Tokens used', value: live.tokens >= 1_000_000 ? `${(live.tokens / 1_000_000).toFixed(1)}M` : `${Math.round(live.tokens / 1000)}K`, icon: Cpu, tone: 'text-sky-300' },
-        { label: 'Sessions', value: String(live.sessions), icon: Layers, tone: 'text-foreground' },
-        { label: 'Avg cost/session', value: live.sessions > 0 ? `$${(live.spent / live.sessions).toFixed(2)}` : '—', icon: Timer, tone: 'text-emerald-300' },
+        { label: 'Chats', value: String(live.sessions), icon: Layers, tone: 'text-foreground' },
+        { label: 'Avg cost/chat', value: live.sessions > 0 ? `$${(live.spent / live.sessions).toFixed(2)}` : '—', icon: Timer, tone: 'text-emerald-300' },
       ]
     : KPIS
 
@@ -240,7 +240,7 @@ export default function AnalyticsPanel() {
       <footer className="flex items-center justify-between border-t border-border bg-card px-4 py-2">
         <span className="font-mono text-[10px] text-muted-foreground">
           <Coins className="mr-1 inline h-3 w-3" />
-          {inTauri() ? 'durable usage ledger · per-session aggregates' : 'preview pricing metadata'}
+          {inTauri() ? 'durable usage ledger · per-chat aggregates' : 'preview pricing metadata'}
         </span>
         <Button
           size="sm"

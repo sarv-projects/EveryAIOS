@@ -1,5 +1,8 @@
 # 15 — Repo Implementation Ledger, Part 2: Desktop Apps, Scraping, Deep Research, Business Tools, Connectors
 
+> **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPEC.md) · delivery: [`../../TODO.md`](../../TODO.md). Frozen by decision **D8** — research docs are **never updated** with code changes, so a dated claim here is not a stale claim.
+
+
 > Compiled 2026-08-06. Part 2 of the implementation ledger — every repo from docs 01–13 in these domains, with URLs, docs links, and how features are actually implemented.
 > **Part 1 (agents, coding, orchestration, cyber) → `14-repo-implementation-ledger-1-agents-coding.md`.**
 > ⚠️ Stars live as of 2026-08-05/06 where verified; flagged where 404/rate-limited this pass.

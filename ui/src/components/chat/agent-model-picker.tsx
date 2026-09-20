@@ -383,7 +383,7 @@ export default function AgentModelPicker({ compact }: Props) {
   const handlePinChief = () => {
     const sessionId = useAppStore.getState().activeSessionId
     if (!sessionId) {
-      notify('No active session to pin to')
+      notify('No active chat to pin to')
       return
     }
     if (!chiefEligibleId) {
@@ -394,11 +394,11 @@ export default function AgentModelPicker({ compact }: Props) {
     // pin lifecycle, not just pin-once).
     if (sessionPin === chiefEligibleId) {
       clearSessionChiefPin(sessionId)
-      notify(`Chief pin cleared for this session — default applies again`)
+      notify(`Chief pin cleared for this chat — default applies again`)
       return
     }
     setSessionChiefPin(sessionId, chiefEligibleId)
-    notify(`Session pinned to ${chiefEligibleId} — this chat now routes through that Chief`)
+    notify(`Chat pinned to ${chiefEligibleId} — this chat now routes through that Chief`)
   }
 
   // F8 — plan-before-touch install: request (Guard-2 ticket or auto-allow),
@@ -775,13 +775,13 @@ export default function AgentModelPicker({ compact }: Props) {
                     type="button"
                     onClick={handlePinChief}
                     className="shrink-0 text-[10px] text-muted-foreground underline-offset-2 hover:text-sky-300 hover:underline"
-                    title="Pin this agent as the Chief for the active session only (outranks the user default); click again to unpin"
+                    title="Pin this agent as the Chief for the active chat only (outranks the user default); click again to unpin"
                   >
                     {sessionPin
                       ? chiefEligibleId === sessionPin
-                        ? 'unpin from this session'
-                        : `Pin ${agent.name} for this session`
-                      : `Pin ${agent.name} for this session`}
+                        ? 'unpin from this chat'
+                        : `Pin ${agent.name} for this chat`
+                      : `Pin ${agent.name} for this chat`}
                   </button>
                 )}
                 {chiefEligibleId && (
@@ -804,12 +804,12 @@ export default function AgentModelPicker({ compact }: Props) {
                 silence, even after a restart (the marker is vault-persisted). */}
             {sessionPin && (
               <div className="border-b border-border bg-sky-500/5 px-3 py-1 font-mono text-[9px] text-sky-300/90">
-                Session pinned to <span className="font-semibold">{sessionPin}</span> — outranks the user default for this chat.
+                Chat pinned to <span className="font-semibold">{sessionPin}</span> — outranks the user default for this chat.
               </div>
             )}
             {!sessionPin && sessionUnpinned && (
               <div className="border-b border-border bg-emerald-500/5 px-3 py-1 font-mono text-[9px] text-emerald-300/90">
-                <span className="font-semibold">Default Chief applies</span> — this session's pin was cleared; it follows the user default again.
+                <span className="font-semibold">Default Chief applies</span> — this chat's pin was cleared; it follows the user default again.
               </div>
             )}
 
@@ -1028,7 +1028,7 @@ export default function AgentModelPicker({ compact }: Props) {
                     <div className="flex items-center gap-1.5">
                       <Sliders className="h-3 w-3 text-sky-400" />
                       <span className="font-mono text-[10px] font-semibold text-foreground">
-                        Session Capability Loadout
+                        Chat Capability Loadout
                       </span>
                       {anyBusy && (
                         <Badge className="bg-warning/15 px-1 text-[7px] text-warning">
@@ -1043,7 +1043,7 @@ export default function AgentModelPicker({ compact }: Props) {
                         className="h-4 px-1.5 font-mono text-[8px] text-muted-foreground hover:text-sky-300"
                         onClick={() => {
                           resetSessionCapabilities(activeSessionId)
-                          notify('Session capabilities reset to defaults')
+                          notify('Chat capabilities reset to defaults')
                         }}
                       >
                         Reset Defaults

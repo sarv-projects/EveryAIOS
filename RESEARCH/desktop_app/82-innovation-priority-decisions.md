@@ -1,5 +1,8 @@
 # 82 — Innovation Priority Stack (decision-applied: add / avoid / ignore / defer)
 
+> **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPEC.md) · delivery: [`../../TODO.md`](../../TODO.md). Frozen by decision **D8** — research docs are **never updated** with code changes, so a dated claim here is not a stale claim.
+
+
 > **Source:** external scorecard provided 2026-08-17 — 23 capabilities rated on user pull / moat / leverage / complexity, 6 "must-win" bets, architecture gates A–E, and a features-to-decline list.
 > **Method:** every row re-judged against the live repo (what is already built vs queued vs new), the benchmark (doc 80), and the moat roadmap (doc 81). Ratings below are **repo-grounded decisions**, not a re-scoring.
 > **Repos:** 0 new — **ledger unchanged 281**.

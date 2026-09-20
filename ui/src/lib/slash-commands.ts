@@ -29,8 +29,8 @@ export const INBUILT_SLASH_COMMANDS: SlashCommand[] = [
   { cmd: '/model', desc: 'Switch underlying model', mutating: false },
   { cmd: '/undo', desc: 'Roll back last turn', mutating: true },
   { cmd: '/compact', desc: 'Compact older turns (keeps recent tail + marker)', mutating: true },
-  { cmd: '/clear', desc: 'Clear session messages', mutating: true },
-  { cmd: '/export', desc: 'Export session transcript', mutating: false },
+  { cmd: '/clear', desc: 'Clear chat messages', mutating: true },
+  { cmd: '/export', desc: 'Export chat transcript', mutating: false },
 ]
 
 /** Preference key holding the commands the user switched **off** (P58.4). */

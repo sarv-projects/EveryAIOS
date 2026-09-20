@@ -1,96 +1,90 @@
 # 10 — Build Plan (phases with exit criteria)
 
-> **Full-Stack Implementation Roadmap:** Coordinates delivery across the 8 Full-Stack Modules (Modules 1 through 8).
-> Sequencing merges v2.0 §5 phases with the research M0–M9 (RESEARCH spec §5) and the Rust-layer reality (browser/script/guard/audit are new and Rust). Each phase has an **exit criterion that can be verified by a test**, honoring the "no failures / edge cases" goal (each phase adds an edge-case hardening pass + the conformance/adversarial test suites). P10 (testing/QA), P11 (UI/UX) and P12 (market/GTM) run **in parallel** with P0–P8 (see TODO.md P10–P12 for the full task breakdown).
->
-> **v3.39 kernel contracts (TODO P36 + P27 probe + ExecutionKernel fields) are not a new build phase.** They are named types/fields on existing rows. Sequence: remaining Stage-0 engine attach → ExecutionKernel disk + K1 receipts → P27 (HF/`local://` + LM Studio/llama.cpp process probe) → then P36 smallest-first (`DocumentAsset` → `config_hash` → C6 edges → B3 child perms → `MCPServerRecord` → `RouteDecision` → `ManagedResource` trait). **v3.40** adds protocol/capability text on existing rows (MCP resources/elicitation/sampling, I6 executor hooks, Scout child, CodeMirror 6 — **superseded 2026-08-23 by the P41.1 Monaco embed decision**, F12 honesty, D4 persist, I8 atomic commit, E2 diagnostics, E5 HAR, D10/G7 incremental) — same sequence, no extra phase. Do not pause P0–P8 for a resource-kernel rewrite. **E9 is required ChatGPT+Claude desktop parity (P9.1) — not built, not a cut.**
-> **v3.45 Dynamic Chief (TODO P38 crate seams landed; occupancy/handoff/`/` = TODO P53).** Brain tier is a configurable slot — `primary_chief` = inbuilt | **any installed** ACP agent (that product's loop) — on B9/F12/J17/H32/B3. P38 landed ChiefAdapter + GovernedSession (Mediated | Self-contained | NotGoverned — omit fs/terminal does **not** mean UNSUPPORTED-forces-MCP). P53 closes installed-any occupancy, live `available_commands` slash, compact-before-swap handoff, installed-CLI subagents, per-session tool log. Swarms deferred. Does not pause Stage-0.
-> **v3.46 Performance & Footprint (TODO P39) is a small measurement-gated queue, not a new phase.** Five tasks on existing rows: (1) IPC payload-budget enforcement (doc-42 §1.4; 16MiB `MAX_FRAME_LEN` cap already live); (2) semantic context-distillation tier (LLMLingua-2 pattern, MIT, optional behind P5.7 ratio-based compaction, profiling-gated); (3) MCP loopback keep-alive/pooling (MRTR already covers long-running); (4) local-model KV-cache type knob (`-ctk/-ctv`); (5) lazy-load enforcement pass (R6). Already-covered by design, not re-queued: P29 native sidecar, R4 MessagePack "measure first", SSE-via-MRTR, ACP-default-via-P38.
-> **v3.47 architecture freeze (spec §4.3):** the agent control plane is consolidated — ACP v1-stable = local harness-drive (GovernedSession corrected: Mediated | Self-contained | NotGoverned; v2 draft removes the client fs/terminal surface — monitored), MCP = the tool surface (Channel B = the only fully-ticketed path), A2A v1.0.0 = remote discovery only (verified: complementary to MCP, NOT a subagent/tool-call protocol — our B3 stays internal). No new phases; P38 + P39 as sequenced.
-> **v3.75 Native agent plane (TODO P64 + `17-NATIVE-AGENT.md`).** The two-plane contract is frozen (Native owns its cognitive plane **and** the shared cowork plane; external agents keep their own plane and borrow the shared one; capability resolution is native-first, augmentation-second). P64 is **not a new build phase** — it is the wiring of primitives that already exist (`mergeFirstClassTools`/`resolveMentions` unhooked, repo map never injected, `SubAgentRuntime` with no execution side, checkpoint/edit-ladder/skill-distillation seams, shared-plane façades, Win/mac sandbox backends). Sequence it **before** ARCH/16 (the Rust chat-loop port): the seams must be correct in the sidecar first. Externally visible sequencing is unchanged — it does not pause Stage-0 or P53.
-> **v3.67 H36 terminal profiles (TODO P54) + §4.5 backends.** Shell is a profile registry + PTY host (PowerShell/cmd/Git Bash/WSL/$SHELL), not piped `sh`/`cmd`. Cloud = user-owned ExecutionNode attach (H33 v1 slot). Does not pause Stage-0 or P53.
+> **Derived from [`CORE.md`](CORE.md) — the root authority; this document specializes, never restates, it.**
+> **SCOPE REDUCED — delivery status lives in [`../TODO.md`](../TODO.md).** This document keeps phases and exit
+> criteria; implementation detail, sequencing and status belong in the TODO, which is the single
+> implementation-status surface. **Reduced `P69.A21` (done 2026-09-20).**
+
+---
+
+> Sequencing merges v2.0 §5 phases with the research M0–M9 and the Rust-layer reality. Each phase has an **exit criterion verifiable by a test**. P10 (testing/QA), P11 (UI/UX) and P12 (market/GTM) run **in parallel** with P0–P8. Version-level sequencing notes (kernel contracts, agent-binding wiring, terminal backends, perf queue) live in `TODO.md` — this file keeps only what phase gates what. The capability contract is the matrix (09); phases are feature-locked at kickoff. E9 (desktop computer-use) is required product surface, not a scope cut.
 
 ## P0 — Workspace & skeleton (≈2 wks)
-- Rust workspace (`crates/*`), TS workspace (`packages/coordinator` + `ui`), pnpm workspace over the **in-repo vendored** `@personal-ai/core-*` packages (`packages/core-*`; the original `../APP` sibling link is gone), CI (cargo test, vitest, tauri build matrix).
-- `everyaios-core` binary boots headless (config, dirs, vault init, SQLite schema v1), `everyaios-ipc` stdio JSON-RPC framing, ProcessSupervisor spawning a hello-world sidecar.
-- **Exit:** `cargo test` green; sidecar E2E "echo" over IPC green; `everyaios-core --version` prints; config from `everyaios.toml` loaded; vault opens/creates SQLCipher db; Tauri window shows React shell; sidecar heap safety (J13) + watchdog (J10) + UNIX-socket/pre-spawn (J16) tasks land in P0.
+
+Rust workspace + TS workspace + pnpm workspace over the in-repo vendored `@personal-ai/core-*` packages, CI matrix; `everyaios-core` boots headless (config, dirs, vault init, SQLite schema v1); stdio JSON-RPC framing; ProcessSupervisor spawns the sidecar; Tauri window shows the React shell.
+
+- **Exit:** `cargo test` green; sidecar E2E "echo" over IPC green; `--version` prints; config loads; vault opens/creates; sidecar heap safety + watchdog + pre-spawn land here.
 
 ## P1 — Chat + BYOK key-rings (≈4 wks)
-- ProviderAdapter (A1) + **key-ring vault (A2/A3)**: add N keys/provider, priority/weight, cooldowns, auto-failover, budgets, health UI.
-- Sidecar chat loop (streaming) + UI chat; token/cost ledger (A9); cache-aware costs.
-- OAuth subscription flows (A4) behind a flag.
-- **Exit:** two keys under one provider auto-failover under a simulated 429 (unit test + manual UI); streaming chat round-trip with a real BYOK key; ledger rows correct; $ budget kills session (J11).
+
+ProviderAdapter (A1) + key-ring vault (A2/A3: N keys/provider, priority/weight, cooldowns, auto-failover, budgets, health UI); sidecar streaming chat + UI chat; token/cost ledger (A9); OAuth flows (A4) behind a flag.
+
+- **Exit:** two keys under one provider auto-fail over a simulated 429 (unit + manual UI); streaming round-trip with a real BYOK key; ledger rows correct; $ budget kills the session.
 
 ## P2 — Browser layer (≈6 wks)
-- everyaios-cdp + everyaios-browser: spawn system Chrome/Edge, CDP discovery, snapshot/diff/refs, input, 37-tool catalog served via everyaios-mcp (stdio first, then HTTP).
-- **Tiered engines (E10):** **Lightpanda** lightweight CDP tier (**default** for scrape/RAG) + **Obscura** opt-in; tier 0 static → 1 lightweight → 2 full escalation; spawn-only license discipline.
-- **Session Vault (E11):** SQLCipher-encrypted multi-account sessions (cookies/localStorage), Trust-Ladder-gated access (agent never sees raw cookies), rotation, usage audit; capture paths 1–3 incl. **live-attach session inheritance (E13)**.
-- **Challenge handler (E12/E14):** PoW local solver + human-in-loop pass-through (default) + behavioral-realism input layer; optional BYO solver API behind a flag.
-- **Script-eval (E4):** everyaios-script (`run`/`evaluate`) rquickjs sandbox + `browser` SDK + InnerCallHook (every primitive authorized → recorded → page-claims captured); ownership-filtered `pages.list()`.
-- **Session replay (E5):** injected recorder → NDJSON ingest → replay store; sticky `has_gap`; durable event log + idempotency classes; 7-day retention.
-- Ownership isolation + tab claims + audit rows.
-- **Browser extensions (E15–E17 — doc 63 §4.1–4.3):** Electron-app CDP automation (drive VS Code/Slack/Spotify via debug port); `snapshot(slim: true)` + WebMCP (chrome-devtools-mcp pattern); multi-protocol action parsing (native/CUA/Anthropic/UI-TARS adapters behind the router — skyvern pattern).
-- **Exit:** scripted browser E2E: navigate → snapshot → act (click/fill) → diff → assert (headed on dev box / headless chrome-for-testing in CI); ownership: agent cannot close a user tab (test); scrape task runs on Obscura tier and escalates to Chrome only on JS-render need (test); session-vault round-trip (capture → grant → inject → revoke; agent never sees cookies — test); challenge surface → human-in-loop handoff works (manual); PoW challenge auto-solved locally (test); `run` executes a multi-step script with audited primitives (every primitive has an audit row); recording → replay round-trip with has_gap on a forced gap; **Electron-app snapshot→click→read E2E; slim snapshot ≤40% of full-snapshot tokens; CUA action parse → same browser op.**
+
+One `BrowserService` façade (08): CDP discovery + snapshot/diff/refs + 37-tool catalog via everyaios-mcp; tiered engine strategies (static → Lightpanda default / Obscura opt-in → full Chrome); Session Vault (E11: capture → grant → inject → revoke, agent never sees cookies; incl. session inheritance E13); challenge handler (E12: PoW local + human-in-loop default + behavioral realism; BYO behind a flag); script-eval `run` (E4: sandbox + SDK + InnerCallHook audit); session replay (E5: recorder → NDJSON → store, sticky `has_gap`); ownership isolation + tab claims; extensions (E15–E17: Electron-app CDP, slim snapshots, multi-protocol action parsing).
+
+- **Exit:** scripted E2E (navigate → snapshot → act → diff → assert); agent cannot close a user tab; scrape runs on the lightweight tier and escalates only on need; vault round-trip with cookie-invisibility; human-in-loop handoff works; PoW auto-solved locally; every `run` primitive has an audit row; recording → replay round-trip flags a forced gap; Electron snapshot→click→read; slim ≤40% of full tokens; action parse → same browser op.
 
 ## P3 — Cockpit & audit UI (≈4 wks)
-- Replay & audit UI (scrubber + per-step screenshots + searchable sessions); cockpit cards (Watch/Stop, quiet mode, MCQ interrupts); distributed tracing (J14).
-- **Exit:** replay & audit UI round-trip; cockpit shows live + stop kills the loop.
 
-## P4 — Office engine + storage intelligence (≈5 wks)  ← user-critical
-- docx block-patch editor; xlsx (IronCalc **0.8.3 library** + calamine + workbook DSL + deterministic planner — single calc truth engine); pptx part-editor; pdf (lopdf form-fill + text-swap + re-author + redact); **P4.7b office perfectness gaps (doc 63 §3): charts, track-changes/comments, PPT transitions, PDF annotations, presenter mode (SPEAKER_NOTES contract — guizang pattern), CSL citation insertion (obsidian-zotero pattern)**; renderers in UI; conformance oracle wired.
-- **Storage intelligence (D9–D11, G7 — doc 49):** `everyaios-storage` — parallel work-stealing walker (crossbeam-deque) + immutable arena snapshots (arc_swap, zstd save/load) + squarified treemap; 7-stage hash dedup (size → xxHash3 → BLAKE3, hardlink-aware, optional reflink); large-file finder; **Guard-2-ticketed cleanup**; SQLite FTS5 instant filename search + notify-watcher incremental updates.
-- **Exit:** round-trip tests (open → edit → save → LibreOffice-reopen asserts byte-stable untouched parts); formula recalc correctness tests (IronCalc golden cases); pptx slide add/remove round-trip; pdf form fill test; every edit has snapshotBefore rollback; **scan fixture tree → treemap data + dedup report; zstd snapshot round-trip; FTS5 filename query <50ms (P4.8).**
+Replay & audit UI (scrubber + per-step screenshots + searchable sessions); cockpit cards (Watch/Stop, quiet mode, MCQ interrupts); distributed tracing.
+
+- **Exit:** replay & audit UI round-trip; cockpit shows live state and stop kills the loop.
+
+## P4 — Office engine + storage intelligence (≈5 wks) ← user-critical
+
+docx block-patch editor; xlsx (IronCalc single calc truth engine + calamine + workbook DSL + deterministic planner); pptx part-editor; pdf (form-fill + text-swap + re-author + redact); office perfectness gaps (charts, track-changes/comments, transitions, annotations, presenter mode, citations); UI renderers; conformance oracle. Storage intelligence (D9–D11, G7): parallel walker + arena snapshots + treemap; hash dedup; large-file finder; Guard-2-gated cleanup; FTS5 filename search + watcher.
+
+- **Exit:** round-trip tests (LibreOffice-reopen asserts byte-stable untouched parts); IronCalc golden-case recalc; pptx add/remove round-trip; pdf form-fill; every edit has snapshotBefore rollback; scan fixture → treemap + dedup report; zstd snapshot round-trip; FTS5 query <50ms.
 
 ## P5 — Memory fusion + token economy (≈5 wks)
-- Multi-signal fusion (C3), LadybugDB graph backend (C6), Letta paging (C2), warm-set wiring (C7); **Taste profile (C9)** — taste store (`~/.everyaios/taste/` + per-repo), accept/reject/edit learning hooks on Guard-2 + audit, confidence-scored rules, stable-prefix injection; **ACT-R activation + spontaneous recall (#32, NOOA doc 39)** — retention/importance math + typed relational edges, pre-turn spontaneous block; **pass-by-reference context (C10)** — live refs + bounded previews via script-eval (E4); **ghost context prevention (7.5.1)** — file-event tombstone eviction via `notify` crate; compaction pipeline with Reasonix/BrowserOS/Janus knobs (05) + **compaction-as-lifecycle hooks + model-fallback chain (doc 63 §4.5 — codex pattern)**; snip rules; prefix-stability enforcement + cache-break events; per-session efficiency projections; **FSRS spaced-repetition (C13, doc 63 §2.2 — anki port)**; **hierarchical repo summarization (doc 63 §0 verdict — deepwiki-open pattern)**; intent classifier (memory/fact/event/document, Vane upgrade — classify→parallel→cite, doc 63 §4.14).
-- **Exit:** retrieval benchmark (multi-hop + temporal queries) vs plain BM25 baseline (target: mem0-class gains); **pass-by-reference (C10) exit:** a 10MB file queried via ref-preview keeps in-context payload under a hard cap (≤2K tokens) and ACT-R recall (#32) passes the multi-hop + temporal query set; compaction triggers at ratios without breaking the loop (incl. lifecycle hooks); prefix-dirty handling tested; dashboard shows $/token per key; FSRS intervals respect retention target (simulator matches published curves).
+
+Four-class memory (07) on the memory API: multi-signal fusion (C3), graph backend (C6), paging (C2), warm-set wiring (C7); taste profile (C9); ACT-R activation + spontaneous recall (#32); pass-by-reference context (C10); ghost-context tombstone eviction; compaction pipeline + lifecycle hooks + model-fallback chain; prefix-stability + cache-break events; efficiency projections; FSRS reinforcement (C13); hierarchical repo summarization; intent classifier.
+
+- **Exit:** retrieval benchmark (multi-hop + temporal) vs plain BM25 baseline shows the fusion-class gain; 10MB file queried via ref-preview keeps in-context payload ≤2K tokens and ACT-R recall passes the multi-hop + temporal set; compaction triggers without breaking the loop; prefix-dirty handling tested; $/token per key on the dashboard; FSRS intervals match the retention target.
 
 ## P6 — Orchestration + connectors (≈5 wks)
-- Blueprint engine (B2) — **spec-per-task files + verify-gated tasks + agent-frontmatter schema (doc 63 §0 verdict — codger/openspec REF + §4.4 qwen-code frontmatter + §4.16 openspec verify-gate patterns)**; sub-agents (B3/B4) + **multi-agent topologies (group-chat + handoff, doc 63 §0 verdict — agent-framework REF)**; scheduling + nudge cards (B7) + **automation tool shapes (run_code / online_search, doc 63 §4.12 — khoj pattern)**; harness installer (F8), **harness-driving (F12)**: spawn/attach the user's existing agent CLIs (Codex/Claude Code/Cline/OpenCode/Grok/Pi) as side-by-side workers on the same workspace — Chief occupancy shares compacted session context; side-by-side workers keep their own loops after injection; shared files + session state, Trust-Ladder-gated + audited (Open WebUI Computer pattern, doc 35 §C); connector hub routing (**MCP-first per Connector-platform decision 2026-08-16 — MCP Servers + Native + Tool Catalog; Composio/Zapier/Nango aggregator tabs removed**) + browser-session connectors (F3) + Auth Bridge (F4), MCP client reconcile (F6), **messaging bridges (F13)** — **desktop-first** (in-app cards, not a headless 24×7 daemon): email/Telegram/WhatsApp adapters first (Hermes/OpenClaw patterns, docs 36/39), Signal/iMessage + always-on daemon deferred (we start desktop, not CLI→headless), **email/calendar connectors (F14/F15, doc 50)** — Gmail/Google Calendar via Auth Bridge OAuth or IMAP/SMTP + ICS.
-- **Exit:** two spec-driven agents with different models run a plan end-to-end; scheduled task fires headless; a harness config file gets a managed entry (plan-before-touch, foreign-entry refusal test); **two external agent CLIs run side-by-side on the same workspace with shared files + isolated contexts (test)**; **messaging-bridge round-trip via stub adapter (message in → agent loop → reply out, test)**; Gmail-via-browser-session connector drives a real flow (dev credentials); email read→summarize→reply round-trip via stub (F14).
+
+Blueprint engine (B2: spec files + verify-gated tasks + frontmatter schema); sub-agents (B3/B4) + multi-agent topologies; scheduling + nudge cards (B7) + automation tool shapes; harness installer (F8); harness-driving (F12: user's agent CLIs as side-by-side workers, own loops, shared files, Trust-Ladder-gated + audited); connector hub routing (MCP-first: MCP Servers + Native + Tool Catalog) + browser-session connectors (F3) + Auth Bridge (F4) + MCP client reconcile (F6); messaging bridges (F13, desktop-first: email/Telegram/WhatsApp; Signal/iMessage + daemon deferred); email/calendar connectors (F14/F15).
+
+- **Exit:** two spec-driven agents on different models run a plan end-to-end; scheduled task fires headless; harness config gets a managed entry (plan-before-touch, foreign-entry refusal); two external CLIs run side-by-side on one workspace with shared files + isolated contexts; messaging round-trip via stub adapter; Gmail-via-browser-session drives a real flow; email read→summarize→reply via stub.
 
 ## P7 — Forge + guardrails hardening (≈4 wks)
-- Forge loop (I1/I2/I4/I5), **code-intel (I11 — doc 63 §2.1):** LSP client (neovim `runtime/lua/vim/lsp/*` reference) + SCIP symbol queries (crux pattern) + repo-map (aider `repomap.py` pattern) in `everyaios-codeintel`, guard-ticketed; **Extension/plugin ABI (I6)** — manifest.toml (abi_version, contributes, capabilities, trust_flags), CapabilityGranter allow-lists with `*`/`**` wildcards (Zed pattern), **capability+effects schema + frontend-side tool handlers (siyuan pattern, doc 63 §4.11)**, lazy activation, fail-closed trust flags, dogfood rule; skill registry with auto-injection; adversarial test suite (cyber corpus, doc 26) against Guard-1/injection defense; Guard-2 diff-card UX polish; estop/OTP; path-floor fuzz tests.
-- **Exit:** agent writes a skill that survives restart and is callable next session (the v2.0 exit criterion); plugin manifest rejects bad bundles + capability blocks unlisted exec (I6); **LSP hover/references/rename-with-preview round-trip; SCIP symbol query on a fixture repo; repo-map assembles context for a mid-size repo**; 100% of the red-team pattern list blocked by Guard-1 or diff-card (test); path-floor escape fuzz = 0 successes.
+
+Forge loop (I1/I2/I4/I5); code-intel (I11: LSP + SCIP + repo-map in `everyaios-codeintel`, guard-ticketed); extension/plugin ABI (I6: manifest, CapabilityGranter, trust flags, lazy activation, dogfood rule); skill registry with auto-injection; adversarial suite against Guard-1/injection defense; Guard-2 diff-card UX polish; estop/OTP; path-floor fuzz.
+
+- **Exit:** an agent-written skill survives restart and is callable next session; bad plugin bundles rejected + capability blocks unlisted exec; LSP hover/references/rename-with-preview round-trip; SCIP query on a fixture repo; repo-map assembles context for a mid-size repo; 100% of the red-team pattern list blocked by Guard-1 or diff-card; path-floor escape fuzz = 0 successes.
 
 ## P8 — Product polish + release (≈3 wks)
-- **Verified-completion eval subsystem (EV1 — doc 63 §2.3):** task manifests (goal + required-outcome + forbidden-side-effect + budgets), deterministic verifier SDK, evidence bundles, status taxonomy, evidence-first loop reports (better-harness pattern), 30-task adversarial suite with fault injection, retrieval-eval corpus with prompt-injection traps. **Builds before multi-agent work is trusted (user directive).**
-- Reader/office/blueprint/analytics UI pass; **widget cards (H17 — weather/stock/math inline)**; personality; tray daemon; telemetry opt-in; packaging (Win/macOS/Linux installers); idle-RSS perf pass (**measure & publish real numbers** — <30MB idle / <80MB warm are targets to verify, not promises); docs.
-- **Exit:** Windows beta build installs and runs; **eval: verifier rejects a plausible-but-unsupported completion (anti-"sounds finished" regression)**; **idle/warm RSS measured & published with the coordinator running** (<30MB idle / <80MB warm are targets to verify, not promises — the Bun sidecar alone is ~93MB, J16); telemetry off-by-default verified (no requests without opt-in); all UIs functional.
+
+Verified-completion eval subsystem (EV1: task manifests, verifier SDK, evidence bundles, adversarial suite with fault injection, retrieval-eval corpus — builds before multi-agent work is trusted); reader/office/blueprint/analytics UI pass; widget cards (H17); personality; tray daemon; telemetry opt-in; packaging (Win/macOS/Linux); idle-RSS perf pass (measure & publish real numbers — targets are to verify, not promises); docs.
+
+- **Exit:** Windows beta installs and runs; verifier rejects a plausible-but-unsupported completion; idle/warm RSS measured & published with the coordinator running; telemetry off-by-default verified; all UIs functional.
 
 ## P9 — Desktop computer-use (E9) + remaining post-v1
-**E9 is required product surface** (ChatGPT Desktop + Claude Computer Use parity — native windows, see-pane, Guard-2). It is **not built**; it is not a scope cut. Other P9+ items stay sequenced: WASM fuel sandbox (I3), voice input (H15), remote session handoff (H18), local OpenAI-compatible server (A8), HTML→video, magic completion (H16), connector sync→RAG, AutomationBench, community skills marketplace, self-hosted MCP hub, **image generation (A10), clipboard (H26), voice TTS (H28)**.
+
+E9 is required ChatGPT+Claude desktop parity (native windows, see-pane, Guard-2) — not built, not a cut. Other P9+ items stay sequenced: WASM fuel sandbox (I3), voice input (H15), remote session handoff (H18), local OpenAI-compatible server (A8), HTML→video, magic completion (H16), connector sync→RAG, AutomationBench, community skills marketplace, self-hosted MCP hub, image generation (A10), clipboard (H26), voice TTS (H28).
 
 ## P10 — End-to-end testing & QA (≈4 wks, parallel)
-- Integration suites (12 E2E flows: install→BYOK→chat→tool; memory persistence; browser pipeline; office pipeline; sub-agents; crystallization; connector hub; ACP harness; scheduled headless; messaging stub; extension ABI; MCP server).
-- Security & adversarial (cyber red-team corpus; 50+ injection payloads; 10K path fuzz; symlink/TOCTOU suite; Guard-2 non-bypass; revoked key; sidecar crash mid-call; kill everyaios-core → children die <5s; malicious SKILL.md; over-privileged plugin manifest).
-- Performance & stress (cold start <2s; idle/warm RSS measured & published — <30MB/<80MB are verify-targets, not promises; IPC <2ms; snapshot <500ms; retrieval <100ms; FTS5 <50ms; compaction <3s; 50 concurrent calls; 10 tabs × 3 agents; 100 scheduled; heap <512MB @30min; battery; 4hr stability).
-- Cross-platform (Win 11 / macOS Sequoia ARM / Ubuntu 24.04; WSL bridge; auto-updater; SQLCipher vault migration; Ollama; Chrome/Edge fallback).
-- Regression & CI/CD (matrix: cargo test + vitest + Tauri build; LibreOffice conformance oracle; nightly E2E; perf regression artifacts; pre-commit hooks; release pipeline).
-- **Exit:** all E2E suites green; 0 path escapes; no orphan processes; benchmarks hit targets; release pipeline artifacts on all 3 platforms.
+
+Integration suites (12 E2E flows); security & adversarial (red-team corpus, 50+ injection payloads, 10K path fuzz, symlink/TOCTOU, Guard-2 non-bypass, revoked key, sidecar crash mid-call, kill-core → children die <5s, malicious SKILL.md, over-privileged manifest); performance & stress (cold start, RSS, IPC, snapshot, retrieval, FTS5, compaction, concurrency, tabs×agents, scheduled volume, heap, battery, 4hr stability); cross-platform (Win 11 / macOS Sequoia ARM / Ubuntu 24.04; WSL; updater; vault migration; Ollama; Chrome/Edge fallback); regression & CI/CD (matrix, LibreOffice oracle, nightly E2E, perf artifacts, pre-commit, release pipeline).
+
+- **Exit:** all E2E suites green; 0 path escapes; no orphan processes; benchmarks hit targets; release artifacts on all 3 platforms.
 
 ## P11 — UI/UX design & optimization (≈3 wks, parallel)
-- Design system (palette, typography, spacing 4px grid, component library, motion, icons, Figma file).
-- Core UX flows (onboarding, empty/error/loading states, Guard-2 permission card, multi-agent view, blueprint editor, office edit UX, cockpit quiet↔expanded, MCQ interrupt card).
-- **Generative UI (H25, AG-UI — doc 50):** agent-emitted live components over one JSON channel, sandboxed iframe renderer (strict CSP + process isolation, Anthropic Artifacts pattern); artifact cards upgrade from static previews to live components on demand.
-- **Resumable streams (H27, doc 50):** coordinator holds in-flight stream state (last token/id); reconnect UI ("🔄 Reconnecting…" chip) + auto-resume from last token (LibreChat pattern); idempotent retry wiring per ARCH/03.
-- Accessibility & i18n (WCAG 2.2 AA target, keyboard nav, high-contrast, reduced-motion, locale files, RTL, font scaling).
-- Performance UX (skeleton loaders, optimistic UI, virtual scrolling, progressive loading, debounced search, LCP <1s, TTI <2s).
-- User research & feedback (beta feedback mechanism, NPS after 7d, 5 testers × 3 rounds, UX metrics, opt-in session recording).
-- **Exit:** design system adopted across UI; tested WCAG 2.2 AA criteria pass for the supported surface; LCP/TTI targets met; feedback loop live.
+
+Design system; core UX flows (onboarding, empty/error/loading, Guard-2 card, multi-agent view, blueprint editor, office edit UX, cockpit quiet↔expanded, MCQ card); generative UI (H25, sandboxed); resumable streams (H27); accessibility & i18n (WCAG 2.2 AA target); performance UX (skeletons, optimistic UI, virtualization, LCP <1s, TTI <2s); user research & feedback loop.
+
+- **Exit:** design system adopted; supported-surface WCAG 2.2 AA criteria pass; LCP/TTI targets met; feedback loop live.
 
 ## P12 — Market research & go-to-market (≈4 wks, parallel)
-- Competitive analysis (AnythingLLM/Jan/Cherry/OpenWorker/Chatbox/Claude Code/Open WebUI hands-on; gap matrix vs top 5; positioning hooks: crystallization, office engine, memory algos).
-- Personas (power dev, knowledge worker, privacy researcher, automation builder) + feature priorities + value props.
-- Positioning & messaging (tagline, description, "Why EveryAIOS?", comparison pages, name, brand identity).
-- Launch strategy (open-source repo + LICENSE, README, HN/Reddit/X/YouTube/Product Hunt, beta program 50–100).
-- Docs & community (install/getting-started/provider/skill-plugin/ACP guides, CONTRIBUTING, SECURITY, docs site, Discord).
-- Monetization research (open-core models, plugin marketplace potential, "EveryAIOS Pro" optional tier, pricing benchmarks; **v1 = 100% free**).
+
+Competitive analysis + gap matrix; personas + priorities + value props; positioning & messaging; launch strategy (repo, README, beta 50–100); docs & community; monetization research (**v1 = 100% free**).
+
 - **Exit:** launch plan + assets ready; beta testers onboarded; docs live.
 
-## Risk register (top items, with mitigation)
-1. **Bun-compiled sidecar perf** — mitigation: pre-spawn at boot, keep-alive, Rust hot paths already extracted (browser/script/guard/audit).
-2. **CDP fragility across Chrome versions** — pinned chrome-for-testing for CI + fallback; protocol-version tolerant client (everyaios-cdp).
-3. **Office byte-preservation complexity** — conformance oracle in CI on every save-path change; feature-flag edits until green.
-4. **OAuth ToS volatility** — encrypted store + graceful degrade to BYOK (03 §3.6).
-5. **Scope creep** — the matrix (09) is the contract; phases are feature-locked at kickoff.
+## Risk register
+
+Top risks and mitigations (Bun sidecar perf → pre-spawn + Rust hot paths; CDP fragility → pinned chrome-for-testing + tolerant client; Office byte-preservation → conformance oracle + feature flags; OAuth ToS volatility → encrypted store + BYOK degrade; scope creep → matrix 09 is the contract) are tracked with their owning phases in `TODO.md`.

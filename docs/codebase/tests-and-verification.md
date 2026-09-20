@@ -1,5 +1,10 @@
 # Tests and Verification
 
+> **Post-thaw authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md)** (27 invariants I1–I27) **+ the subsystem contracts** (`WORK` · `SESSION` · `AGENT` · `EXTERNAL-AGENTS` · `CONTEXT` · `CAPABILITIES` · `MEMORY` · `SECURITY` · `RECOVERY` · `ROUTING` · `UI` · `DESKTOP`). Refreshed post-thaw (TODO **P69.A35**). This artifact remains what it was built to be: accurate about the **code and tests** it indexes — that is its value. Where quoted code wording predates the thaw (legacy `Chief` identifiers, "token economy" module docs), quotations are verbatim and marked as such.
+
+---
+
+
 ## Commands
 
 ```bash
@@ -52,6 +57,27 @@ Policy: CI runs all tests on every PR; no merging with failing tests
 - Ticket semantics (single-use, args-hash binding) → unit tests inside
   `crates/everyaios-guard/src/ticket.rs` (`#[cfg(test)]` module).
 - Audit append/resume → unit tests inside `crates/everyaios-audit/src/lib.rs`.
+
+## Post-thaw verification direction (TODO-owned, not yet built)
+
+These do not exist yet — they are the thaw's verification backlog, stated here so this map does not
+imply they do:
+
+- **CI architecture checks (TODO P69.E):** exactly one AgentRegistry / ToolRegistry / authorization
+  engine / Work model / event writer / vault; no TS privileged effects; every effect passes Guard
+  (connector, MCP, ACP, UI paths); no second event log; no scheduler/workflow/subagent-owned execution
+  loop; no UI write except through the Work Gateway; capability lockstep (`capabilities.yaml` ==
+  `ARCH/09` == spec §0, **166** ids) stays green.
+- **Architecture regression tests (TODO P69.F9):** Work lifecycle, crash recovery, idempotency,
+  `uncertain`-effect classification, receipt correctness, event ordering, event→projection consistency,
+  binding switch, passport generation, agent resume, scoped-capability leakage, the ACP permission path,
+  ACP mediated fs/terminal, bridge isolation, Guard-bypass attempts, connector bypass, secret leakage,
+  UI-state divergence.
+- **Defect closure (TODO P69.C, nine rows):** V1 (ACP permission path bypasses Guard), V2/V3 (mediated-mode
+  fs/terminal + default), V4 (TS credential custody) — each violates a CORE invariant and each needs a test
+  that fails before the fix; plus V5–V9 (ACP-registry adapter: auth inferred from license, registry `env`
+  discarded, bare binary launch, unparsed `license_url` + substring license matching, and a split auth-mode
+  wire contract). **P69.E7/E8 turn two of these into CI gates** so the class cannot recur silently.
 
 ## Known verification gaps (stated, not hidden)
 

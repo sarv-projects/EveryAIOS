@@ -1,5 +1,8 @@
 # 45 — Agent Client Protocol (ACP) Deep-Dive (source-verified)
 
+> **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPEC.md) · delivery: [`../../TODO.md`](../../TODO.md). Frozen by decision **D8** — research docs are **never updated** with code changes, so a dated claim here is not a stale claim.
+
+
 > **Date:** 2026-08-07 · **Purpose:** the missing piece for **harness-driving (F12)** — hosting Claude Code / Codex / Cursor / OpenCode / Cline side-by-side as audited workers. ACP is *the* open standard for connecting any agent to any client. It also ships a live, working example of the **versioned-ABI + capability-negotiation** model we're building (doc 44 §5.3 patches 1–2).
 > **Method:** all claims below source-read this pass from the live repo (`agentclientprotocol/agent-client-protocol`, 3,889★, Apache-2.0, no CLA) + opencode/BrowserOS ACP implementations. Nothing README-paraphrased.
 > **Related:** doc 44 (modularity M1–M6 — ACP is the "M7" harness seam), doc 33 §7.6 (BrowserOS already hosts ACP agents), doc 35 (Open WebUI Computer harness-driving F12), doc 43 §2.3 (IPC/observability).

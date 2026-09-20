@@ -1,5 +1,8 @@
 # 59 — OmniRoute Deep-Dive (routing + scoring business logic)
 
+> **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPEC.md) · delivery: [`../../TODO.md`](../../TODO.md). Frozen by decision **D8** — research docs are **never updated** with code changes, so a dated claim here is not a stale claim.
+
+
 > Added 2026-08-13. Source-level read of OmniRoute's routing internals (`docs/routing/AUTO-COMBO.md`, `PROVIDER_REFERENCE.md`, README) — extracted for **steal/reimplement**, not vendor. 46,937⭐, MIT, pushed 2026-08-13.
 > **This is the business-logic spec for our A2/A3/A6/A7/A9/P6.10/J11.** Every weight below is a *reimplementable* number, not a copy-paste of their code.
 

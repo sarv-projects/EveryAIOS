@@ -1,5 +1,8 @@
 # 30 — Agent-OS Family Deep-Dive: ZeroClaw · IronClaw · BrowserOS · EverOS · MemOS · stereOS · PhyAgentOS
 
+> **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPEC.md) · delivery: [`../../TODO.md`](../../TODO.md). Frozen by decision **D8** — research docs are **never updated** with code changes, so a dated claim here is not a stale claim.
+
+
 > Fetched live 2026-08-06. Depth: **🟦 structure-verified** (official mdBook/README architecture, not source-read) for ZeroClaw/IronClaw/BrowserOS; 🟩 README-level for EverOS/MemOS/stereOS/PhyAgentOS. `agiresearch/AIOS` already covered at code level (docs 16 §5, 26 §5) — cross-referenced, not re-read.
 > ⚠️ GitHub API rate-limited this pass — top-level file listings could NOT be pulled; all structure claims below come from each repo's **README + official docs** (mdBook for ZeroClaw, README for IronClaw/BrowserOS). No source files read.
 

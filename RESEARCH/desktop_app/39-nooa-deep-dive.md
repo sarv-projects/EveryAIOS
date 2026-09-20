@@ -1,5 +1,8 @@
 # 39 — NVIDIA NOOA (Object-Oriented Agents) deep-dive + audit resolutions
 
+> **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPEC.md) · delivery: [`../../TODO.md`](../../TODO.md). Frozen by decision **D8** — research docs are **never updated** with code changes, so a dated claim here is not a stale claim.
+
+
 > Added 2026-08-06 on user request: *"reread all, upgrade final all… then check https://github.com/NVIDIA-NeMo/labs-OO-Agents"*.
 > **Method:** shallow-cloned and read this pass (`/tmp/oo-agents`, 20MB). Read: full README, `pyproject.toml`, CHANGELOG, package READMEs (`nooa-cli`, `nooa-memory`, `nooa-bench`), `skills/` index (11 SKILL.md bundles), `examples/README.md` progression, core `src/nooa/` module tree, and **nooa-memory source** (`forgetting.py` retention formula, `manager.py` spontaneous-association hook, `references.py` typed edges). Web: NVIDIA blog *"Six Agent Harness Capabilities for Higher Model Performance"* + arXiv 2607.20709 (via researcher). Core runtime modules listed but not line-read → depth **🟦 structure-verified**.
 

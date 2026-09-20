@@ -1,5 +1,8 @@
 # 09 · Repo Reality-Check — 10-Repo Verification (GitHub API)
 
+> **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPEC.md) · delivery: [`../../TODO.md`](../../TODO.md). Frozen by decision **D8** — research docs are **never updated** with code changes, so a dated claim here is not a stale claim.
+
+
 > A pasted list of "top repos" was reality-checked against the GitHub API (Aug 2026).
 > **Result: 9 of 10 are real; 1 is hallucinated (`toprank`).** Actual star counts were 2–4x
 > higher than the pasted list claimed. Re-verify anything before depending on it.

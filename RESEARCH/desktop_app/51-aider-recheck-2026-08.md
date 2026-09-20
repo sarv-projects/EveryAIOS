@@ -1,5 +1,8 @@
 # 51 — Aider Recheck (2026-08) — doc 46 claims vs primary sources
 
+> **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPEC.md) · delivery: [`../../TODO.md`](../../TODO.md). Frozen by decision **D8** — research docs are **never updated** with code changes, so a dated claim here is not a stale claim.
+
+
 > **Date:** 2026-08-09 · **Status:** 🟦 primary-source verified (aider.chat docs + GitHub; web-researched 2026 state)
 > **Purpose:** Re-verify every Aider claim made in **doc 46** (`Aider-AI/aider`, 48K⭐, Apache-2.0, Python) against primary sources — per the user's "recheck aider once again". Confirms the STEAL list (S1–S8) and matrix I7–I10; flags the two token/benchmark claims that have **no primary source**.
 > **Cross-refs:** doc 46 (the original deep-dive), matrix I7–I10, TODO P11.5.9 (Aider-derived features), ARCH/12 §5.4 (Code tab — Aider-derived edit UX).
