@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SHIPPED_AGENTS, createAgentRepository } from '../registry.js';
+import { SHIPPED_AGENTS, createAgentProfileRepository } from '../registry.js';
 
 const EXPECTED_OVERLAY_IDS = new Set(['general', 'research', 'reader', 'writer', 'planner', 'code', 'docmaker', 'summarizer']);
 
@@ -28,7 +28,7 @@ describe('SHIPPED_AGENTS registry', () => {
   });
 
   it('exposes a get/list API', () => {
-    const repo = createAgentRepository();
+    const repo = createAgentProfileRepository();
     expect(repo.get).toBeDefined();
     expect(repo.list).toBeDefined();
   });

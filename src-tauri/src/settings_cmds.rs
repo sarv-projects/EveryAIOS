@@ -161,7 +161,10 @@ pub struct AgentSettings {
     pub installed: bool,
     /// `inbuilt | acp | mcp`.
     pub protocol: String,
-    /// `subscription | api_key | local_cli | keyless | unknown`.
+    /// Canonical auth-mode spelling (P69.C11, home `everyaios_types::AuthMode`):
+    /// `subscription | api_key | local | keyless | unknown`. The legacy
+    /// `local_cli` spelling is deleted — `local` means local inference on this
+    /// machine (`ARCH/03` §3.0), not "open source".
     pub auth_mode: String,
     pub native_capabilities: Vec<String>,
     pub shared_capabilities: Vec<String>,
@@ -611,22 +614,24 @@ fn agent_readiness(
                 "api_key_required"
             }
         }
-        "local_cli" => "local_cli",
+        // Readiness vocabulary (a UI state, distinct from the auth-mode wire
+        // contract): a local-inference agent renders as `local_cli`.
+        // The deleted `local_cli` auth spelling is deliberately NOT accepted
+        // here — callers pass the canonical `AuthMode::as_str()` value.
+        "local" => "local_cli",
         "keyless" => "ready",
         _ => "unavailable",
     }
 }
 
 fn auth_mode_for(manifest: &everyaios_acp::HarnessManifest) -> &'static str {
-    use everyaios_acp::{AuthMode, HarnessProtocol};
+    use everyaios_acp::HarnessProtocol;
     if manifest.protocol == HarnessProtocol::Inbuilt {
         return "keyless";
     }
-    match manifest.auth_mode {
-        AuthMode::Subscription => "subscription",
-        AuthMode::ApiKey => "api_key",
-        AuthMode::Local => "local_cli",
-    }
+    // P69.C11 — one canonical serializer: the enum's own spelling, exactly as
+    // `ui/src/lib/acp.ts` declares it. No hand-maintained second mapping.
+    manifest.auth_mode.as_str()
 }
 
 fn protocol_for(manifest: &everyaios_acp::HarnessManifest) -> &'static str {
@@ -1604,7 +1609,7 @@ mod tests {
             "ready"
         );
         assert_eq!(
-            agent_readiness(true, false, "local_cli", false, false, false),
+            agent_readiness(true, false, "local", false, false, false),
             "local_cli"
         );
         assert_eq!(

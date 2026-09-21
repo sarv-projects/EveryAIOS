@@ -1,4 +1,4 @@
-import type { IntentCategory, RetrievalPlan, RouteContext, UserQuery } from '@personal-ai/core-domain';
+import type { IntentCategory, RetrievalPlan, RouteContext, UserQuery } from '@everyaios/core-domain';
 import { memoryCategoriesForIntent } from './categories.js';
 
 export type MemoryRetrievalHint = {

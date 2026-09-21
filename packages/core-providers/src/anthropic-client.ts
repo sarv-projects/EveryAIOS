@@ -1,4 +1,4 @@
-import type { ChatMessage, Token } from '@personal-ai/core-domain';
+import type { ChatMessage, Token } from '@everyaios/core-domain';
 import type { OpenAiProviderConfig, ValidationResult } from './types.js';
 
 /**

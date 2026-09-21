@@ -11,7 +11,7 @@
 > **Full-Stack Module:** Module 1 & Module 3 — Universal Harness Agent Loop & Cockpit Shell Conversation Features (`packages/coordinator/src/chat.ts`, `prompt.ts`, `chief.ts` — module path only; the `Chief` concept is retired per [`AGENT.md`](AGENT.md) §2 and [`CORE.md`](CORE.md) §7.1: the loop owner is the **AgentBinding**, coordination is the **Turn Coordinator**).
 > **User directive (verbatim):** *"for the ai chat features, copy from hermes, etc., and the rest from under ~business_Dev/APP/architecture.md — check the AI chat section. You need to understand what to copy, or convert, and not."*
 > This doc is that analysis. It takes the **two source corpora** and produces one clear list:
-> 1. **COPY** — reuse as-is (already built & tested in the `@personal-ai/core-*` engine — **now vendored in-repo at `packages/core-*`**, originally `APP/packages/`; or a research pattern to implement directly).
+> 1. **COPY** — reuse as-is (already built & tested in the `@everyaios/core-*` engine — **now vendored in-repo at `packages/core-*`**, originally `APP/packages/`; or a research pattern to implement directly).
 > 2. **CONVERT** — adapt (mobile → desktop, or research concept → our stack; keep the idea, change the plumbing).
 > 3. **REJECT** — do NOT copy (locked out, wrong stack, server-dependent, or explicitly out of scope).
 >

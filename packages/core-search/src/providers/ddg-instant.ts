@@ -4,7 +4,7 @@
  * Quality is near-Perplexity for knowledge questions.
  * https://api.duckduckgo.com/?q=query&format=json
  */
-import type { SearchContext, SearchProvider, SearchResult } from '@personal-ai/core-domain';
+import type { SearchContext, SearchProvider, SearchResult } from '@everyaios/core-domain';
 
 type DdgInstantResponse = {
   Abstract?: string;

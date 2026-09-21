@@ -23,7 +23,7 @@ import type {
   ConnectorResult,
   MemoryFact,
   UserQuery,
-} from '@personal-ai/core-domain';
+} from '@everyaios/core-domain';
 
 const YT_API = 'https://www.googleapis.com/youtube/v3';
 const CONNECTOR_NAME = 'youtube' as const;

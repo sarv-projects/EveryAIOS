@@ -768,6 +768,10 @@ pub fn acp_install_request(
         &args_hash,
         0,
     ) {
+        // P69.C12 — both verdicts carry the evidence the consent surface must
+        // show: the license (and its registry-published URL), the verdict, the
+        // source, and the reason. `ask` is the common path for proprietary
+        // registry agents; it must never be silent.
         GuardDecision::Allow { ticket_id } => Ok(serde_json::json!({
             "action": "allow",
             "agentId": agent_id,
@@ -778,6 +782,11 @@ pub fn acp_install_request(
             "exactCommand": exact_command,
             "consentRequired": true,
             "preferNative": matches!(spec.kind, everyaios_acp::InstallKind::Binary { .. }),
+            "license": spec.license,
+            "licenseUrl": spec.license_url,
+            "verdict": "allow",
+            "reason": "allow-listed curated agent or an open license",
+            "source": "acp-registry",
         })),
         GuardDecision::Ask { ticket_id } => Ok(serde_json::json!({
             "action": "ask",
@@ -787,9 +796,41 @@ pub fn acp_install_request(
             "exactCommand": exact_command,
             "consentRequired": true,
             "preferNative": matches!(spec.kind, everyaios_acp::InstallKind::Binary { .. }),
+            "license": spec.license,
+            "licenseUrl": spec.license_url,
+            "verdict": "ask",
+            "reason": "no allow-list entry for this agent — one explicit consent is required",
+            "source": "acp-registry",
         })),
         GuardDecision::Block { reason } => Err(format!("install blocked: {reason}")),
     }
+}
+
+/// P69.C12 — the **consent wait** half: block until the user answers the
+/// Guard-2 card for an `ask` install (approve in the dedicated guard window),
+/// then report honestly. The caller commits with the same single-use ticket
+/// when — and only when — the answer was approval; a rejection or a timeout
+/// returns `approved: false` (never a fabricated success), so the picker can
+/// surface the visible reason instead of stalling.
+#[tauri::command]
+pub fn acp_install_await(
+    state: State<'_, AppState>,
+    ticket_id: String,
+    timeout_ms: Option<u64>,
+) -> Result<serde_json::Value, String> {
+    let mut guard = state.guard_service.lock().map_err(|e| e.to_string())?;
+    let approved = guard.wait_ticket(
+        &ticket_id,
+        std::time::Duration::from_millis(timeout_ms.unwrap_or(120_000)),
+    );
+    Ok(serde_json::json!({
+        "approved": approved,
+        "reason": if approved {
+            "approved in the Guard window"
+        } else {
+            "not approved — declined or timed out; nothing was installed"
+        },
+    }))
 }
 
 /// F8 — the **install executor** (the "touch" half). Consumes the Guard-2

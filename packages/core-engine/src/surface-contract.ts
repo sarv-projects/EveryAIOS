@@ -1,5 +1,5 @@
 import type { SurfaceContract, SurfaceKind } from './types';
-import type { Scope } from '@personal-ai/core-domain';
+import type { Scope } from '@everyaios/core-domain';
 
 const chatScope: Scope = { type: 'none' };
 

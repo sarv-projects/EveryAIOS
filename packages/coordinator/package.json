@@ -11,11 +11,11 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@personal-ai/core-ai": "workspace:*",
-    "@personal-ai/core-connectors": "workspace:*",
-    "@personal-ai/core-engine": "workspace:*",
-    "@personal-ai/core-providers": "workspace:*",
-    "@personal-ai/core-search": "workspace:*"
+    "@everyaios/core-ai": "workspace:*",
+    "@everyaios/core-connectors": "workspace:*",
+    "@everyaios/core-engine": "workspace:*",
+    "@everyaios/core-providers": "workspace:*",
+    "@everyaios/core-search": "workspace:*"
   },
   "devDependencies": {
     "@types/bun": "^1.1.0",

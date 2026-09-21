@@ -1,5 +1,5 @@
 /**
- * @personal-ai/core-connectors
+ * @everyaios/core-connectors
  *
  * Connector adapters for all supported services.
  * Each adapter follows the "click → auth → use" end-to-end flow:
@@ -13,7 +13,7 @@
  * API key pattern: `connector:{name}:apikey`
  */
 
-export type { ConnectorAdapter } from '@personal-ai/core-domain';
+export type { ConnectorAdapter } from '@everyaios/core-domain';
 export {
   ConnectorOrchestrator,
   type ConnectorPlan,

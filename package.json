@@ -10,7 +10,8 @@
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
     "tauri:verify-clean-boot": "node scripts/clean-profile-boot-check.mjs",
-    "ipc:parity": "node scripts/ipc-parity.mjs --md"
+    "ipc:parity": "node scripts/ipc-parity.mjs --md",
+    "check:arch": "node scripts/check-arch-invariants.mjs"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.11.4"

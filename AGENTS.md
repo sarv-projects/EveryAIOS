@@ -149,18 +149,21 @@ L0  External Agents    Claude Code, Codex, OpenCode, MCP servers, Chrome
 ## 11. Development Commands
 
 ```bash
+# NOTE: the Rust workspace manifest is `crates/Cargo.toml` — cargo commands
+# must run from `crates/` (CI sets `working-directory: crates`).
+
 # Build (requires: Rust 1.98+, Node 22+, Bun, pnpm 11+)
-cargo build                       # Rust kernel
+(cd crates && cargo build)        # Rust kernel
 pnpm install                      # JS workspace
 pnpm --filter @everyaios/coordinator build  # Sidecar
 
 # Test
-cargo test                        # All Rust tests
-cargo test -p everyaios-core      # Single crate
+(cd crates && cargo test)                    # All Rust tests
+(cd crates && cargo test -p everyaios-core)  # Single crate
 pnpm test                         # All JS tests
 
 # Typecheck
-cargo clippy                      # Rust lint
+(cd crates && cargo clippy)       # Rust lint
 pnpm --filter ui tsc --noEmit     # UI typecheck
 
 # Code Graph (AST-based analysis)
@@ -175,6 +178,11 @@ python3 .agents/skills/codebase-intelligence/scripts/codegraph.py export --forma
 # Codebase Map (narrative + exhaustive file inventory)
 node scripts/gen-codebase-map.mjs            # regenerate CODEBASE-MAP.md
 node scripts/gen-codebase-map.mjs --check    # exit 1 if stale (CI gate)
+
+# Architecture-invariant gate (no TS credential custody, one authorization
+# decider, one auth vocabulary, one canonical schema)
+node scripts/check-arch-invariants.mjs
+node scripts/ipc-parity.mjs --md             # UI ↔ Tauri command parity
 ```
 
 **Staleness checks:** both tools support a `--check` mode that exits non-zero

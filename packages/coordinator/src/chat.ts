@@ -1,7 +1,7 @@
 /**
  * P1.4 — streaming chat loop (B1 base), the "sidecar proposes" half.
  *
- * Wires the reused `@personal-ai/core-engine` ConversationEngine (A-1, ARCH 11)
+ * Wires the reused `@everyaios/core-engine` ConversationEngine (A-1, ARCH 11)
  * into the coordinator and exposes it as a JSON-RPC `chat/stream` method:
  *
  *   chat/stream          → { accepted, streamId }  (engine runs detached)
@@ -20,10 +20,10 @@
  * maps that error through untouched so the UI shows the exact string.
  */
 
-import { ConversationEngine } from "@personal-ai/core-engine";
-import type { StreamChunk, TurnInput } from "@personal-ai/core-engine";
-// Vendored mirror of `@personal-ai/core-ai` StreamSession (see
-// stream-session.ts) and `@personal-ai/core-files` chunkText/estimateTokens
+import { ConversationEngine } from "@everyaios/core-engine";
+import type { StreamChunk, TurnInput } from "@everyaios/core-engine";
+// Vendored mirror of `@everyaios/core-ai` StreamSession (see
+// stream-session.ts) and `@everyaios/core-files` chunkText/estimateTokens
 // (see chunking.ts) — both self-contained, no package import graph.
 import { StreamSession } from "./stream-session";
 import { chunkText, estimateTokens } from "./chunking";
@@ -66,6 +66,7 @@ import { recordObservation, currentObservations } from "./observations";
 import { hintsFor } from "./catalog";
 import { budgetJson, refRegistry } from "./budget";
 import { assertAllLogged, ContextTrace, type ContextSource } from "./context-trace";
+import { ContextManager, compilePrompt } from "@everyaios/core-engine";
 import { runStage, type WaterfallHooks } from "./waterfall";
 import { ensureWork, recordThought, recordTransition } from "./work-events";
 export { evaluateGuard, useTicket, guardGate } from "./guard";
@@ -651,7 +652,13 @@ async function runInbuiltTurn(
   // recorded on the trace at injection time and proven present in the final
   // prompt (assertAllLogged) before the turn completes.
   const contextTrace = new ContextTrace();
-  const injectedBlocks: { source: ContextSource; content: string }[] = [];
+  // P69.D7 — one context manager owns *what enters the context* (source, tier,
+  // provenance); serialization stays in `compilePrompt`, assembly in
+  // `prompt.ts`. Call sites below decide nothing about bookkeeping.
+  const contextManager = new ContextManager<ContextSource>({
+    trace: contextTrace,
+    injectVolatile: injectBelowBoundary,
+  });
   if (toolExecutor) {
     try {
       const rawListed = await toolExecutor.listTools();
@@ -926,9 +933,7 @@ async function runInbuiltTurn(
           const facts = plan?.coreFacts ?? [];
           if (facts.length > 0) {
             const block = `<memory_warm_set>\n${facts.join("\n")}\n</memory_warm_set>`;
-            contextTrace.record("memory_warm_set", block);
-            injectedBlocks.push({ source: "memory_warm_set", content: block });
-            system = injectBelowBoundary(system, block);
+            system = contextManager.inject(system, "memory_warm_set", block);
           }
           // P51.28 / P64.8 — model catalog from skill/warm_set (Rust omits
           // disable-model-invocation). Fall back to memory/plan.learnedSkills.
@@ -948,9 +953,7 @@ async function runInbuiltTurn(
           }
           if (skills.length > 0) {
             const block = `<skill_warm_set>\n${skills.join("\n")}\n</skill_warm_set>`;
-            contextTrace.record("memory_warm_set", block);
-            injectedBlocks.push({ source: "memory_warm_set", content: block });
-            system = injectBelowBoundary(system, block);
+            system = contextManager.inject(system, "memory_warm_set", block);
           }
         } catch {
           /* memory/plan is best-effort — a missing handler never blocks the turn */
@@ -961,9 +964,7 @@ async function runInbuiltTurn(
       // schemas are the resolved subset on ProviderRequest.tools.
       if (catalogIndex.length > 0) {
         const block = `<tool_index>\n${catalogIndex.join("\n")}\n</tool_index>`;
-        contextTrace.record("tool_index", block);
-        injectedBlocks.push({ source: "tool_index", content: block });
-        system = injectBelowBoundary(system, block);
+        system = contextManager.inject(system, "tool_index", block);
       }
       // P64.3 repo-map injection: native tags + PageRank rows, ranked and
       // budget-fit deterministically, injected BELOW the boundary so
@@ -980,9 +981,7 @@ async function runInbuiltTurn(
             const fitted = fitRepoMapToBudget(rankRepoMapTags(rows));
             const block = renderRepoMapBlock(fitted);
             if (block.length > 0) {
-              contextTrace.record("repo_map", block);
-              injectedBlocks.push({ source: "repo_map", content: block });
-              system = injectBelowBoundary(system, block);
+              system = contextManager.inject(system, "repo_map", block);
             }
           }
         } catch {
@@ -1018,9 +1017,7 @@ async function runInbuiltTurn(
               lastBlock ?? 'no trusted command record yet in this session',
             ];
             const block = `<terminal_plane>\n${lines.join('\n')}\n</terminal_plane>`;
-            contextTrace.record('terminal_plane', block);
-            injectedBlocks.push({ source: 'terminal_plane', content: block });
-            system = injectBelowBoundary(system, block);
+            system = contextManager.inject(system, 'terminal_plane', block);
           }
         } catch {
           /* no terminal plane on this host — the prompt is unchanged */
@@ -1031,19 +1028,26 @@ async function runInbuiltTurn(
         const { payloads } = await resolveMentions(input.text);
         for (const payload of payloads) {
           const block = `<context_provider id="${payload.provider}" query="${payload.query}">\n${payload.content}\n</context_provider>`;
-          contextTrace.record("user", block);
-          injectedBlocks.push({ source: "user", content: block });
-          system = injectBelowBoundary(system, block);
+          system = contextManager.inject(system, "user", block);
         }
       } catch {
         /* context provider resolution failure never blocks turn */
       }
       const userBlock = `<user>\n${input.text}\n</user>`;
-      contextTrace.record("user", userBlock);
-      injectedBlocks.push({ source: "user", content: userBlock });
-      contextTrace.record("system", system);
-      injectedBlocks.push({ source: "system", content: system });
-      return `${system}\n\n${userBlock}`;
+      contextManager.record("user", userBlock);
+      contextManager.record("system", system, "stable");
+      // P69.D7 — serialization is `compilePrompt`'s single job: layer 0 is the
+      // assembled system prompt (the byte-stable prefix), layer 1 the current
+      // user turn. Bytes are identical to the previous inline join, and the
+      // hash travels with the turn so cache stability is auditable.
+      const compiled = await compilePrompt(
+        new Map([
+          [0, system],
+          [1, userBlock],
+        ]),
+      );
+      emit({ type: "stage", streamId, stage: `prompt:${compiled.hash.slice(0, 12)}` });
+      return compiled.full;
     },
     streamProvider: async function* (prompt, signal, extras) {
       const messages: ProviderMessage[] = [
@@ -1086,7 +1090,7 @@ async function runInbuiltTurn(
           : {}),
       };
       // P30.8 — invariant: every recorded block is present in what we send.
-      const logged = assertAllLogged(contextTrace, injectedBlocks, prompt);
+      const logged = assertAllLogged(contextTrace, [...contextManager.blocks()], prompt);
       if (!logged.ok) {
         emit({
           type: "error",

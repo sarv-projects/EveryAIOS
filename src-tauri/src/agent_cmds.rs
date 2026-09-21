@@ -6,7 +6,14 @@
 //! Fail-closed: unknown ids and invalid TOML are errors, never silently
 //! ignored; ids are always re-derived from the bundle name by the crate
 //! (`slug`), never trusted from the caller.
+//!
+//! P69.D1 — `agent_directory_list` is the single read façade. The ACP launch
+//! registry, the bundled registry index and the local bundle store are all
+//! *sources*; `everyaios_agents::AgentDirectory` composes them into one
+//! canonical record set so the UI never keeps a parallel agent map.
 
+use everyaios_agents::{AgentDirectory, AgentDirectoryEntry, AgentSource};
+use everyaios_types::{AgentDefinition, AgentId, AgentProtocol, AuthMode};
 use serde_json::json;
 
 /// The registry root — `~/.everyaios/agents` (honors `EVERYAIOS_HOME`).
@@ -72,4 +79,104 @@ pub fn agent_registry_set_disabled(id: String, disabled: bool) -> Result<(), Str
     registry()
         .set_disabled(&id, disabled)
         .map_err(|e| e.to_string())
+}
+
+/// Project a launch manifest onto the canonical `AgentDefinition`.
+fn definition_from_manifest(m: &everyaios_acp::HarnessManifest) -> AgentDefinition {
+    let protocol = match m.protocol {
+        everyaios_acp::HarnessProtocol::Inbuilt => AgentProtocol::Inbuilt,
+        everyaios_acp::HarnessProtocol::ModelBackend => AgentProtocol::ModelBackend,
+        everyaios_acp::HarnessProtocol::Acp => AgentProtocol::Acp,
+    };
+    AgentDefinition {
+        id: AgentId::new(m.id.clone()),
+        name: m.name.clone(),
+        description: m.description.clone(),
+        protocol,
+        // The manifest's auth mode is the handshake-refined value; a manifest
+        // that has never been probed says `unknown` rather than guessing
+        // (`ARCH/03-BYOK-KEYRINGS.md` §3.0, P69.C7).
+        auth_mode: match m.auth_mode {
+            everyaios_acp::AuthMode::Subscription => AuthMode::Subscription,
+            everyaios_acp::AuthMode::ApiKey => AuthMode::ApiKey,
+            everyaios_acp::AuthMode::Local => AuthMode::Local,
+            everyaios_acp::AuthMode::Keyless => AuthMode::Keyless,
+            everyaios_acp::AuthMode::Unknown => AuthMode::Unknown,
+        },
+        is_default: m.is_default,
+        capabilities: Vec::new(),
+        extension_mechanisms: Vec::new(),
+    }
+}
+
+/// Human-readable distribution label (the `locator` shown in the picker's
+/// "why can't I run this?" affordance).
+fn distribution_label(d: &everyaios_acp::Distribution) -> String {
+    match d {
+        everyaios_acp::Distribution::Binary { command, .. } => format!("binary: {command}"),
+        everyaios_acp::Distribution::Npx { package, .. } => format!("npx: {package}"),
+        everyaios_acp::Distribution::Uvx { package, .. } => format!("uvx: {package}"),
+    }
+}
+
+fn entry_json(entry: &AgentDirectoryEntry) -> serde_json::Value {
+    json!({
+        "id": entry.definition.id.as_str(),
+        "name": entry.definition.name,
+        "description": entry.definition.description,
+        "protocol": match entry.definition.protocol {
+            AgentProtocol::Inbuilt => "inbuilt",
+            AgentProtocol::Acp => "acp",
+            AgentProtocol::ModelBackend => "model_backend",
+        },
+        "authMode": entry.definition.auth_mode.as_str(),
+        "isDefault": entry.definition.is_default,
+        "source": entry.source.as_str(),
+        "installed": entry.installed,
+        "removable": entry.source.is_removable(),
+        "locator": entry.locator,
+    })
+}
+
+/// The one agent directory (P69.D1): inbuilt engine + ACP launch registry +
+/// saved `agent.toml` bundles, composed server-side and returned id-ordered.
+///
+/// The UI reads this as a façade; it never merges agent lists of its own.
+#[tauri::command]
+pub fn agent_directory_list() -> Result<serde_json::Value, String> {
+    let mut dir = AgentDirectory::new();
+
+    let launch = crate::acp_cmds::launch_registry();
+    for manifest in &launch.agents {
+        let source = if manifest.protocol == everyaios_acp::HarnessProtocol::Inbuilt {
+            AgentSource::Inbuilt
+        } else {
+            AgentSource::AcpRegistry
+        };
+        let installed = manifest.protocol == everyaios_acp::HarnessProtocol::Inbuilt
+            || crate::acp_cmds::agent_installed(&manifest.id);
+        dir.upsert(
+            AgentDirectoryEntry::new(definition_from_manifest(manifest), source)
+                .with_installed(installed)
+                .with_locator(distribution_label(&manifest.distribution)),
+        );
+    }
+
+    // Local bundles are a *source*: their definitions join the same directory.
+    let reg = registry();
+    let mut bundle_count = 0usize;
+    for meta in reg.list() {
+        if let Ok(bundle) = reg.load(&meta.id) {
+            bundle_count += 1;
+            dir.upsert_bundle(&bundle);
+        }
+    }
+
+    let rows: Vec<serde_json::Value> = dir.list().iter().map(|e| entry_json(e)).collect();
+    Ok(json!({
+        "agents": rows,
+        "defaultAgentId": launch.default_agent,
+        "bundleCount": bundle_count,
+        "total": dir.len(),
+    }))
 }

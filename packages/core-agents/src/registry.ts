@@ -2,7 +2,7 @@
  * Agent metadata registry (toolIds, maxRisk, webAccess, etc.).
  *
  * UI-specific prompt overlays live in
- * @personal-ai/core-ai/src/chat/agents.ts AGENT_CATALOG — this file
+ * @everyaios/core-ai/src/chat/agents.ts AGENT_CATALOG — this file
  * defines the canonical tool/risk profile. Agent IDs shared between
  * BOTH files (general, research, reader) MUST be kept in sync.
  *
@@ -10,9 +10,9 @@
  * Shipped agents are constants — not stored in DB.
  */
 
-import type { AgentDefinition, AgentRepository } from './types';
+import type { AgentProfile, AgentProfileRepository } from './types';
 
-export const SHIPPED_AGENTS: AgentDefinition[] = [
+export const SHIPPED_AGENTS: AgentProfile[] = [
   {
     id: 'general', name: 'General Assistant', icon: '🤖',
     instructions: 'You are a helpful general assistant. Answer questions, help with tasks, and be concise.',
@@ -107,12 +107,12 @@ const SHIPPED_IDS = new Set(SHIPPED_AGENTS.map((a) => a.id));
  * - Shipped agents loaded from constants (never written to DB)
  * - Custom agents persisted to `agents` table, survive restarts
  */
-export function createAgentRepository(db?: {
+export function createAgentProfileRepository(db?: {
   getAll: (sql: string, ...params: unknown[]) => Promise<Record<string, unknown>[]>;
   run: (sql: string, ...params: unknown[]) => Promise<void>;
   get: (sql: string, ...params: unknown[]) => Promise<Record<string, unknown> | null>;
-}): AgentRepository {
-  const cache = new Map<string, AgentDefinition>();
+}): AgentProfileRepository {
+  const cache = new Map<string, AgentProfile>();
   for (const a of SHIPPED_AGENTS) cache.set(a.id, a);
 
   if (!db) {
@@ -135,7 +135,7 @@ export function createAgentRepository(db?: {
         if (SHIPPED_IDS.has(row.id as string)) continue;
 
         let permissions: {
-          maxRisk?: AgentDefinition['maxRisk'];
+          maxRisk?: AgentProfile['maxRisk'];
           webAccess?: boolean;
           maxToolCallsPerTurn?: number;
         } = {};
@@ -155,7 +155,7 @@ export function createAgentRepository(db?: {
         } catch {
           preferredModel = [];
         }
-        const agent: AgentDefinition = {
+        const agent: AgentProfile = {
           id: row.id as string,
           name: row.name as string,
           icon: (row.icon as string) ?? '🤖',
@@ -164,7 +164,7 @@ export function createAgentRepository(db?: {
           maxRisk: permissions.maxRisk ?? 'local-write',
           // Prefer explicit permissions_json.webAccess; fall back to true only if omitted.
           webAccess: permissions.webAccess ?? true,
-          memoryScope: (row.memory_scope as AgentDefinition['memoryScope']) ?? 'full',
+          memoryScope: (row.memory_scope as AgentProfile['memoryScope']) ?? 'full',
           maxToolCallsPerTurn: permissions.maxToolCallsPerTurn ?? 8,
           preferredModel,
         };

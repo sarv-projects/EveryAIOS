@@ -9,7 +9,7 @@
  * network, no Rust binary.
  */
 import { describe, expect, test } from "bun:test";
-import type { StreamChunk } from "@personal-ai/core-engine";
+import type { StreamChunk } from "@everyaios/core-engine";
 import type { ChatEvent, ProviderBridge } from "./chat";
 import {
   activePlanCount,

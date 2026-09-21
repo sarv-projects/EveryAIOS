@@ -1,23 +1,8 @@
 export { ToolRuntime } from './tool-runtime';
-export {
-  evaluatePermissionGate,
-  evaluatePermissionGateWithTrust,
-  approveRiskForSession,
-  clearSessionApprovals,
-} from './permission-gate';
+// P69.D6 — the permission gate and trust ladder moved to
+// `@everyaios/core-engine` (`src/policy/`). They are advisory classifiers,
+// never an authority: Guard (Rust) decides every mutating effect. `core-tools`
+// stays a pure tool-declaration surface.
 export { imageGenerationTool, imageEditingTool } from './image-generation';
 export { toolsToOpenAI } from './tool-function-calling';
-export {
-  TrustLadder,
-  maxRiskForScore,
-  ladderLevelForScore,
-  TRUST_LADDER,
-  TRUST_SUCCESS_DELTA,
-  TRUST_FAILURE_DELTA,
-  TRUST_DECLINE_DELTA,
-  TRUST_MAX,
-  TRUST_FARM_WINDOW_MS,
-  TRUST_FARM_CAP,
-} from './trust-ladder';
-export type { LadderRiskLevel, TrustOutcome } from './trust-ladder';
 export type { ToolContract, ToolContext, ToolInvocation, RiskLevel, ToolFamily, PermissionGateResult } from './types';

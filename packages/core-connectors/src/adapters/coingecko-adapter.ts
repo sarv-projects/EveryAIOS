@@ -7,7 +7,7 @@ import type {
   ConnectorResult,
   UserQuery,
   MemoryFact,
-} from '@personal-ai/core-domain';
+} from '@everyaios/core-domain';
 
 /**
  * CoinGecko adapter — free crypto prices, no auth required.

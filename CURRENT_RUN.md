@@ -1326,7 +1326,7 @@ pnpm -r --filter "./packages/core-*" run build
 npx -y bun@1.1.38 …                  → bun available ephemerally, no global install
 ```
 
-The vendored `@personal-ai/core-*` packages ship as `main: ./dist/index.js` and
+The vendored `@everyaios/core-*` packages ship as `main: ./dist/index.js` and
 had never been built, which is why they resolved as `TS2307 Cannot find module`
 and why the coordinator suite could not run. Building them fixed both.
 

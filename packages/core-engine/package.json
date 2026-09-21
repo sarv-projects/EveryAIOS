@@ -1,5 +1,5 @@
 {
-  "name": "@personal-ai/core-engine",
+  "name": "@everyaios/core-engine",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -11,11 +11,8 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "@personal-ai/core-domain": "workspace:*",
-    "@personal-ai/core-tools": "workspace:*",
-    "@personal-ai/core-providers": "workspace:*",
-    "@personal-ai/core-memory": "workspace:*",
-    "@personal-ai/core-search": "workspace:*",
+    "@everyaios/core-domain": "workspace:*",
+    "@everyaios/core-tools": "workspace:*",
     "@stablelib/sha256": "^2.0.1"
   },
   "devDependencies": {

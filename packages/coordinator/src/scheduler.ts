@@ -14,6 +14,12 @@
 
 import type { ProviderBridge, ChatEvent } from "./chat";
 import { runChatStream } from "./chat";
+// P69.D16 — the scheduler creates **Work, nothing else**: each due job is
+// run through `runChatStream` with the job's session id as `workId`, so the
+// Work Gateway (`work/create` + `execution/begin` inside the chat loop) owns
+// the durable record, the run lifecycle and every event. The coordinator's
+// scheduler role is limited to ticking, leasing and reawakening — it owns no
+// execution engine, memory, tools, state machine or event log of its own.
 
 /** Outbound JSON-RPC request to Rust. */
 type Request = (method: string, params: unknown) => Promise<unknown>;

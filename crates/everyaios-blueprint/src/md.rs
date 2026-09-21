@@ -33,7 +33,7 @@ use crate::frontmatter::{
     parse_frontmatter, AgentConfig, FrontmatterError, Isolation, PermissionMode,
 };
 use crate::spec::TaskSpec;
-use everyaios_eval::{HashAlgorithm, OutcomeCheck};
+use crate::verify::{HashAlgorithm, OutcomeCheck};
 use thiserror::Error;
 
 /// A parsed blueprint file: an optional agent-frontmatter block + the plan.

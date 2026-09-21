@@ -1,5 +1,5 @@
 /**
- * Text chunking + token estimation — vendored from `@personal-ai/core-files`
+ * Text chunking + token estimation — vendored from `@everyaios/core-files`
  * (`indexing/chunking.ts`), matching the APP implementation verbatim.
  *
  * Why vendored instead of imported: the coordinator imports only

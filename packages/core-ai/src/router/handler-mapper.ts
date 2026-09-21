@@ -6,7 +6,7 @@ import type {
   RouteDecision,
   RouteHandler,
   UserQuery,
-} from '@personal-ai/core-domain';
+} from '@everyaios/core-domain';
 import { buildRetrievalPlan } from './retrieval-planner.js';
 
 function routeResult(

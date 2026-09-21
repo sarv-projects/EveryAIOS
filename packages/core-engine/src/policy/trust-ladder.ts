@@ -1,9 +1,11 @@
 /**
  * Algorithm #12 — Trust Ladder (Progressive Permission Escalation)
  * ===============================================================
- * Prior-art gap: Chain-of-Trust (2026) evaluates *collaborators* in
- * distributed systems; existing papers evaluate trust, but nobody gates
- * *permission escalation inside a single AI assistant* on a scalar TrustScore.
+ * Advisory policy input (P69.D3 / P69.D6): the ladder summarises observed
+ * tool-call outcomes into a scalar score that *suggests* a risk rung. Guard
+ * (Rust) remains the only decider — a high rung never authorises an effect
+ * on its own, it only shapes what the sidecar is willing to propose without
+ * an explicit user confirmation step.
  *
  * The ladder: a device/agent accumulates TrustScore (0–100) from tool-call
  * outcomes. Higher scores unlock riskier tool families WITHOUT confirmation:

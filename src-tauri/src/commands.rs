@@ -191,6 +191,9 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Syn
         agent_cmds::agent_registry_remove,
         agent_cmds::agent_registry_duplicate,
         agent_cmds::agent_registry_set_disabled,
+        // P69.D1 — the single agent directory (inbuilt + ACP registry + local
+        // bundles composed server-side; the UI reads this as a façade).
+        agent_cmds::agent_directory_list,
         acp_cmds::acp_agents,
         acp_cmds::acp_launch,
         // P63 — per-agent model-backend configuration (install-tab card).
@@ -218,6 +221,7 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Syn
         acp_cmds::acp_install_status,
         acp_cmds::acp_install_request,
         acp_cmds::acp_install_commit,
+        acp_cmds::acp_install_await,
         acp_cmds::acp_install,
         acp_cmds::acp_agent_import,
         acp_cmds::acp_agent_verify,

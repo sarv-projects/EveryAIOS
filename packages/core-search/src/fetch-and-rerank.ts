@@ -1,4 +1,4 @@
-import type { SearchContext, SearchResult } from '@personal-ai/core-domain';
+import type { SearchContext, SearchResult } from '@everyaios/core-domain';
 import { rerankByBm25 } from './bm25-rerank.js';
 import { WebFetchCascade } from './fetch-cascade.js';
 import { ReadabilityFetcherProvider } from './providers/readability-fetcher.js';

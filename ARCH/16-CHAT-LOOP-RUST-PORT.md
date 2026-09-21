@@ -153,7 +153,7 @@ win. The default is: port both.
   TTFT sanity check vs current.
 
 - **M4 — Retire:** drop the now-unused vendored `StreamSession`, the chat imports of
-  `@personal-ai/core-engine`, and the loop-only helper surface from the coordinator;
+  `@everyaios/core-engine`, and the loop-only helper surface from the coordinator;
   update ARCH/05/13 + §4.2.9 spec mermaid + TODO.
 
 ## 7. Risks & explicit non-goals
@@ -169,7 +169,7 @@ win. The default is: port both.
   round-trip would cancel the win); the *routing* model is reused from
   `everyaios-engine`/P36, not re-derived; AG-UI stays a lightweight envelope (marshal,
   not a port of the UI's generative surface).
-- **What this does NOT do:** it does not port the mobile `@personal-ai/core-engine`
+- **What this does NOT do:** it does not port the mobile `@everyaios/core-engine`
   package or the plan-executor / scheduler / MCP / connector loops. Those remain TS by
   design (they are not the chat hot-path and have their own delegation seams).
 

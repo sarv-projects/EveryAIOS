@@ -124,7 +124,8 @@ const MAX_TOOL_ROUNDS = 5;
 
 /**
  * Fallback risk when no agent sandbox is available.
- * Higher-risk tools still fail closed if PermissionGate denies them.
+ * Higher-risk tools still fail closed — but at Guard (Rust), which is the
+ * only permission authority (P69.D3); the in-process classifier is advisory.
  */
 const FALLBACK_TOOL_RISK = 'read' as const;
 
@@ -504,8 +505,14 @@ export class ConversationEngine {
   }
 
   /**
-   * ToolPlanner mount check + PermissionGate risk check.
-   * Returns an error result object if the call must not run; null if allowed.
+   * ToolPlanner mount check, agent risk-limit check, and advisory risk
+   * classification.
+   *
+   * Returns an error result object only for the two cases the engine itself
+   * owns: a catalog tool mounted on the wrong surface, and a tool above the
+   * agent's declared `maxRisk`. Permission verdicts are not decided here —
+   * Guard (Rust) evaluates every effect and mints the authorization ticket
+   * (P69.D3).
    */
   private gateToolCall(
     toolId: string,
@@ -543,38 +550,21 @@ export class ConversationEngine {
       }
     }
 
-    // PermissionGate risk must be the tool's real family risk — not the agent max.
-    // read → auto-grant
-    // local-write → NO blanket auto-approval (fix #23): create_automation /
-    // create_docx must not run with zero confirmation from chat. The gate
-    // grants only when the user/UI explicitly approved the risk for this
-    // session (approveRiskForSession) or the surface contract requires the
-    // write (automation runs carry their own pre-approved flow).
-    // external-write / destructive → always require confirmation.
+    // P69.D3 — advisory classification only. The classifier runs on the tool's
+    // real family risk (never the agent max) so the risk rung, confirmation
+    // class and surface verdict ride the turn as provenance; the result is not
+    // a verdict and must not block the call.
+    //
+    // Binding decisions belong to Guard (Rust): the coordinator's ToolExecutor
+    // forwards every effect to `guard/evaluate`, which mints an authorization
+    // ticket or refuses, and a refusal surfaces as a ticket card in chat. Note
+    // in particular that local-write is deliberately *not* auto-approved here:
+    // the engine proposes, Guard disposes.
     const sid = sessionId ?? 'default';
-    let sessionApproved = false;
-    if (toolRisk === 'read') {
-      sessionApproved = true;
-    } else if (toolRisk === 'local-write') {
-      // Deliberately NOT calling approveForSession here — session approval
-      // must be an explicit user/UI action, not an implicit engine grant.
-      sessionApproved = false;
-    }
-
-    const gate = this.permissionGate.evaluate(
-      contract.surface,
-      family,
-      toolRisk,
-      sid,
-      sessionApproved,
-    );
-    if (!gate.granted) {
-      if (gate.requiresConfirmation) {
-        return {
-          error: `Permission required (${gate.confirmationKind ?? 'confirm'}) for ${toolId}`,
-        };
-      }
-      return { error: `Permission denied for ${toolId}` };
+    try {
+      void this.permissionGate.evaluate(contract.surface, family, toolRisk, sid, false);
+    } catch {
+      // A classifier fault must never fail a turn — Guard still decides.
     }
 
     return null;

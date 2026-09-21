@@ -7,7 +7,7 @@
  * (creditAware / shouldContinueStreaming must never appear in chat.ts).
  */
 import { describe, expect, test } from "bun:test";
-import type { StreamChunk } from "@personal-ai/core-engine";
+import type { StreamChunk } from "@everyaios/core-engine";
 import {
   activeStreamCount,
   cancelChatStream,

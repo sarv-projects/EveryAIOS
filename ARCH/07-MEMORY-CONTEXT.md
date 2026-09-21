@@ -56,7 +56,7 @@ Adding a scorer must add a **scorer inside one memory system**, never a parallel
 | Taste profile (confidence-scored rules, `observe_accept/reject/edit`, stable-prefix injection, markdown round-trip) | `everyaios-memory::taste` — P5.6 ✅ | C9 |
 | Pass-by-reference context (`RefHandle` + bounded previews ≤2K tokens; query via E4 script-eval, never serialize what you can reference) | `everyaios-memory::reference` — P5.8 ✅ | C10 |
 | Warm set (top-5 per project/session, swapped on workspace change, fixed injection budget 05 §5.1: 600 tokens) + agent-managed paging (core ≤600 tok · archival · recall; writes queued to turn boundaries) | coordinator + 05 budgets | C7/C2 |
-| Polarized retention (sentiment −1..+1; defensive queries flip to negatives first; correction-detector auto-tags regressions) + risk compass (retrieval-confidence × source-coverage ÷ hedging-density ⇒ auto-flag or grounded self-check) + temporal anticipation (weekly-rhythm pre-indexing) + crystallization (workflows → deterministic loops, 0 tokens) + KG conflict resolution (recency + confidence + user-pin) | `@personal-ai/core-memory` ✅ (spreading-activation 11 tests, phantom-thread 9, forgetting-to-remember 17, temporal-anticipation, knowledge-graph, conflict, correction-detector, decay) | C1 |
+| Polarized retention (sentiment −1..+1; defensive queries flip to negatives first; correction-detector auto-tags regressions) + risk compass (retrieval-confidence × source-coverage ÷ hedging-density ⇒ auto-flag or grounded self-check) + temporal anticipation (weekly-rhythm pre-indexing) + crystallization (workflows → deterministic loops, 0 tokens) + KG conflict resolution (recency + confidence + user-pin) | `@everyaios/core-memory` ✅ (spreading-activation 11 tests, phantom-thread 9, forgetting-to-remember 17, temporal-anticipation, knowledge-graph, conflict, correction-detector, decay) | C1 |
 | Ghost-context prevention (file-event tombstone eviction via `notify`: tombstone FTS5/vec/graph rows on rename/delete; rename = re-path, never delete+re-index; purge on compaction) | memory coordinator | C7 |
 | Sync/export/wipe (`render_markdown_export`/`render_json_export`, Obsidian `[[wiki-link]]` view mirror, per-scope `WipeScope`; E2E sync ChaCha20-Poly1305 + X25519 + version vectors + tombstones + `reconcile` + `ConflictPolicy` + live TCP transport + 8 Tauri commands + Settings → Connections) | `everyaios-core::export` / `everyaios-core::sync` — P8.9 ✅ | C8 |
 | Lazy concept-graph mode (query-time concept graph, `relevance_budget` knob; indexing ≈ vector RAG) | tracked as TODO P5.12 | C6 |
@@ -71,7 +71,7 @@ The sensory / working / episodic / semantic / procedural tier table described th
 
 | Piece | Where | Status |
 |---|---|---|
-| 7 algos + KG + conflict + decay | `@personal-ai/core-memory` | **Built** (tested) |
+| 7 algos + KG + conflict + decay | `@everyaios/core-memory` | **Built** (tested) |
 | FTS5+vec hybrid + embeddings + chunking | `everyaios-memory` + `everyaios-storage` | **Built** *(former TS `core-files`, consolidated — Tier 2c)* |
 | Rust-native graph store (LadybugDB-compatible optional backend) | coordinator `memory/graph.ts` | Canonical graph surface; optional backend swap-in |
 | Multi-signal fusion + paging + scopes | coordinator `memory/fusion.ts` | New (strategy layer) |

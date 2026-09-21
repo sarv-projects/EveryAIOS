@@ -1,5 +1,5 @@
 {
-  "name": "@personal-ai/core-ai",
+  "name": "@everyaios/core-ai",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -21,8 +21,8 @@
     "vitest": "^3.0.0"
   },
   "dependencies": {
-    "@personal-ai/core-agents": "workspace:*",
-    "@personal-ai/core-domain": "workspace:*",
-    "@personal-ai/core-memory": "workspace:*"
+    "@everyaios/core-agents": "workspace:*",
+    "@everyaios/core-domain": "workspace:*",
+    "@everyaios/core-memory": "workspace:*"
   }
 }

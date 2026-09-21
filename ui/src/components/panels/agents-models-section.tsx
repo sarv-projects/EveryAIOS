@@ -48,7 +48,7 @@ import {
   type AgentRuntime,
   type TaskKind,
 } from '@/lib/agents'
-import { acpIdFor, acpInstallCommit, acpInstallRequest } from '@/lib/acp'
+import { acpIdFor, acpInstallAwait, acpInstallCommit, acpInstallRequest } from '@/lib/acp'
 import {
   agentBackendClear,
   agentBackendGet,
@@ -630,10 +630,11 @@ function AgentCard({
     try {
       const rid = acpIdFor(agent.id)
       const req = await acpInstallRequest(rid)
+      const licenseNote = req.license ? ` · license: ${req.license}` : ''
       const cmd = (req.exactCommand ?? []).join(' ')
       if (req.consentRequired && cmd) {
         const ok = window.confirm(
-          `SEP-1024 exact-command consent\n\nInstall ${agent.name}?\n\n${cmd}${req.preferNative ? '\n\nPrefer verified native artifact.' : ''}`,
+          `SEP-1024 exact-command consent\n\nInstall ${agent.name}?${licenseNote}\n\n${cmd}${req.preferNative ? '\n\nPrefer verified native artifact.' : ''}`,
         )
         if (!ok) {
           notify('Install cancelled')
@@ -645,7 +646,19 @@ function AgentCard({
         notify(`${agent.name} installed — runtimes re-scanned`)
         await rescan()
       } else {
-        notify(`Approval needed — Guard-2 card #${req.ticketId.slice(0, 8)} is in the chat`)
+        // P69.C12 — wait for the one explicit consent, then commit (or show
+        // the honest refusal), never a silent stall.
+        notify(
+          `Consent needed${licenseNote} — ${req.reason ?? 'proprietary agent'}; approve the Guard-2 card #${req.ticketId.slice(0, 8)}`,
+        )
+        const { approved, reason } = await acpInstallAwait(req.ticketId)
+        if (!approved) {
+          notify(reason ?? 'Install not approved', 'error')
+          return
+        }
+        await acpInstallCommit(rid, req.ticketId)
+        notify(`${agent.name} installed — runtimes re-scanned`)
+        await rescan()
       }
     } catch (e) {
       notify(e instanceof Error ? e.message : `Installing ${agent.name} failed`, 'error')

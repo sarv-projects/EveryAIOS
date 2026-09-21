@@ -502,6 +502,7 @@ mod tests {
         let root = tmp_root("npx");
         let installer = Installer::new(root.clone());
         let spec = InstallSpec {
+            license_url: None,
             agent_id: "cline".into(),
             name: "Cline".into(),
             version: "3.0.55".into(),
@@ -581,6 +582,7 @@ mod tests {
         let root = tmp_root("nosha");
         let installer = Installer::new(root.clone());
         let spec = InstallSpec {
+            license_url: None,
             agent_id: "x".into(),
             name: "X".into(),
             version: "1".into(),

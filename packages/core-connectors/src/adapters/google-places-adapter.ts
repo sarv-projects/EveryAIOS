@@ -7,7 +7,7 @@ import type {
   ConnectorResult,
   UserQuery,
   MemoryFact,
-} from '@personal-ai/core-domain';
+} from '@everyaios/core-domain';
 
 /**
  * Google Places (New) adapter — text search + nearby POI lookup.

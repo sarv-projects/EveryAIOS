@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { RouteContext } from '@personal-ai/core-domain';
+import type { RouteContext } from '@everyaios/core-domain';
 import { HeuristicIntentClassifier, SmartRouter } from '../router/index.js';
 
 const baseCtx: RouteContext = {

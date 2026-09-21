@@ -47,6 +47,8 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const MAP_PATH = join(ROOT, "CODEBASE-MAP.md");
+/** This generator's own output — excluded from every self-referential stat. */
+const SELF_MAP = "CODEBASE-MAP.md";
 const BEGIN = "<!-- BEGIN-GENERATED-INVENTORY -->";
 const END = "<!-- END-GENERATED-INVENTORY -->";
 
@@ -369,7 +371,7 @@ function resolveSpec(fromFile, spec) {
   const candidates = [];
   if (spec.startsWith("@/")) candidates.push(join("ui/src", spec.slice(2)));
   else if (spec.startsWith(".")) candidates.push(join(dirname(fromFile), spec));
-  else if (spec.startsWith("@personal-ai/")) candidates.push(join("packages", spec.split("/")[1], "src/index"));
+  else if (spec.startsWith("@everyaios/")) candidates.push(join("packages", spec.split("/")[1], "src/index"));
   else return null;
 
   for (const c of candidates) {
@@ -1013,10 +1015,12 @@ function renderAppendix(unaccounted) {
   for (const [e, n] of [...ext].sort((a, b) => b[1] - a[1])) lines.push(`| \`${e}\` | ${n} |`);
   lines.push(`| **TOTAL tracked** | **${FILES.length}** |`);
   lines.push("");
-  const textFiles = FILES.filter(isText);
+  // The map itself is excluded: its own line count changes on every write, so
+  // including it would make `--check` fail forever (see renderDocsSection).
+  const textFiles = FILES.filter((f) => isText(f) && f !== SELF_MAP);
   const totalLines = textFiles.reduce((a, f) => a + countLines(read(f)), 0);
   lines.push(
-    `Lines counted across the ${textFiles.length} tracked text files at generation time: **${totalLines.toLocaleString()}**.`,
+    `Lines counted across the ${textFiles.length} tracked text files at generation time: **${totalLines.toLocaleString()}** (this map excluded — self-referential).`,
   );
   lines.push("");
   lines.push("### 15.5 Coverage audit — is any tracked file unaccounted for?");
@@ -1421,6 +1425,12 @@ function renderAssetSection() {
 
 function renderDocsSection() {
   const docs = FILES.filter((f) => f.endsWith(".md"));
+  // Self-reference guard: this map documents itself, and its own byte/line
+  // counts change each time it is written — so the census and the per-file
+  // header would differ from the previous run forever and the `--check` gate
+  // (run in CI) could never pass. The entry stays (coverage is complete) but
+  // its numbers are omitted and excluded from the aggregate rows.
+  const statsDocs = docs.filter((f) => f !== SELF_MAP);
   const familyOf = (f) => {
     if (f.startsWith("ARCH/")) return "ARCH — the design set (+ DIAGRAMS & ADR)";
     if (f.startsWith("RESEARCH/desktop_app/")) return "RESEARCH/desktop_app — the prior-art & competitor corpus";
@@ -1455,16 +1465,31 @@ function renderDocsSection() {
   lines.push("| --- | ---: | ---: |");
   const famNames = [...fams.keys()].sort();
   for (const fam of famNames) {
-    const fs = fams.get(fam);
+    const fs = fams.get(fam).filter((f) => f !== SELF_MAP);
+    if (fs.length === 0) {
+      // The self entry's family — counted as 0 lines so the totals stay stable.
+      lines.push(`| ${fam} | ${fams.get(fam).length} | — |`);
+      continue;
+    }
     lines.push(`| ${fam} | ${fs.length} | ${fs.reduce((a, f) => a + countLines(read(f)), 0).toLocaleString()} |`);
   }
-  lines.push(`| **TOTAL** | **${docs.length}** | **${docs.reduce((a, f) => a + countLines(read(f)), 0).toLocaleString()}** |`);
+  lines.push(
+    `| **TOTAL** | **${docs.length}** | **${statsDocs.reduce((a, f) => a + countLines(read(f)), 0).toLocaleString()}** |`,
+  );
   lines.push("");
   famNames.forEach((fam, i) => {
     lines.push(`### 14.${i + 1} ${fam}`);
     lines.push("");
     for (const f of fams.get(fam).sort()) {
       acct(f, "docs");
+      if (f === SELF_MAP) {
+        lines.push(
+          `#### \`${f}\` — the map itself (size and line count omitted: self-referential, they change on every write)`,
+        );
+        lines.push(`> ${mdTitle(f)}`);
+        lines.push("");
+        continue;
+      }
       lines.push(`#### \`${f}\` — ${countLines(read(f)).toLocaleString()} lines · ${humanBytes(bytesOf(f))}`);
       lines.push(`> ${mdTitle(f)}`);
       const lead = mdLead(f);

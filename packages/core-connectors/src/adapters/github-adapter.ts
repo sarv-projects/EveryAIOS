@@ -7,7 +7,7 @@ import type {
   ConnectorResult,
   UserQuery,
   MemoryFact,
-} from '@personal-ai/core-domain';
+} from '@everyaios/core-domain';
 
 /**
  * GitHub connector (personal token or anonymous).
@@ -53,7 +53,7 @@ export class GitHubAdapter implements ConnectorAdapter {
 
     const headers: Record<string, string> = {
       'Accept': 'application/vnd.github+json',
-      'User-Agent': 'personal-ai-connectors',
+      'User-Agent': 'everyaios-connectors',
     };
     if (token) headers['Authorization'] = `Bearer ${token}`;
 

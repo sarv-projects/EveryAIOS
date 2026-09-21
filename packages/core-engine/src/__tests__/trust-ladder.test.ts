@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { z } from 'zod';
-import { evaluatePermissionGateWithTrust } from '../permission-gate';
-import type { ToolContract } from '../types';
+import { evaluatePermissionGateWithTrust } from '../policy/permission-gate';
+import type { ToolContract } from '@everyaios/core-tools';
 import {
   TrustLadder,
   maxRiskForScore,
@@ -10,7 +9,7 @@ import {
   TRUST_SUCCESS_DELTA,
   TRUST_FAILURE_DELTA,
   TRUST_DECLINE_DELTA,
-} from '../trust-ladder';
+} from '../policy/trust-ladder';
 
 describe('#12 Trust Ladder — rung thresholds', () => {
   it('read-only below 25', () => {
@@ -106,15 +105,18 @@ afterEach(() => {
 });
 
 describe('#12 — gate integration security posture', () => {
-  const toolFor = (riskLevel: 'external-write' | 'local-write'): ToolContract => ({
-    id: 't',
-    family: 'automations',
-    riskLevel,
-    surfaceAllowlist: ['chat'],
-    inputSchema: z.object({}),
-    outputSchema: z.any(),
-    execute: async () => ({}),
-  });
+  // Schema fields are never read by the classifier — only id/family/riskLevel/
+  // surfaceAllowlist are consulted — so the fixture supplies opaque placeholders.
+  const toolFor = (riskLevel: 'external-write' | 'local-write'): ToolContract =>
+    ({
+      id: 't',
+      family: 'automations',
+      riskLevel,
+      surfaceAllowlist: ['chat'],
+      inputSchema: {},
+      outputSchema: {},
+      execute: async () => ({}),
+    }) as unknown as ToolContract;
 
   it('trust NEVER bypasses confirmation for external-write or destructive', () => {
     const ladder = new TrustLadder(100); // max trust

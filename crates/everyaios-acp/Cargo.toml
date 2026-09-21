@@ -18,3 +18,6 @@ zip = { workspace = true }
 tar = { workspace = true }
 # Linux-only at runtime; the sandbox APIs are #[cfg(target_os = "linux")]-gated.
 everyaios-guard = { path = "../everyaios-guard" }
+# P69.C11/D25 — the canonical `AuthMode` (and the shared id vocabulary) live in
+# the schema crate so the Rust serializers and the TS projection cannot drift.
+everyaios-types = { path = "../everyaios-types" }

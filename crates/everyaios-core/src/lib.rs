@@ -13,6 +13,11 @@
 
 use std::path::PathBuf;
 
+// P69.D19/D20 — the kernel boundary ledger: what stays in the execution
+// kernel and what is a service renting it. Read before adding a module here.
+#[path = "kernel_budget.rs"]
+pub mod kernel_budget;
+
 pub mod adapter;
 pub mod agui;
 pub mod ai_marker;
@@ -137,8 +142,11 @@ pub use cua::{
 pub use doctor::{run_doctor, Check, DoctorProbe, DoctorReport, LiveProbe, Status as DoctorStatus};
 pub use eval_service::EvalService;
 pub use everyaios_mcp::ExternalTool;
-/// Backward-compat alias: [`Execution`] was renamed to [`Work`] (P47.4).
-pub use execution::Work as Execution;
+// P69.D21 — the `Execution` ↔ `Work` back-compat alias is gone (P47.4 renamed
+// the struct; the alias was kept "until safe" and nothing outside this crate
+// ever referenced it). One term per concept: the durable unit is `Work`.
+// `ExecutionKernel`/`ExecutionPhase`/`ExecutionTrigger` are the kernel's own
+// machinery names, not a second word for the Work record.
 pub use execution::{
     auto_checkpoint_kernel, check_restore_fence, commit_workspace_snapshot,
     decide_shadow_preflight, parse_shadow_candidate, plan_subagent_worktree, run_shadow_command,

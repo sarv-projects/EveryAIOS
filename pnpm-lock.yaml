@@ -18,19 +18,19 @@ importers:
 
   packages/coordinator:
     dependencies:
-      '@personal-ai/core-ai':
+      '@everyaios/core-ai':
         specifier: workspace:*
         version: link:../core-ai
-      '@personal-ai/core-connectors':
+      '@everyaios/core-connectors':
         specifier: workspace:*
         version: link:../core-connectors
-      '@personal-ai/core-engine':
+      '@everyaios/core-engine':
         specifier: workspace:*
         version: link:../core-engine
-      '@personal-ai/core-providers':
+      '@everyaios/core-providers':
         specifier: workspace:*
         version: link:../core-providers
-      '@personal-ai/core-search':
+      '@everyaios/core-search':
         specifier: workspace:*
         version: link:../core-search
     devDependencies:
@@ -46,7 +46,7 @@ importers:
 
   packages/core-agents:
     dependencies:
-      '@personal-ai/core-tools':
+      '@everyaios/core-tools':
         specifier: workspace:*
         version: link:../core-tools
     devDependencies:
@@ -59,13 +59,13 @@ importers:
 
   packages/core-ai:
     dependencies:
-      '@personal-ai/core-agents':
+      '@everyaios/core-agents':
         specifier: workspace:*
         version: link:../core-agents
-      '@personal-ai/core-domain':
+      '@everyaios/core-domain':
         specifier: workspace:*
         version: link:../core-domain
-      '@personal-ai/core-memory':
+      '@everyaios/core-memory':
         specifier: workspace:*
         version: link:../core-memory
     devDependencies:
@@ -78,7 +78,7 @@ importers:
 
   packages/core-connectors:
     dependencies:
-      '@personal-ai/core-domain':
+      '@everyaios/core-domain':
         specifier: workspace:*
         version: link:../core-domain
     devDependencies:
@@ -100,19 +100,10 @@ importers:
 
   packages/core-engine:
     dependencies:
-      '@personal-ai/core-domain':
+      '@everyaios/core-domain':
         specifier: workspace:*
         version: link:../core-domain
-      '@personal-ai/core-memory':
-        specifier: workspace:*
-        version: link:../core-memory
-      '@personal-ai/core-providers':
-        specifier: workspace:*
-        version: link:../core-providers
-      '@personal-ai/core-search':
-        specifier: workspace:*
-        version: link:../core-search
-      '@personal-ai/core-tools':
+      '@everyaios/core-tools':
         specifier: workspace:*
         version: link:../core-tools
       '@stablelib/sha256':
@@ -128,7 +119,7 @@ importers:
 
   packages/core-memory:
     dependencies:
-      '@personal-ai/core-domain':
+      '@everyaios/core-domain':
         specifier: workspace:*
         version: link:../core-domain
     devDependencies:
@@ -141,12 +132,9 @@ importers:
 
   packages/core-providers:
     dependencies:
-      '@personal-ai/core-domain':
+      '@everyaios/core-domain':
         specifier: workspace:*
         version: link:../core-domain
-      '@personal-ai/core-security':
-        specifier: workspace:*
-        version: link:../core-security
     devDependencies:
       typescript:
         specifier: ^5.7.0
@@ -157,12 +145,12 @@ importers:
 
   packages/core-search:
     dependencies:
+      '@everyaios/core-domain':
+        specifier: workspace:*
+        version: link:../core-domain
       '@modelcontextprotocol/sdk':
         specifier: ^1.29.0
         version: 1.30.0(zod@4.4.3)
-      '@personal-ai/core-domain':
-        specifier: workspace:*
-        version: link:../core-domain
       cheerio:
         specifier: ^1.2.0
         version: 1.2.0
@@ -195,7 +183,7 @@ importers:
 
   packages/core-tools:
     dependencies:
-      '@personal-ai/core-domain':
+      '@everyaios/core-domain':
         specifier: workspace:*
         version: link:../core-domain
       zod:

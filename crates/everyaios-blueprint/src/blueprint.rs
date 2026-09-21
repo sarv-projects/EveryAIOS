@@ -2,10 +2,10 @@
 //!
 //! Each blueprint task carries a `verify` block — deterministic checks that
 //! must pass before the task is marked done. **We never accept the agent's own
-//! "finished" claim**; the verifier (`everyaios-eval`) proves the state.
+//! "finished" claim**; the verifier ([`crate::verify`]) proves the state.
 
 use crate::spec::TaskSpec;
-use everyaios_eval::{verify, OutcomeCheck, TaskManifest, VerificationReport};
+use crate::verify::{verify, OutcomeCheck, TaskManifest, VerificationReport};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use thiserror::Error;
@@ -274,7 +274,7 @@ impl Blueprint {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use everyaios_eval::OutcomeCheck;
+    use crate::verify::OutcomeCheck;
 
     fn spec(id: &str) -> TaskSpec {
         TaskSpec::new(id, format!("goal {id}"))

@@ -10,6 +10,19 @@ export { ExaSearchProvider } from './providers/exa-search.js';
 export { DdgInstantAnswerProvider } from './providers/ddg-instant.js';
 export { DdgHtmlSearchProvider } from './providers/ddg-html-search.js';
 export { TavilySearchProvider } from './providers/tavily-search.js';
+export { ExaRestSearchProvider } from './providers/exa-rest-search.js';
+// Governed egress seam (P69.C4/D4): attach the host transport at bootstrap so
+// BYOK providers delegate credential resolution and netfloor routing to Rust.
+export {
+  setGovernedSearchTransport,
+  getGovernedSearchTransport,
+  hasGovernedSearchTransport,
+} from './governed-transport.js';
+export type {
+  GovernedSearchRequest,
+  GovernedSearchResponse,
+  GovernedSearchTransport,
+} from './governed-transport.js';
 export { WikipediaSearchProvider } from './providers/wikipedia-search.js';
 export { DuckDuckGoSearchProvider, parseDuckDuckGoLiteHtml } from './providers/duckduckgo-search.js';
 export { ReadabilityFetcherProvider } from './providers/readability-fetcher.js';

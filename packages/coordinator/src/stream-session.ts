@@ -1,5 +1,5 @@
 /**
- * StreamSession — vendored from `@personal-ai/core-ai` `streaming/stream-session.ts`.
+ * StreamSession — vendored from `@everyaios/core-ai` `streaming/stream-session.ts`.
  *
  * Provides TTFT + 33ms batch-flush + token counting during a streaming turn.
  * The coordinator consumes only `ttft`/`batch`/`error` events and

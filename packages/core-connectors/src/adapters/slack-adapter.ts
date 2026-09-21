@@ -20,7 +20,7 @@ import type {
   ConnectorResult,
   MemoryFact,
   UserQuery,
-} from '@personal-ai/core-domain';
+} from '@everyaios/core-domain';
 
 const SLACK_API = 'https://slack.com/api';
 const CONNECTOR_NAME = 'slack' as const;

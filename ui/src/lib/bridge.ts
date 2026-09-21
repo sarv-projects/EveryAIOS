@@ -18,6 +18,8 @@ import {
   acpInstallStatus,
   acpLaunch,
   acpPrompt,
+  agentDirectoryList,
+  type AgentDirectoryEntry,
   type HarnessManifest,
   type InstallState,
 } from "./acp";
@@ -119,7 +121,16 @@ function mergeAgentCatalog(
 export async function refreshAgentCatalog(): Promise<void> {
   const manifests = await acpAgents();
   const installs = await acpInstallStatus();
-  const merged = mergeAgentCatalog(AGENTS, manifests, installs);
+  let merged = mergeAgentCatalog(AGENTS, manifests, installs);
+  // P69.D1 — the canonical directory carries what `acp_agents` cannot: local
+  // `agent.toml` bundles. Best-effort: a shell without the command (older
+  // build) must not break rotation of the rest of the catalog.
+  try {
+    const directory = await agentDirectoryList();
+    merged = mergeDirectoryAgents(merged, directory.agents);
+  } catch {
+    /* directory unavailable — the ACP-merged catalog still stands */
+  }
   useAppStore.getState().setLiveAgents(merged);
 }
 
@@ -139,6 +150,65 @@ export function registerTurnDispatcher(): void {
 /** Every ACP agent that has no curated catalog entry gets a synthesized
  * picker row (mark + accent + install state), so the full registry is
  * choosable even before its curated models land. */
+/**
+ * P69.D1 — merge the canonical agent directory (`agent_directory_list`) into
+ * the picker catalog. The directory is the composition point: it is the only
+ * place local `agent.toml` bundles and inbuilt/discovered rows appear, so a
+ * user-authored agent is choosable without the UI keeping an agent list of
+ * its own. Entries the ACP merge already produced are only annotated (never
+ * duplicated); bundle rows are joined by their bundle slug.
+ */
+function mergeDirectoryAgents(
+  merged: AgentRuntime[],
+  entries: AgentDirectoryEntry[],
+): AgentRuntime[] {
+  const seen = new Set(merged.map((a) => a.id));
+  for (const entry of entries) {
+    const existing = merged.find((a) => a.id === entry.id);
+    if (existing) {
+      // Stale catalog rows must still learn what the directory knows.
+      existing.status = entry.installed ? 'installed' : existing.status;
+      existing.note = entry.description || existing.note;
+      continue;
+    }
+    if (seen.has(entry.id)) continue;
+    merged.push({
+      id: entry.id,
+      name: entry.name,
+      vendor:
+        entry.source === 'local_bundle'
+          ? 'custom agent'
+          : entry.authMode === 'subscription'
+            ? 'subscription'
+            : entry.authMode === 'api_key'
+              ? 'API key'
+              : entry.authMode === 'local'
+                ? 'local inference'
+                : 'unknown',
+      tagline: entry.description,
+      status: entry.installed ? 'installed' : 'available',
+      discovered: entry.source === 'discovered',
+      path: entry.locator ?? undefined,
+      mark: entry.name.replace(/[^A-Za-z0-9]/g, '').slice(0, 2).toUpperCase() || 'A',
+      accent:
+        entry.source === 'local_bundle'
+          ? 'bg-violet-500 text-slate-950'
+          : 'bg-sky-500 text-slate-950',
+      capabilities: [],
+      models: [],
+      defaultModel: '',
+      headless: true,
+      sandbox: 'soft',
+      note:
+        entry.source === 'local_bundle'
+          ? 'Custom agent (agent.toml bundle)'
+          : entry.locator ?? undefined,
+    });
+    seen.add(entry.id);
+  }
+  return merged;
+}
+
 function synthesizeAgent(m: HarnessManifest): AgentRuntime {
   const mark =
     m.name.replace(/[^A-Za-z0-9]/g, "").slice(0, 2).toUpperCase() || "A";

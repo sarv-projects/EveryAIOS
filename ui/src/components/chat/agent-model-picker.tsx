@@ -408,13 +408,14 @@ export default function AgentModelPicker({ compact }: Props) {
   const installAgent = async (agentId: string) => {
     setInstalling(true)
     try {
-      const { acpInstallRequest, acpInstallCommit } = await import('@/lib/acp')
+      const { acpInstallRequest, acpInstallCommit, acpInstallAwait } = await import('@/lib/acp')
       const rid = acpIdFor(agentId)
       const req = await acpInstallRequest(rid)
+      const licenseNote = req.license ? ` · license: ${req.license}` : ''
       const cmd = (req.exactCommand ?? []).join(' ')
       if (req.consentRequired && cmd) {
         const ok = window.confirm(
-          `SEP-1024 exact-command consent\n\nInstall ${agentId}?\n\n${cmd}${req.preferNative ? '\n\nPrefer verified native artifact.' : ''}`,
+          `SEP-1024 exact-command consent\n\nInstall ${agentId}?${licenseNote}\n\n${cmd}${req.preferNative ? '\n\nPrefer verified native artifact.' : ''}`,
         )
         if (!ok) {
           notify('Install cancelled')
@@ -430,7 +431,21 @@ export default function AgentModelPicker({ compact }: Props) {
         void refreshAgentCatalog().catch(() => {})
         setOpen(false)
       } else {
-        notify(`Approval needed — Guard-2 card #${req.ticketId.slice(0, 8)} is in the chat`)
+        // P69.C12 — one explicit consent in the dedicated Guard window, then
+        // commit; a decline/timeout surfaces the visible reason instead of a
+        // silent stall.
+        notify(
+          `Consent needed${licenseNote} — ${req.reason ?? 'proprietary agent'}; approve the Guard-2 card #${req.ticketId.slice(0, 8)}`,
+        )
+        const { approved, reason } = await acpInstallAwait(req.ticketId)
+        if (!approved) {
+          notify(reason ?? 'Install not approved')
+          return
+        }
+        await acpInstallCommit(rid, req.ticketId)
+        notify(`${agent?.name} installed — pick it and send`)
+        void refreshAgentCatalog().catch(() => {})
+        setOpen(false)
       }
     } catch (err) {
       notify(err instanceof Error ? err.message : 'Install failed')

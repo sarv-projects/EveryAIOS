@@ -8,6 +8,9 @@ description = "P47.3 — the shared contract crate: pure ID newtypes + the enum 
 
 [dependencies]
 serde = { workspace = true }
+# P69.D25 — the canonical event envelope carries a typed JSON payload
+# (`EventEnvelope`); serde_json is data-only, no IO, so the purity rule holds.
+serde_json = { workspace = true }
 
 [dev-dependencies]
 serde_json = { workspace = true }

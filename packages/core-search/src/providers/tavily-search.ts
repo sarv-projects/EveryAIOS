@@ -4,8 +4,21 @@
  *
  * Returns an "answer" summary plus extracted content from web results,
  * similar to Perplexity-level search quality.
+ *
+ * Credential and egress custody (P69.C4/D4): this provider never reads an API
+ * key, never reads `process.env` and never calls `fetch` itself. It asks the
+ * host through the governed transport, which resolves the `tavily` secret from
+ * `everyaios-vault` and routes the request through Guard-2 `netfloor`. With no
+ * transport attached the provider reports unavailable — there is deliberately
+ * no environment-variable fallback.
  */
-import type { SearchContext, SearchProvider, SearchResult } from '@personal-ai/core-domain';
+import type { SearchContext, SearchProvider, SearchResult } from '@everyaios/core-domain';
+import {
+  getGovernedSearchTransport,
+  type GovernedSearchTransport,
+} from '../governed-transport.js';
+
+const TAVILY_ENDPOINT = 'https://api.tavily.com/search';
 
 type TavilyResponse = {
   query: string;
@@ -20,49 +33,37 @@ type TavilyResponse = {
   response_time: number;
 };
 
-function getApiKey(): string | null {
-  return (
-    process.env.EXPO_PUBLIC_TAVILY_API_KEY?.trim() ||
-    process.env.TAVILY_API_KEY?.trim() ||
-    null
-  );
-}
-
 export class TavilySearchProvider implements SearchProvider {
   readonly name = 'tavily';
   readonly kind = 'search' as const;
-  private apiKey: string | null;
 
-  constructor() {
-    this.apiKey = getApiKey();
-  }
+  constructor(private readonly transport: GovernedSearchTransport | null = getGovernedSearchTransport()) {}
 
   async isAvailable(_ctx: SearchContext): Promise<boolean> {
-    return this.apiKey != null && this.apiKey.length > 0;
+    return this.transport !== null;
   }
 
   async search(query: string): Promise<SearchResult[]> {
-    if (!this.apiKey) return [];
-
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15_000);
+    if (!this.transport) return [];
 
     try {
-      const response = await fetch('https://api.tavily.com/search', {
+      const response = await this.transport.request({
+        provider: 'tavily',
+        url: TAVILY_ENDPOINT,
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          api_key: this.apiKey,
+        // No `api_key` field: the host injects the vault credential.
+        body: {
           query,
           search_depth: 'advanced',
           include_answer: true,
           include_raw_content: false,
           max_results: 10,
-        }),
-        signal: controller.signal,
+        },
+        timeoutMs: 15_000,
       });
 
-      if (!response.ok) {
+      if (response.status >= 400) {
         console.warn(`[Tavily] HTTP ${response.status}`);
         return [];
       }
@@ -94,8 +95,6 @@ export class TavilySearchProvider implements SearchProvider {
     } catch (e) {
       console.warn('[Tavily] search failed:', e);
       return [];
-    } finally {
-      clearTimeout(timeout);
     }
   }
 }

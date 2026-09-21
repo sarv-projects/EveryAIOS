@@ -8,6 +8,11 @@ export type {
   ToolResultRecord,
 } from './engine';
 export type { TrajectoryStep, TurnTrajectory } from './trajectory';
+// Advisory policy classifiers (P69.D6) — policy input for Guard, never a verdict.
+export * from './policy';
+// Context policy (P69.D7) — what enters a turn's context; serialization stays
+// in `./prompt-compiler`.
+export * from './context';
 export {
   assessHallucinationRisk,
   countUncertaintyMarkers,

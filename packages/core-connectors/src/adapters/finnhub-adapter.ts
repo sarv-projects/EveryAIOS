@@ -20,7 +20,7 @@ import type {
   ConnectorResult,
   MemoryFact,
   UserQuery,
-} from '@personal-ai/core-domain';
+} from '@everyaios/core-domain';
 
 const FINNHUB_API = 'https://finnhub.io/api/v1';
 const CONNECTOR_NAME = 'finnhub' as const;

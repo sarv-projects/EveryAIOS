@@ -44,6 +44,10 @@ pub struct RegistryAgent {
     pub authors: Vec<String>,
     #[serde(default)]
     pub license: String,
+    /// P69.C10 — the registry publishes it; the parser must not drop it.
+    /// `camelCase` on the wire (`licenseUrl`).
+    #[serde(default, rename = "licenseUrl")]
+    pub license_url: Option<String>,
     pub distribution: RegistryDistribution,
     #[serde(default)]
     pub icon: Option<String>,
@@ -183,6 +187,10 @@ pub struct InstallSpec {
     pub name: String,
     pub version: String,
     pub license: String,
+    /// P69.C10 — the registry's published license URL (carried through the
+    /// plan so the consent surface can show where the license came from).
+    #[serde(default)]
+    pub license_url: Option<String>,
     pub kind: InstallKind,
     /// For `Binary`: the extract destination (`<data_dir>/agents/<id>/<version>`).
     #[serde(default)]
@@ -260,14 +268,54 @@ impl RegistryPolicy {
     }
 }
 
-fn is_open_license(license: &str) -> bool {
-    let l = license.to_ascii_lowercase();
-    l.contains("apache")
-        || l.contains("mit")
-        || l.contains("gpl")
-        || l.contains("agpl")
-        || l.contains("bsd")
-        || l.contains("mpl")
+/// The exact identifier set [`is_open_license`] accepts (normalized lowercase).
+/// P69.C10 — a curated list, not substring sniffing: a license string merely
+/// *containing* `mit`/`bsd` is **not** treated as open.
+pub const OPEN_LICENSE_IDS: &[&str] = &[
+    "0bsd",
+    "agpl-3.0",
+    "agpl-3.0-only",
+    "agpl-3.0-or-later",
+    "apache-2.0",
+    "bsd-2-clause",
+    "bsd-3-clause",
+    "cc0-1.0",
+    "eupl-1.2",
+    "gpl-2.0",
+    "gpl-2.0-only",
+    "gpl-2.0-or-later",
+    "gpl-3.0",
+    "gpl-3.0-only",
+    "gpl-3.0-or-later",
+    "isc",
+    "lgpl-2.1",
+    "lgpl-3.0",
+    "mit",
+    "mpl-2.0",
+    "ms-pl",
+    "unlicense",
+    "wtfpl",
+    "zlib",
+];
+
+/// Normalize one license token for exact matching.
+fn normalize_license_token(raw: &str) -> Option<String> {
+    let t = raw.trim().to_ascii_lowercase();
+    // Tolerate presentation suffixes ("MIT License", "Apache-2.0 license").
+    let t = t.strip_suffix(" license").unwrap_or(&t).trim().to_string();
+    if t.is_empty() { None } else { Some(t) }
+}
+
+/// P69.C10 — **exact (normalized) license matching**, never substring sniffing.
+/// An `A OR B` / `A/B` expression is open when at least one alternative parses
+/// to a known open identifier; anything unrecognized is not open.
+pub fn is_open_license(license: &str) -> bool {
+    let lower = license.to_ascii_lowercase();
+    lower
+        .split(" or ")
+        .flat_map(|p| p.split('/'))
+        .filter_map(normalize_license_token)
+        .any(|p| OPEN_LICENSE_IDS.contains(&p.as_str()))
 }
 
 impl RegistryIndex {
@@ -310,6 +358,7 @@ impl RegistryIndex {
             name: a.name.clone(),
             version: a.version.clone(),
             license: a.license.clone(),
+            license_url: a.license_url.clone(),
             kind,
             install_dir: None,
         })
@@ -325,59 +374,64 @@ impl RegistryIndex {
     pub fn merge_into(&self, reg: &mut LaunchRegistry, platform: Platform) {
         for a in &self.agents {
             let canon = canonical_id(&a.id);
-            let auth = auth_from_license(&a.license);
-            let (dist, desc) = match &a.distribution {
+            // P69.C7 — the registry publishes **no auth field**, so it cannot
+            // be the authority. If a curated row already exists (audited),
+            // keep its value; otherwise the honest default is `Unknown` — the
+            // ACP handshake (`initialize` / `authenticate`) refines it. Never
+            // infer auth from the software license.
+            let auth = reg
+                .get(&canon)
+                .map(|m| m.auth_mode)
+                .unwrap_or(AuthMode::Unknown);
+            let (dist, env) = match &a.distribution {
                 RegistryDistribution::Npx { npx } => (
                     Distribution::Npx {
                         package: npx.package.clone(),
                         args: npx.args.clone(),
                     },
-                    with_env_note(a, &npx.env),
+                    // P69.C8 — carry `npx.env` into the manifest env, not into
+                    // a description note.
+                    env_to_vec(&npx.env),
                 ),
                 RegistryDistribution::Uvx { uvx } => (
                     Distribution::Uvx {
                         package: uvx.package.clone(),
                         args: uvx.args.clone(),
                     },
-                    with_env_note(a, &uvx.env),
+                    env_to_vec(&uvx.env),
                 ),
                 RegistryDistribution::Binary { binary } => {
-                    let t = binary.get(platform.key());
-                    let cmd = t
-                        .map(|t| basename_cmd(&t.cmd))
-                        .unwrap_or_else(|| basename_cmd(&a.id));
-                    let args = t.map(|t| t.args.clone()).unwrap_or_default();
+                    // P69.C9 — ACP binary args are load-bearing (`["acp"]`,
+                    // `["--acp=true"]`, …). A missing platform target must
+                    // **not** start the agent's normal CLI looking broken;
+                    // skip the merge so no bare launch is ever derived (the
+                    // install plan already reports `None` for this platform).
+                    let Some(t) = binary.get(platform.key()) else {
+                        continue;
+                    };
                     (
-                        Distribution::Binary { command: cmd, args },
-                        a.description.clone(),
+                        Distribution::Binary {
+                            command: basename_cmd(&t.cmd),
+                            args: t.args.clone(),
+                        },
+                        env_to_vec(&t.env),
                     )
                 }
             };
             let manifest = HarnessManifest {
                 id: canon.clone(),
                 name: a.name.clone(),
-                description: desc,
+                description: a.description.clone(),
                 auth_mode: auth,
                 distribution: dist,
                 protocol: HarnessProtocol::Acp,
-                env: vec![],
+                env,
                 backend_env_keys: vec![],
                 is_default: false,
             };
             reg.upsert(manifest);
         }
     }
-}
-
-/// A description that surfaces the pinned version + any required env.
-fn with_env_note(a: &RegistryAgent, env: &HashMap<String, String>) -> String {
-    let mut d = a.description.clone();
-    if !env.is_empty() {
-        d.push_str(" [env: ");
-        d.push_str(&env.keys().cloned().collect::<Vec<_>>().join(","));
-        d.push(']');
-    }
-    d
 }
 
 /// Strip a platform path to a launchable basename (`./bin/devin` → `devin`,
@@ -396,15 +450,6 @@ fn canonical_id(id: &str) -> String {
         "glm-acp-agent" => "glm-agent".to_string(),
         "factory-droid" => "factory-droid".to_string(),
         other => other.trim_end_matches("-acp").to_string(),
-    }
-}
-
-/// License → auth-mode heuristic (proprietary ⇒ subscription; else local/BYOK).
-fn auth_from_license(license: &str) -> AuthMode {
-    if is_open_license(license) {
-        AuthMode::Local
-    } else {
-        AuthMode::Subscription
     }
 }
 
@@ -545,6 +590,20 @@ mod tests {
         let mut p = RegistryPolicy::builtin();
         p.denylist.push("opencode".into());
         assert_eq!(p.evaluate("opencode", "MIT"), PolicyVerdict::Block);
+    }
+
+    #[test]
+    fn license_matching_is_exact() {
+        // P69.C10 — substring sniffing rejected. `"mitochondria"` contains
+        // `mit`; it must not read as an open license.
+        assert!(!is_open_license("mitochondria"));
+        assert!(!is_open_license("BSD-like"));
+        assert!(!is_open_license("proprietary"));
+        assert!(is_open_license("MIT"));
+        assert!(is_open_license("Apache-2.0"));
+        assert!(is_open_license("MIT License"));
+        assert!(is_open_license("MIT OR Apache-2.0"));
+        assert!(is_open_license("Apache-2.0/MIT"));
     }
 
     #[test]

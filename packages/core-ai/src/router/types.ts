@@ -4,7 +4,7 @@ import type {
   RouteContext,
   RouteDecision,
   UserQuery,
-} from '@personal-ai/core-domain';
+} from '@everyaios/core-domain';
 
 export type { IntentCategory, IntentClassification, RouteContext, RouteDecision, UserQuery };
 

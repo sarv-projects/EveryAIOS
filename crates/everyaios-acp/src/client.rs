@@ -205,6 +205,67 @@ pub struct PromptOutcome {
     pub permissions: Vec<PermissionRequestParams>,
     /// The decisions handed back for those requests.
     pub permission_decisions: Vec<PermissionDecision>,
+    /// Agent→client mediated calls serviced during the turn (P69.C2): each is
+    /// routed through the host's [`ClientMediation`] seam and recorded here so
+    /// the audit trail carries the same evidence the permission path does.
+    pub mediated: Vec<MediatedCall>,
+}
+
+/// One agent→client request serviced through the mediation seam.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MediatedCall {
+    /// The ACP method (`fs/read_text_file`, `terminal/create`, …).
+    pub method: String,
+    /// Whether the host's mediator completed it (a refusal records `false`).
+    pub ok: bool,
+    /// The refusal/failure reason when `ok` is false.
+    pub error: Option<String>,
+}
+
+/// The host's **mediation seam** for agent→client requests (P69.C2).
+///
+/// Mediated mode means the agent asks *us* to read/write files or run a
+/// terminal command, and we service that request through the canonical
+/// capability executor (Guard → ticket → executor → observation + receipt).
+/// The ACP layer therefore never performs the effect itself — it hands the
+/// method + params to the host and returns the host's result.
+///
+/// The default (no mediator attached) is an explicit fail-closed refusal, so a
+/// mediated-mode session can never silently service an ungoverned effect.
+pub trait ClientMediation: Send + Sync {
+    /// Handle one request and return the JSON `result` payload, or a refusal
+    /// message. Implementations must not invent a success they did not
+    /// perform.
+    fn call(&self, method: &str, params: &serde_json::Value) -> Result<serde_json::Value, String>;
+}
+
+/// The ACP v1 client-side surface the mediator answers (P69.C2). ACP v2
+/// removes this surface in favour of `mcpServers`; v1-only agents remain
+/// common, so mediated mode must service these names while Channel B (the MCP
+/// catalogue) is the durable path.
+pub fn is_mediated_client_method(method: &str) -> bool {
+    matches!(
+        method,
+        "fs/read_text_file"
+            | "fs/write_text_file"
+            | "terminal/create"
+            | "terminal/output"
+            | "terminal/wait_for_exit"
+            | "terminal/kill"
+            | "terminal/release"
+    )
+}
+
+/// An explicit refusal used when no mediator is attached.
+pub struct NoMediation;
+
+impl ClientMediation for NoMediation {
+    fn call(&self, method: &str, _params: &serde_json::Value) -> Result<serde_json::Value, String> {
+        Err(format!(
+            "mediated mode unavailable: no capability mediator attached for `{method}` \
+             (self-contained mode — service it through the agent's own executor or Channel B)"
+        ))
+    }
 }
 
 /// An ACP session: one agent subprocess + the JSON-RPC request/response state.
@@ -218,6 +279,9 @@ pub struct AcpSession<T: AcpTransport> {
     agent_capabilities: Option<AgentCapabilities>,
     config_options: Vec<ConfigOption>,
     authenticated: bool,
+    /// The host's mediation seam (P69.C2). `None` ⇒ mediated requests are
+    /// refused explicitly rather than answered `-32601`.
+    mediator: Option<std::sync::Arc<dyn ClientMediation>>,
     /// Inbound messages that arrived **before** the response we were waiting
     /// for. ACP agents interleave freely — `codex-acp` sends `session/update`
     /// notifications between our `session/new` request and its reply — so a
@@ -239,8 +303,22 @@ impl<T: AcpTransport> AcpSession<T> {
             agent_capabilities: None,
             config_options: Vec::new(),
             authenticated: false,
+            mediator: None,
             pending: std::collections::VecDeque::new(),
         }
+    }
+
+    /// Attach the host's mediation seam (P69.C2). Attach it **before**
+    /// `initialize_with_caps` so the advertised client capabilities match the
+    /// mode the host can actually service (P69.C3).
+    pub fn set_mediator(&mut self, mediator: std::sync::Arc<dyn ClientMediation>) {
+        self.mediator = Some(mediator);
+    }
+
+    /// Whether a mediation seam is attached (drives the mediated/self-contained
+    /// advertisement).
+    pub fn has_mediator(&self) -> bool {
+        self.mediator.is_some()
     }
 
     pub fn agent_info(&self) -> Option<&AgentInfo> {
@@ -530,6 +608,51 @@ impl<T: AcpTransport> AcpSession<T> {
                             outcome: PermissionOutcome { option_id },
                         };
                         let reply = json!({ "jsonrpc": "2.0", "id": rid, "result": result });
+                        self.transport.send(&reply.to_string())?;
+                    }
+                    // P69.C2 — mediated fs/terminal requests go through the
+                    // host's capability seam; never `-32601` when mediated.
+                    other if is_mediated_client_method(other) => {
+                        let params = v.get("params").cloned().unwrap_or(Value::Null);
+                        let mediator = self.mediator.clone();
+                        let reply = match mediator {
+                            Some(m) => match m.call(other, &params) {
+                                Ok(result) => {
+                                    outcome.mediated.push(MediatedCall {
+                                        method: other.to_string(),
+                                        ok: true,
+                                        error: None,
+                                    });
+                                    json!({"jsonrpc": "2.0", "id": rid, "result": result})
+                                }
+                                Err(message) => {
+                                    outcome.mediated.push(MediatedCall {
+                                        method: other.to_string(),
+                                        ok: false,
+                                        error: Some(message.clone()),
+                                    });
+                                    json!({
+                                        "jsonrpc": "2.0", "id": rid,
+                                        "error": { "code": -32603, "message": message }
+                                    })
+                                }
+                            },
+                            None => {
+                                let message = format!(
+                                    "mediated mode unavailable: no capability mediator attached \
+                                     for `{other}` (self-contained mode)"
+                                );
+                                outcome.mediated.push(MediatedCall {
+                                    method: other.to_string(),
+                                    ok: false,
+                                    error: Some(message.clone()),
+                                });
+                                json!({
+                                    "jsonrpc": "2.0", "id": rid,
+                                    "error": { "code": -32603, "message": message }
+                                })
+                            }
+                        };
                         self.transport.send(&reply.to_string())?;
                     }
                     other => {

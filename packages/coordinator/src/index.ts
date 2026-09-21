@@ -14,7 +14,7 @@
  *   capabilities, doc 45) so the contract evolves without breaking peers.
  *
  * P0.3 scope: the loop + handshake + echo. Later phases plug the real
- * `@personal-ai/core-*` engine stages (chat, memory, office, connectors)
+ * `@everyaios/core-*` engine stages (chat, memory, office, connectors)
  * into this same process.
  */
 

@@ -66,7 +66,7 @@ desktop_app/
 └── ui/                          ← React 19 + Zustand 5 + Tailwind 4 cockpit SPA
 ```
 
-**Reuse rule:** `@personal-ai/core-*` packages are **vendored in-repo** under `packages/core-*` (workspace glob `packages/*`; the old `../APP` sibling + `APP_CLONE_TOKEN` gate were removed 2026-08-29 — CI/release fail loudly if the workspace is incomplete). Desktop-specific additions go in `packages/coordinator/` or the Rust crates.
+**Reuse rule:** `@everyaios/core-*` packages are **vendored in-repo** under `packages/core-*` (workspace glob `packages/*`; the old `../APP` sibling + `APP_CLONE_TOKEN` gate were removed 2026-08-29 — CI/release fail loudly if the workspace is incomplete). Desktop-specific additions go in `packages/coordinator/` or the Rust crates.
 
 ## 2.2 Rust crate responsibilities (all new — source-pattern maps)
 

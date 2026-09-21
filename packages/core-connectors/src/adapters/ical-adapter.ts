@@ -7,7 +7,7 @@ import type {
   ConnectorResult,
   UserQuery,
   MemoryFact,
-} from '@personal-ai/core-domain';
+} from '@everyaios/core-domain';
 
 /**
  * iCal / ICS calendar connector — parses any user-provided public ICS feed URL.

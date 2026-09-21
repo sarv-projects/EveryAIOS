@@ -5,7 +5,7 @@ import type {
   ConnectorResult,
   UserQuery,
   MemoryFact,
-} from '@personal-ai/core-domain';
+} from '@everyaios/core-domain';
 
 /**
  * ConnectorOrchestrator per spec §12.2 and blueprint §15.1.

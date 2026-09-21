@@ -1,5 +1,5 @@
 {
-  "name": "@personal-ai/core-tools",
+  "name": "@everyaios/core-tools",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -11,7 +11,7 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "@personal-ai/core-domain": "workspace:*",
+    "@everyaios/core-domain": "workspace:*",
     "zod": "^4.4.3"
   },
   "devDependencies": {

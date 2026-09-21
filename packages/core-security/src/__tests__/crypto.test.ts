@@ -1,7 +1,6 @@
 import { webcrypto } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { decryptSecret, encryptSecret, type InjectableSubtleCrypto } from '../crypto.js';
-import { sealApiKey, unsealApiKey } from '../seal.js';
 
 const subtle = webcrypto.subtle as unknown as InjectableSubtleCrypto;
 const getRandomValues = webcrypto.getRandomValues.bind(webcrypto);
@@ -26,10 +25,10 @@ describe('encryptSecret / decryptSecret', () => {
   });
 });
 
-describe('sealApiKey / unsealApiKey', () => {
+describe('encryptSecret / decryptSecret', () => {
   it('seals and unseals API keys', async () => {
-    const sealed = await sealApiKey('nvapi-abc', 'device-secret', cryptoOptions);
-    const apiKey = await unsealApiKey(sealed, 'device-secret', cryptoOptions);
+    const sealed = await encryptSecret('nvapi-abc', 'device-secret', cryptoOptions);
+    const apiKey = await decryptSecret(sealed, 'device-secret', cryptoOptions);
     expect(apiKey).toBe('nvapi-abc');
   });
 });

@@ -1,4 +1,28 @@
-import type { RiskLevel, ToolFamily, ToolContract, PermissionGateResult, ToolContext } from './types';
+/**
+ * Advisory permission classifier (P69.D3 / P69.D6)
+ * ==============================================
+ * The TypeScript layer is **policy input, not an authority**. Guard (Rust)
+ * is the only entity that may decide whether a mutating effect runs: every
+ * tool effect the model proposes is forwarded to `guard/evaluate`, which
+ * mints an authorization ticket or refuses (see `packages/coordinator`
+ * `ToolExecutor`).
+ *
+ * This module therefore *classifies* (risk rung, session approval, surface
+ * allowlist, trust score) and reports; it never issues a binding verdict.
+ * Callers may use the classification to render UI affordances or to attach
+ * provenance to a proposal, and must not treat `granted` as permission to
+ * skip the Guard round-trip.
+ *
+ * The classifier lives in `everyaios-engine` (not `core-tools`) so that the
+ * tool catalog stays a pure declaration surface.
+ */
+import type {
+  RiskLevel,
+  ToolFamily,
+  ToolContract,
+  PermissionGateResult,
+  ToolContext,
+} from '@everyaios/core-tools';
 import { TrustLadder, maxRiskForScore } from './trust-ladder';
 
 /** Cap session approval map to avoid unbounded growth across long sessions. */

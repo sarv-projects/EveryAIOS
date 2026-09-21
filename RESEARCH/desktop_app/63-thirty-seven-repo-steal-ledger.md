@@ -120,7 +120,7 @@ Each gap is a D-series TODO item, not a spec cut.
 5. **codex compaction lifecycle** → everyaios-memory `compaction` gets `PreCompactHook/PostCompactHook` + token-budget path + fallback model chain, wired into coordinator turn loop. Rust + TS glue.
 6. **crux SCIP queries** → new `everyaios-codeintel` crate (scip reader + answer renderer), tools registered in mcp catalog. Rust.
 7. **neovim LSP** → `everyaios-codeintel` LSP client module or sidecar TS (lsp-types); guard-ticketed. Rust/TS decision at implementation.
-8. **aider repo-map** → `everyaios-codeintel::repo_map` (tree-sitter queries per language) or coordinator reuse of `@personal-ai/core-*` if already present. Rust preferred.
+8. **aider repo-map** → `everyaios-codeintel::repo_map` (tree-sitter queries per language) or coordinator reuse of `@everyaios/core-*` if already present. Rust preferred.
 9. **guiang SPEAKER_NOTES** → pptx part-editor emits `SPEAKER_NOTES` contract; UI presenter mode; validator script port. Rust + UI.
 10. **anki FSRS** → `everyaios-memory::fsrs` module (port of `rslib/src/scheduler/fsrs` — same algorithm, our API). Rust.
 11. **siyuan capability+effects + SSE handlers** → I6 extension manifest gains `effects` + `actionEffects` + `ownerId`; frontend-capability dispatch via existing SSE/event channel. Rust.

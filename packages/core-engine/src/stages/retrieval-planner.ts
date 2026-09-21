@@ -1,4 +1,4 @@
-import type { Scope } from '@personal-ai/core-domain';
+import type { Scope } from '@everyaios/core-domain';
 import type { SurfaceContract } from '../types';
 
 export interface RetrievalPlan {

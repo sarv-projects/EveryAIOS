@@ -16,6 +16,13 @@ fn now_ms() -> u64 {
         .unwrap_or(0)
 }
 
+/// P69.D17/D18 — the *runtime* capability invocation shape the broker checks
+/// a grant against. Named deliberately: the canonical schema record is
+/// `everyaios_types::CapabilityRequest` (a Work/binding-scoped request that
+/// precedes grant minting); this struct is the broker's per-call check input
+/// at the executor boundary. Every connector action and MCP tool call funnels
+/// through `invoke(grant_id, &request)` here — there is no second permission
+/// universe.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CapabilityRequest {
     pub run_id: String,

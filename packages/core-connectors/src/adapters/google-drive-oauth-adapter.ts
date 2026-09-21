@@ -28,7 +28,7 @@ import type {
   ConnectorResult,
   MemoryFact,
   UserQuery,
-} from '@personal-ai/core-domain';
+} from '@everyaios/core-domain';
 
 const DRIVE_API = 'https://www.googleapis.com/drive/v3';
 const CONNECTOR_NAME = 'google-drive' as const;

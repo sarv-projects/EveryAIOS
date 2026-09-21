@@ -16,7 +16,7 @@ export {
   getAgentById,
   getAgentByLabel,
   agentSystemBlock,
-  type AgentDefinition,
+  type AgentPersonaOverlay,
   type AgentToolHint,
 } from './chat/agents.js';
 export { normalizeOutput } from './chat/output-normalizer.js';

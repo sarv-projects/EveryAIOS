@@ -1,5 +1,5 @@
 /**
- * P1.2 — smoke-import of `@personal-ai/core-providers` into the coordinator
+ * P1.2 — smoke-import of `@everyaios/core-providers` into the coordinator
  * sidecar. Proves the workspace dep resolves, its public surface is intact,
  * and its synchronous catalog functions behave — without any network call
  * (validateApiKey/streamCompletion stay uncalled on purpose).
@@ -26,7 +26,7 @@ import {
   streamCompletion,
   validateAnthropicApiKey,
   validateApiKey,
-} from "@personal-ai/core-providers";
+} from "@everyaios/core-providers";
 
 describe("core-providers smoke-import (APP workspace dep)", () => {
   test("module resolves and the catalog is populated", () => {
@@ -64,7 +64,7 @@ describe("core-providers smoke-import (APP workspace dep)", () => {
     expect(getRecommendedProviders().length).toBeGreaterThan(0);
     const openai = getProviderById("openai");
     expect(openai).toBeDefined();
-    // ProviderGroup is a string-literal union from @personal-ai/core-domain;
+    // ProviderGroup is a string-literal union from @everyaios/core-domain;
     // the entry's group must be a member of the AI groups array.
     expect(AI_PROVIDER_GROUPS.includes(openai!.group)).toBe(true);
     expect(openai!.groupLabel.length).toBeGreaterThan(0);

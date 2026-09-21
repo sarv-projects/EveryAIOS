@@ -17,7 +17,7 @@
 //!   so `stream_events` stays live while a turn runs; `request_permission`
 //!   answers the driver's blocked permission callback (the Guard-2 seam).
 
-use crate::client::{AcpError, AcpSession, AcpTransport};
+use crate::client::{AcpError, AcpSession, AcpTransport, ClientMediation};
 use crate::messages::{
     AgentCapabilities, ClientCapabilities, ClientInfo, McpServer, PermissionDecision,
 };
@@ -107,6 +107,50 @@ impl Approval {
             option_id: None,
         }
     }
+}
+
+/// The host's authorization seam for ACP permission prompts (**P69.C1 / I12**).
+///
+/// The ACP layer must never decide a permission question on its own: the host
+/// implements this over Guard (evaluate → mint an [`AuthorizationTicket`] →
+/// consume it) with the agent identity attached to the ticket, and returns the
+/// verdict. The default when no gate is installed is fail-closed:
+/// [`DenyAllGate`] denies everything, so a session can never silently approve.
+///
+/// [`AuthorizationTicket`]: everyaios_types::TicketId
+pub trait PermissionGate: Send + Sync {
+    /// Decide one pending request. Implementations consult Guard and their
+    /// decision is final (the ACP layer maps it to the wire option).
+    fn decide(&self, req: &PermissionRequest) -> Approval;
+}
+
+/// The fail-closed default gate: no host gate attached ⇒ nothing approved.
+pub struct DenyAllGate;
+
+impl PermissionGate for DenyAllGate {
+    fn decide(&self, _req: &PermissionRequest) -> Approval {
+        Approval::deny()
+    }
+}
+
+/// How this session should be governed (**P69.C3**).
+///
+/// The default is [`GovernancePreference::Mediated`]: when a mediation seam is
+/// attached we advertise + service `fs`/`terminal` through Guard. Without a
+/// seam the same preference degrades honestly to the self-contained path
+/// (advertise nothing — never claim mediation we cannot service).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum GovernancePreference {
+    /// Advertise `fs`/`terminal` and service them through the host's
+    /// [`ClientMediation`] seam (Guard → executor → observation + receipt).
+    /// This is a **v1-peer** surface: ACP v2 removes it in favour of
+    /// `mcpServers` (Channel B), so a v2 connection degrades cleanly to
+    /// self-contained or Channel B.
+    #[default]
+    Mediated,
+    /// Withhold `fs`/`terminal`; the agent's own sandbox governs and we claim
+    /// only that (declared alternative, always selectable).
+    SelfContained,
 }
 
 /// Capabilities reported back from [`ChiefAdapter::initialize`].
@@ -335,18 +379,50 @@ pub struct AcpChief {
     turn_count: u64,
     caps: Option<ChiefCapabilities>,
     thread: Option<JoinHandle<()>>,
+    /// The host's Guard seam (P69.C1). Default: deny everything.
+    gate: Arc<dyn PermissionGate>,
+    /// The host's mediation seam (P69.C2). `None` ⇒ self-contained path.
+    mediation: Option<Arc<dyn ClientMediation>>,
+    /// The declared governance preference (P69.C3).
+    governance: GovernancePreference,
 }
 
 impl AcpChief {
     /// Spawn the driver thread over `transport` with the given client info.
+    /// No mediation seam and no host gate: the honest degraded path (a
+    /// self-contained session that can never approve).
     pub fn spawn<T: AcpTransport + Send + 'static>(transport: T, client_info: ClientInfo) -> Self {
+        Self::spawn_with(
+            transport,
+            client_info,
+            None,
+            GovernancePreference::default(),
+        )
+    }
+
+    /// Spawn with an explicit governance contract: the mediation seam the
+    /// session may advertise/service, and the declared preference.
+    pub fn spawn_with<T: AcpTransport + Send + 'static>(
+        transport: T,
+        client_info: ClientInfo,
+        mediation: Option<Arc<dyn ClientMediation>>,
+        governance: GovernancePreference,
+    ) -> Self {
         let (cmd_tx, cmd_rx) = channel::<DriverCmd>();
         let (event_tx, event_rx) = channel::<ChiefEvent>();
         let waiters: Arc<Mutex<HashMap<String, Sender<PermissionDecision>>>> =
             Arc::new(Mutex::new(HashMap::new()));
         let waiters_clone = waiters.clone();
+        let mediation_for_driver = mediation.clone();
         let thread = std::thread::spawn(move || {
-            driver_loop(transport, client_info, cmd_rx, event_tx, waiters_clone);
+            driver_loop(
+                transport,
+                client_info,
+                cmd_rx,
+                event_tx,
+                waiters_clone,
+                mediation_for_driver,
+            );
         });
         Self {
             driver: cmd_tx,
@@ -356,7 +432,34 @@ impl AcpChief {
             turn_count: 0,
             caps: None,
             thread: Some(thread),
+            gate: Arc::new(DenyAllGate),
+            mediation,
+            governance,
         }
+    }
+
+    /// Install the host's Guard seam (P69.C1). Must be installed before the
+    /// first `request_permission` call; without it every request is denied.
+    pub fn set_permission_gate(&mut self, gate: Arc<dyn PermissionGate>) {
+        self.gate = gate;
+    }
+
+    /// Builder form of [`AcpChief::set_permission_gate`].
+    pub fn with_permission_gate(mut self, gate: Arc<dyn PermissionGate>) -> Self {
+        self.gate = gate;
+        self
+    }
+
+    /// Whether this instance can actually service mediated requests: the
+    /// declared preference is mediated **and** a seam is attached. This is the
+    /// exact condition `initialize` advertises on the wire (P69.C3).
+    pub fn mediated(&self) -> bool {
+        self.governance == GovernancePreference::Mediated && self.mediation.is_some()
+    }
+
+    /// The declared governance preference.
+    pub fn governance_preference(&self) -> GovernancePreference {
+        self.governance
     }
 
     /// The negotiated governance (available after `initialize`).
@@ -368,9 +471,13 @@ impl AcpChief {
 impl ChiefAdapter for AcpChief {
     fn initialize(&mut self, session: &SessionId) -> Result<ChiefCapabilities, ChiefError> {
         let (tx, rx) = channel();
+        // P69.C3 — the default is chosen from the explicit governance policy,
+        // not hardcoded: mediated is advertised **only** when this instance can
+        // actually service the surface; otherwise the self-contained path is
+        // the honest answer.
         self.driver
             .send(DriverCmd::Initialize {
-                advertise_fs_terminal: false, // default: withhold (self-contained path)
+                advertise_fs_terminal: self.mediated(),
                 sandbox_claim: false,
                 reply: tx,
             })
@@ -414,11 +521,24 @@ impl ChiefAdapter for AcpChief {
             .expect("waiters poisoned")
             .remove(&req.tool_call_id)
             .ok_or_else(|| ChiefError::NoPendingPermission(req.tool_call_id.clone()))?;
-        let approval = Approval::allow(); // host decides; driver maps to the option
+        // P69.C1 — the decision comes from the host's Guard seam, never from
+        // this layer. `DenyAllGate` (the default) denies, so there is no
+        // unconditional allow on any path here.
+        let approval = self.gate.decide(&req);
+        let decision = if approval.approved {
+            PermissionDecision::Allow {
+                option_id: approval
+                    .option_id
+                    .clone()
+                    .or_else(|| Some(req.tool_call_id.clone())),
+            }
+        } else {
+            PermissionDecision::Deny {
+                option_id: approval.option_id.clone(),
+            }
+        };
         waiter
-            .send(PermissionDecision::Allow {
-                option_id: Some(req.tool_call_id),
-            })
+            .send(decision)
             .map_err(|_| ChiefError::DriverStopped)?;
         Ok(approval)
     }
@@ -454,8 +574,14 @@ fn driver_loop<T: AcpTransport + Send + 'static>(
     cmds: Receiver<DriverCmd>,
     events: Sender<ChiefEvent>,
     waiters: Arc<Mutex<HashMap<String, Sender<PermissionDecision>>>>,
+    mediation: Option<Arc<dyn ClientMediation>>,
 ) {
     let mut session = AcpSession::new(transport);
+    // Attach the mediation seam before `initialize` so the advertised client
+    // capabilities match exactly what the host can service (P69.C2/P69.C3).
+    if let Some(m) = mediation {
+        session.set_mediator(m);
+    }
     let mut initialized = false;
     loop {
         let Ok(cmd) = cmds.recv() else {

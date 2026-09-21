@@ -1,71 +1,74 @@
-import type { SearchContext, SearchProvider, SearchResult } from '@personal-ai/core-domain';
+/**
+ * Exa REST search provider.
+ *
+ * Credential and egress custody (P69.C4/D4): the key lives in
+ * `everyaios-vault` and the request leaves through Guard-2 `netfloor`. This
+ * provider therefore holds only a *provider id* and an endpoint — it never
+ * reads `process.env`, never accepts an API key argument, and never calls
+ * `fetch` itself. No governed transport attached ⇒ unavailable.
+ */
+import type { SearchContext, SearchProvider, SearchResult } from '@everyaios/core-domain';
+import {
+  getGovernedSearchTransport,
+  type GovernedSearchTransport,
+} from '../governed-transport.js';
 
 const EXA_API_URL = 'https://api.exa.ai/search';
 
 export class ExaRestSearchProvider implements SearchProvider {
   name = 'Exa REST';
   kind = 'search' as const;
-  private apiKey: string | null;
 
-  constructor(apiKey?: string) {
-    this.apiKey = apiKey ?? process.env.EXPO_PUBLIC_EXA_API_KEY?.trim() ?? null;
-  }
+  constructor(private readonly transport: GovernedSearchTransport | null = getGovernedSearchTransport()) {}
 
   async isAvailable(_ctx: SearchContext): Promise<boolean> {
-    return this.apiKey != null && this.apiKey.length > 0;
+    return this.transport !== null;
   }
 
   async search(query: string): Promise<SearchResult[]> {
-    if (!this.apiKey) throw new Error('Exa API key not configured');
+    if (!this.transport) throw new Error('Governed search transport not attached');
 
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 8000);
-
-    try {
-      const res = await fetch(EXA_API_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': this.apiKey,
+    const res = await this.transport.request({
+      provider: 'exa',
+      url: EXA_API_URL,
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      // No `x-api-key`: the host resolves the vault secret and adds the header.
+      body: {
+        query,
+        numResults: 8,
+        type: 'auto',
+        contents: {
+          highlights: true,
+          text: { maxCharacters: 300 },
         },
-        body: JSON.stringify({
-          query,
-          numResults: 8,
-          type: 'auto',
-          contents: {
-            highlights: true,
-            text: { maxCharacters: 300 },
-          },
-        }),
-        signal: controller.signal,
-      });
+      },
+      timeoutMs: 8_000,
+    });
 
-      if (!res.ok) {
-        const detail = await res.text().catch(() => '');
-        console.warn(`[ExaRest] ${res.status}: ${detail.slice(0, 100)}`);
-        return [];
-      }
-
-      const body = (await res.json()) as {
-        results?: Array<{
-          title?: string;
-          url?: string;
-          text?: string;
-          highlights?: string[];
-          score?: number;
-          publishedDate?: string;
-        }>;
-      };
-
-      return (body.results ?? []).map((r) => ({
-        title: r.title ?? '',
-        url: r.url ?? '',
-        snippet: r.highlights?.[0] ?? r.text ?? '',
-        score: r.score ?? 0,
-        source: 'Exa',
-      }));
-    } finally {
-      clearTimeout(timer);
+    if (res.status >= 400) {
+      const detail = await res.text().catch(() => '');
+      console.warn(`[ExaRest] ${res.status}: ${detail.slice(0, 100)}`);
+      return [];
     }
+
+    const body = (await res.json()) as {
+      results?: Array<{
+        title?: string;
+        url?: string;
+        text?: string;
+        highlights?: string[];
+        score?: number;
+        publishedDate?: string;
+      }>;
+    };
+
+    return (body.results ?? []).map((r) => ({
+      title: r.title ?? '',
+      url: r.url ?? '',
+      snippet: r.highlights?.[0] ?? r.text ?? '',
+      score: r.score ?? 0,
+      source: 'Exa',
+    }));
   }
 }

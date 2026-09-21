@@ -11,7 +11,7 @@
 #                                       (the same one .tauri/ holds locally;
 #                                       base64 -d the .key file if re-adding)
 #   TAURI_SIGNING_PRIVATE_KEY_PASSWORD — the key's passphrase ('' if none)
-#   (the @personal-ai/core-* coordinator deps are vendored in-repo under
+#   (the @everyaios/core-* coordinator deps are vendored in-repo under
 #    packages/core-* — no private-repo token is required anymore).
 #
 # The sidecar (packages/coordinator) is compiled with bun and shipped inside

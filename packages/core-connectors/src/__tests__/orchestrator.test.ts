@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
-import type { ConnectorName } from '@personal-ai/core-domain';
+import type { ConnectorName } from '@everyaios/core-domain';
 import { ConnectorOrchestrator } from '../orchestrator';
 import { WeatherAdapter } from '../adapters/weather-adapter';
 import { RssAdapter } from '../adapters/rss-adapter';

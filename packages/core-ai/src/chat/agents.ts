@@ -2,13 +2,17 @@
  * UI prompt-overlay catalog for the chat surface.
  *
  * Canonical agent metadata (IDs, capabilities, risk profile, web access, etc.)
- * lives in `@personal-ai/core-agents/src/registry.ts` SHIPPED_AGENTS.
+ * lives in `@everyaios/core-agents/src/registry.ts` SHIPPED_AGENTS.
  * This file layers UI-specific prompt overlays on top of that registry so
  * there is a single source of truth for agent IDs and capabilities.
  */
 
-import { SHIPPED_AGENTS } from '@personal-ai/core-agents';
-import type { AgentDefinition as CoreAgentDefinition } from '@personal-ai/core-agents';
+import { SHIPPED_AGENTS } from '@everyaios/core-agents';
+// P69.D1/D25 — the sidecar's agent shapes, named for what they are: `core-agents`
+// owns the *profile* (instructions/risk/tool subset), this file owns the *UI
+// persona overlay* it merges over that profile. The canonical agent record
+// (`AgentDefinition`, protocol + auth mode + capabilities) is Rust's.
+import type { AgentProfile as CoreAgentProfile } from '@everyaios/core-agents';
 
 /**
  * UI-facing tool hint for the agent picker. Derived from the canonical toolIds
@@ -22,7 +26,7 @@ export type AgentToolHint =
   | 'research'
   | 'connectors';
 
-export type AgentDefinition = {
+export type AgentPersonaOverlay = {
   id: string;
   label: string;
   /** User-facing one-line description shown in the agent picker. */
@@ -43,7 +47,7 @@ export type AgentDefinition = {
  */
 const UI_EXTENSIONS: Record<
   string,
-  Pick<AgentDefinition, 'description' | 'systemOverlay' | 'preferDeep'>
+  Pick<AgentPersonaOverlay, 'description' | 'systemOverlay' | 'preferDeep'>
 > = {
   general: {
     description: 'Balanced assistant for everyday questions and tasks',
@@ -195,11 +199,11 @@ export const AGENT_ORDER: readonly string[] = [
  * UI extension is silently skipped so SHIPPED_AGENTS can grow without
  * breaking the chat surface.
  */
-export const AGENT_CATALOG: readonly AgentDefinition[] = SHIPPED_AGENTS.flatMap(
-  (shipped: CoreAgentDefinition) => {
+export const AGENT_CATALOG: readonly AgentPersonaOverlay[] = SHIPPED_AGENTS.flatMap(
+  (shipped: CoreAgentProfile) => {
     const ui = UI_EXTENSIONS[shipped.id];
     if (!ui) return [];
-    const def: AgentDefinition = {
+    const def: AgentPersonaOverlay = {
       id: shipped.id,
       label: shipped.name,
       description: ui.description,
@@ -210,7 +214,7 @@ export const AGENT_CATALOG: readonly AgentDefinition[] = SHIPPED_AGENTS.flatMap(
     };
     return [def];
   },
-).sort((a: AgentDefinition, b: AgentDefinition) => {
+).sort((a: AgentPersonaOverlay, b: AgentPersonaOverlay) => {
   const idxA = AGENT_ORDER.indexOf(a.id);
   const idxB = AGENT_ORDER.indexOf(b.id);
   if (idxA === -1 || idxB === -1) return a.label.localeCompare(b.label);
@@ -220,12 +224,12 @@ export const AGENT_CATALOG: readonly AgentDefinition[] = SHIPPED_AGENTS.flatMap(
 /** UI-only prompt overlay extensions keyed by canonical agent ID (exported for anti-drift tests). */
 export { UI_EXTENSIONS };
 
-export function getAgentById(id: string): AgentDefinition {
+export function getAgentById(id: string): AgentPersonaOverlay {
   const found = AGENT_CATALOG.find((a) => a.id === id || a.label === id);
   return found ?? AGENT_CATALOG[0]!;
 }
 
-export function getAgentByLabel(label: string): AgentDefinition {
+export function getAgentByLabel(label: string): AgentPersonaOverlay {
   return getAgentById(label);
 }
 

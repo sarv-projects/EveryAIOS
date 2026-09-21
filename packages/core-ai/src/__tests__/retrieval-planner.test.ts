@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { RouteContext } from '@personal-ai/core-domain';
+import type { RouteContext } from '@everyaios/core-domain';
 
-vi.mock('@personal-ai/core-memory', () => ({
+vi.mock('@everyaios/core-memory', () => ({
   buildMemoryRetrievalHint: vi.fn(() => ({ topicHints: [] })),
   attachMemoryScopeToPlan: vi.fn(
     (plan: Record<string, unknown>, _hint: unknown) => ({

@@ -95,7 +95,7 @@ Responsibilities are each crate's own module doc (`crates/*/src/lib.rs`):
   source); `core-security` shrinks to a crypto/vault-support utility; `core-tools` keeps model-facing
   definitions only; `core-engine` keeps policies/helpers.
 - **Namespace is currently split (TODO P69.D23):** `coordinator` publishes as `@everyaios/coordinator`; the
-  other ten still publish as `@personal-ai/*`. The rename is half-done — finish it in one pass rather than
+  other ten still publish as `@everyaios/*`. The rename is half-done — finish it in one pass rather than
   partially. Imports resolve to each package's `src/index.ts` (not the gitignored `dist/`).
 - **Boundary:** no file-level imports in either direction between `packages/`
   and `ui/` or `crates/` (graph-verified); the sidecar talks to Rust over the

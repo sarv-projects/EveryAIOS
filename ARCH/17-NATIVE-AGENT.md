@@ -533,7 +533,10 @@ type SettingsReadModel = {
 
 type AgentSettings = {
   agentId: string; installed: boolean; protocol: 'inbuilt'|'acp'|'mcp';
-  authMode: 'subscription'|'api_key'|'local_cli'|'keyless'|'unknown';
+  // Canonical auth-mode wire vocabulary (P69.C11): one spelling per variant,
+  // projected from `everyaios_types::AuthMode`. `local` means local inference
+  // on this machine — never "open source" (a license property).
+  authMode: 'subscription'|'api_key'|'local'|'keyless'|'unknown';
   nativeCapabilities: string[]; sharedCapabilities: string[];
   modelOwner: 'native'|'agent'|'managed';
   backendBinding?: { providerId: string; injectedEnvNames: string[]; unexpressed: string[]; writesToAgentConfig: false };

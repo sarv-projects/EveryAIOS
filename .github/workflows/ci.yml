@@ -24,6 +24,10 @@ jobs:
         run: node scripts/check-doc-sync.mjs
       - name: Verify CODEBASE-MAP.md is up to date
         run: node scripts/gen-codebase-map.mjs --check
+      # P69.E — structural invariants: no TS credential custody, no second
+      # authorization decider, one auth vocabulary, one canonical schema.
+      - name: Architecture invariants
+        run: node scripts/check-arch-invariants.mjs
 
   rust:
     name: cargo test/clippy/fmt (${{ matrix.os }})
@@ -104,7 +108,7 @@ jobs:
         env:
           EVERYAIOS_LIVE_TEST: "1"
 
-  # UI: self-contained (own package-lock.json, no @personal-ai deps) — always runs.
+  # UI: self-contained (own package-lock.json, no @everyaios/* deps) — always runs.
   ui:
     name: ui typecheck + build
     runs-on: ubuntu-latest
@@ -132,7 +136,7 @@ jobs:
         working-directory: ui
         run: bun test
 
-  # Sidecar: coordinator bun tests + typecheck. The @personal-ai/core-*
+  # Sidecar: coordinator bun tests + typecheck. The @everyaios/core-*
   # engine packages are vendored in-repo under packages/core-*, so this job
   # needs no private-repo token and always runs.
   sidecar:
@@ -151,7 +155,7 @@ jobs:
         run: |
           npm install -g pnpm
           pnpm install
-      # Fail loudly if the reused @personal-ai/core-* engine packages are not
+      # Fail loudly if the reused @everyaios/core-* engine packages are not
       # vendored in-repo. This is the explicit replacement for the dropped
       # APP_CLONE_TOKEN gate: building the sidecar must NEVER silently succeed
       # against a missing/typosquatted core dependency when the workspace is
@@ -163,7 +167,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # The coordinator's @personal-ai/* direct deps (mirrors package.json).
+          # The coordinator's @everyaios/* direct deps (mirrors package.json).
           need=(core-ai core-connectors core-engine core-providers core-search)
           err=0
           for p in "${need[@]}"; do
@@ -171,8 +175,8 @@ jobs:
             if [ ! -d "$pkg" ] || [ ! -f "$pkg/package.json" ]; then
               echo "::error::vendored package '$pkg' is MISSING — the coordinator would fail only later, loudly"; err=1
             fi
-            if ! grep -q "\"@personal-ai/$p\"" packages/coordinator/package.json; then
-              echo "::error::coordinator does not depend on '@personal-ai/$p' but vendored '$pkg' exists — mismatch"; err=1
+            if ! grep -q "\"@everyaios/$p\"" packages/coordinator/package.json; then
+              echo "::error::coordinator does not depend on '@everyaios/$p' but vendored '$pkg' exists — mismatch"; err=1
             fi
           done
           # Belt-and-suspenders: confirm the workspace glob actually resolves them.

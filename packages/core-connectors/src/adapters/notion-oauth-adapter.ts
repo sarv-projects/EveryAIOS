@@ -18,7 +18,7 @@ import type {
   ConnectorResult,
   MemoryFact,
   UserQuery,
-} from '@personal-ai/core-domain';
+} from '@everyaios/core-domain';
 
 const NOTION_API = 'https://api.notion.com/v1';
 const CONNECTOR_NAME = 'notion' as const;

@@ -11,3 +11,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
 sha1 = { workspace = true }
+# P69.D32 — the harness consumes the runtime verification contract from
+# `everyaios-blueprint::verify`; the dependency points this way round so no
+# runtime crate ever links the eval harness.
+everyaios-blueprint = { path = "../everyaios-blueprint" }

@@ -50,7 +50,7 @@
     "config_declared_mappings": [
       "workspace crate names from crates/*/Cargo.toml ([package] name)",
       "tsconfig.json paths aliases (ui/tsconfig.json: @/* -> ui/src/*)",
-      "workspace package names from packages/*/package.json (@personal-ai/*, @everyaios/*)"
+      "workspace package names from packages/*/package.json (@everyaios/* since the P69.D23 namespace cleanup)"
     ]
   },
   "artifact_provenance": {

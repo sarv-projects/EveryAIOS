@@ -20,7 +20,7 @@ import type {
   ConnectorResult,
   MemoryFact,
   UserQuery,
-} from '@personal-ai/core-domain';
+} from '@everyaios/core-domain';
 
 const AVIATIONSTACK_VIA_WORKER = '/v1/connectors/proxy/aviationstack';
 const CONNECTOR_NAME = 'aviationstack' as const;

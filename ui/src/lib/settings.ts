@@ -6,6 +6,8 @@
 // every mutation goes through the one funnel that answers the §17.12.3 envelope
 // `{ appliedLive, restartRequired, state, health, lastError? }`.
 //
+import type { AuthMode } from './acp'
+
 // Two rules this module keeps:
 // - **Keys stay by reference.** `authRef` is an opaque vault handle
 //   (`vault:oauth:<provider>:<id>`); no raw secret ever crosses this boundary.
@@ -92,7 +94,10 @@ export interface SessionLoadoutRow {
 }
 
 export type AgentProtocol = 'inbuilt' | 'acp' | 'mcp'
-export type AgentAuthMode = 'subscription' | 'api_key' | 'local_cli' | 'keyless' | 'unknown'
+/** P69.C11 — the auth-mode contract has exactly one declaration: the
+ * canonical `AuthMode` union in `./acp` (a projection of
+ * `everyaios_types::AuthMode`). This name is kept for call sites. */
+export type AgentAuthMode = AuthMode
 export type ModelOwner = 'native' | 'agent' | 'managed'
 export type AgentReadiness =
   | 'ready'

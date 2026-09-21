@@ -20,7 +20,7 @@ import type {
   ConnectorResult,
   MemoryFact,
   UserQuery,
-} from '@personal-ai/core-domain';
+} from '@everyaios/core-domain';
 
 const SOUNDCLOUD_API = 'https://api.soundcloud.com';
 const CONNECTOR_NAME = 'soundcloud' as const;

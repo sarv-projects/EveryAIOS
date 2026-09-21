@@ -1,5 +1,4 @@
-import { webcrypto } from 'node:crypto';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { ProviderVault } from '../vault.js';
 import type { KeyValueStore } from '../types.js';
 
@@ -21,84 +20,70 @@ function createMockStore(): KeyValueStore & { dump: () => string | null } {
   };
 }
 
-function mockFetch(handler: (url: string, init?: RequestInit) => Response | Promise<Response>) {
-  return vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
-    const resolved = typeof url === 'string' ? url : url.toString();
-    return handler(resolved, init);
-  }) as typeof fetch;
-}
-
-beforeEach(() => {
-  vi.stubGlobal('crypto', webcrypto);
-});
-
-afterEach(() => {
-  vi.restoreAllMocks();
-});
-
-describe('ProviderVault', () => {
-  it('saves a validated provider with a sealed key', async () => {
+/**
+ * P69.C4 / P69.D4 — `ProviderVault` is an availability + handle facade.
+ * Credentials live only in the Rust vault; no test here (and no caller) may
+ * cause TypeScript to seal, store, or read key material.
+ */
+describe('ProviderVault (handle-only contract)', () => {
+  it('records provider metadata + an opaque keyRef', async () => {
     const store = createMockStore();
-    const vault = new ProviderVault(store, 'device-secret-test');
-    const fetchImpl = mockFetch((url) => {
-      if (url.endsWith('/models')) {
-        return new Response(JSON.stringify({ data: [{ id: 'meta/llama3-8b-instruct' }] }), {
-          status: 200,
-        });
-      }
-      return new Response('not found', { status: 404 });
-    });
-
+    const vault = new ProviderVault(store);
     const connected = await vault.save({
       id: 'nvidia-nim',
-      apiKey: 'nvapi-test-key',
-      fetchImpl,
+      keyRef: 'vault:nvidia-nim:1',
     });
-
     expect(connected.id).toBe('nvidia-nim');
     expect(connected.isActive).toBe(true);
-    const raw = store.dump();
-    expect(raw).toBeTruthy();
-    expect(raw).not.toContain('nvapi-test-key');
-    expect(await vault.getApiKey('nvidia-nim')).toBe('nvapi-test-key');
+    expect(await vault.hasKey('nvidia-nim')).toBe(true);
+    expect(await vault.keyRef('nvidia-nim')).toBe('vault:nvidia-nim:1');
+    // The persisted record carries the handle, never a secret.
+    const dump = store.dump();
+    expect(dump).toContain('vault:nvidia-nim:1');
+    expect(dump).not.toContain('nvapi');
+    expect(dump).not.toContain('apiKey');
   });
 
-  it('rejects invalid API keys before saving', async () => {
-    const store = createMockStore();
-    const vault = new ProviderVault(store, 'device-secret-test');
-    const fetchImpl = mockFetch(() => new Response('unauthorized', { status: 401 }));
-
+  it('refuses raw key material — the TS credential path is gone', async () => {
+    const vault = new ProviderVault(createMockStore());
     await expect(
-      vault.save({
-        id: 'cerebras',
-        apiKey: 'bad-key',
-        fetchImpl,
-      }),
-    ).rejects.toThrow(/failed/i);
-
-    expect(await vault.list()).toHaveLength(0);
+      vault.save({ id: 'nvidia-nim', apiKey: 'nvapi-secret' } as never),
+    ).rejects.toThrow(/no longer accepts key material/);
   });
 
-  it('lists, filters active providers, and removes entries', async () => {
-    const store = createMockStore();
-    const vault = new ProviderVault(store, 'device-secret-test');
-    const fetchImpl = mockFetch((url) => {
-      if (url.endsWith('/models')) {
-        return new Response(JSON.stringify({ data: [{ id: 'model' }] }), { status: 200 });
-      }
-      return new Response('not found', { status: 404 });
-    });
+  it('hasKey is false when only metadata is recorded', async () => {
+    const vault = new ProviderVault(createMockStore());
+    await vault.save({ id: 'groq', model: undefined });
+    expect(await vault.hasKey('groq')).toBe(false);
+    expect(await vault.keyRef('groq')).toBeNull();
+  });
 
-    await vault.save({ id: 'nvidia-nim', apiKey: 'key-1', fetchImpl });
-    await vault.save({ id: 'groq', apiKey: 'key-2', fetchImpl });
-    await vault.setActive('groq', false);
+  it('keeps an existing handle on a metadata-only re-save', async () => {
+    const vault = new ProviderVault(createMockStore());
+    await vault.save({ id: 'groq', keyRef: 'vault:groq:1' });
+    await vault.save({ id: 'groq', isActive: false });
+    expect(await vault.keyRef('groq')).toBe('vault:groq:1');
+    expect((await vault.list()).find((p) => p.id === 'groq')?.isActive).toBe(false);
+  });
 
-    expect(await vault.list()).toHaveLength(2);
-    expect((await vault.getActive()).map((entry) => entry.id)).toEqual(['nvidia-nim']);
+  it('does not silently re-activate a deactivated provider', async () => {
+    const vault = new ProviderVault(createMockStore());
+    await vault.save({ id: 'groq', isActive: false });
+    await vault.save({ id: 'groq', keyRef: 'vault:groq:2' });
+    expect((await vault.list()).find((p) => p.id === 'groq')?.isActive).toBe(false);
+    const activated = await vault.setActive('groq', true);
+    expect(activated.isActive).toBe(true);
+  });
 
-    await vault.remove('nvidia-nim');
-    expect(await vault.list()).toEqual([
-      expect.objectContaining({ id: 'groq', isActive: false }),
-    ]);
+  it('removes a provider record', async () => {
+    const vault = new ProviderVault(createMockStore());
+    await vault.save({ id: 'groq', keyRef: 'vault:groq:3' });
+    await vault.remove('groq');
+    expect(await vault.list()).toEqual([]);
+  });
+
+  it('unknown providers are rejected', async () => {
+    const vault = new ProviderVault(createMockStore());
+    await expect(vault.save({ id: 'not-a-provider' })).rejects.toThrow(/Unknown provider/);
   });
 });

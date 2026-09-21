@@ -13,7 +13,7 @@
  *   (test-gated; the skills directory is never written from TS).
  */
 import { describe, expect, test } from "bun:test";
-import type { StreamChunk } from "@personal-ai/core-engine";
+import type { StreamChunk } from "@everyaios/core-engine";
 import {
   applyEditLadder,
   applyEditBatch,

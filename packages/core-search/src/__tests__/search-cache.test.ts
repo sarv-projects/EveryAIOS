@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { SearchContext, SearchResult } from '@personal-ai/core-domain';
+import type { SearchContext, SearchResult } from '@everyaios/core-domain';
 import { SearchCache, SearchCacheProvider, getSearchCache } from '../cache/search-cache.js';
 
 const sampleResults: SearchResult[] = [

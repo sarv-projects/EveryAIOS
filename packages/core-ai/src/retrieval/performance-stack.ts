@@ -1,4 +1,4 @@
-import type { FileChunk } from '@personal-ai/core-domain';
+import type { FileChunk } from '@everyaios/core-domain';
 
 export type TwoTierSearchFn = (query: string, fileId: string) => Promise<FileChunk[]>;
 

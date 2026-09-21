@@ -3,7 +3,10 @@
 //! model/provider pin + scoped MCP/connectors/skills/tools + workflows —
 //! everything a custom agent is.
 
+use everyaios_types::{AgentDefinition, AgentId, AgentProtocol, AuthMode, CapabilityId};
 use serde::{Deserialize, Serialize};
+
+use crate::registry::slug;
 
 pub const BUNDLE_SCHEMA_VERSION: u32 = 1;
 
@@ -134,6 +137,33 @@ impl AgentBundle {
     /// Scope check: does this bundle declare this connector?
     pub fn declares_connector(&self, connector_id: &str) -> bool {
         self.connectors.iter().any(|c| c == connector_id)
+    }
+
+    /// Project this bundle onto the canonical [`AgentDefinition`] so the
+    /// directory has exactly one record shape (P69.D1). The id is the same
+    /// slug the bundle store uses, so bundle ⇄ definition ids cannot drift.
+    ///
+    /// Auth mode is `Unknown` on purpose: a bundle declares *which engine* it
+    /// binds to, not how that engine authenticates — the ACP handshake is the
+    /// authoritative source (`ARCH/03-BYOK-KEYRINGS.md` §3.0).
+    pub fn definition(&self) -> AgentDefinition {
+        AgentDefinition {
+            id: AgentId::new(slug(&self.name)),
+            name: self.name.clone(),
+            description: self.description.clone(),
+            protocol: match &self.engine {
+                EngineBinding::Inbuilt | EngineBinding::ModelOnly => AgentProtocol::Inbuilt,
+                EngineBinding::Acp(_) => AgentProtocol::Acp,
+            },
+            auth_mode: AuthMode::Unknown,
+            is_default: false,
+            capabilities: self
+                .skills
+                .iter()
+                .map(|s| CapabilityId::from(s.as_str()))
+                .collect(),
+            extension_mechanisms: Vec::new(),
+        }
     }
 
     pub fn from_toml(src: &str) -> Result<Self, String> {

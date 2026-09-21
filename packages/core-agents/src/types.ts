@@ -1,8 +1,19 @@
-import type { RiskLevel } from '@personal-ai/core-tools';
+/**
+ * Agent *profiles* — the sidecar's runtime agent shape: instructions, tool
+ * subset, risk ceiling, memory scope, model preference.
+ *
+ * Naming matters here (P69.D1/D25): the canonical **agent record**
+ * (`AgentDefinition` — protocol, auth mode, capabilities, provenance) is owned
+ * by Rust (`everyaios_types::AgentDefinition`) and read through
+ * `agent_directory_list`; this is the sandbox/profile half that never travels
+ * on the registry wire. Keeping one name per concept is what stops a second
+ * "the agent" type from appearing at a boundary.
+ */
+import type { RiskLevel } from '@everyaios/core-tools';
 
 export type MemoryScope = 'full' | 'project' | 'none';
 
-export interface AgentDefinition {
+export interface AgentProfile {
   id: string;
   name: string;
   icon: string;
@@ -17,9 +28,9 @@ export interface AgentDefinition {
   outputSchema?: Record<string, unknown>;
 }
 
-export interface AgentRepository {
-  get(id: string): Promise<AgentDefinition | null>;
-  list(): Promise<AgentDefinition[]>;
-  save(agent: AgentDefinition): Promise<void>;
+export interface AgentProfileRepository {
+  get(id: string): Promise<AgentProfile | null>;
+  list(): Promise<AgentProfile[]>;
+  save(agent: AgentProfile): Promise<void>;
   delete(id: string): Promise<void>;
 }

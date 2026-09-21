@@ -1,5 +1,5 @@
-import { evaluatePermissionGate, approveRiskForSession } from '@personal-ai/core-tools';
-import type { ToolContract } from '@personal-ai/core-tools';
+import { evaluatePermissionGate, approveRiskForSession } from '../policy/permission-gate';
+import type { ToolContract } from '@everyaios/core-tools';
 import type { ToolFamily } from '../types';
 
 export interface GateResult {

@@ -1,5 +1,5 @@
-import { Scope } from '@personal-ai/core-domain';
-import type { RiskLevel } from '@personal-ai/core-tools';
+import { Scope } from '@everyaios/core-domain';
+import type { RiskLevel } from '@everyaios/core-tools';
 
 export type { Scope };
 export type SurfaceKind = 'chat' | 'reader' | 'bubble' | 'automation';

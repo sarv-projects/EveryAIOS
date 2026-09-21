@@ -7,12 +7,11 @@
 //! checks the *requested final state exists* — files, hashes, content,
 //! test-pass — and that no forbidden side effect occurred.
 //!
-//! - `status` — the six-way completion-status taxonomy (score + status, never
-//!   one blended number).
-//! - `manifest` — the task manifest format: goal + required-outcome checks +
-//!   forbidden-side-effect constraints + budgets + evidence requirements.
-//! - `verifier` — the deterministic verifier SDK: run outcome checks,
-//!   derive the status, and assemble an evidence bundle.
+//! The runtime verification contract — the completion-status taxonomy, the
+//! task-manifest format, the deterministic verifier SDK and the surface checks
+//! — lives in `everyaios_blueprint::verify` (P69.D32) and is re-exported here
+//! so harness callers keep one import site. The harness must never be a runtime
+//! dependency: the kernel verifies through the contract, not through this crate.
 //! - `evidence` — the evidence bundle (artifact hashes, validator reports,
 //!   screenshots, approval events) with explicit missing-evidence reporting.
 //! - `report` — the evidence-first loop report (impact / expected-output /
@@ -36,17 +35,18 @@
 pub mod batch;
 pub mod corpus;
 pub mod evidence;
-pub mod manifest;
 pub mod report;
 pub mod retrieval;
 pub mod runner;
 pub mod simulator;
-pub mod status;
 pub mod store;
 pub mod suite;
-pub mod surface;
 pub mod usage;
-pub mod verifier;
+
+// The runtime verification contract is owned by `everyaios-blueprint::verify`
+// (P69.D32) and re-exported here so existing harness call paths
+// (`crate::manifest::…`) and external callers keep resolving unchanged.
+pub use everyaios_blueprint::verify::{manifest, status, surface, verifier};
 
 pub use batch::{run_retrieval_batch, run_suite, RetrievalBatchReport, SuiteReport};
 pub use corpus::{
@@ -54,7 +54,7 @@ pub use corpus::{
     builtin_retrieval_questions, RetrievalCase,
 };
 pub use evidence::{ApprovalEvent, ArtifactHash, EvidenceBundle};
-pub use manifest::{
+pub use everyaios_blueprint::verify::manifest::{
     Budgets, Constraint, EvidenceRequirement, HashAlgorithm, OutcomeCheck, TaskManifest,
 };
 pub use report::{Finding, LoopReport};
@@ -67,15 +67,17 @@ pub use simulator::{
     compile as compile_demo, CompiledDemo, CompiledStep, SimulationFixture, SimulationReport,
     Simulator, StepVerdict,
 };
-pub use status::{CompletionStatus, Score};
+pub use everyaios_blueprint::verify::status::{CompletionStatus, Score};
+pub use everyaios_blueprint::verify::surface::{
+    verify_surface, Surface, SurfaceCheck, SurfaceContext, SurfaceVerdict,
+};
 pub use store::EvidenceStore;
 pub use suite::{builtin_suite, AdversarialTask, FaultInjection, FaultKind, TaskCategory};
-pub use surface::{verify_surface, Surface, SurfaceCheck, SurfaceContext, SurfaceVerdict};
 pub use usage::{
     EfficiencyMetrics, GenericUsageParser, TurnClass, TurnKind, TurnStat, Usage, UsageParser,
     UsageParserRegistry,
 };
-pub use verifier::{
+pub use everyaios_blueprint::verify::verifier::{
     run_outcome_check, verify, verify_with_policy, OutcomeCheckResult, VerificationReport,
     VerificationScore,
 };

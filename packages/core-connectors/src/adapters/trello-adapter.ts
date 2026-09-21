@@ -27,7 +27,7 @@ import type {
   ConnectorResult,
   MemoryFact,
   UserQuery,
-} from '@personal-ai/core-domain';
+} from '@everyaios/core-domain';
 
 const TRELLO_API = 'https://api.trello.com/1';
 const CONNECTOR_NAME = 'trello' as const;

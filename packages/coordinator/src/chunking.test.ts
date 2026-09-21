@@ -1,7 +1,7 @@
 /**
  * Vendored `core-files` chunking/token-estimation parity tests.
  *
- * Mirrors the core assertions from `@personal-ai/core-files`
+ * Mirrors the core assertions from `@everyaios/core-files`
  * `__tests__/chunking.test.ts` for the two functions this sidecar now owns
  * locally — so the vendored copy provably matches the APP behavior the
  * engine loop depends on (cache-stable token counts, bounded chunk sizes).

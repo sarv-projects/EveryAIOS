@@ -1,4 +1,4 @@
-import type { ChatMessage } from '@personal-ai/core-domain';
+import type { ChatMessage } from '@everyaios/core-domain';
 import {
   CHAT_CONTEXT_TOKENS,
   CHAT_MAX_OUTPUT_TOKENS,

@@ -9,7 +9,8 @@
 //! - `spec` — `TaskSpec` (goal + context + acceptance) ↔ `spec.md`.
 //! - `blueprint` — `Blueprint` / `BlueprintTask` / `VerifyBlock` with a
 //!   dependency-aware ready set + cycle detection, and `verify_against()` that
-//!   delegates to `everyaios-eval`.
+//!   delegates to [`verify`] (the runtime contract; the harness lives in
+//!   `everyaios-eval`, which depends on this crate, not the reverse).
 //! - `frontmatter` — `AgentConfig` + `PermissionMode → ApprovalMode` bridge.
 //! - `topology` — `MultiAgentPlan` (group-chat / handoff / sequential /
 //!   concurrent) with least-privilege validation.
@@ -23,6 +24,10 @@
 
 pub mod automation;
 pub mod blueprint;
+// P69.D32 — the runtime verification contract (task manifest, completion
+// status, verifier SDK, surface checks) lives here, upstream of the eval
+// harness: runtime crates link this, never `everyaios-eval`.
+pub mod verify;
 pub mod change_set;
 pub mod checkpoint;
 pub mod crystallize;
@@ -30,6 +35,15 @@ pub mod frontmatter;
 pub mod helpers;
 pub mod inbuilt;
 pub mod iteration;
+// P69.D12 — `jobs`, `kanban`, `swarm`, `workflow` and `loop_pattern` are
+// **declarative patterns over Work/Run/Step**, not runtimes: they carry state
+// machines, merge/reduction policy and validation, but no scheduler, no
+// threads, no IO and no event log of their own (verified: zero external
+// consumers drive them as execution engines; execution itself delegates to
+// the caller's executor — the kernel's ExecutionKernel/WorkGateway). The
+// `marketplace` module is likewise a registry + layout contract; the actual
+// install/download is the F8 installer's job. If one of these modules ever
+// grows `spawn`/IO/scheduling, D12 is violated — say so in review.
 pub mod jobs;
 pub mod kanban;
 pub mod learn;
@@ -46,6 +60,7 @@ pub mod spec;
 pub mod subagent;
 pub mod supply_chain;
 pub mod surgical;
+// P69.D12 — declarative pattern, see the module list note above.
 pub mod swarm;
 pub mod topology;
 pub mod workflow;

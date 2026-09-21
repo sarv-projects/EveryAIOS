@@ -137,7 +137,7 @@ The biggest finding: the review was right but **under-counted the real workaroun
 | **v1 alternative: system Node** | +5MB | 200-300ms | UX friction (requires Node 18+ installed) |
 | **v2+: native Rust orchestration** | 0MB extra | 0ms | Major rewrite; deferred to profiling demand |
 
-**Spec patch**: ARCH 02 §2.1 update: *"Node sidecar → `coordinator` runs on **Bun compiled binary** (~60MB realistic, <30ms cold start) for v1. Total installed size ~80-100MB. If Bun ecosystem gaps block any required `@personal-ai/core-*` package, fall back to system-Node (≤200ms cold start) or Node bundled (≤60MB runtime only)."*
+**Spec patch**: ARCH 02 §2.1 update: *"Node sidecar → `coordinator` runs on **Bun compiled binary** (~60MB realistic, <30ms cold start) for v1. Total installed size ~80-100MB. If Bun ecosystem gaps block any required `@everyaios/core-*` package, fall back to system-Node (≤200ms cold start) or Node bundled (≤60MB runtime only)."*
 
 ### 1.4 Cold Start Latency
 **Landmine**: *"Booting Node, parsing TS, opening IPC socket = 100-300ms. Crash + restart produces user-visible hang."*

@@ -41,6 +41,9 @@ everyaios-browser = { path = "../crates/everyaios-browser" }
 everyaios-cdp = { path = "../crates/everyaios-cdp" }
 everyaios-codeintel = { path = "../crates/everyaios-codeintel" }
 everyaios-agents = { path = "../crates/everyaios-agents" }
+# P69.D1/D25 — the canonical agent/element schema lives in `everyaios-types`;
+# the shell reads the same record shape the crates and the TS façade use.
+everyaios-types = { path = "../crates/everyaios-types" }
 everyaios-blueprint = { path = "../crates/everyaios-blueprint" }
 everyaios-script = { path = "../crates/everyaios-script" }
 everyaios-computeruse = { path = "../crates/everyaios-desktop", package = "everyaios-computeruse" }

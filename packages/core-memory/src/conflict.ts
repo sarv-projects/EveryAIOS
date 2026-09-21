@@ -1,4 +1,4 @@
-import type { FactCandidate, MemoryFact, MemoryRepository } from '@personal-ai/core-domain';
+import type { FactCandidate, MemoryFact, MemoryRepository } from '@everyaios/core-domain';
 
 export type EmbedVectorFn = (text: string) => Promise<Float32Array>;
 

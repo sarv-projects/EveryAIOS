@@ -52,7 +52,7 @@ pub enum SurfaceCheck {
     /// The file's hash must match `expected` (post-write verification).
     FileHash {
         path: String,
-        algorithm: crate::manifest::HashAlgorithm,
+        algorithm: super::manifest::HashAlgorithm,
         expected: String,
     },
     /// The file's text must contain `substring` (post-write verification).
@@ -218,12 +218,12 @@ pub fn verify_surface(check: &SurfaceCheck, ctx: &SurfaceContext) -> SurfaceVerd
             Some(bytes) => {
                 use sha2::Digest;
                 let hex = match algorithm {
-                    crate::manifest::HashAlgorithm::Sha256 => {
+                    super::manifest::HashAlgorithm::Sha256 => {
                         let mut h = sha2::Sha256::new();
                         h.update(bytes);
                         encode_lower(&h.finalize())
                     }
-                    crate::manifest::HashAlgorithm::Sha1 => {
+                    super::manifest::HashAlgorithm::Sha1 => {
                         let mut h = sha1::Sha1::new();
                         h.update(bytes);
                         encode_lower(&h.finalize())
@@ -389,7 +389,7 @@ pub fn verify_surface(check: &SurfaceCheck, ctx: &SurfaceContext) -> SurfaceVerd
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::manifest::HashAlgorithm;
+    use super::super::manifest::HashAlgorithm;
 
     fn file_check() -> SurfaceCheck {
         SurfaceCheck::FileHash {

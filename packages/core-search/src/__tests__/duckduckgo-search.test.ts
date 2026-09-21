@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { SearchContext } from '@personal-ai/core-domain';
+import type { SearchContext } from '@everyaios/core-domain';
 import {
   DuckDuckGoSearchProvider,
   parseDuckDuckGoLiteHtml,

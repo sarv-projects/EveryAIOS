@@ -11,7 +11,7 @@
 
 ## P0 — Workspace & skeleton (≈2 wks)
 
-Rust workspace + TS workspace + pnpm workspace over the in-repo vendored `@personal-ai/core-*` packages, CI matrix; `everyaios-core` boots headless (config, dirs, vault init, SQLite schema v1); stdio JSON-RPC framing; ProcessSupervisor spawns the sidecar; Tauri window shows the React shell.
+Rust workspace + TS workspace + pnpm workspace over the in-repo vendored `@everyaios/core-*` packages, CI matrix; `everyaios-core` boots headless (config, dirs, vault init, SQLite schema v1); stdio JSON-RPC framing; ProcessSupervisor spawns the sidecar; Tauri window shows the React shell.
 
 - **Exit:** `cargo test` green; sidecar E2E "echo" over IPC green; `--version` prints; config loads; vault opens/creates; sidecar heap safety + watchdog + pre-spawn land here.
 

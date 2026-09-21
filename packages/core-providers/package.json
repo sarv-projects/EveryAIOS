@@ -1,5 +1,5 @@
 {
-  "name": "@personal-ai/core-providers",
+  "name": "@everyaios/core-providers",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -21,7 +21,6 @@
     "vitest": "^3.0.0"
   },
   "dependencies": {
-    "@personal-ai/core-domain": "workspace:*",
-    "@personal-ai/core-security": "workspace:*"
+    "@everyaios/core-domain": "workspace:*"
   }
 }

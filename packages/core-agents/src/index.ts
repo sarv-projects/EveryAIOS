@@ -1,2 +1,2 @@
-export { SHIPPED_AGENTS, createAgentRepository } from './registry';
-export type { AgentDefinition, AgentRepository, MemoryScope } from './types';
+export { SHIPPED_AGENTS, createAgentProfileRepository } from './registry';
+export type { AgentProfile, AgentProfileRepository, MemoryScope } from './types';

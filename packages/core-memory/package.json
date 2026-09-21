@@ -1,5 +1,5 @@
 {
-  "name": "@personal-ai/core-memory",
+  "name": "@everyaios/core-memory",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -17,7 +17,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@personal-ai/core-domain": "workspace:*"
+    "@everyaios/core-domain": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.7.0",

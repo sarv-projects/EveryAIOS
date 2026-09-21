@@ -2,8 +2,8 @@
 //! against the filesystem and derives a `CompletionStatus`. Never trusts the
 //! agent's final text.
 
-use crate::manifest::{HashAlgorithm, OutcomeCheck, TaskManifest};
-use crate::status::{CompletionStatus, Score};
+use super::manifest::{HashAlgorithm, OutcomeCheck, TaskManifest};
+use super::status::{CompletionStatus, Score};
 use serde::{Deserialize, Serialize};
 use sha2::Digest;
 use std::path::{Path, PathBuf};
@@ -217,7 +217,7 @@ pub fn verify_with_policy(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::manifest::{Budgets, EvidenceRequirement, HashAlgorithm};
+    use super::super::manifest::{Budgets, EvidenceRequirement, HashAlgorithm};
     use std::fs;
     use std::io::Write;
     use std::sync::atomic::{AtomicU32, Ordering};

@@ -1,7 +1,7 @@
 /**
  * P1.5 — System prompt assembly (desktop).
  *
- * Ports the 12-segment stable-prefix pipeline from `@personal-ai/core-ai`
+ * Ports the 12-segment stable-prefix pipeline from `@everyaios/core-ai`
  * (A-6, ARCH 11) into the desktop sidecar and adds the desktop-only layers:
  *
  *  1. **SOUL.md identity slot** (Hermes Slot #1, doc 16 §38 / doc 41 B-2):
@@ -29,7 +29,7 @@ import {
   PERSONA_PRESETS,
   buildPersonalityPrompt,
   type PersonaId,
-} from "@personal-ai/core-ai";
+} from "@everyaios/core-ai";
 
 export {
   CACHE_BOUNDARY,

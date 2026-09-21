@@ -16,7 +16,7 @@ import type {
   ConnectorResult,
   MemoryFact,
   UserQuery,
-} from '@personal-ai/core-domain';
+} from '@everyaios/core-domain';
 
 const DROPBOX_API = 'https://api.dropboxapi.com/2';
 const CONNECTOR_NAME = 'dropbox' as const;

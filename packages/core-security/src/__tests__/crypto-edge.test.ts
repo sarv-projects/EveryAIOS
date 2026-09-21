@@ -5,7 +5,6 @@ import {
   encryptSecret,
   type InjectableSubtleCrypto,
 } from '../crypto.js';
-import { sealApiKey, unsealApiKey } from '../seal.js';
 
 const subtle = webcrypto.subtle as unknown as InjectableSubtleCrypto;
 const getRandomValues = webcrypto.getRandomValues.bind(webcrypto);
@@ -109,27 +108,27 @@ describe('encryptSecret / decryptSecret — edge cases', () => {
 });
 
 // ---------------------------------------------------------------------------
-// sealApiKey / unsealApiKey – edge cases
+// encryptSecret / decryptSecret – edge cases
 // ---------------------------------------------------------------------------
 
-describe('sealApiKey / unsealApiKey — edge cases', () => {
+describe('encryptSecret / decryptSecret — edge cases', () => {
   it('round-trips an API key with special characters', async () => {
     const specialKey = 'nvapi-🔥-special-कुंजी-🔑-with-accents-éñç';
-    const sealed = await sealApiKey(specialKey, 'device-secret', cryptoOptions);
-    const unsealed = await unsealApiKey(sealed, 'device-secret', cryptoOptions);
+    const sealed = await encryptSecret(specialKey, 'device-secret', cryptoOptions);
+    const unsealed = await decryptSecret(sealed, 'device-secret', cryptoOptions);
     expect(unsealed).toBe(specialKey);
   });
 
   it('produces different ciphertexts for different device secrets', async () => {
-    const sealed1 = await sealApiKey('same-api-key', 'device-secret-1', cryptoOptions);
-    const sealed2 = await sealApiKey('same-api-key', 'device-secret-2', cryptoOptions);
+    const sealed1 = await encryptSecret('same-api-key', 'device-secret-1', cryptoOptions);
+    const sealed2 = await encryptSecret('same-api-key', 'device-secret-2', cryptoOptions);
     expect(sealed1).not.toBe(sealed2);
   });
 
   it('fails with the wrong device secret', async () => {
-    const sealed = await sealApiKey('my-real-key', 'correct-secret', cryptoOptions);
+    const sealed = await encryptSecret('my-real-key', 'correct-secret', cryptoOptions);
     await expect(
-      unsealApiKey(sealed, 'wrong-secret', cryptoOptions),
+      decryptSecret(sealed, 'wrong-secret', cryptoOptions),
     ).rejects.toThrow();
   });
 });

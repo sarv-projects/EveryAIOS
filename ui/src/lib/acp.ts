@@ -7,8 +7,23 @@
 import { invoke } from "./tauri";
 import { nativeCall } from './runtime';
 
-/** Auth-mode badge (F12 — subscription / api_key / local). */
-export type AuthMode = "subscription" | "api_key" | "local";
+/**
+ * Auth-mode badge (F12). **Canonical spelling** (P69.C11) — a projection of
+ * `everyaios_types::AuthMode`; one union for the whole stack, never a second
+ * hand-maintained variant list.
+ *
+ * `local` means local inference on this machine (Ollama / llamafile /
+ * on-device) per `ARCH/03-BYOK-KEYRINGS.md` §3.0 — it is not an open-source
+ * marker. Anything the authoritative source is silent about is `unknown` and
+ * must render as unknown. The legacy `'local_cli'` auth spelling is deleted
+ * (it survives only in the readiness vocabulary, which is a UI state).
+ */
+export type AuthMode =
+  | "subscription"
+  | "api_key"
+  | "local"
+  | "keyless"
+  | "unknown";
 
 /** How the agent is distributed / driven. */
 export type HarnessProtocol = "inbuilt" | "acp" | "model_backend";
@@ -157,6 +172,13 @@ export interface InstallRequest {
   exactCommand?: string[];
   consentRequired?: boolean;
   preferNative?: boolean;
+  /** P69.C12 — the consent surface's evidence: license (+ published URL),
+   * verdict, why, and which catalog the row came from. Never empty. */
+  license?: string;
+  licenseUrl?: string | null;
+  verdict?: "allow" | "ask";
+  reason?: string;
+  source?: string;
 }
 
 /** The result of `acp_authenticate` (url-type pending vs completed). */
@@ -189,6 +211,42 @@ export function acpIdFor(catalogId: string): string {
 }
 
 /** The launch registry (the picker). Default = inbuilt EveryAIOS. */
+/** P69.D1 — one directory entry, composed server-side by
+ * `everyaios_agents::AgentDirectory`. The UI renders these rows; it never
+ * merges agent lists of its own (the ACP registry, the local bundle store and
+ * the inbuilt engine meet in one place, in Rust). */
+export interface AgentDirectoryEntry {
+  id: string;
+  name: string;
+  description: string;
+  protocol: HarnessProtocol;
+  authMode: AuthMode;
+  isDefault: boolean;
+  /** Where the row came from — provenance the picker must be able to show. */
+  source: 'inbuilt' | 'acp_registry' | 'discovered' | 'local_bundle' | 'mcp';
+  installed: boolean;
+  /** Whether the user may remove this row (discovered / local bundles only). */
+  removable: boolean;
+  /** Install/distribution hint, e.g. `npx: @scope/pkg` — never a secret. */
+  locator: string | null;
+}
+
+export interface AgentDirectorySnapshot {
+  agents: AgentDirectoryEntry[];
+  defaultAgentId: string;
+  bundleCount: number;
+  total: number;
+}
+
+/**
+ * The canonical agent directory (P69.D1). Prefer this over `acpAgents()` when
+ * a surface needs to *enumerate* agents (picker, settings list, subagent
+ * mix): it is the composed truth including local `agent.toml` bundles.
+ */
+export async function agentDirectoryList(): Promise<AgentDirectorySnapshot> {
+  return nativeCall('agent directory', () => invoke<AgentDirectorySnapshot>('agent_directory_list'));
+}
+
 export async function acpAgents(): Promise<HarnessManifest[]> {
   return nativeCall('ACP agent registry', () => invoke<HarnessManifest[]>("acp_agents"));
 }
@@ -211,6 +269,18 @@ export async function acpInstallCommit(
   ticketId: string,
 ): Promise<{ agentId: string; version: string; kind: string; binaryPath?: string }> {
   return nativeCall('ACP install commit', () => invoke("acp_install_commit", { agentId, ticketId }));
+}
+
+/** P69.C12 — wait for the user's Guard-window answer on an `ask` install,
+ * then commit only when approved. A rejection or timeout resolves
+ * `approved: false` with an honest reason; nothing is installed. */
+export async function acpInstallAwait(
+  ticketId: string,
+  timeoutMs?: number,
+): Promise<{ approved: boolean; reason?: string }> {
+  return nativeCall('ACP install await consent', () =>
+    invoke<{ approved: boolean; reason?: string }>("acp_install_await", { ticketId, timeoutMs }),
+  );
 }
 
 /** Launch an agent: spawn + ACP handshake → a live handle. May report

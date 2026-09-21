@@ -10,4 +10,3 @@ export {
   type CryptoOptions,
   type InjectableSubtleCrypto,
 } from './crypto.js';
-export { sealApiKey, unsealApiKey } from './seal.js';

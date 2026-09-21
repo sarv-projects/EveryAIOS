@@ -1,11 +1,11 @@
-//! S0.7 EV1 runtime wiring — call `everyaios-eval` at task completion so a
+//! S0.7 EV1 runtime wiring — run the runtime verifier at task completion so a
 //! K1 work receipt can carry a verified-conformance claim.
 //!
 //! Today EV1 is a crate-level verifier (`cargo test`). This service is the
 //! JSON-RPC surface (`eval/verify`) the coordinator hits when a plan (or
 //! other task) finishes.
 
-use everyaios_eval::{
+use everyaios_blueprint::verify::{
     verify, Constraint, OutcomeCheck, SurfaceCheck, SurfaceContext, TaskManifest,
     VerificationReport,
 };
@@ -17,7 +17,7 @@ pub struct EvalService {
     last: Option<VerificationReport>,
     /// P48.3 — per-surface verify results (shell/git/office/browser/desktop…
     /// beyond the filesystem-only EV1-at-plan check).
-    last_surface: Option<everyaios_eval::SurfaceVerdict>,
+    last_surface: Option<everyaios_blueprint::verify::SurfaceVerdict>,
 }
 
 impl EvalService {
@@ -32,7 +32,7 @@ impl EvalService {
         self.last.as_ref()
     }
 
-    pub fn last_surface_verdict(&self) -> Option<&everyaios_eval::SurfaceVerdict> {
+    pub fn last_surface_verdict(&self) -> Option<&everyaios_blueprint::verify::SurfaceVerdict> {
         self.last_surface.as_ref()
     }
 
@@ -67,7 +67,7 @@ impl EvalService {
                 .unwrap_or(serde_json::json!({})),
         )
         .map_err(|e| format!("bad context: {e}"))?;
-        let verdict = everyaios_eval::verify_surface(&check, &ctx);
+        let verdict = everyaios_blueprint::verify::verify_surface(&check, &ctx);
         let label = verdict.status_label().to_string();
         let verified = verdict.is_verified();
         self.last_surface = Some(verdict.clone());

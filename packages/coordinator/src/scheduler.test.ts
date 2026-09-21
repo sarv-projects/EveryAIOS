@@ -1,7 +1,7 @@
 import { test, expect, mock } from "bun:test";
 import { startScheduler, type DueReport, type ListReport, type SchedulerJob } from "./scheduler";
 import type { ChatEvent, ProviderBridge } from "./chat";
-import type { StreamChunk } from "@personal-ai/core-engine";
+import type { StreamChunk } from "@everyaios/core-engine";
 
 /** A scripted provider bridge: yields one text chunk then done. */
 const okBridge: ProviderBridge = {
