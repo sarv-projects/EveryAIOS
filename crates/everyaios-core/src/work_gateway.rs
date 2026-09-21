@@ -6,7 +6,7 @@
 //! platform sandbox enforcement remain explicit follow-up seams.
 
 pub use everyaios_types::AutonomyLevel;
-use everyaios_types::{RiskLevel, WorkId};
+use everyaios_types::{AgentBinding, BindingLifecycle, BindingUsage, RiskLevel, WorkId};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -48,6 +48,16 @@ fn narrow(current: &str, trusted: &str, ladder: &[&str; 4]) -> String {
     }
 }
 
+/// P69.D14 — the `(work, run, agent_session)` triple a subagent delegation
+/// minted: one child Work, its Run, and its ephemeral AgentSession.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChildWorkRef {
+    pub work_id: String,
+    pub run_id: String,
+    pub agent_session_id: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkAddress {
@@ -58,6 +68,12 @@ pub struct WorkAddress {
     pub node_id: Option<String>,
     pub current_run_id: Option<String>,
     pub version: u64,
+    /// P69.D14 — set when this Work was delegated into existence by another
+    /// Work (a subagent child). `None` for roots created by a user, the
+    /// scheduler or an external client. The link is what makes the delegation
+    /// tree reconstructible from the one event log, without a second registry.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent_work_id: Option<String>,
 }
 
 impl WorkAddress {
@@ -70,6 +86,7 @@ impl WorkAddress {
             node_id: None,
             current_run_id: None,
             version: 1,
+            parent_work_id: None,
         }
     }
 
@@ -150,6 +167,9 @@ pub enum DomainEvent {
         objective: String,
         project_id: Option<String>,
         session_id: Option<String>,
+        /// P69.D14 — the delegating Work when this is a subagent child.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        parent_work_id: Option<String>,
     },
     WorkUpdated {
         patch: Value,
@@ -307,6 +327,27 @@ pub enum RuntimeEvent {
     },
     AgentSessionTerminated {
         agent_session_id: String,
+    },
+    // --- AgentBinding (P69.B2) — the durable unit that survives restart ---
+    AgentBindingCreated {
+        binding: AgentBinding,
+    },
+    AgentBindingActivated {
+        binding_id: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        provider_session_id: Option<String>,
+    },
+    AgentBindingSuspended {
+        binding_id: String,
+    },
+    AgentBindingResumed {
+        binding_id: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        provider_session_id: Option<String>,
+    },
+    AgentBindingUsageRecorded {
+        binding_id: String,
+        usage: BindingUsage,
     },
 }
 
@@ -628,6 +669,10 @@ pub struct WorkGateway {
     ptys: HashMap<String, PtySession>,
     worktrees: HashMap<String, WorktreeBinding>,
     agent_sessions: HashMap<String, AgentSession>,
+    /// P69.B2 — durable agent bindings, keyed by binding id. The binding (not
+    /// the process) is the unit that survives a restart; replay rebuilds the
+    /// map from the journal's `AgentBinding*` events.
+    agent_bindings: HashMap<String, AgentBinding>,
     /// P49.15 — the frozen per-run runtime contract, keyed by work. A user
     /// change after start never silently mutates the Run.
     manifests: HashMap<String, RuntimeManifest>,
@@ -720,6 +765,7 @@ impl WorkGateway {
             WorkEvent::Domain(DomainEvent::WorkCreated {
                 project_id,
                 session_id,
+                parent_work_id,
                 ..
             }) => {
                 let address = self
@@ -728,6 +774,7 @@ impl WorkGateway {
                     .or_insert_with(|| WorkAddress::new(work_id.clone()));
                 address.project_id = project_id.clone();
                 address.session_id = session_id.clone();
+                address.parent_work_id = parent_work_id.clone();
                 self.presence
                     .entry(work_id.clone())
                     .or_insert_with(|| WorkPresence {
@@ -813,6 +860,45 @@ impl WorkGateway {
                     p.active_clients.retain(|id| id != client_id);
                 }
             }
+            // P69.B2 — bindings are durable: replay rebuilds the binding map
+            // from the journal so a restart re-attaches to live provider
+            // sessions instead of forgetting them.
+            WorkEvent::Runtime(RuntimeEvent::AgentBindingCreated { binding }) => {
+                let mut binding = binding.clone();
+                binding.last_event_seq = event.sequence;
+                self.agent_bindings
+                    .insert(binding.binding_id.as_str().to_string(), binding);
+            }
+            WorkEvent::Runtime(RuntimeEvent::AgentBindingActivated {
+                binding_id,
+                provider_session_id,
+            })
+            | WorkEvent::Runtime(RuntimeEvent::AgentBindingResumed {
+                binding_id,
+                provider_session_id,
+            }) => {
+                if let Some(b) = self.agent_bindings.get_mut(binding_id) {
+                    b.state = BindingLifecycle::Active;
+                    if let Some(sid) = provider_session_id {
+                        b.provider_session_id = Some(sid.clone());
+                    }
+                    b.last_event_seq = event.sequence;
+                }
+            }
+            WorkEvent::Runtime(RuntimeEvent::AgentBindingSuspended { binding_id }) => {
+                if let Some(b) = self.agent_bindings.get_mut(binding_id) {
+                    b.state = BindingLifecycle::Parked;
+                    b.last_event_seq = event.sequence;
+                }
+            }
+            WorkEvent::Runtime(RuntimeEvent::AgentBindingUsageRecorded { binding_id, usage }) => {
+                if let Some(b) = self.agent_bindings.get_mut(binding_id) {
+                    b.usage.input_tokens = b.usage.input_tokens.saturating_add(usage.input_tokens);
+                    b.usage.output_tokens = b.usage.output_tokens.saturating_add(usage.output_tokens);
+                    b.usage.cost_micros = b.usage.cost_micros.saturating_add(usage.cost_micros);
+                    b.last_event_seq = event.sequence;
+                }
+            }
             _ => {}
         }
         Ok(())
@@ -854,14 +940,173 @@ impl WorkGateway {
                 objective: objective.into(),
                 project_id: address.project_id.clone(),
                 session_id: address.session_id.clone(),
+                parent_work_id: None,
             }),
             None,
         );
         address
     }
+
+    /// P69.D14 — register a **child Work** for a delegated task. A subagent is
+    /// a Work in the one graph, so its address carries the parent link and its
+    /// `WorkCreated` event records it: the delegation tree replays from the one
+    /// event log, with no parallel subagent registry. Idempotent like
+    /// [`Self::create_work`]; an unknown parent is refused (a delegation that
+    /// names no real parent is a caller bug, not a new root).
+    pub fn create_child_work(
+        &mut self,
+        parent_work_id: &str,
+        work_id: impl Into<String>,
+        objective: impl Into<String>,
+        project_id: Option<String>,
+        session_id: Option<String>,
+    ) -> Result<WorkAddress, String> {
+        if !self.works.contains_key(parent_work_id) {
+            return Err("unknown parent work".into());
+        }
+        let id = work_id.into();
+        if let Some(existing) = self.works.get(&id) {
+            return Ok(existing.clone());
+        }
+        let mut address = WorkAddress::new(id.clone());
+        address.project_id = project_id;
+        address.session_id = session_id;
+        address.parent_work_id = Some(parent_work_id.to_string());
+        self.works.insert(id.clone(), address.clone());
+        self.presence.insert(
+            id.clone(),
+            WorkPresence {
+                work_id: id.clone(),
+                state: Some(WorkPresenceState::Running),
+                ..Default::default()
+            },
+        );
+        self.append(
+            &id,
+            WorkEvent::Domain(DomainEvent::WorkCreated {
+                objective: objective.into(),
+                project_id: address.project_id.clone(),
+                session_id: address.session_id.clone(),
+                parent_work_id: Some(parent_work_id.to_string()),
+            }),
+            None,
+        );
+        Ok(address)
+    }
+
+    /// P69.D14 — the child Works delegated from `parent_work_id`. Reads the
+    /// same addresses the tree is built from; there is no second child list.
+    pub fn children_of(&self, parent_work_id: &str) -> Vec<&WorkAddress> {
+        self.works
+            .values()
+            .filter(|a| a.parent_work_id.as_deref() == Some(parent_work_id))
+            .collect()
+    }
+
+    /// P69.D14 — the deterministic child-Work id for a delegated task:
+    /// `<parent>/subagent/<task_id>`. Deterministic on purpose — spawn,
+    /// completion and any later lookup re-derive the same id from
+    /// `(parent, task)` without a mapping table.
+    pub fn child_work_id(parent_work_id: &str, task_id: &str) -> String {
+        format!("{parent_work_id}/subagent/{task_id}")
+    }
+
+    /// P69.D14 — the deterministic Run id bound to a delegated child Work.
+    pub fn child_run_id(parent_work_id: &str, task_id: &str) -> String {
+        format!("{}/run", Self::child_work_id(parent_work_id, task_id))
+    }
+
+    /// P69.D14 — the deterministic AgentSession id opened for a delegated
+    /// child Work. One delegation = one child Work + one Run + one ephemeral
+    /// session, all keyed off `(parent, task)`.
+    pub fn child_agent_session_id(parent_work_id: &str, task_id: &str) -> String {
+        format!("{}/agent", Self::child_work_id(parent_work_id, task_id))
+    }
+
+    /// P69.D14 — the `(work, run, agent_session)` triple a delegation minted.
+    pub fn delegate_child_work(
+        &mut self,
+        parent_work_id: &str,
+        task_id: &str,
+        objective: &str,
+        agent_id: &str,
+        worktree_id: Option<String>,
+    ) -> Result<ChildWorkRef, String> {
+        let child = Self::child_work_id(parent_work_id, task_id);
+        let run = Self::child_run_id(parent_work_id, task_id);
+        let session = Self::child_agent_session_id(parent_work_id, task_id);
+        let parent = self
+            .works
+            .get(parent_work_id)
+            .cloned()
+            .ok_or("unknown parent work")?;
+        self.create_child_work(
+            parent_work_id,
+            child.clone(),
+            objective,
+            parent.project_id.clone(),
+            parent.session_id.clone(),
+        )?;
+        self.bind_execution(&child, &run)?;
+        self.record_execution_transition(&child, &run, "running")?;
+        self.spawn_subagent(
+            &child,
+            &run,
+            &session,
+            agent_id,
+            AgentLifetime::EphemeralChild,
+            None,
+            worktree_id,
+        )?;
+        Ok(ChildWorkRef {
+            work_id: child,
+            run_id: run,
+            agent_session_id: session,
+        })
+    }
+
+    /// P69.D14 — close a delegated child Work: the terminal Run event on the
+    /// child's own timeline plus the ephemeral session's termination. Returns
+    /// the same triple [`Self::delegate_child_work`] minted so the caller can
+    /// address what it is closing. Idempotent on an already-terminal child
+    /// (the session terminate step is the one that already ran).
+    pub fn finish_child_work(
+        &mut self,
+        parent_work_id: &str,
+        task_id: &str,
+        outcome: &str,
+        reason: Option<&str>,
+    ) -> Result<ChildWorkRef, String> {
+        let child = Self::child_work_id(parent_work_id, task_id);
+        let run = Self::child_run_id(parent_work_id, task_id);
+        let session = Self::child_agent_session_id(parent_work_id, task_id);
+        let event = match outcome {
+            "failed" => WorkEvent::Domain(DomainEvent::RunFailed {
+                run_id: run.clone(),
+                reason: reason.unwrap_or("subagent failed").to_string(),
+            }),
+            "cancelled" => WorkEvent::Domain(DomainEvent::RunCancelled { run_id: run.clone() }),
+            _ => WorkEvent::Domain(DomainEvent::RunCompleted { run_id: run.clone() }),
+        };
+        self.append(&child, event, None)
+            .ok_or("append child run terminal event")?;
+        if let Some(p) = self.presence.get_mut(&child) {
+            p.active_run = Some(run.clone());
+            p.state = Some(match outcome {
+                "failed" => WorkPresenceState::Failed,
+                _ => WorkPresenceState::Completed,
+            });
+        }
+        let _ = self.terminate_agent_session(&child, &session);
+        Ok(ChildWorkRef {
+            work_id: child,
+            run_id: run,
+            agent_session_id: session,
+        })
+    }
+
     pub fn bind_execution(&mut self, work_id: &str, execution_id: &str) -> Result<(), String> {
-        if !self.works.contains_key(work_id) {
-            return Err("unknown work".into());
+        if !self.works.contains_key(work_id) {            return Err("unknown work".into());
         }
         self.execution_ids
             .insert(work_id.to_string(), execution_id.to_string());
@@ -1389,6 +1634,166 @@ impl WorkGateway {
             .collect()
     }
 
+    // ======== P69.B2 AgentBinding — the durable unit ========
+
+    /// Register a durable binding in `parked`. Creation and activation are
+    /// distinct lifecycle events (`ARCH/AGENT.md` §3): a created binding only
+    /// becomes `active` through [`Self::transition_agent_binding`]. The Work
+    /// must exist (a binding to nothing is a caller bug) and the binding id
+    /// must be new — a second create is refused rather than silently replacing
+    /// live state.
+    pub fn create_agent_binding(
+        &mut self,
+        mut binding: AgentBinding,
+    ) -> Result<WorkEventEnvelope, String> {
+        if !self.works.contains_key(binding.work_id.as_str()) {
+            return Err("unknown work for agent binding".into());
+        }
+        let binding_id = binding.binding_id.as_str().to_string();
+        if self.agent_bindings.contains_key(&binding_id) {
+            return Err("agent binding already exists".into());
+        }
+        binding.state = BindingLifecycle::Parked;
+        binding.last_event_seq = 0;
+        let work_id = binding.work_id.as_str().to_string();
+        self.agent_bindings
+            .insert(binding_id.clone(), binding.clone());
+        let envelope = self
+            .append(
+                &work_id,
+                WorkEvent::Runtime(RuntimeEvent::AgentBindingCreated { binding }),
+                None,
+            )
+            .ok_or("append AgentBindingCreated")?;
+        if let Some(b) = self.agent_bindings.get_mut(&binding_id) {
+            b.last_event_seq = envelope.sequence;
+        }
+        Ok(envelope)
+    }
+
+    /// Move a binding through the lifecycle vocabulary the architecture names:
+    /// `activated` (a live agent session is attached), `suspended` (parked,
+    /// state retained), `resumed` (parked → active, optionally with a new
+    /// provider session handle). A `dead` binding never comes back — every
+    /// transition is refused, which is the distinction that makes park ≠ crash.
+    ///
+    /// `ARCH/CORE.md` §7.2 — a Session owns bindings; exactly one is active.
+    /// Activating a binding while a sibling in the same Session is still active
+    /// is refused here, so a switch must park the outgoing binding first
+    /// (`ARCH/AGENT.md` §6).
+    pub fn transition_agent_binding(
+        &mut self,
+        binding_id: &str,
+        transition: &str,
+        provider_session_id: Option<String>,
+    ) -> Result<WorkEventEnvelope, String> {
+        let binding = self
+            .agent_bindings
+            .get(binding_id)
+            .ok_or("unknown agent binding")?;
+        if binding.state == BindingLifecycle::Dead {
+            return Err("agent binding is dead".into());
+        }
+        let work_id = binding.work_id.as_str().to_string();
+        let session_id = binding.session_id.clone();
+        let (event, state) = match transition {
+            "activated" => (
+                WorkEvent::Runtime(RuntimeEvent::AgentBindingActivated {
+                    binding_id: binding_id.to_string(),
+                    provider_session_id: provider_session_id.clone(),
+                }),
+                BindingLifecycle::Active,
+            ),
+            "suspended" => (
+                WorkEvent::Runtime(RuntimeEvent::AgentBindingSuspended {
+                    binding_id: binding_id.to_string(),
+                }),
+                BindingLifecycle::Parked,
+            ),
+            "resumed" => (
+                WorkEvent::Runtime(RuntimeEvent::AgentBindingResumed {
+                    binding_id: binding_id.to_string(),
+                    provider_session_id: provider_session_id.clone(),
+                }),
+                BindingLifecycle::Active,
+            ),
+            other => return Err(format!("unknown binding transition: {other}")),
+        };
+        if state == BindingLifecycle::Active {
+            if let Some(other) = self.agent_bindings.values().find(|b| {
+                b.state == BindingLifecycle::Active
+                    && b.session_id == session_id
+                    && b.binding_id.as_str() != binding_id
+            }) {
+                return Err(format!(
+                    "session {} already has an active binding: {}",
+                    session_id.as_str(),
+                    other.binding_id.as_str()
+                ));
+            }
+        }
+        let envelope = self
+            .append(&work_id, event, None)
+            .ok_or("append AgentBinding transition")?;
+        let binding = self
+            .agent_bindings
+            .get_mut(binding_id)
+            .ok_or("unknown agent binding")?;
+        binding.state = state;
+        if let Some(sid) = provider_session_id {
+            binding.provider_session_id = Some(sid);
+        }
+        binding.last_event_seq = envelope.sequence;
+        Ok(envelope)
+    }
+
+    /// Accumulate per-binding token/cost accounting. Deltas are added to the
+    /// durable record and the delta itself is the event, so replay cannot
+    /// double-count (it applies the same deltas in the same order).
+    pub fn record_binding_usage(
+        &mut self,
+        binding_id: &str,
+        usage: BindingUsage,
+    ) -> Result<WorkEventEnvelope, String> {
+        let binding = self
+            .agent_bindings
+            .get(binding_id)
+            .ok_or("unknown agent binding")?;
+        let work_id = binding.work_id.as_str().to_string();
+        let envelope = self
+            .append(
+                &work_id,
+                WorkEvent::Runtime(RuntimeEvent::AgentBindingUsageRecorded {
+                    binding_id: binding_id.to_string(),
+                    usage,
+                }),
+                None,
+            )
+            .ok_or("append AgentBindingUsageRecorded")?;
+        let binding = self
+            .agent_bindings
+            .get_mut(binding_id)
+            .ok_or("unknown agent binding")?;
+        binding.usage.input_tokens = binding.usage.input_tokens.saturating_add(usage.input_tokens);
+        binding.usage.output_tokens = binding
+            .usage
+            .output_tokens
+            .saturating_add(usage.output_tokens);
+        binding.usage.cost_micros = binding.usage.cost_micros.saturating_add(usage.cost_micros);
+        binding.last_event_seq = envelope.sequence;
+        Ok(envelope)
+    }
+
+    pub fn agent_binding(&self, binding_id: &str) -> Option<&AgentBinding> {
+        self.agent_bindings.get(binding_id)
+    }
+    pub fn bindings_for(&self, work_id: &str) -> Vec<&AgentBinding> {
+        self.agent_bindings
+            .values()
+            .filter(|b| b.work_id.as_str() == work_id)
+            .collect()
+    }
+
     /// P49.10–12 — JSON-RPC dispatch so the **sidecar agent loop** (not just a
     /// human/CLI) can drive the session runtime as first-class tools. The
     /// coordinator sends `work/pty_spawn`, `work/worktree_create`,
@@ -1486,6 +1891,38 @@ impl WorkGateway {
                 ev(self.terminate_agent_session(&s("workId"), &s("agentSessionId"))?)
             }
             "work/agent_sessions" => serde_json::to_value(self.agent_sessions_for(&s("workId")))
+                .map_err(|e| e.to_string()),
+            // P69.D14 — the delegation tree below a Work (child Works, each
+            // carrying its parent link). Read-only; children only ever come
+            // into existence through `delegate_child_work`.
+            "work/children" => serde_json::to_value(self.children_of(&s("workId")))
+                .map_err(|e| e.to_string()),
+            // P69.B2 — durable agent bindings. The binding, not the process, is
+            // the unit that survives a restart; usage is recorded as deltas so
+            // replay cannot double-count.
+            "work/binding_create" => {
+                let binding: AgentBinding = serde_json::from_value(
+                    p.get("binding")
+                        .cloned()
+                        .ok_or("work/binding_create requires binding")?,
+                )
+                .map_err(|e| format!("work/binding_create requires a valid binding: {e}"))?;
+                ev(self.create_agent_binding(binding)?)
+            }
+            "work/binding_transition" => ev(self.transition_agent_binding(
+                &s("bindingId"),
+                &s("transition"),
+                opt_s("providerSessionId"),
+            )?),
+            "work/binding_usage" => {
+                let usage = BindingUsage {
+                    input_tokens: p.get("inputTokens").and_then(Value::as_u64).unwrap_or(0),
+                    output_tokens: p.get("outputTokens").and_then(Value::as_u64).unwrap_or(0),
+                    cost_micros: p.get("costMicros").and_then(Value::as_u64).unwrap_or(0),
+                };
+                ev(self.record_binding_usage(&s("bindingId"), usage)?)
+            }
+            "work/bindings" => serde_json::to_value(self.bindings_for(&s("workId")))
                 .map_err(|e| e.to_string()),
             // ---- P49.1 — canonical addressing ----
             "work/create" => serde_json::to_value(self.create_work(

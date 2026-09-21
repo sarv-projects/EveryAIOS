@@ -19,7 +19,9 @@
 //   LAYER-1 `core-engine` is policies/helpers only — no transport, no egress
 //   LAYER-2 `everyaios-eval` stays outside the runtime (no production dep)
 //   TS-DUP   TypeScript never re-declares a canonical record/id (P69.D15/D25)
+//   RUST-DUP Rust declares each canonical primitive once (P69.B2)
 //   LAYER-3  the TS search cascade is not wired into the turn loop (P69.D9)
+//   LAYER-4  the coordinator orchestrates only — no privileged IO (P69.D22)
 //   PURITY-1 `everyaios-ipc` is transport only (D26)
 //   PURITY-2 `everyaios-engine` is pure policy — no IO (D27)
 //   PURITY-3 `everyaios-catalog` is metadata only — no vault/guard (D28)
@@ -397,6 +399,42 @@ function productionDeps(crateName) {
   }
 }
 
+// --- LAYER-4: the coordinator owns orchestration only (P69.D22) -----------
+// The turn loop loads state, builds context, selects a route, projects tools,
+// delegates, observes, verifies, recovers and finishes — through the host
+// channel. Filesystem/shell/browser execution, credentials, authorization,
+// sandbox enforcement and durable persistence all belong to the Rust core,
+// which is why the coordinator's production files must not import an IO
+// builtin or call an fs/process function at all. A coordinator that can write
+// a file or spawn a process is a second execution path around Guard.
+{
+  const bannedImports =
+    /from\s+["']node:(?:fs|fs\/promises|child_process|net|http|https|dgram|tls|worker_threads)["']/;
+  const bannedCalls =
+    /(?<![.\w])(?:writeFile|writeFileSync|readFile|readFileSync|appendFile|createWriteStream|mkdir|mkdirSync|unlink|unlinkSync|rm|rmSync|spawn|spawnSync|execSync|execFileSync|exec|execFile|fork)\s*\(/;
+  for (const file of walk(join(ROOT, "packages/coordinator/src"), TS)) {
+    if (file.endsWith(".test.ts")) continue;
+    const src = readFileSync(file, "utf8");
+    const imports = matchesInCode(src, bannedImports);
+    if (imports.length) {
+      fail(
+        "LAYER-4",
+        rel(file),
+        `privileged IO import at line ${imports[0].line}: ${imports[0].text} — the coordinator orchestrates through the host channel (P69.D22)`,
+      );
+      continue;
+    }
+    const calls = matchesInCode(src, bannedCalls);
+    if (calls.length) {
+      fail(
+        "LAYER-4",
+        rel(file),
+        `privileged IO call at line ${calls[0].line}: ${calls[0].text} — effects belong to the Rust core`,
+      );
+    }
+  }
+}
+
 // --- TS-DUP: TypeScript never re-declares the canonical schema -------------
 // P69.D15/D25 — `everyaios-types` (Rust) owns the canonical records and id
 // newtypes; a TS file may *project* them (a projection is named for its job —
@@ -423,6 +461,31 @@ function productionDeps(crateName) {
   }
 }
 
+// --- RUST-DUP: one declaration per canonical primitive ---------------------
+// The TS-DUP failure mode on the Rust side: `everyaios-blueprint`'s plugin
+// manifest used to declare a second `AgentBinding` (a `bind: Vec<String>`
+// manifest declaration) beside the canonical durable primitive. A local shape
+// is fine — shadowing a canonical name is not; name it for its job.
+{
+  const canonical = {
+    AgentBinding: "crates/everyaios-types/src/lib.rs",
+  };
+  for (const file of walk(join(ROOT, "crates"), new Set([".rs"]))) {
+    const name = rel(file);
+    const src = productionPart(readFileSync(file, "utf8"));
+    for (const [symbol, owner] of Object.entries(canonical)) {
+      const pattern = new RegExp(`\\b(?:pub\\s+)?(?:struct|enum)\\s+${symbol}\\b`);
+      if (pattern.test(src) && name !== owner) {
+        fail(
+          "RUST-DUP",
+          name,
+          `declares a second ${symbol}; the canonical primitive lives in ${owner} — name the local shape for its job`,
+        );
+      }
+    }
+  }
+}
+
 // --- report ---------------------------------------------------------------
 if (failures.length) {
   console.error(`architecture-invariant gate: ${failures.length} violation(s)\n`);
@@ -435,5 +498,5 @@ if (failures.length) {
 }
 
 console.log(
-  "architecture-invariant gate: OK (CRED-1/2/3, AUTH-1/2/3, SCHEMA-1, DECIDE-1/2, LAYER-1/2/3, PURITY-1/2/3/4, TS-DUP)",
+  "architecture-invariant gate: OK (CRED-1/2/3, AUTH-1/2/3, SCHEMA-1, DECIDE-1/2, LAYER-1/2/3/4, PURITY-1/2/3/4, TS-DUP, RUST-DUP)",
 );

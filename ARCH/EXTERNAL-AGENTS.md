@@ -163,19 +163,25 @@ Consequences that must be stated plainly:
 
 ---
 
-## 6. Confirmed defects in the current implementation
+## 6. Confirmed defects (at the 2026-09-20 thaw)
 
-All three verified in source; each is a live row in `P69.C`.
+**Status 2026-09-21 — all three repaired in code (implemented, not verified):** V1 → `P69.C1`
+(`PermissionGate`, fail-closed `DenyAllGate` default) · V2 → `P69.C2` (`ClientMediation` seam with an
+explicit refusal when no mediator is attached) · V3 → `P69.C3` (`GovernancePreference::Mediated` default
+when a mediation seam exists). The evidence below is the dated thaw record — line numbers are as-of that
+date and are intentionally not rewritten.
 
-| # | Defect | Evidence |
-|---|---|---|
-| **V1** | The ACP permission path grants approval without consulting Guard — `Approval::allow()` on the host side | `crates/everyaios-acp/src/chief.rs:417` |
-| **V2** | ACP `fs/*` and `terminal/*` are unhandled, so mediated mode has no filesystem or terminal path; every other agent→client request returns `-32601 method not found` | `crates/everyaios-acp/src/client.rs:521` (only `session/request_permission` is implemented); `client.rs:538` (fallback error) |
-| **V3** | Mediated mode is not the default — the client withholds the fs/terminal capability set | `crates/everyaios-acp/src/chief.rs:373` |
+| # | Defect | Evidence | Repair (TODO) |
+|---|---|---|---|
+| **V1** | The ACP permission path grants approval without consulting Guard — `Approval::allow()` on the host side | `crates/everyaios-acp/src/chief.rs:417` | **C1** — implemented (unverified) |
+| **V2** | ACP `fs/*` and `terminal/*` are unhandled, so mediated mode has no filesystem or terminal path; every other agent→client request returns `-32601 method not found` | `crates/everyaios-acp/src/client.rs:521` (only `session/request_permission` is implemented); `client.rs:538` (fallback error) | **C2** — implemented (unverified) |
+| **V3** | Mediated mode is not the default — the client withholds the fs/terminal capability set | `crates/everyaios-acp/src/chief.rs:373` | **C3** — implemented (unverified) |
 
 > V1 is the most serious: an architecture that advertises a single authorization gate while this path
 grants approval unilaterally is mis-described, not merely incomplete. **V1 and V2 must both close before
-any claim of "all mediated effects are governed" is written into a document.**
+any claim of "all mediated effects are governed" is written into a document.** *(Both are repaired in
+code as of 2026-09-21 — C1/C2, implemented but not verified; the claim may be written once verification
+runs.)*
 
 *(A `Approval::allow()` also appears at `chief.rs:663`; that one is a test-driver fixture, not a
 production path, and must not be reported as a second vulnerability.)*
@@ -221,10 +227,9 @@ the user's own permission decisions inside the agent.)*
 
 ---
 
-## 10. Migration notes
-
-- V1 must be fixed before the permission path can be described as guarded; V2/V3 before mediated mode can be
-  described as the primary path.
+## 10. Migration notes- V1 must be fixed before the permission path can be described as guarded; V2/V3 before mediated mode can be
+described as the primary path. **Status 2026-09-21:** V1–V3 are repaired in code (C1–C3 — implemented,
+not verified); the descriptions still may not claim guarded/primary mediation until verification runs.
 - The bridge requires the binding record first ([AGENT.md](AGENT.md) §3) — order is binding → bridge → scope.
 - Multi-platform confinement honesty is unchanged: a confined launch fails closed, and a non-Linux posture
   reports what it actually achieved rather than claiming confinement.

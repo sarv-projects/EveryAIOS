@@ -27,8 +27,10 @@ surface. What the code enforces is **authorization provenance** (`ARCH/CORE.md` 
 args-bound `AuthorizationTicket` (`crates/everyaios-guard/src/ticket.rs`, struct at `:102`, mint at
 `:59`, consume at `:162`); human UI mutations carry trusted user-gesture provenance stamped by Rust
 call sites only. Provider API keys never leave the vault (`crates/everyaios-vault`, SQLCipher
-key-ring per its module doc; TS-side custody at `packages/core-providers/src/vault.ts:88,:147` is a
-confirmed defect against I10 — see `ARCH/CORE.md` §11 V4). See [invariants.md](invariants.md).
+key-ring per its module doc). The former TS-side custody (`packages/core-providers/src/vault.ts`) was the
+confirmed V4 defect — repaired in code 2026-09-21 (`P69.C4`, handle-only façade, custody Rust-side;
+implemented, not verified), with CRED-1/2/3 in `scripts/check-arch-invariants.mjs` preventing its return.
+See [invariants.md](invariants.md).
 
 ## Subsystems and boundaries
 

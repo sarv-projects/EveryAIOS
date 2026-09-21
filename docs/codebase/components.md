@@ -89,14 +89,15 @@ Responsibilities are each crate's own module doc (`crates/*/src/lib.rs`):
 - **`core-ai`** (13 tests), **`core-engine`** (4), **`core-memory`** (8),
   **`core-search`** (7), **`core-providers`** (6), **`core-connectors`** (5),
   **`core-tools`**, **`core-security`**, **`core-agents`**.
-- Post-thaw consolidation targets (TODO P69.D, not yet executed — current code still holds the duplicated
-  authority): provider-credential custody leaves `core-providers` for the Rust vault alone — V4
-  (`packages/core-providers/src/vault.ts:88,:147` seals/unseals keys, violating CORE I10, verified in
-  source); `core-security` shrinks to a crypto/vault-support utility; `core-tools` keeps model-facing
-  definitions only; `core-engine` keeps policies/helpers.
-- **Namespace is currently split (TODO P69.D23):** `coordinator` publishes as `@everyaios/coordinator`; the
-  other ten still publish as `@everyaios/*`. The rename is half-done — finish it in one pass rather than
-  partially. Imports resolve to each package's `src/index.ts` (not the gitignored `dist/`).
+- **Post-thaw consolidation (P69.D) — landed in code 2026-09-20/21, implemented-not-verified.**
+  Provider-credential custody left `core-providers` for the Rust vault alone (defect V4 → `P69.C4`;
+  `vault.ts` is now a handle-only façade); `core-security` is reduced to a crypto/vault-support utility
+  (D5); `core-tools` keeps model-facing definitions only (D6, policy moved to `core-engine`); `core-engine`
+  keeps policies/helpers (D8). Partial rows with named remainders: D1/D2/D9/D15/D24/D25; D19/D20 are
+  `SCOPED` shrink plans (`TODO.md`).
+- **Namespace unified (P69.D23, landed 2026-09-20):** all eleven packages publish as `@everyaios/*` —
+  manifests, imports, `pnpm-workspace.yaml`, lockfile and the CI vendored-package guard moved in one pass.
+  Imports resolve to each package's `src/index.ts` (not the gitignored `dist/`).
 - **Boundary:** no file-level imports in either direction between `packages/`
   and `ui/` or `crates/` (graph-verified); the sidecar talks to Rust over the
   stdio JSON-RPC contract only.

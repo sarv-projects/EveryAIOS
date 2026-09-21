@@ -733,8 +733,11 @@ async function runInbuiltTurn(
   }
 
   const dispatchOneTool = async (toolId: string, args: Record<string, unknown>) => {
-    const ctx: { sessionId: string; agentId?: string } = { sessionId };
+    const ctx: { sessionId: string; agentId?: string; workId?: string } = { sessionId };
     if (params.agentId !== undefined) ctx.agentId = params.agentId;
+    // P69.D14 — a spawned subagent is registered as a child Work of this
+    // turn's Work, so the delegation tree is reconstructible from the one log.
+    if (params.workId !== undefined) ctx.workId = params.workId;
     const surface = refuseDesktopIfWrongSurface(toolId, args);
     if (!surface.ok) {
       emit({

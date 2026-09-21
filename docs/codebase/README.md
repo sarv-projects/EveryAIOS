@@ -1,6 +1,6 @@
 # EveryAIOS — Codebase Understanding
 
-> **Post-thaw authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md)** (27 invariants I1–I27) **+ the subsystem contracts** (`WORK` · `SESSION` · `AGENT` · `EXTERNAL-AGENTS` · `CONTEXT` · `CAPABILITIES` · `MEMORY` · `SECURITY` · `RECOVERY` · `ROUTING` · `UI` · `DESKTOP`). Refreshed post-thaw (TODO **P69.A35**). This artifact remains what it was built to be: accurate about the **code and tests** it indexes — that is its value. Where quoted code wording predates the thaw (legacy `Chief` identifiers, "token economy" module docs), quotations are verbatim and marked as such.
+> **Post-thaw authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md)** (27 invariants I1–I27) **+ the subsystem contracts** (`WORK` · `SESSION` · `AGENT` · `EXTERNAL-AGENTS` · `CONTEXT` · `CAPABILITIES` · `MEMORY` · `SECURITY` · `RECOVERY` · `ROUTING` · `UI` · `DESKTOP`). Refreshed post-thaw (TODO **P69.A35**); claims touching the P69.C/D repairs were re-verified against source **2026-09-21** (see `freshness.json` → `claims_refresh`). This artifact remains what it was built to be: accurate about the **code and tests** it indexes — that is its value. Where quoted code wording predates the thaw (legacy `Chief` identifiers, "token economy" module docs), quotations are verbatim and marked as such.
 
 ---
 
@@ -30,7 +30,7 @@ Capability identity: [`capabilities.yaml`](../../capabilities.yaml) == `ARCH/09-
 | Layer | Implementation | Talks to next layer via |
 |---|---|---|
 | L4 Cockpit | `ui/` — React 19 + Zustand 5 + Tailwind 4 | Tauri IPC: `nativeCall()` (`ui/src/lib/runtime.ts`) |
-| L3 Tauri shell | `src-tauri/` — 339 registered commands across ~46 `*_cmds.rs` modules | direct Rust calls into L2 |
+| L3 Tauri shell | `src-tauri/` — 351 registered commands across ~46 `*_cmds.rs` modules (machine-checked by `scripts/ipc-parity.mjs`, 2026-09-21) | direct Rust calls into L2 |
 | L2 Rust kernel | `crates/` — 22-cargo workspace | stdio JSON-RPC 2.0 (`crates/everyaios-ipc`) |
 | L1 Bun sidecar | `packages/coordinator` — LLM turn loop | ACP / MCP / CDP |
 | L0 External agents | Claude Code, Codex, OpenCode, MCP servers, Chrome | their own protocols |

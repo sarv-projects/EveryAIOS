@@ -17,8 +17,10 @@
 
 - **Credential custody:** SQLCipher key-ring in `crates/everyaios-vault`
   (ARCH/03, J8). The sidecar never holds keys; streams are brokered over the
-  `provider/stream` seam (see [flows.md](flows.md) F3). **Known violation:** `packages/core-providers/src/vault.ts:88,:147`
-  seals/unseals API keys in TypeScript — confirmed defect V4 against CORE I10 (`ARCH/CORE.md` §11).
+  `provider/stream` seam (see [flows.md](flows.md) F3). The former TS-side custody
+  (`packages/core-providers/src/vault.ts`) was confirmed defect V4 against CORE I10 (`ARCH/CORE.md` §11);
+  **repaired in code 2026-09-21** (`P69.C4` — handle-only façade, custody Rust-side; implemented, not
+  verified), guarded by CRED-1/2/3 in `scripts/check-arch-invariants.mjs`.
 - **Catalog:** `crates/everyaios-catalog` syncs models.dev metadata so routing
   and the UI picker work from a local snapshot; curated seed rows are labeled
   fallback, never presented as live data.
@@ -55,12 +57,7 @@
 
 ## Post-thaw defect pointers (verified in source, `ARCH/CORE.md` §11)
 
-Four of the nine confirmed defects live on the external-agent path (the other five, V5–V9, are in the ACP-registry adapter — see `ARCH/EXTERNAL-AGENTS.md` §4): **V1** — the ACP permission path
-grants approval without consulting Guard (`crates/everyaios-acp/src/chief.rs:417`,
-`Approval::allow()`); **V2** — ACP `fs/*` and `terminal/*` are unhandled (`client.rs:521` handles only
-`session/request_permission`, everything else returns `-32601`, `:538`), so mediated mode has no
-filesystem/terminal path; **V3** — mediated mode is not the default (`chief.rs:373`,
-`advertise_fs_terminal: false`). (V4, TS credential custody) is noted above. All nine are open work in `TODO.md` P69.C.
+Four of the nine thaw-confirmed defects lived on the external-agent path: **V1** — the ACP permission path grants approval without consulting Guard (`crates/everyaios-acp/src/chief.rs:417`, `Approval::allow()`); **V2** — ACP `fs/*` and `terminal/*` unhandled (`client.rs:521` handled only `session/request_permission`; everything else returned `-32601`, `:538`), so mediated mode had no filesystem/terminal path; **V3** — mediated mode not the default (`chief.rs:373`, `advertise_fs_terminal: false`). (V4, TS credential custody, is noted above.) **All four are repaired in code 2026-09-21 — `P69.C1`/`C2`/`C3`/`C4`, implemented but not verified**; the cited line numbers are as-of the thaw date. The other five (V5–V9, ACP-registry adapter — `ARCH/EXTERNAL-AGENTS.md` §4) are repaired as `P69.C7`–`C11`.
 
 ## Adapter locations (where a new external integration goes)
 

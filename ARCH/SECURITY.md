@@ -84,8 +84,11 @@ A policy input is not an authority.
 
 - The vault owns custody, key-rings, 429-driven failover state, and credential selection.
 - Streams are **brokered**: the sidecar receives frames, never key material.
-- A TypeScript package that seals or unseals credentials **violates I10** — this is a confirmed, live defect
-  (`packages/core-providers/src/vault.ts`), tracked as `P69.C4` and the most serious item in the register.
+- A TypeScript package that seals or unseals credentials **violates I10**. The confirmed defect
+  (`packages/core-providers/src/vault.ts`, `P69.C4` — the most serious item in the thaw register) is
+  **repaired in code (2026-09-21, implemented, not verified):** `ProviderVault` is a handle-only façade,
+  custody is Rust-side (`vault_key_add` / `provider_probe`), and the CRED-1/2/3 checks in
+  `scripts/check-arch-invariants.mjs` fail the build if a TS seal/unseal path reappears.
 - Credential-shaped values must be refused in child-process environments; a confined child obtains
   credentials through the vault broker, never by inheritance.
 
@@ -155,6 +158,7 @@ per-mode claims that are permitted.
 
 ## 11. Migration notes
 
-`P69.C1`–`P69.C4` must land before this document may be summarized anywhere as "every mediated effect is
-governed". Until then, the accurate statement is: *EveryAIOS capability effects are governed; the ACP
-permission path currently is not (V1), and mediated fs/terminal mediation is unimplemented (V2).*
+`P69.C1`–`P69.C4` are **repaired in code as of 2026-09-21 (implemented, not verified)**. This document
+must still not be summarized anywhere as "every mediated effect is governed" until the repairs are
+**verified**; the accurate statement at this moment is: *EveryAIOS capability effects are governed; the ACP
+permission path and the mediated fs/terminal path are repaired in code but unverified (`P69.C1`/`C2`).*

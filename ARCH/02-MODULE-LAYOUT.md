@@ -29,7 +29,7 @@
 | **Module 5: Work-Native Primitives (Office, Browser, CUA)** | `everyaios-office` (IronCalc 0.8.3, OOXML), `everyaios-browser`, `everyaios-cdp`, `everyaios-desktop` (CUA) | `coordinator` (`tools/browser.ts`, `tools/office.ts`) | Right-rails: `office-xlsx`, `office-docx`, `office-pdf`, `browse`, `desktop` |
 | **Module 6: Durable Work & Cognitive Memory (four classes)** | `everyaios-memory` (ACT-R), `everyaios-storage`, `everyaios-codeintel` | `core-memory` | `screens/MemoryScreen.tsx`, `screens/ProjectsScreen.tsx`, `screens/FilesScreen.tsx`, right-rail `graph` |
 | **Module 7: Executive Automations & Calendar Daemon** | `everyaios-core` (`automation_runtime.rs`) | `coordinator` (`scheduler.ts`), `core-automations` | `screens/AutomationsScreen.tsx`, `screens/CalendarScreen.tsx`, right-rail `terminal` |
-| **Module 8: Security Guard-2 & Merkle Audit Membrane** | `everyaios-guard` (`netfloor.rs`, `pathfloor.rs`), `everyaios-audit`, `everyaios-script` (rquickjs) | `core-tools` (`trust-ladder`) | `screens/GuardScreen.tsx`, `screens/ActivityScreen.tsx`, Guard approval diff cards |
+| **Module 8: Security Guard-2 & Merkle Audit Membrane** | `everyaios-guard` (`netfloor.rs`, `pathfloor.rs`), `everyaios-audit`, `everyaios-script` (rquickjs) | `core-engine` (`trust-ladder` — advisory policy, moved out of `core-tools` by `P69.D5`/`D6`) | `screens/GuardScreen.tsx`, `screens/ActivityScreen.tsx`, Guard approval diff cards |
 
 ## 2.2 Workspace Directory Structure
 
@@ -99,10 +99,10 @@ desktop_app/
 | Memory + RAG | `core-memory`; vectorless FTS5/BM25 + embeddings + chunking live in Rust (`everyaios-memory::bm25`, `everyaios-storage`) — `core-files` was consolidated away (Tier 2c) | multi-signal retrieval fusion (mem0 pattern), procedural memory, Letta-style paging hooks |
 | Connector hub | `core-connectors` (orchestrator, 27+ adapters, composio) | routing engine per doc 13; usage meters; Auth Bridge |
 | **P6 connector transports** | `everyaios-core::connectors` (gmail, calendar, imap_smtp, browser_session) | injectable `HttpTransport`/`CdpSession`/`MailTransport` seams; Gmail API read/send/modify with 401→refresh→retry, Calendar CRUD + ICS export, IMAP/SMTP fallback, browser-session Gmail/Notion/Linear/Outlook DOM reading — 24 tests green |
-| Search/research | `core-search` (cascade, bm25, research-tiers) | deep-research tree runner (doc 07); **tiered cascade + SQLite result cache (G8, Algorithm #33, doc 52)** — cached instant tier → WebSurfx → SearXNG → fallback; parallel top-N fetch cascade |
+| Search/research | `core-search` (cascade, bm25, research-tiers) | deep-research tree runner (doc 07); **tiered cascade + SQLite result cache (G8, Algorithm #33, doc 52)** — cached instant tier → WebSurfx → SearXNG → fallback; parallel top-N fetch cascade. *Not the desktop implementation: the Rust kernel owns desktop search (`P69.D9`/`D10`); `LAYER-3` fails if the cascade is wired into the turn loop.* |
 | Automations | `core-automations` (workflow engine, crystallization) | scheduler UI, nudge sentinels |
 | Providers/BYOK | `core-providers`, `core-ai` (clients, router, vault) | **key-ring client** (03): multiple keys/provider, fallback rotation |
-| Security | `core-tools` (trust-ladder, permission-gate) | keep; GuardRail enforcement delegated to Rust everyaios-guard |
+| Security | `core-engine` (trust-ladder, permission-gate — advisory policy; moved out of `core-tools` by `P69.D5`/`D6`) | keep; GuardRail enforcement delegated to Rust everyaios-guard; Guard is the only decider |
 
 **Division of trust:** the sidecar proposes; the Rust core disposes. **Execution model:** the sidecar runs the reused `core-*` engine in-process (files, connectors, search — that's the asset being reused), but every **mutating** call must present a valid **everyaios-guard authorization ticket**: Rust performs the regex scan + path resolution + permission decision first and issues a short-lived ticket; the sidecar's tool runtime rejects un-ticketed mutations. The sidecar's own *unguarded* OS access is confined to its data dir (its stdio pipe is the only unrestricted handle). Browser control, script-eval, OAuth-token use, and shell outside the granted workspace always execute in Rust regardless of ticket.
 

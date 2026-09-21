@@ -91,10 +91,14 @@ pub struct CapabilityList {
     pub deny: Vec<String>,
 }
 
-/// Explicit agent binding — capabilities are never global. Empty `bind`
-/// means the plugin is bound to nothing (and is refused by the granter).
+/// The plugin manifest's explicit agent-binding declaration — capabilities
+/// are never global. Empty `bind` means the plugin is bound to nothing (and
+/// is refused by the granter). Deliberately *not* named `AgentBinding`: the
+/// canonical `everyaios_types::AgentBinding` is the durable agent-attachment
+/// primitive (`ARCH/AGENT.md` §3), and a manifest declaration must never
+/// shadow it.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct AgentBinding {
+pub struct PluginAgentBinding {
     #[serde(default)]
     pub bind: Vec<String>,
 }
@@ -114,7 +118,7 @@ pub struct PluginManifest {
     #[serde(default)]
     pub capabilities: CapabilityList,
     #[serde(default)]
-    pub agents: AgentBinding,
+    pub agents: PluginAgentBinding,
 }
 
 /// Errors from the plugin ABI.
@@ -519,7 +523,7 @@ pub fn first_party_catalog() -> Vec<PluginManifest> {
             ],
             deny: vec![],
         },
-        agents: AgentBinding {
+        agents: PluginAgentBinding {
             bind: agents.iter().map(|s| s.to_string()).collect(),
         },
     })

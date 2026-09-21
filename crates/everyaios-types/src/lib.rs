@@ -368,7 +368,14 @@ pub enum AgentGovernanceMode {
     NotGoverned,
 }
 
-/// The lifecycle of a durable [`AgentBinding`] (`ARCH/AGENT.md` §5.1).
+/// The `state` of a durable [`AgentBinding`] (`ARCH/AGENT.md` §3).
+///
+/// `Active` · `Parked` · `Resuming` move through the named lifecycle events
+/// (`AgentBindingCreated` · `Activated` · `Suspended` · `Resumed`,
+/// `ARCH/WORK.md`). `Dead` and `Unavailable` are consequence states on the
+/// same record — `ARCH/AGENT.md` §3 names no event for them, so their
+/// derivation belongs to the AgentBridge event bridge (`P69.B4`). `Dead`
+/// never resumes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum BindingLifecycle {
@@ -414,23 +421,45 @@ pub struct AgentDefinition {
 }
 
 /// A durable agent binding — an agent attached to a Work. The binding, not
-/// the process, is the unit that survives a restart (`ARCH/AGENT.md` §5.1);
+/// the process, is the unit that survives a restart (`ARCH/AGENT.md` §3);
 /// `provider_session_id` is deliberately distinct from the EveryAIOS
-/// [`SessionId`].
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+/// [`SessionId`] (`ARCH/SESSION.md`). A Session owns bindings; exactly one is
+/// `active` (`ARCH/CORE.md` §7.2).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AgentBinding {
     pub binding_id: AgentBindingId,
-    pub agent_id: AgentId,
-    pub work_id: WorkId,
     pub session_id: SessionId,
+    pub work_id: WorkId,
+    pub agent_id: AgentId,
+    /// Reference into `everyaios-agents`' adapter registry (`P69.B3`); the
+    /// binding names the adapter, it never embeds one.
+    #[serde(default)]
+    pub adapter_id: Option<String>,
+    /// How the runtime drives the agent — the canonical vocabulary from
+    /// `AgentDefinition` (`P69.D1`; `ARCH/AGENT.md` §3's `acp | stdio |
+    /// in-process` is the illustrative form of this enum).
+    pub protocol: AgentProtocol,
     /// The agent's own session identity (resume handle). Never the EveryAIOS
     /// session id — conflating them is how resume breaks.
     #[serde(default)]
     pub provider_session_id: Option<String>,
-    pub governance: AgentGovernanceMode,
-    pub lifecycle: BindingLifecycle,
+    /// Provider model + mode in force for this binding, when the adapter
+    /// supports switching them (`ARCH/AGENT.md` §5 — negotiated, never
+    /// assumed).
+    #[serde(default)]
+    pub model: Option<String>,
+    #[serde(default)]
+    pub mode: Option<String>,
+    /// The resolved effective capability set (`ARCH/AGENT.md` §3).
     #[serde(default)]
     pub capability_manifest: Vec<CapabilityId>,
+    pub governance_mode: AgentGovernanceMode,
+    /// Reference to the short-lived, work/binding-scoped bridge credential
+    /// once `AgentBridge` lands (`P69.B4`); the bridge owns the credential,
+    /// the binding only names it.
+    #[serde(default)]
+    pub bridge_id: Option<String>,
+    pub state: BindingLifecycle,
     #[serde(default)]
     pub usage: BindingUsage,
     #[serde(default)]
@@ -704,13 +733,18 @@ mod tests {
 
         let binding = AgentBinding {
             binding_id: AgentBindingId::new("b-1"),
-            agent_id: AgentId::new("opencode"),
-            work_id: WorkId::new("w-1"),
             session_id: SessionId::new("s-1"),
+            work_id: WorkId::new("w-1"),
+            agent_id: AgentId::new("opencode"),
+            adapter_id: None,
+            protocol: AgentProtocol::Acp,
             provider_session_id: Some("agent-side-42".into()),
-            governance: AgentGovernanceMode::SelfContained,
-            lifecycle: BindingLifecycle::Parked,
+            model: Some("claude-sonnet-4-5".into()),
+            mode: Some("default".into()),
             capability_manifest: vec![],
+            governance_mode: AgentGovernanceMode::SelfContained,
+            bridge_id: None,
+            state: BindingLifecycle::Parked,
             usage: BindingUsage::default(),
             last_event_seq: 3,
             private_state_ref: None,

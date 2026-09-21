@@ -37,6 +37,20 @@
     ],
     "unchanged_since_f99a5d9": "the 12 files added by 3d80e6b are documentation, so every structural count above is identical to the set built at f99a5d9; only the file total (1426 → 1436) and the provenance pointers moved"
   },
+  "claims_refresh": [
+    {
+      "date": "2026-09-21",
+      "commit": "fcf3c8f + working tree",
+      "method": "direct source reads at the cited paths (not a codegraph regeneration)",
+      "corrected": [
+        "the TS-credential-custody claims (components.md, architecture.md, external-systems.md, flows.md) — packages/core-providers/src/vault.ts is now a handle-only façade and custody is Rust-side (P69.C4, implemented-not-verified)",
+        "the ACP defect claims V1/V2/V3 (flows.md, external-systems.md) — PermissionGate (P69.C1), ClientMediation (P69.C2) and GovernancePreference::Mediated (P69.C3) landed",
+        "the 'namespace is currently split / rename is half-done' claim (components.md) — P69.D23 unified all eleven packages on @everyaios/* in one pass",
+        "the registered-command count in README.md — 339 → 351 registered (scripts/ipc-parity.mjs, 2026-09-21)"
+      ],
+      "not_refreshed": "the graph-derived tables (hub in-degrees, PageRank, boundary counts) and the index stats above are unchanged from the 2026-09-20 generation at 0dd50da — a codegraph regeneration is still the correct way to refresh those; do not read new graph numbers out of this pass"
+    }
+  ],
   "files_included": "git-tracked files passing codegraph's should_include filter (source, docs, config)",
   "files_excluded": [
     "gitignored paths (.venv, node_modules, dist, target, .code-intelligence)",

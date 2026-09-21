@@ -1080,7 +1080,7 @@ async function waitForTicketApproval(
 export async function dispatchSubAgent(
   request: ToolRequest,
   spec: SubAgentSpecShape,
-  ctx: { sessionId: string; agentId?: string } = { sessionId: "default" },
+  ctx: { sessionId: string; agentId?: string; workId?: string } = { sessionId: "default" },
   sleep: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms)),
 ): Promise<SubAgentResultShape> {
   if (spec.depth > SUBAGENT_MAX_DEPTH) {
@@ -1100,6 +1100,11 @@ export async function dispatchSubAgent(
     blockedTools: spec.blockedTools,
     depth: spec.depth,
     ...(spec.role ? { role: spec.role } : {}),
+    // P69.D14 — the parent Work the child is delegated from. The kernel
+    // registers the child as a Work (parent link, own Run, ephemeral agent
+    // session) in the one Work Gateway; without it there is nothing to
+    // attach the child's timeline to.
+    ...(ctx.workId ? { workId: ctx.workId } : {}),
   };
   const argsHash = canonicalArgsHash(args);
   const gated = await evaluateGuard(request, {

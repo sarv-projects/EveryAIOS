@@ -45,8 +45,9 @@ user-gesture provenance stamped by Rust call sites only. Every audit row records
 
 1. A proposed mutating effect (tool call, automation step) reaches
    `crates/everyaios-guard` **[D: AGENTS §10, §15]**.
-   **Known defect V1:** the ACP permission path grants approval without consulting Guard
-   (`crates/everyaios-acp/src/chief.rs:417`, `Approval::allow()`) — open work (TODO P69.C1, CORE I12).
+   The thaw-confirmed defect V1 — the ACP permission path granting approval without consulting Guard
+   (`crates/everyaios-acp/src/chief.rs:417`, `Approval::allow()`) — is **repaired in code** (2026-09-21,
+   `P69.C1` — host `PermissionGate`, fail-closed default; implemented, not verified).
 2. Guard-1 deterministic pre-exec scan runs: `pathfloor` (filesystem),
    `netfloor` (SSRF/egress), TOCTOU checks, sandbox policy
    (`guard/src/approval_policy.rs`, `autonomy.rs`, `batch.rs`) **[S: module layout]**.
@@ -79,9 +80,9 @@ user-gesture provenance stamped by Rust call sites only. Every audit row records
    symbol-traced here]**.
 4. Catalog/model metadata comes from `crates/everyaios-catalog` (models.dev
    sync) so routing does not require network at call time **[S: module doc]**.
-   **Known defect V4:** `packages/core-providers/src/vault.ts:88,:147` seals/unseals provider keys in
-   TypeScript — credential custody must live only in `everyaios-vault` (CORE I10; TODO P69.C4, the most
-   severe of the four).
+   The former TS-side custody (`packages/core-providers/src/vault.ts` — thaw defect V4) is **repaired in
+   code** (2026-09-21, `P69.C4` — handle-only façade, custody only in `everyaios-vault`, CORE I10;
+   implemented, not verified).
 
 ## F4 — External agent session (ACP example)
 
@@ -91,10 +92,11 @@ user-gesture provenance stamped by Rust call sites only. Every audit row records
 2. Governance class of the external agent is surfaced honestly in the UI
    (Governed-Mediated / Self-contained / NotGoverned badges,
    `ui/DESIGN-SYSTEM.md` §3) — and audit coverage must be stated per mode, never claimed uniformly
-   (CORE I15, `ARCH/EXTERNAL-AGENTS.md`). **Known gaps V2/V3:** mediated-mode `fs/*`/`terminal/*`
-   handlers are unimplemented (`client.rs:521` handles only `session/request_permission`, `:538`
-   returns `-32601`), and mediated mode is not the default (`chief.rs:373`,
-   `advertise_fs_terminal: false`) — open work (TODO P69.C2/C3).
+   (CORE I15, `ARCH/EXTERNAL-AGENTS.md`). The thaw gaps V2/V3 — mediated-mode `fs/*`/`terminal/*`
+   handlers unimplemented (`client.rs:521` handled only `session/request_permission`; `:538` returned
+   `-32601`) and mediated not the default (`chief.rs:373`, `advertise_fs_terminal: false`) — are
+   **repaired in code** (2026-09-21, `P69.C2`/`C3` — `ClientMediation` seam + `GovernancePreference::Mediated`
+   default, fail-closed when no mediator is attached; implemented, not verified).
 3. MCP tool surfaces are exposed via `crates/everyaios-mcp`; tool-hijack
    validation is part of that crate's contract **[S: module doc, `hijack.rs`]**.
    The Work Gateway is the only path to an effect; external agents see task-shaped façades via the
@@ -105,6 +107,8 @@ user-gesture provenance stamped by Rust call sites only. Every audit row records
 - Flows are file-level. Call-order *within* a step is reconstructed from seams
   and docs, not symbol-traced. Lifting this to tier-A evidence requires
   LSP/SCIP-backed resolution (see `freshness.json` coverage notes).
-- The P69.A35 refresh re-read the named defect seams in the working tree
-  (`chief.rs:417,:373`; `client.rs:521,:538`; `vault.ts:88,:147`) but did not re-trace step sequences;
-  treat pre-existing step order as carried, defect pointers as re-read.
+- The P69.A35 refresh re-read the named defect seams in the working tree (2026-09-20); the **2026-09-21
+  claims pass** then re-read the repaired seams (`chief.rs` `PermissionGate`/`GovernancePreference`,
+  `client.rs` `ClientMediation`, `vault.ts` handle-only façade) and rewrote the V1–V4 rows to
+  repaired-in-code status. Step sequences were not re-traced in either pass; treat pre-existing step order
+  as carried.

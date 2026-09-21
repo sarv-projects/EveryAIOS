@@ -89,9 +89,10 @@ docs, code, or Git history, that is stated explicitly.
   ticketed” slogan is corrected to the **authorization-provenance** rule.
 - **Why:** three things made the freeze untenable — a context-engineering practice the architecture had only
   partially absorbed, external agent runtimes exposing deep enough extension surfaces to make “host, do not
-  own” precise, and **four defects verified in source** (a permission path that granted approval without
+  own” precise,  and **four defects verified in source** (a permission path that granted approval without
   Guard, unhandled ACP file/terminal mediation, mediated mode not being the default, and a TypeScript package
-  holding provider credentials against the vault rule).
+  holding provider credentials against the vault rule). *(All four are repaired in code as of 2026-09-21 —
+  `P69.C1`–`C4`, implemented-not-verified; the verification is still owed.)*
 - **Provenance:** [`ADR/0003`](../../ARCH/ADR/0003-architecture-thaw-core-authority.md) (2026-09-20); work
   tracked as **P69** (consolidation, defects, CI checks, migration) and **P70** (v1 release) in `../../TODO.md`.
 - **Status:** accepted. A further expansion now requires a new ADR, not a document edit.

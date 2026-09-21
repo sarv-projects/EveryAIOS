@@ -347,8 +347,10 @@ agent cannot assert an identity it does not have. External agents see **task-sha
 | **Not-governed** | the agent's own, no bridge | no EveryAIOS claim at all |
 
 The UI must show which mode is actually in force. Claiming identical observability across modes would
-violate I15. Current state: mediated is **not** the default and its fs/terminal handlers are missing —
-see §11 V2/V3.
+violate I15. **Status 2026-09-21: repaired in code, not yet verified.** Mediated is now the default when a
+mediation seam is attached (`GovernancePreference::Mediated`, `P69.C3`) and the `fs/*` / `terminal/*`
+handlers exist behind the `ClientMediation` seam with an explicit fail-closed refusal when no mediator is
+attached (`P69.C2`) — see §11.1. The v1-only caveat below still bounds the claim.
 
 **Version caveat that governs the ordering above.** The mediated mode is a **v1 surface being deleted**:
 ACP v2 removes the client filesystem and terminal APIs and directs implementers to expose Client-side tools
@@ -506,19 +508,24 @@ memory system never becomes a second timeline. Full architecture: [MEMORY.md](ME
 
 ## 11. Current-state deltas (verified)
 
-### 11.1 Defects confirmed in source
+### 11.1 Defects confirmed in source (at the 2026-09-20 thaw)
 
-| # | Defect | Evidence | Invariant broken |
-|---|---|---|---|
-| **V1** | The ACP permission path grants approval without consulting Guard | `crates/everyaios-acp/src/chief.rs:417` — `let approval = Approval::allow(); // host decides; driver maps to the option` | I12 |
-| **V2** | ACP `fs/*` and `terminal/*` are unhandled → mediated mode has no filesystem/terminal path | `crates/everyaios-acp/src/client.rs:521` handles only `session/request_permission`; everything else returns `-32601 method not found` (`client.rs:538`) | I14, §7.5 |
-| **V3** | Mediated mode is not the default | `crates/everyaios-acp/src/chief.rs:373` — `advertise_fs_terminal: false, // default: withhold (self-contained path)` | §7.5 |
-| **V4** | A TypeScript package stores provider credentials, against the vault rule | `packages/core-providers/src/vault.ts` — `ProviderVault` seals/unseals API keys via `@everyaios/core-security` (`:88`, `:147`) | **I10** (the most serious) |
-| **V5** | **Auth mode is inferred from the software license** — a category error that also abuses the term `local`. `auth_from_license` maps open-license → `Local`, else → `Subscription`, and can **never** yield `ApiKey`. But `Local` means **local inference on this machine** (`03-BYOK-KEYRINGS.md` §3.0, with its own `local-models-panel` UI) — not "open source", which is a *license* property orthogonal to authentication. ~20 seed agents are mislabelled, incl. `amp` (commercial frontier), `glm-agent` (needs a Coding Plan), `qwen-code` / `kimi` / `goose` / `fast-agent` (need API keys) | `crates/everyaios-acp/src/registry_index.rs:403` (doc comment admits "license → auth-mode heuristic"); `registry.rs:206–234` (`AuthMode::Local` on 24 seed entries). The registry carries **no** auth field — it is a curated list of auth-supporting agents whose `authMethods` are CI-verified **in the ACP handshake** | I23, `EXTERNAL-AGENTS.md` §4(4), BYOK §3.0 |
-| **V6** | **Registry `env` is discarded in the merge.** `env: vec![]` is hardcoded while `launch_plan` *does* merge `manifest.env` into the spawn environment, so the value is parsed, then stringified into a description note instead of wired | `registry_index.rs:363` (`env: vec![]`) vs `registry.rs:276` (`let mut env = m.env.clone();`); `with_env_note` puts env in prose | `EXTERNAL-AGENTS.md` §4(6) |
-| **V7** | **A binary agent with a missing platform block launches bare.** Falls back to `args: vec![]` — but ACP binary args are load-bearing (`poolside` `["acp"]`, `antigravity-acp` `["--uid="]` on linux only). The agent then starts its normal CLI, not its ACP server, and looks broken with no useful error | `registry_index.rs:349` (`t.map(…).unwrap_or_default()`), `:348` (cmd fallback) | `EXTERNAL-AGENTS.md` §4(5) |
-| **V8** | Minor schema-coverage gap: `license_url` is present in `registry.json` but **not parsed**; and `is_open_license` is substring matching, so a license string merely *containing* `mit`/`bsd` passes as open | `registry_index.rs` `struct RegistryAgent` (no `license_url` field); `is_open_license` at `:263` | `EXTERNAL-AGENTS.md` §4 |
-| **V9** | **The auth-mode wire contract disagrees across layers.** Two Rust serializers emit different strings for the same variant, and the two TypeScript types do not match either — so an auth mode can be silently unrepresentable at a boundary | `registry.rs:44` → `"local"` vs `src-tauri/src/settings_cmds.rs:628` → `"local_cli"`; `ui/src/lib/acp.ts:11` → `"subscription" \| "api_key" \| "local"` vs `ui/src/lib/settings.ts:95` → `'subscription' \| 'api_key' \| 'local_cli' \| 'keyless' \| 'unknown'` | I4 (one schema owner), BYOK §3.0 |
+> **All nine repaired in code 2026-09-20/21 — implemented, not verified.** `TODO.md` P69.C1–C4 and C7–C12
+> carry `IMPLEMENTED — unverified`; C5/C6 are documentation sweeps and remain open. The evidence column is
+> the dated thaw record — cited line numbers are as-of that date and are intentionally not rewritten. Each
+> row now names its repair row.
+
+| # | Defect | Evidence | Invariant broken | Repair (TODO) |
+|---|---|---|---|---|
+| **V1** | The ACP permission path grants approval without consulting Guard | `crates/everyaios-acp/src/chief.rs:417` — `let approval = Approval::allow(); // host decides; driver maps to the option` | I12 | **C1** — implemented (unverified) |
+| **V2** | ACP `fs/*` and `terminal/*` are unhandled → mediated mode has no filesystem/terminal path | `crates/everyaios-acp/src/client.rs:521` handles only `session/request_permission`; everything else returns `-32601 method not found` (`client.rs:538`) | I14, §7.5 | **C2** — implemented (unverified) |
+| **V3** | Mediated mode is not the default | `crates/everyaios-acp/src/chief.rs:373` — `advertise_fs_terminal: false, // default: withhold (self-contained path)` | §7.5 | **C3** — implemented (unverified) |
+| **V4** | A TypeScript package stores provider credentials, against the vault rule | `packages/core-providers/src/vault.ts` — `ProviderVault` seals/unseals API keys via `@everyaios/core-security` (`:88`, `:147`) | **I10** (the most serious) | **C4** — implemented (unverified) |
+| **V5** | **Auth mode is inferred from the software license** — a category error that also abuses the term `local`. `auth_from_license` maps open-license → `Local`, else → `Subscription`, and can **never** yield `ApiKey`. But `Local` means **local inference on this machine** (`03-BYOK-KEYRINGS.md` §3.0, with its own `local-models-panel` UI) — not "open source", which is a *license* property orthogonal to authentication. ~20 seed agents are mislabelled, incl. `amp` (commercial frontier), `glm-agent` (needs a Coding Plan), `qwen-code` / `kimi` / `goose` / `fast-agent` (need API keys) | `crates/everyaios-acp/src/registry_index.rs:403` (doc comment admits "license → auth-mode heuristic"); `registry.rs:206–234` (`AuthMode::Local` on 24 seed entries). The registry carries **no** auth field — it is a curated list of auth-supporting agents whose `authMethods` are CI-verified **in the ACP handshake** | I23, `EXTERNAL-AGENTS.md` §4(4), BYOK §3.0 | **C7** — implemented (unverified) |
+| **V6** | **Registry `env` is discarded in the merge.** `env: vec![]` is hardcoded while `launch_plan` *does* merge `manifest.env` into the spawn environment, so the value is parsed, then stringified into a description note instead of wired | `registry_index.rs:363` (`env: vec![]`) vs `registry.rs:276` (`let mut env = m.env.clone();`); `with_env_note` puts env in prose | `EXTERNAL-AGENTS.md` §4(6) | **C8** — implemented (unverified) |
+| **V7** | **A binary agent with a missing platform block launches bare.** Falls back to `args: vec![]` — but ACP binary args are load-bearing (`poolside` `["acp"]`, `antigravity-acp` `["--uid="]` on linux only). The agent then starts its normal CLI, not its ACP server, and looks broken with no useful error | `registry_index.rs:349` (`t.map(…).unwrap_or_default()`), `:348` (cmd fallback) | `EXTERNAL-AGENTS.md` §4(5) | **C9** — implemented (unverified) |
+| **V8** | Minor schema-coverage gap: `license_url` is present in `registry.json` but **not parsed**; and `is_open_license` is substring matching, so a license string merely *containing* `mit`/`bsd` passes as open | `registry_index.rs` `struct RegistryAgent` (no `license_url` field); `is_open_license` at `:263` | `EXTERNAL-AGENTS.md` §4 | **C10** — implemented (unverified) |
+| **V9** | **The auth-mode wire contract disagrees across layers.** Two Rust serializers emit different strings for the same variant, and the two TypeScript types do not match either — so an auth mode can be silently unrepresentable at a boundary | `registry.rs:44` → `"local"` vs `src-tauri/src/settings_cmds.rs:628` → `"local_cli"`; `ui/src/lib/acp.ts:11` → `"subscription" \| "api_key" \| "local"` vs `ui/src/lib/settings.ts:95` → `'subscription' \| 'api_key' \| 'local_cli' \| 'keyless' \| 'unknown'` | I4 (one schema owner), BYOK §3.0 | **C11** — implemented (unverified) |
 
 ### 11.2 Consolidation targets
 
@@ -527,6 +534,14 @@ Duplicate authorities to collapse into the matrix in §4: multiple agent registr
 duplicate Work/session state in the UI store · duplicate tool schema universes · duplicate prompt/context
 managers · duplicate search/RAG implementations · duplicate event stores. Each is enumerated with an
 owner and an action in `../TODO.md`.
+
+**Status 2026-09-21 (implemented, not verified).** The P69.D wave collapsed the ones with a landed row:
+agent registries and `AgentDefinition`s (**D1/D15/D23**) · the TS permission/trust-ladder engine
+(**D3/D5/D6** — policy is advisory in `core-engine`; Guard is the only decider) · the duplicate provider
+vault (**C4**) · tool schema universes (**D2/D17/D18**) · prompt/context managers (**D7**) · search/RAG
+(**D9/D10**) · event stores and the Work model (**D11**). UI Work/session state is **classified, not
+deleted** (**D24** — verified classification). Still partial per their rows: D1/D2/D9/D24/D25 (named
+remainders), D15 (naming half), D19/D20 (`SCOPED` shrink plans).
 
 ### 11.3 Honest gaps
 

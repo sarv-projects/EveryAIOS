@@ -17,6 +17,64 @@ Each entry records the date or release marker, change category, affected section
 - A citation or implementation detail may remain in the spec only when it is itself a current behavioral constraint; its historical or evidentiary explanation belongs here.
 
 ---
+## 2026-09-21 — P69 consolidation wave 1: defect repairs, ownership landings, `AgentBinding`, invariant gates
+
+**Category:** implementation/consolidation (the thaw programme of the 2026-09-20 entry, executed as code).
+**Flipped:** no capability checkbox changes; ~30 `P69` rows moved from `NOT DONE` to
+`IMPLEMENTED — unverified` — they stay `[ ]` in the live count so the count keeps meaning *verified*.
+
+**Decision.** Execute the thaw's work programme code-first under an explicit **“implement, do not test
+yet”** instruction. Nothing in this wave may be described as verified; every landed row carries
+`[IMPLEMENTED — unverified]` and names its own remainder.
+
+**Implementation.**
+- **CI invariant gates (new).** `scripts/check-arch-invariants.mjs` (wired into the CI docs job and
+  `pnpm check:arch`) asserts 14 implied invariants, each one a violation the tree has already paid for
+  once: CRED-1/2/3 (no TS credential custody — it found the two real offenders, Tavily and Exa REST, now
+  behind the host `GovernedSearchTransport`), AUTH-1/2/3 (one auth vocabulary; `AuthMode` declared once),
+  SCHEMA-1, DECIDE-1/2 (advisory policy in `core-engine`; no hardcoded approval outside `#[cfg(test)]`),
+  LAYER-1/2/3/4, PURITY-1/2/3/4 (crate-boundary manifests), and TS-DUP/RUST-DUP (canonical records and id
+  newtypes declared once — RUST-DUP caught a second `AgentBinding` in the plugin manifest, renamed
+  `PluginAgentBinding`).
+- **Defect repairs (`P69.C`).** C1 host-controlled `PermissionGate` + fail-closed `DenyAllGate` default;
+  C2 `ClientMediation` seam for ACP `fs/*`/`terminal/*` with an explicit refusal when no mediator is
+  attached; C3 `GovernancePreference::Mediated` default; C4 `ProviderVault` reduced to a handle-only
+  façade (custody Rust-side); C7 registry auth takes the ACP handshake as the only source; C8 registry
+  `env` wired into the spawn environment; C9 a binary agent missing its platform target is skipped, never
+  launched bare; C10 `license_url` parsed + exact normalised SPDX matching; C11 one auth-mode wire
+  contract; C12 the registry `Ask` consent path wired end-to-end. C5/C6 (documentation sweeps) remain open.
+- **Ownership consolidation (`P69.D`).** One `AgentDirectory` (D1); one advisory authorization decision —
+  Guard is the only decider (D3/D5/D6); `ContextManager` + one prompt assembler (D7); core-engine purity
+  (D8); kernel-owned retrieval (D9/D10); one event store and Work model (D11); blueprint declarative (D12);
+  `MultiRun` as a pure strategy (D13); subagents as child Work/Runs (D14); scheduler/workflow create Work
+  only (D16); connector actions and MCP tools normalise into the canonical models (D17/D18); the
+  `Execution` alias deleted (D21); coordinator boundary enforced structurally (D22); namespace unified to
+  `@everyaios/*` for all eleven packages (D23); UI as projections, classified (D24); `everyaios-types` as
+  the canonical schema layer (D25); purity rows (D26–D28, D31); the verification contract moved upstream
+  of the harness (D32). Partial rows keep named remainders (D1/D2/D9/D15/D19/D20/D24/D25).
+- **`AgentBinding` (`P69.B2`).** Record aligned field-for-field with `ARCH/AGENT.md` §3 / `ARCH/CORE.md`
+  §7.2; the four lifecycle events plus usage deltas replay into the binding map from the journal; creation
+  is not activation (a created binding persists `parked`); `dead` is terminal; “exactly one active per
+  Session” is enforced in the gateway. `resuming`/`dead`/`unavailable` have **no named event** in
+  `ARCH/WORK.md` — their derivation is recorded as `P69.B4`'s event bridge rather than invented.
+- **Infrastructure.** `gen-codebase-map.mjs --check` could never pass because the generator embedded its
+  own byte/line counts; fixed. `TODO.md`'s live count was already off by one at HEAD and is corrected to
+  the file's real numbers (1305 done + 302 open).
+
+**Documentation.** `ARCH/CORE.md` §7.5/§11, `ARCH/EXTERNAL-AGENTS.md` §6/§10 and `ARCH/SECURITY.md` now
+carry dated **“repaired in code — implemented, not verified”** annotations on the thaw defect rows
+(evidence line numbers intentionally not rewritten); `docs/codebase/` claims touching the repairs were
+re-verified against source and logged in `freshness.json` → `claims_refresh` (graph-derived tables were
+deliberately not refreshed — that requires a codegraph regeneration).
+
+**Verification.** *None for this wave — explicitly.* No Rust/TS/UI suites were run; the instruction was
+implement-only. Compile-level and gate-level only, green at the time of writing:
+`cargo check --workspace --all-targets`, `cargo check` in `src-tauri`, `tsc --noEmit` for all ten
+packages + coordinator + UI, `check-doc-sync.mjs`, `check-arch-invariants.mjs`,
+`gen-codebase-map.mjs --check`, `ipc-parity.mjs`. Verifying the wave is the first task of the next session,
+before any row flips to `DONE`.
+
+---
 ## 2026-09-20 — Architecture thaw: `ARCH/CORE.md` becomes the root authority
 
 **Category:** architecture/contract. **Flipped:** no capability checkbox changes — this entry records an
