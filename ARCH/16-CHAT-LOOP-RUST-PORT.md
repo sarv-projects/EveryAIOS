@@ -178,6 +178,13 @@ win. The default is: port both.
 > **Superseded (`P69.A25`).** "One turn becomes one process" assumed the retired Rust-loop target. The live
 > end condition: the bound agent owns the turn; EveryAIOS owns context projection, governance, and
 > durability around it.
+>
+> **Fully superseded 2026-09-21 ([`ADR/0005`](ADR/0005-external-agents-are-the-v1-engines.md)).** v1 ships
+> **no built-in engine**, so there is no EveryAIOS turn loop to port and this document has **no remaining
+> action**. What survives from its analysis is the *coordination* seam — the sidecar loads state, assembles
+> and projects context, relays the stream, dispatches tools, persists events and drives recovery — now stated
+> in [`ROUTING.md`](ROUTING.md) §1 and [`../DESKTOP-APP-SPEC.md`](../DESKTOP-APP-SPEC.md) §4.2.5 (Impl B).
+> The ported slices that only ever served the built-in loop are removed under `P71.2c`.
 
 One turn becomes **one process, zero TS hops, zero IPC round-trips for provider,
 tool, and memory** — and the sidecar's largest remaining TS surface is gone. That is

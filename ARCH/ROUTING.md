@@ -1,112 +1,136 @@
-# ARCH/ROUTING — catalog, router, credentials, transport, ledger
+# ARCH/ROUTING — agent routing, credentials, and usage observability
 
-> **Status:** Subsystem contract, derived from [`CORE.md`](CORE.md) §4 and §8. Owns model selection and
-> provider access. Invariants it must not weaken: **I10, I21**.
+> **Status:** Subsystem contract, derived from [`CORE.md`](CORE.md) §4 and §8. Owns **which external agent
+> receives a Work**, plus credential and usage/cost **observability**. It no longer owns model selection or
+> provider transport — see [`ADR/0005`](ADR/0005-external-agents-are-the-v1-engines.md).
+> Invariants it must not weaken: **I4, I10, I15, I21, I23, I24**.
 
 ---
 
-## 1. The chain
+## 1. What "routing" means now
+
+The question this document answers:
+
+> **Which external agent should receive this Work?**
+
+Not: *which LLM should EveryAIOS call?* The agent owns its provider, model, authentication, model switching
+and provider fallback ([`AGENT.md`](AGENT.md) §1). EveryAIOS knows about them only as negotiated or reported
+metadata.
 
 ```mermaid
 flowchart TD
-    MC["ModelCatalog — metadata: capabilities · pricing · context limits · modalities · health"] --> MR["ModelRouter — deterministic selection over the candidate set"]
-    MR --> V["Vault — the only credential authority"]
-    V --> PT["ProviderTransport — one adapter per wire format"]
-    PT --> CL["Cost / Usage Ledger"]
+    W["WORK"] --> AR["Agent Resolver"]
+    AR --> REG["Agent Registry — installed · enabled"]
+    REG --> F["capability · readiness · policy filter"]
+    F --> AB["AgentBinding"]
 ```
-
-Each link has exactly one responsibility. The router does **not** hold credentials; the transport does **not**
-choose a model; the ledger does **not** route.
 
 ---
 
-## 2. Capacity comes from the resolved route
+## 2. Resolution inputs
 
-```
-provider + model → adapter.resolveModel() → authoritative context capacity
-```
+| Input | Meaning |
+|---|---|
+| **capability match** | what the Work's Steps require vs the agent's negotiated manifest |
+| **readiness** | installed · launchable · protocol-compatible · authenticated · negotiated · ready |
+| **user policy** | fixed agent · inherit primary · primary chooses · resolver chooses |
+| **delegation policy** | whether this agent is allowed as a worker — depth · concurrency · budget |
+| **scope** | the Work's Session/Project scope and remaining budget |
 
-There is **no global context-window registry** (I21). A global table is a second source of truth that drifts
-the moment a provider changes limits or a user configures a custom endpoint. See
-[CONTEXT.md](CONTEXT.md) §9.
+The **primary agent chooses; EveryAIOS validates.** A delegation request that fails any check is **denied with
+a reason** — never silently downgraded to a different agent, which would make the outcome unpredictable and
+the audit trail wrong.
 
 ---
 
 ## 3. The v1 policy is deliberately boring
 
 ```
-candidate filter:  capability (tools · vision · modality · context fit)
-                 × health (recent observations, not assumptions)
-                 × cost
-                 × latency
-                 → selection
+capability filter × readiness × user policy → selection
 ```
 
-> The router does **not** need to become a research project. A deterministic policy over four signals is
-> sufficient for v1, and advanced routing can arrive later behind the same interface without an
-> architecture change — which is the point of keeping the interface thin.
-
-A provider-qualified selection is preserved end-to-end: the picker's provider **and** model id both reach the
-broker. Unsupported transports **fail closed** rather than being guessed.
+Deterministic, explainable, and thin enough that a better agent-selection strategy can arrive later behind the
+same interface without an architecture change. Unready agents are not selected, and the UI states why.
 
 ---
 
-## 4. Credentials
+## 4. Credentials — whose they are
 
-[SECURITY.md](SECURITY.md) §5 owns the rule; the routing consequence is: the broker resolves a credential
-**inside the vault boundary** and the sidecar receives frames, never key material (I10). Key-rings support
-multiple keys per provider with an explicit failover taxonomy (§5 below). A keyless local runtime is a
-first-class provider, not a special case.
-
----
-
-## 5. Failover taxonomy — honest about what does and does not rotate
-
-| Response | Meaning | Action |
+| Credential | Owner | Store |
 |---|---|---|
-| **429** | rate limited | mark failure, set cooldown (honour `Retry-After`, else backoff with a cap), retry with the next key; the priority key becomes eligible again after cooldown; bounded switches per call |
-| **401 / 403** | credential rejected | suspend that key, tell the user, try the next key if one exists |
-| **5xx** | provider trouble | **do not rotate keys** — this is not a key problem, and rotating hides an outage while burning other keys |
+| EveryAIOS connector credentials (Gmail · GitHub · Calendar · Slack · Drive) | EveryAIOS | vault (**I10**) |
+| EveryAIOS-managed API credentials | EveryAIOS | vault (**I10**) |
+| Browser session vault | EveryAIOS | vault |
+| Scoped capability secrets | EveryAIOS | vault, opaque handle |
+| **External-agent credentials** (subscriptions · provider keys · OAuth) | **the agent** | the agent's own store |
 
-The 5xx distinction matters: a naive "rotate on any failure" policy converts a provider incident into the
-exhaustion of every key the user owns.
-
----
-
-## 6. Catalog and health
-
-- The catalog is a **synced snapshot with a live refresh**: a vendored/bootstrap list plus periodic refresh;
-  curated seed rows are labeled as fallback and **never presented as live capability**.
-- Health is an **observation**, not an inference: a probe writes a durable observation, and every surface that
-  makes a claim replays what a probe actually observed. A failed probe never verifies; a metadata-only probe
-  confirms nothing hard; a report that confirmed nothing must not read as "fully verified".
-- Probing a keyed provider resolves the credential from the vault, uses the provider's own model endpoint, and
-  is **not a turn** — it must not move key health or budget.
+EveryAIOS may **initiate or facilitate** an agent's authentication. It must **never** copy credentials out of
+an agent's native store. The vault remains the single authority for what EveryAIOS owns; the rule is narrowed
+from *"all provider keys"* to *"all keys EveryAIOS holds"* — which is what makes it true rather than
+aspirational. See [`SECURITY.md`](SECURITY.md) §5 and ADR-0005 §6.
 
 ---
 
-## 7. Local models
+## 5. Usage and cost observability
 
-A local runtime (Ollama, llama.cpp server, LM Studio attach, MLX, or a served GGUF) participates as a
-**keyless provider** on the same list, with the same catalog/health semantics. Hardware fit is a routing
-input computed from live host metrics — never a static stub — and a fit estimate is a recommendation, not a
-promise.
+Tokens and cost are **observations**, sourced from agent reports, ACP events, provider reports where those are
+exposed, and EveryAIOS capability calls. Never invent precision an agent did not report (**I15**): where an
+agent reports nothing, the surface says so rather than showing a plausible-looking number.
+
+Cache-aware accounting survives unchanged in spirit: prompt-cache reads and writes are tracked per turn where
+they are reported, and the ledger distinguishes what was observed from what was estimated.
 
 ---
 
-## 8. Invariants this document must not weaken
+## 6. Catalog and health — of agents, not models
+
+- **Agent health is an observation, not an inference.** A probe writes a durable observation and every surface
+  replays what a probe actually observed. A metadata-only probe confirms nothing hard.
+- **Registry metadata is discovery input, never runtime truth.** The handshake wins
+  ([`EXTERNAL-AGENTS.md`](EXTERNAL-AGENTS.md) §4).
+- **Model metadata is reference data.** Catalogue, pricing, context limits and modalities are retained for
+  display and for capacity estimation where a route reports it. It is not an execution authority, and the
+  loss of a catalogue must never prevent a turn.
+
+---
+
+## 7. Capacity
+
+Context capacity comes from the **resolved route** where the agent reports it (**I21**). Where an agent reports
+nothing, EveryAIOS must not fabricate a window — it uses a conservative configured default and labels the
+value as an assumption rather than a measurement.
+
+---
+
+## 8. Local models are not this document's business
+
+A local runtime (Ollama · llama.cpp server · LM Studio attach · MLX · a served GGUF) is an **agent's provider
+decision**, not an EveryAIOS routing concern. Discovery remains useful as **inventory**, so the user can point
+an agent at what is installed — and it is reported as inventory, never as an EveryAIOS inference path.
+
+---
+
+## 9. Invariants this document must not weaken
 
 | Invariant | How |
 |---|---|
-| I10 — credentials only in the vault | §4; the router never touches key material |
-| I21 — route-derived capacity | §2 |
-| I4 — one owner per state | §1's single responsibility per link; no routing logic in the UI, TS and Rust simultaneously |
-| I15 — no false claims | §6's observation semantics; §5's refusal to rotate on 5xx |
+| I4 — one owner per state | §1–§3: agent selection has exactly one owner |
+| I10 — credentials only in the vault | §4: narrowed to EveryAIOS-owned material, which is what makes it enforceable |
+| I15 — no false claims | §5–§6: observations, never claims; §7's labelled assumption |
+| I21 — route-derived capacity | §7 |
+| I23 / I24 — agent is replaceable | §1: switching changes the AgentBinding only |
 
 ---
 
-## 9. Migration notes
+## 10. Migration notes
 
-Routing logic currently exists in more than one layer (provider metadata in TS, selection in Rust, picker UX
-in the UI). Consolidating to this chain is `P69.D6` and `P69.A12`; the picker keeps its UX and loses any
-pretence of being an authority.
+- **Reversed:** the previous chain (`ModelCatalog → ModelRouter → Vault → ProviderTransport → model execution`)
+  is retired. It was correct while EveryAIOS had its own model path; that path is deferred to post-v1
+  ([`ADR/0005`](ADR/0005-external-agents-are-the-v1-engines.md)).
+- [`03-BYOK-KEYRINGS.md`](03-BYOK-KEYRINGS.md) is re-scoped to EveryAIOS-owned credentials and connector
+  key-rings, not agent inference (`P71.6`).
+- [`05-TOKEN-ECONOMY.md`](05-TOKEN-ECONOMY.md) keeps context engineering + usage ledger + cost observability
+  and loses the "model gateway" framing (`P71.4`).
+- Routing logic currently exists in more than one layer (provider metadata in TS, selection in Rust, picker UX
+  in the UI). Consolidating to this chain is `P69.D6` / `P69.A12`; the picker keeps its UX and loses any
+  pretence of being an authority.

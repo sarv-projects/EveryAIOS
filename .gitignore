@@ -57,3 +57,6 @@ packages/coordinator/.everyaios_bench/
 venv/
 __pycache__/
 *.pyc
+
+# Local scratch transcripts (working notes, not repository content)
+multiagent.txt

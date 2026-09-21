@@ -2,7 +2,9 @@
 
 **Date**: September 16, 2026  
 **Target**: EveryAIOS Desktop Cowork Runtime & Multi-Agent Swarm Subsystems  
-**Scope**: Two-Plane Native Architecture, External Agent Swapping (OpenCode, Grok Build, Codex, Inbuilt), Subagent Delegation, Shared Cowork Capabilities (Office, Browser, Computer Use, Calendar, Fleet, Memory), Concurrency Governance, Worktree Isolation, Failure Avoidance, and Context Truncation.
+**Scope**: Two-Plane Native Architecture, External Agent Swapping (OpenCode, Grok Build, Codex), Subagent Delegation, Shared Cowork Capabilities (Office, Browser, Computer Use, Calendar, Fleet, Memory), Concurrency Governance, Worktree Isolation, Failure Avoidance, and Context Truncation.
+
+> **Post-report scope note (2026-09-21).** This is a **dated verification report (2026-09-16)**; its measurements are point-in-time evidence and are not rewritten. Two things have changed since. (1) [`ARCH/ADR/0005`](ARCH/ADR/0005-external-agents-are-the-v1-engines.md) **removed the built-in/“Inbuilt” engine from v1** — an Inbuilt swap target no longer exists, and only *installed* ACP agents are interchangeable. (2) Session kinds are defined by [`ARCH/ADR/0006`](ARCH/ADR/0006-session-kinds.md). **Legacy identifiers:** `chiefRegistry` · `chief.ts` · `setSessionPin` · “Chief” are **names awaiting migration** (`TODO.md` P71.5b) for the session **agent-binding registry** — the behaviour described below is correct; the vocabulary is not. Case IDs are unchanged.
 
 ---
 
@@ -72,7 +74,7 @@ Six core Cowork problem statements were formulated and tested:
 - **Subagent**: `grok` (Grok Build external agent)
 - **Input**: User selects OpenCode in the agent picker. OpenCode initiates subtask delegation to Grok Build for computational optimization.
 - **Execution**:
-  1. `chiefRegistry.setSessionPin("test-cowork-s1", "opencode")` pins session to OpenCode.
+  1. `chiefRegistry.setSessionPin("test-cowork-s1", "opencode")` pins the session to OpenCode. *(Legacy name — the session **agent-binding registry**; migration `TODO.md` P71.5b.)*
   2. Subagent spawn request evaluated by `checkSpawn()`: depth=1 (<2), active=0 (<6), steps=12 (<1000).
   3. `deriveChildPermissions()` derives child permissions: inherits `read`, `shared:office`, and explicit grant `shared:browser`.
   4. `planFleet()` provisions isolated worktree at `.everyaios/worktrees/run-001/agent-1-grok`.
@@ -100,7 +102,7 @@ Six core Cowork problem statements were formulated and tested:
 - **Input**: A 5-turn session with completed IronCalc calculation (receipt `r_001`) and market comparison (receipt `r_002`) swaps the active agent from OpenCode to Grok Build.
 - **Execution**:
   1. `chiefRegistry.record()` records active session state with `configHash: "cfg-hash-992384918234"`, turn index=5.
-  2. `chiefRegistry.swap()` rebinds Chief to `grok` without altering turn index or config hash.
+  2. `chiefRegistry.swap()` rebinds the **AgentBinding** to `grok` without altering turn index or config hash — the binding changes; the Work, Session and history do not (**I24**).
   3. `buildResumePrompt()` constructs resume instructions for Grok Build.
 - **Expected Outcome**: Resume prompt explicitly instructs the incoming agent not to re-explain the task, not to replay completed receipts, and to resume from the next unfinished checkpoint.
 - **Actual Outcome**: **PASS**. Zero state lost; completed receipts intact; resume prompt verified.

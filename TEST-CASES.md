@@ -3,7 +3,26 @@
 > **Standard**: ISO/IEC/IEEE 29119 Software Testing Standard & IEEE 829 Test Documentation  
 > **Target System**: EveryAIOS — Universal Agentic OS & Desktop Harness  
 > **Release Target**: Windows 11 Desktop (Primary) / macOS Sonoma / Ubuntu 24.04 LTS  
-> **Document Status**: Canonical Enterprise Master Test Specification  
+> **Document Status**: Canonical Enterprise Master Test Specification
+
+> **Engine scope (2026-09-21).** Architecture authority is [`ARCH/CORE.md`](ARCH/CORE.md), with
+> [`ARCH/ADR/0005`](ARCH/ADR/0005-external-agents-are-the-v1-engines.md) — **external agents are the only
+> first-class main engines in v1; the built-in engine is deferred to post-v1** — and
+> [`ARCH/ADR/0006`](ARCH/ADR/0006-session-kinds.md) (session kinds `interactive` · `automation` ·
+> `delegated`).
+>
+> **Where a case below exercises an EveryAIOS-owned inference loop** — a built-in/"inbuilt" engine, model
+> routing as an EveryAIOS authority, or a coordinator answering with `ConversationEngine` — **that case is
+> deferred with the engine** (`TODO.md` P71.2c/P71.2d) and must not be counted as v1 acceptance. Marked
+> inline as *deferred (`P71`)*.
+>
+> **Everything that tests the environment remains in scope and unchanged:** Work durability and recovery,
+> Guard/tickets and the effect funnel, the capability plane (Office · browser · computer use · memory ·
+> search · connectors · storage), agent discovery/install/binding, session kinds, delegation, and every UI
+> projection.
+>
+> **Test IDs are stable and are never renumbered.** A deferred case keeps its ID so historical evidence stays
+> traceable. **§5 records the P71 acceptance suites** (the delegation façade, engine absence, session kinds).  
 
 ---
 
@@ -28,7 +47,7 @@ Testing is organized into **8 orthogonal dimensions**:
 ## 1. Module-by-Module Testing Framework (Modules 1 – 8)
 
 ### Module 1: Universal Agent Hosting & Multi-Agent Swarm Harness
-*Backend: `crates/everyaios-acp`, `packages/coordinator/src/chief.ts`, `packages/coordinator/src/chat.ts` | Frontend: Cockpit Agent Picker & Two-Pane Runtime Configuration*
+*Backend: `crates/everyaios-acp`, `packages/coordinator/src/chat.ts` (turn coordination), `packages/coordinator/src/chief.ts` (**legacy filename** for the session agent-binding registry — the *name* is migrated under `TODO.md` P71.5b; the module is the delegation/spawn policy owner) | Frontend: Cockpit Agent Picker & Two-Pane Runtime Configuration*
 
 | Test ID | Level & Type | Objective | Preconditions | Execution Steps & Verification | Expected Outcome |
 | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -47,8 +66,8 @@ Testing is organized into **8 orthogonal dimensions**:
 
 ---
 
-### Module 2: Model Gateway, Provider Router & BYOK Security
-*Backend: `crates/everyaios-vault`, `crates/everyaios-core/src/providers.rs`, `packages/core-providers` | Frontend: Settings > Models & Providers, Keyring Manager*
+### Module 2: Agent Registry, Discovery, Binding & Encrypted Vault (ex-“Model Gateway, Provider Router & BYOK Security” — [`ADR/0005`](ARCH/ADR/0005-external-agents-are-the-v1-engines.md))
+*Backend: `crates/everyaios-vault`, `crates/everyaios-catalog`, `crates/everyaios-agents`, `crates/everyaios-acp` | Frontend: Settings > Agents, Providers & Keys, Keyring Manager*
 
 | Test ID | Level & Type | Objective | Preconditions | Execution Steps & Verification | Expected Outcome |
 | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -885,7 +904,7 @@ Testing is organized into **8 orthogonal dimensions**:
 
 #### `E2E-UC-48`: High-Throughput 429 Rate-Limit Provider Pool Rotation across 5 Keys
 - **Industry Context**: Enterprise AI Automation Pipeline processing 10,000 documents under tight provider rate limits.
-- **Agent & Model**: Module 2 Model Gateway Keyring.
+- **Agent & Model**: Module 2 — Agent Registry / EveryAIOS-managed credential key-ring (no model gateway).
 - **Involved Modules**: Module 2 (Vault Keyring), Module 4 (Batch Workflow).
 - **Input Assets**: 5 API keys for Anthropic Claude 3.5 Sonnet configured in provider pool.
 - **Execution Sequence**:
@@ -910,7 +929,7 @@ Testing is organized into **8 orthogonal dimensions**:
 
 #### `E2E-UC-50`: Cryptographic Secure Workspace Wipe & Memory Shredding
 - **Industry Context**: Financial Auditor decommissioning a classified project workspace after transaction closing.
-- **Agent & Model**: the built-in runtime security shredder.
+- **Agent & Model**: EveryAIOS workspace-wipe + memory purge (a capability-plane operation — **no agent inference on this path**, so it is in v1 scope unchanged).
 - **Involved Modules**: Module 7 (Filesystem), Module 6 (Memory), Module 2 (Vault), Module 8 (Audit).
 - **Input Assets**: Workspace `Project_Classified_M&A` with local files, memory vectors, and session history.
 - **Execution Sequence**:
@@ -964,7 +983,7 @@ cd desktop_app && node scripts/clean-profile-boot-check.mjs
 ### Tier 2: Pull Request Automated CI Matrix
 GitHub Actions / CI automated validation running across `windows-latest`, `macos-latest`, and `ubuntu-24.04`:
 1. `check-doc-sync.mjs`: Strict verification that `capabilities.yaml`, `DESKTOP-APP-SPEC.md`, `TODO.md`, and `ARCH/` are 100% synchronized.
-2. `ipc-parity.mjs`: Validates all 37 Tauri command modules against UI invoke calls.
+2. `ipc-parity.mjs`: Validates all **40** `*_cmds.rs` / **351** registered Tauri commands against UI `invoke` call sites (`339` and `46` in older revisions were stale counts).
 3. `clean-profile-boot-check.mjs`: Enforces zero preview mock data leaks into live Tauri database.
 4. `security-gate.mjs`: Automated execution of Level 5 security tests (`netfloor` SSRF, `pathfloor` traversal, ticket expiry).
 
@@ -976,3 +995,39 @@ Automated overnight stress testing:
 
 ### Tier 4: Release Acceptance Certification
 Manual and automated qualification against all **50 End-to-End Real-World Use Cases** (`E2E-UC-01` to `E2E-UC-50`) on clean Windows 11 hardware with verified MSVC build binaries.
+
+---
+
+## 5. P71 Acceptance Suites — External-Agent v1 (added 2026-09-21)
+
+Authority: [`ARCH/ADR/0005`](ARCH/ADR/0005-external-agents-are-the-v1-engines.md) (external agents are the v1 engines; the built-in engine defers to post-v1) and [`ARCH/ADR/0006`](ARCH/ADR/0006-session-kinds.md) (session kinds). These are the **v1 acceptance gate for the engine decision**: they replace the now-deferred native-inference cases as the evidence that the decision actually shipped.
+
+### `P71-DLG` — Delegation on the shared plane (`TODO.md` P71.1)
+
+| Test ID | Level | Objective | Execution & verification | Expected |
+| :--- | :--- | :--- | :--- | :--- |
+| `P71-DLG-01` | L2 Contract | The `delegate.*` façade family exists | Enumerate `SHARED_FACADES` (`crates/everyaios-mcp/src/lib.rs`); assert `delegate.spawn` · `delegate.status` · `delegate.cancel` | Present, dot-hierarchy names, correct `read_only`/`destructive` annotations; `validate_facades()` passes |
+| `P71-DLG-02` | L2 Contract | Delegation reaches the kernel, not a second runtime | Call `delegate.spawn` from a **bound ACP agent**; trace the call | Lands on the `subagent/spawn` handler (`everyaios-core/src/chat.rs`) and creates **child Work** with `parent_work_id`; no `SubAgentRuntime` execution |
+| `P71-DLG-03` | L3 Boundary | Policy **denies**, never downgrades | Request delegation to: not-installed · not-enabled-as-subagent · over depth · over concurrency · over budget (5 cases) | Each returns a **named reason**; zero silent substitution to a different agent |
+| `P71-DLG-04` | L5 Security | The child inherits the parent's boundary | Child attempts a mutation the parent's boundary forbids | Refused; derived child permissions = parent ∩ deny ∩ explicit grants (B3) |
+| `P71-DLG-05` | L6 UI/UX | Delegation is visible to the user | Run a delegation; open the Work detail | Child Work + its agent appear in the timeline; no `Session`/`Run`/`Step` vocabulary on the casual surface |
+
+### `P71-ABS` — The engine is genuinely absent (`P71.2`, `P71.6b`)
+
+| Test ID | Level | Objective | Execution & verification | Expected |
+| :--- | :--- | :--- | :--- | :--- |
+| `P71-ABS-01` | L3 Boundary | The app boots with no built-in binding | Boot with the built-in agent absent; complete one real turn through an installed ACP agent | Works end to end; no fallback-to-inbuilt on any path |
+| `P71-ABS-02` | L1 Unit | No privileged entry remains | Resolve the launch registry default; inspect the picker merge | No `everyaios` agent row seeded; `HarnessProtocol::{Inbuilt,ModelBackend}` gone |
+| `P71-ABS-03` | L5 Security | Guard **principals** are not removed | Inspect the actor on an Office/filesystem/tool effect | `"everyaios"` still appears as the **host principal** — provenance intact; only *agent identity* is retired |
+| `P71-ABS-04` | L1 Unit | No second routing authority | Trace the agent turn for any reachable provider-inference path | None reachable; catalogue + usage exist as **observations** only |
+
+### `P71-SESS` — Session kinds (`ADR-0006`, `P71.8`)
+
+| Test ID | Level | Objective | Execution & verification | Expected |
+| :--- | :--- | :--- | :--- | :--- |
+| `P71-SESS-01` | L1 Unit | `SessionKind` is stored, never inferred | Create a Session; read `kind` | `interactive` for a Chat; the value is a **field**, never derived from "does a Chat exist" |
+| `P71-SESS-02` | L2 Contract | A trigger creates Work **without** a Chat | Fire a scheduled automation | `automation` Session created with no Chat; Work owned; **no hidden Chat** appears in the Chat list |
+| `P71-SESS-03` | L2 Contract | Every Work has an owning Session | Enumerate Works from the event log | Zero Works with a null Session — the scope chain's second rung is total (**I4**) |
+| `P71-SESS-04` | L4 Chaos | Child Work does not mint a Session | Delegate; inspect the child | Child lives in the **parent's** Session (**I8**); no new Session |
+| `P71-SESS-05` | L6 UI/UX | Headless work is surfaced through its owner | Open the Automations screen after a run | Run appears in recent runs with honest status (`running` · `completed` · `failed` · `waiting for approval`); the word "Session" never appears |
+| `P71-SESS-06` | L6 UI/UX | "Open a run" attaches a Chat | Open a completed run and continue it | A Chat attaches to the existing Session; the 1:1 rule then holds for it |

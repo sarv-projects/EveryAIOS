@@ -19,7 +19,15 @@
 ---
 
 ## 1. Active Goal
-**(Current, 2026-09-21 — P69 architecture-thaw implementation wave: defect repairs + ownership consolidation + `AgentBinding` + CI invariant gates — implemented, NOT verified)**:
+**(Current, 2026-09-21 — external-agent engine decision: `ADR-0005` + `ADR-0006`; P71 opened)**:**
+- **Decision:** **external agents are the only first-class main engines in v1**; the built-in engine (model routing, the native loop, its ~50-tool catalog, `ChatRelay` provider broker, `core-providers` inference) is **deferred to post-v1** as a *governed baseline binding*. Session **kinds** (`interactive` · `automation` · `delegated`) resolve the headless-Work gap.
+- Docs landed: `ARCH/ADR/0005`, `ARCH/ADR/0006`, **`ARCH/AUTOMATION.md`** (new — the 14th subsystem contract), `ARCH/ROUTING.md` **rewritten** as agent routing + observability, `ARCH/CORE.md` §6/§7.1/§11, `ARCH/AGENT.md` §2, `ARCH/SESSION.md` §2/§3/§5/§6/§8/§9, `ARCH/17-NATIVE-AGENT.md` **archived**, `ARCH/00-INDEX.md`, `ARCH/01`–`ARCH/03`, `ARCH/09`, `ARCH/11`, `ARCH/16`, `ARCH/DIAGRAMS.md`, `DESKTOP-APP-SPEC.md`, `TEST-CASES.md` **§5**, `testcases.md`, `README.md`, `UI-DESIGN-PROMPT.md`, `ui/DESIGN-SYSTEM.md`, `docs/codebase/*`, `TODO.md` (**P71 — 33 rows**), `SPEC-CHANGELOG.md` (**v3.81–v3.83**), `ui/src/lib/version.ts`.
+- **Code: none written** — deliberately. This wave is the decision, the contracts, the tests and the ledger.
+- **Normative order:** **`P71.1` — the `delegate.*` façade on the shared plane — must land *before* any removal.** Delegation exists only on the built-in path today, so removing the engine first would silently delete the multiagent feature.
+- Gate status at handover: `check-doc-sync.mjs` · `gen-codebase-map.mjs --check` · `check-arch-invariants.mjs` all **exit 0**; capability census **unchanged at 166**; `TODO.md 1640 = 1305 done + 335 open`.
+- **Next:** 1) land `P71.1`; 2) close the `[IMPLEMENTED — unverified]` P69 wave with a verification pass before any row flips to `DONE`; 3) work the P71 rows in the ADR-0005 §8 order.
+
+**(Previous, 2026-09-21 — P69 architecture-thaw implementation wave: defect repairs + ownership consolidation + `AgentBinding` + CI invariant gates — implemented, NOT verified)**:
 - Scope: the P69 programme (`ARCH/ADR/0003`) executed code-first: the C-series defect repairs (C1–C4, C7–C12), the D-series ownership consolidation (~30 rows), `AgentBinding` (B2), the new architecture-invariant CI gate, and the namespace unification (D23).
 - Honest status: **no test suites were run for this wave** — deliberately, per instruction (implement now, verify later). Every landed row carries `[IMPLEMENTED — unverified]` in `TODO.md` (34 rows), stays `[ ]` in the live count, and names its own remainder. Validation is compile-level + gate-level only: `cargo check --workspace --all-targets`, `cargo check` in `src-tauri`, `tsc --noEmit` for all ten packages + coordinator + UI, and the four gate scripts (`check-doc-sync`, `check-arch-invariants`, `gen-codebase-map --check`, `ipc-parity`).
 - Landed in code (highlights):

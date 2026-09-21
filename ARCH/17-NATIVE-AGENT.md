@@ -1,5 +1,12 @@
 # ARCH/17 — The EveryAIOS Native Agent (frozen status lifted by ADR/0003)
 
+> ⛔ **ARCHIVED — historical context, not current architecture.** Superseded by
+> [`ADR/0005`](ADR/0005-external-agents-are-the-v1-engines.md): the built-in engine is **deferred to post-v1**,
+> so this document no longer describes a v1 binding. Live content already lives in
+> [`AGENT.md`](AGENT.md) §2/§5, [`EXTERNAL-AGENTS.md`](EXTERNAL-AGENTS.md) §1–§4 and [`CONTEXT.md`](CONTEXT.md)
+> (the `P69.A26` split). Its native-plane capability rows **B10 · B11 · C14 · C15 · F16 · I14–I17** remain
+> capability *identity* and are unaffected. Physical move to `ARCH/archive/` is tracked as `P71.5a`.
+
 > **PARTLY SUPERSEDED — read [`CORE.md`](CORE.md), [`AGENT.md`](AGENT.md) and [`EXTERNAL-AGENTS.md`](EXTERNAL-AGENTS.md) first.**
 > The **frozen** status of this document is lifted by `ADR/0003`. Specifically superseded: §17.0 item 1
 > (“EveryAIOS Native as Universal Chief & Swarm Harness — an orchestrator **owned by us** that handles

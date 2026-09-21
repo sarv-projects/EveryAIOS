@@ -184,7 +184,7 @@ artifacts, verification and plan state — not private reasoning.
 ## 9. Capacity comes from the route
 
 ```
-ModelCatalog → ModelRouter → resolved route → ContextManager asks:
+EveryAIOS resolves: which agent receives this Work → the agent's own route → ContextManager asks:
                      "how much context can THIS route accept?"
 ```
 

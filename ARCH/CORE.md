@@ -201,6 +201,8 @@ ticket approval but before attempt resolves to **`uncertain`** — never `failed
 Twenty-seven rules (I1–I27). These are the contract; a change that violates one is an architecture change and needs
 an ADR. I1–I9 are inherited (the repo's four non-negotiables, expanded, plus the honesty rules already
 enforced by tests). I10–I27 are established by this document (I27 added via ADR-0004).
+[`ADR/0005`](ADR/0005-external-agents-are-the-v1-engines.md) adds **no invariant** — it is a *scope* decision
+(external agents are the v1 engines; the built-in engine defers to post-v1) and it amends §7.1 only.
 
 ### Ownership and truth
 
@@ -259,16 +261,23 @@ enforced by tests). I10–I27 are established by this document (I27 added via AD
 
 | Role | What it does | Who owns it |
 |---|---|---|
-| **Loop owner** — reasons, plans, selects tools | *The selected agent*, whatever it is | the agent (external or the optional built-in engine) |
+| **Loop owner** — reasons, plans, selects tools | *The selected agent*, whatever it is | the agent (external; the built-in engine is deferred to post-v1) |
 | **Turn coordination** — load state, build context, project tools, emit events, drive recovery | EveryAIOS, and it is **not reasoning** | `coordinator` |
 
 > **Retirement rule:** `Chief` and `ChiefAdapter` are retired as architecture terms. The loop-owner role is
 > `AgentBinding`; the coordination role is the **Turn Coordinator**. `primary_chief` survives only as a
 > legacy identifier until it is migrated (see `../TODO.md`), never as a concept in new text.
 
-EveryAIOS may still ship a **built-in** binding for zero-install first run, but it is **one option among
-equals**: it is not privileged, nothing in the architecture may depend on it, and every feature must work
-with it absent.
+**The built-in engine is deferred to post-v1**
+([`ADR/0005`](ADR/0005-external-agents-are-the-v1-engines.md)). For v1, **external agents are the only
+first-class main engines**: nothing in the architecture may depend on a built-in binding being present. On
+return it is a **governed baseline binding** — valued for full effect governance (its tools cross the
+capability plane, which an external agent's own tools do not — **I14**) and for zero-install first run, and
+for nothing else. It must then obey **I23**/**I24** exactly as an external agent does.
+
+> The consequence to state plainly: with external engines only, the governance promise is *every effect that
+> crosses EveryAIOS's capability plane is authorized, recorded and replayable* — not *every action in the app
+> is audited*. **I14**/**I15** already require this honesty; the engine decision is what makes it visible.
 
 ### 7.2 AgentBinding
 
@@ -560,7 +569,7 @@ titled *"Final architecture — the agent control plane"* and already states, in
 | Already in spec §4.3 / §4.4 / §9 | Consequence for this thaw |
 |---|---|
 | The three-protocol stance — ACP = local harness-drive, MCP = tool surface (Channel B is the only fully ticketed external path), A2A = remote discovery, post-v1 | **No change.** Keep as written |
-| Model ownership: only the built-in runtime owns the EveryAIOS model surface; every external agent owns its own auth/model/routing, and Native credentials are never passed to it | **No change.** Already matches I10's intent |
+| Model ownership: only the built-in runtime owns the EveryAIOS model surface; every external agent owns its own auth/model/routing, and Native credentials are never passed to it | **Amended by [`ADR/0005`](ADR/0005-external-agents-are-the-v1-engines.md).** The external-agent half was always right and in v1 it is the *whole* rule: there is no EveryAIOS model surface, because there is no built-in runtime to own one. Credentials narrow to **EveryAIOS-managed** material in the vault (§7.1, `ROUTING.md` §4). |
 | `primary_chief` = inbuilt **|** any installed ACP agent, "Chief is the executive, not the workhorse", "Orchestrator is code" | **Already the interchangeable-agent model.** The *concept* is correct; only the **word** retires (§7.1) |
 | The 8-plane map (Frontend · Work Gateway/Session Runtime · Control Plane · AI Plane · Data Plane · Extension · Trust Plane · Deployment) | **Richer than CORE §2's 7 planes.** CORE §2 is the dependency rule; the spec's map is the deployment/ownership view. Reconcile by reference, not by replacement |
 | The capability contract — `identity/describe/risk/prepare/validate/execute/observe/verify/rollback/explain` + `IdempotencyClass` (incl. `UncertainRequiresReconciliation`) | **Already exists.** It is the concrete form of the Capability/Executor distinction and of §5.2 |

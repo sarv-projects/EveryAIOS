@@ -9,7 +9,7 @@
 
 ```mermaid
 flowchart TD
-    UI["L4 Cockpit — ui/ (React 19, Zustand 5, Tailwind 4)"] -->|"nativeCall() — Tauri IPC, protocol v1"| TAURI["L3 Tauri shell — src-tauri/ (339 commands, ~46 *_cmds.rs)"]
+    UI["L4 Cockpit — ui/ (React 19, Zustand 5, Tailwind 4)"] -->|"nativeCall() — Tauri IPC, protocol v1"| TAURI["L3 Tauri shell — src-tauri/ (351 registered commands, 40 *_cmds.rs)"]
     TAURI -->|"direct Rust calls"| KERNEL["L2 Rust kernel — crates/ (22-crate workspace)"]
     KERNEL -->|"stdio JSON-RPC 2.0, [u32 LE len][JSON] framing"| SIDECAR["L1 Bun sidecar — packages/coordinator (LLM turn loop)"]
     SIDECAR -->|"ACP / MCP / CDP"| L0["L0 External agents — Claude Code, Codex, OpenCode, MCP servers, Chrome"]
@@ -37,7 +37,7 @@ See [invariants.md](invariants.md).
 | Subsystem | Path | Responsibility (from its own module docs) |
 |---|---|---|
 | Cockpit UI | `ui/` | Single-window cockpit: TitleBar, LeftSidebar, CenterColumn, ActivityRail/RightViewport, StatusBar |
-| Tauri shell | `src-tauri/` | Thin command layer; registers 339 commands, delegates to crates |
+| Tauri shell | `src-tauri/` | Thin command layer; registers **351** commands (`scripts/ipc-parity.mjs`, the parity authority), delegates to crates. The map generator counts **341** for the same list — the two tools count different things, and the parity tool is the one that also tracks UI call sites, so its number is the one to quote. |
 | Orchestrator | `crates/everyaios-core` | "the EveryAIOS orchestrator binary" — supervisor, sidecar link, chat |
 | Guard | `crates/everyaios-guard` | "Guard-1: deterministic pre-exec scanning of every…" effect |
 | Audit | `crates/everyaios-audit` | "append-only NDJSON event log (ARCH/06 §6.5, J5)" |

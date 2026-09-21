@@ -27,8 +27,21 @@ This document fixes all three with one rule:
 | Internal / API | **Session** (behind a Chat) · **Work** · **Run** · **Step** | kernel, IPC, storage |
 | Agent-facing | `provider_session_id` — never an EveryAIOS id | AgentBinding only |
 
-`Chat ↔ Session` is **1:1**. The user says "open my chat"; the runtime says "resume session". Same object,
-two vocabularies. **Nothing user-visible may say "Session".**
+`Chat ↔ Session` is **1:1** *for interactive Sessions*. The user says "open my chat"; the runtime says "resume
+session". Same object, two vocabularies. **Nothing user-visible may say "Session".**
+
+**Sessions have a `kind`** — `interactive` · `automation` · `delegated` (`ADR/0006`). The kind is a property of
+the Session, never inferred from whether a Chat exists:
+
+| Kind | Has a Chat? | Created by | Surfaced through |
+|---|---|---|---|
+| `interactive` | **yes** (1:1) | the user (`+ New Chat`) | the Chat list |
+| `automation` | **no** — and that is normal | a trigger firing (`WORK.md` §7) | the Automation screen's run list (`AUTOMATION.md` §11) |
+| `delegated` | **no** | an explicit out-of-session delegation the user starts | the work/Activity timeline |
+
+A Chat may be created **from** a non-interactive Session later (open a run, continue it). That is a
+projection-side affordance, not a second Session: the Session gains a Chat and the 1:1 rule then applies
+again. Ordinary child Work does **not** get its own Session — it lives in its parent's (I8).
 
 ---
 
@@ -39,11 +52,14 @@ flowchart TD
     U["USER"] --> SP["SPACE — the AI environment"]
     SP --> PJ["PROJECTS — optional, persistent domains"]
     SP --> SC["STANDALONE CHATS"]
+    SP --> NS["NON-INTERACTIVE SESSIONS — no Chat<br/>(automation · delegated, ADR-0006)"]
     PJ --> PC["PROJECT CHATS"]
     PJ --> PR["project resources: files · instructions · memory · skills · capabilities"]
-    PC --> SE["SESSION"]
+    PC --> SE["SESSION (kind: interactive)"]
     SC --> SE
+    NS --> SEN["SESSION (kind: automation | delegated)"]
     SE --> WK["WORK (one or more)"]
+    SEN --> WK
     WK --> AB["AGENT BINDINGS"]
 ```
 
@@ -52,8 +68,8 @@ flowchart TD
 | **Space** | The user's environment: shared memory, preferences, skills, agent configuration, connectors, permissions, projects, chats. Answers "which AI environment am I in?" | exactly one active |
 | **Project** | A persistent domain inside a Space (a repo, a thesis, a tax filing). Holds project instructions, files, memory, skills, knowledge, workspaces and its chats | **optional** |
 | **Workspace** | The physical resources a Work may touch — paths and worktrees. Answers "where are the files?" | per Work |
-| **Chat** | One conversation — the user's object | yes |
-| **Session** | The technical unit behind a Chat: canonical context, events, artifacts, bindings | yes (implicit) |
+| **Chat** | One conversation — the user's object | yes for `interactive` Sessions; **none** for `automation`/`delegated` (ADR-0006) |
+| **Session** | Canonical context, events, artifacts, bindings. Behind a Chat when `interactive`; standalone when `automation`/`delegated` | **yes — every Work has one** |
 | **Work** | The durable objective inside a Session (see CORE §5) | per objective |
 
 > **Why Space exists at all:** "workspace" is already overloaded by every agent CLI (working directory).
@@ -98,6 +114,8 @@ Work → Session → Project → Space → User
 3. Agent-private state is **beside** the hierarchy, never inside it, and is never promoted automatically.
 4. A standalone Chat resolves at `Session → Space → User`. This is a normal resolution path, not a special
    case.
+5. A **non-interactive** Session resolves the same way — `Work → Session → Space → User`, or through
+   `Project` when the automation is project-scoped. **Same shape, no new rule** (`ADR-0006` §8).
 
 ---
 
@@ -105,7 +123,10 @@ Work → Session → Project → Space → User
 
 | Event | Effect |
 |---|---|
-| New Chat | create Session; create the first Work lazily on the first objective; bind the selected agent |
+| New Chat | create an `interactive` Session; create the first Work lazily on the first objective; bind the selected agent |
+| Trigger fires (scheduler · event) | create an `automation` Session **with no Chat** and compile its Work (`WORK.md` §7, `AUTOMATION.md` §5) — never a hidden Chat |
+| Open a run | attach a Chat to that existing non-interactive Session; the 1:1 rule then applies to it |
+| Explicit out-of-session delegation | create a `delegated` Session (ordinary child Work does **not** — it stays in its parent's Session, I8) |
 | Resume Chat | rehydrate Session **from the event log**, never from model memory; re-attach bindings |
 | Switch agent | **must not** create a Session — see [AGENT.md](AGENT.md) and invariant I24 |
 | Move to / from Project | update the association only; history, events and artifacts unchanged |
@@ -139,12 +160,17 @@ the container that makes a Work reachable; it is **not** a second durability mec
 | I23 — agents are replaceable | the agent is a binding on the Session, never its owner |
 | I24 — switching changes the binding only | §6, "Switch agent" row |
 | I25 — provider state is private and resumable | §2 vocabulary; provider ids never appear as Session ids |
+| I8 — subagents are child Work | §2's kind table; child Work stays in its **parent's** Session, never a new one |
+| I15 — no false claims | a non-interactive Session is surfaced through its owner (automation run list · Activity timeline), never as a fabricated Chat |
 
 ---
 
 ## 9. Migration notes
 
 - Existing user-visible "Session" strings become "Chat" (tracked as `P69.A29`).
+- **`SessionKind`** (`interactive` | `automation` | `delegated`) is a new durable field per `ADR-0006`; existing
+  Sessions migrate to `interactive`, which preserves today's behaviour exactly. Canonical type + scope rule:
+  `P71.8`.
 - Existing records need a Space: the migration creates a default Space and adopts existing projects and
   chats into it; a chat with no project stays standalone (`project_id = null`).
 - Nothing here authorizes a schema change by itself — the durable-store schema version bump and its

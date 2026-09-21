@@ -41,7 +41,7 @@ graph TB
 
     subgraph M1_M2_M4["KERNEL MODULES (Rust Core Services)"]
         M1["Module 1: Universal Agent Harness & Swarms<br/>everyaios-acp · multirun.rs · worktrees.rs"]
-        M2["Module 2: Model Gateway & Vault<br/>everyaios-vault · keyring.rs · broker.rs · catalog"]
+        M2["Module 2: Agent Registry, Discovery & Vault<br/>everyaios-agents · everyaios-vault · keyring.rs · broker.rs · catalog"]
         M4["Module 4: Governed MCP Server<br/>everyaios-mcp · schema validation · ticket gate"]
     end
 

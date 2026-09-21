@@ -31,9 +31,11 @@ docs, code, or Git history, that is stated explicitly.
   into `crates/everyaios-engine` ("Rust port slice of the TS
   `ConversationEngine`").
 - **Provenance:** engine module doc; `ARCH/16-CHAT-LOOP-RUST-PORT.md`.
-- **Status:** in-flight per its plan doc — the sidecar (`packages/coordinator`)
-  still runs the turn loop today. Current boundary: sidecar executes; engine
-  crate owns ported slices.
+- **Status (amended 2026-09-21 by [`ADR/0005`](../../ARCH/ADR/0005-external-agents-are-the-v1-engines.md)):**
+  **superseded in purpose.** The loop belongs to the bound agent, and v1 ships no built-in engine, so there is
+  no EveryAIOS turn loop to port. What remains ported-worthy is turn **coordination** — state, context
+  projection, tool dispatch, persistence, events (`ARCH/16-CHAT-LOOP-RUST-PORT.md`'s superseded banner;
+  `D10`'s post-thaw deltas). Ported slices that only ever served the built-in loop are removed under `P71.2c`.
 
 ## D4 — Thin Tauri shell, fat kernel
 

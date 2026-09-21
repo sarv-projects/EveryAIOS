@@ -25,8 +25,13 @@ governance, lifecycle and event history. Neither side owns the other's job.
 | **Loop owner** | reasons, plans, selects tools | the selected agent (external, or the optional built-in engine) | **AgentBinding** |
 | **Turn coordination** | loads state, builds context, projects tools, emits events, drives recovery — **not reasoning** | EveryAIOS | **Turn Coordinator** |
 
-A built-in engine may still ship as one binding for zero-install first run. It is **one option among
-equals**: not privileged, nothing may depend on it, and every feature must work with it absent.
+**The built-in engine is deferred to post-v1** — see
+[`ADR/0005`](ADR/0005-external-agents-are-the-v1-engines.md). For v1 the only main engines are **external
+agents**: nothing may depend on a built-in binding being present — not the picker, not onboarding, not
+defaults, not tests. When it returns it is a **governed baseline binding** whose stated value is (a) full
+effect governance, because its tools cross the capability plane and an external agent's own tools do not
+(**I14**), and (b) zero-install first run. It is not an attempt to out-model frontier agents. On return it
+must obey **I23**/**I24** exactly as an external agent does: one binding, switchable, non-owning.
 
 **Legacy identifiers** (migrated under `P69.A30`, documented here so no reader hunts for a concept that no
 longer exists): `primary_chief`, `AcpChief`, `ChiefAdapter`, the chief module path, the composer's "Chief"

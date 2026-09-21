@@ -74,6 +74,8 @@ These are the shipped chat atoms. The desktop sidecar imports them unchanged fro
 
 **Copy verdict:** A-1…A-16 import as-is into the sidecar. **The only change** is wiring: `generatePrompt` gains the key-ring router (03) and token budgets (05); `executeTool` calls the everyaios-guard ticket flow (06); `persistTurn` also feeds everyaios-audit (06/08).
 
+> **Amended 2026-09-21 — [`ADR/0005`](ADR/0005-external-agents-are-the-v1-engines.md).** The *reasoning* atoms are **deferred with the built-in engine** and are not imported as a v1 execution path: **A-1** (`ConversationEngine`), **A-2** (`RetrievalPlanner`), **A-3** (`ToolPlanner`), **A-5** (`SmartRouter`/`HeuristicClassifier`) and **A-14** (provider clients). The atoms that are **environment rather than engine** survive as coordinator-side turn machinery (`P71.2c`/`P71.2d`): **A-6** prompt assembly, **A-9** output normalizer, **A-10** `StreamSession`, **A-11**/**A-12** compression, **A-13** risk compass, **A-15** trajectory logging, **A-16** artifact side-channel. `A-4` (`PermissionGate`) survives **only as advisory classification** — Guard (Rust) is the sole decider (**I12**, `P69.D3`).
+
 ---
 
 ## 2. COPY — feature patterns from research to implement (source B)

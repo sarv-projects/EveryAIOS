@@ -1,5 +1,13 @@
 # 03 — BYOK Key-Rings: Multiple Keys per Provider, Fallback Rotation
 
+> **Status:** Derived document, **re-scoped by [`ADR/0005`](ADR/0005-external-agents-are-the-v1-engines.md).**
+> It owns **EveryAIOS-managed** credentials — connector tokens, browser sessions, EveryAIOS-managed API keys —
+> and the key-ring/failover mechanics that serve them. It is **no longer a provider-inference gateway**:
+> external agents own their provider, model, authentication and fallback ([`ROUTING.md`](ROUTING.md) §4), and
+> the built-in engine that used to consume these rings is deferred to post-v1. The auth-mode taxonomy in §3.0
+> already states the correct ownership rule — *subscription credentials are never copied or harvested* — and
+> that rule now governs the whole document.
+
 ## 3.0 Auth-mode taxonomy — `local` means **local models**, nothing else
 
 Three unrelated things get conflated in code and UI, so they are separated here once.
@@ -30,8 +38,8 @@ This matters because **`local` is a first-class product concept with its own UI 
 
 > **The user requirement, verbatim:** *"for BYOK, under each provider, add an option that multiple keys under each provider can be added. Each acts as a fallback — as soon as one rate-limits, switch. Technically users can have multiple accounts without ever changing keys."*
 > This doc is the design. Patterns sourced from: LiteLLM key management (web, 2026), OpenRouter multi-BYOK (web), pi + `pi-keyrouter` (doc 19 §1), Reasonix cost discipline (doc 05 §6), BrowserOS OAuth token store (doc 33 §7.4), vault/CES (doc 19 §7, v2.0 §P8).
-> **Full-Stack Module:** Module 2 — Model Gateway & Encrypted Keyring Vault (`crates/everyaios-vault`, `crates/everyaios-catalog`).
-> **Ownership ([`CORE.md`](CORE.md) §4, §7.1):** the vault/BYOK broker is **shared execution-kernel infrastructure**, not a plane of its own. Key pools, 429 failover and key affinity are consumed by the *resolved route* ([`ROUTING.md`](ROUTING.md)) — not by a “Native agent plane”, which is retired as an owning entity (`ADR/0003`); they are never pushed into an external agent. An external ACP agent keeps its own model/account, and EveryAIOS copies **no** subscription credential — a native agent receives only the spawn-env the user explicitly configured.
+> **Full-Stack Module:** Module 2 — **Agent Registry, Discovery, Binding & the Encrypted Vault** (`crates/everyaios-vault`, `crates/everyaios-catalog`) — the module was titled *Model Gateway & Encrypted Keyring Vault* before [`ADR/0005`](ADR/0005-external-agents-are-the-v1-engines.md).
+> **Ownership ([`CORE.md`](CORE.md) §4, §7.1):** the vault/BYOK broker is **shared execution-kernel infrastructure**, not a plane of its own. Key pools, 429 failover and key affinity are consumed by the *resolved route* ([`ROUTING.md`](ROUTING.md)) — not by a “Native agent plane”, which is retired as an owning entity (`ADR/0003`) and whose built-in engine is deferred to post-v1 (`ADR/0005`); they are never pushed into an external agent. An external ACP agent keeps its own model/account, and EveryAIOS copies **no** subscription credential. In v1 there is no built-in agent to receive a spawn-env at all; when the governed baseline binding returns it receives only the spawn-env the user explicitly configured.
 
 ## 3.1 The model: provider → key pool → routing
 

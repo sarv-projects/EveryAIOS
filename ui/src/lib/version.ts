@@ -10,4 +10,4 @@
  * Distinct from `__APP_VERSION__` (compile-time, injected from
  * `ui/package.json`), which is the *application* version shown in About.
  */
-export const ARCH_VERSION = 'v3.80'
+export const ARCH_VERSION = 'v3.83'

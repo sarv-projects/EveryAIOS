@@ -6,7 +6,7 @@ This file records historical decisions, research transfers, implementation updat
 
 Each entry records the date or release marker, change category, affected sections or capability IDs, decision, implementation impact, and verification. Historical entries below are preserved; new entries must use this structure.
 
-**Point-in-time rule — how to read every number below.** Every count in an entry — capability total, TODO census, test counts, version marker — is that entry's own verification evidence **at that date**. This file is an archive; entries are never rewritten to today's numbers, so a dated number is not a stale number. Read `census stays 157` in the v3.69–v3.75 entries as exact: the nine native-plane rows (**B10 · B11 · C14 · C15 · F16 · I14–I17**) landed later, in **v3.76**, which is why those entries and the current contract differ without either being wrong. The only *current* numbers live in `capabilities.yaml` / `ARCH/09-FEATURE-MATRIX.md` / `DESKTOP-APP-SPEC.md` §0 (capability identity) and in `TODO.md`'s live-count line (delivery); `scripts/check-doc-sync.mjs` machine-checks those two. If a number anywhere else disagrees with them, the number is historical and the three identity surfaces plus the live-count line win.
+**Point-in-time rule — how to read every number below.** Every count in an entry — capability total, TODO census, test counts, version marker — is that entry's own verification evidence **at that date**. This file is an archive; entries are never rewritten to today's numbers, so a dated number is not a stale number. Read `census stays 157` in the v3.69–v3.75 entries as exact: the nine native-plane rows (**B10 · B11 · C14 · C15 · F16 · I14–I17**) landed later, in **v3.76**, which is why those entries and the current contract differ without either being wrong. The only *current* numbers live in `capabilities.yaml` / `ARCH/09-FEATURE-MATRIX.md` / `DESKTOP-APP-SPEC.md` §0 (capability identity) and in `TODO.md`'s live-count line (delivery); `scripts/check-doc-sync.mjs` machine-checks those two. The only *current architecture* is `ARCH/CORE.md` plus its subsystem contracts, as amended by `ARCH/ADR/0001–0006` — in particular [`ADR/0005`](ARCH/ADR/0005-external-agents-are-the-v1-engines.md) (external agents are the v1 engines; the built-in engine defers to post-v1) and [`ADR/0006`](ARCH/ADR/0006-session-kinds.md) (session kinds), which **supersede any earlier engine or session statement in an entry below**. If a number anywhere else disagrees with them, the number is historical and the three identity surfaces plus the live-count line win.
 
 ## Documentation ownership
 
@@ -445,6 +445,114 @@ Chief writes `{goal, constraints, inputs, postconditions, out-of-scope}` onto th
 **Verification.** `node scripts/check-doc-sync.mjs` passed (166 capabilities in sync, kernel gate clear); `node scripts/ipc-parity.mjs` passed (321 commands registered); `tsc --noEmit` clean (0 type errors).
 
 ---
+
+## v3.83 — 2026-09-21 — P71 acceptance suites, UI delivery rows, and test-spec scope
+
+**Category:** test specification + delivery ledger. **Capability rows:** none added, none removed — census
+stays **166**.
+
+**Why.** `ARCH/ADR/0005`/`ADR/0006` changed what v1 *is*, but the test specifications and the delivery ledger
+still described the old shape in places, and the UI half of the change had no tracked rows at all — only
+prose. This entry closes both gaps.
+
+**`TEST-CASES.md`.** An **engine-scope banner** declares that any case exercising an EveryAIOS-owned inference
+loop (built-in engine, model routing as an authority, `ConversationEngine`) is **deferred with the engine**
+(`P71.2c`/`P71.2d`) and must not count as v1 acceptance, while everything testing the *environment* stays in
+scope. **Module 2** is renamed to *Agent Registry, Discovery, Binding & Encrypted Vault*. Module 1's backend
+line labels `chief.ts` as a **legacy filename**. A new **§5 P71 acceptance suites** adds 15 cases across three
+groups: `P71-DLG` (the delegation façade — including that the kernel, not a second runtime, receives it),
+`P71-ABS` (the engine is genuinely absent — including that **Guard principals named `everyaios` are *not*
+removed**), and `P71-SESS` (session kinds and the absence of hidden Chats). The stale CI counts
+(`37` command modules / `339` commands) are corrected to **40 / 351**. **Test IDs are stable and are never
+renumbered** — a deferred case keeps its ID so evidence stays traceable.
+
+**`testcases.md`.** A **post-report scope note** preserves it as the dated (2026-09-16) point-in-time report
+rather than rewriting its measurements, removes the now-impossible *Inbuilt* swap target from the scope line,
+and labels `chiefRegistry`/`swap`/`Chief` as **legacy identifiers** for the session agent-binding registry
+(migration `P71.5b`) — the described behaviour is correct, the vocabulary is not.
+
+**`TODO.md`.** **P71.9 — UI for external-agent v1** adds **8 rows, each naming the file that changes and the
+visible behaviour that changes**: picker readiness (no assumed default), first run leads with agent discovery,
+composer shows only the bound agent's surface, delegation is visible + the per-agent subagent profile,
+automations run list with honest status, session kinds surfaced through their owner, agent-builder engine
+choices, and usage/cost presented as observation with an honest unknown. Extends `P53.6`'s shipped surface
+rather than replacing it.
+
+**Verification.** `node scripts/check-doc-sync.mjs` → `166 capabilities in sync (yaml == ARCH/09 == spec §0)`
+and `TODO.md 1638 = 1305 done + 333 open matches header`.
+
+## v3.82 — 2026-09-21 — Session kinds resolve the headless-Work gap (ADR-0006)
+
+**Category:** architecture decision (contract resolution). **Capability rows:** none added, none removed —
+the census stays **166**.
+
+**Decision.** [`ADR/0006`](ARCH/ADR/0006-session-kinds.md) defines Session **kinds** — `interactive`
+(behind a Chat, 1:1) · `automation` (no Chat, normal) · `delegated` (no Chat, explicit). It resolves a
+silence between two contracts that were each correct on their own: `SESSION.md` §2 asserted
+`Chat ↔ Session` is 1:1, while `WORK.md` §7 requires **every** trigger — including Scheduler and Subagent —
+to create Work. A trigger-created Work therefore had no owner for its Session.
+
+**Why it mattered.** Both ways of filling that silence violate **I4**: inventing a hidden Chat per automation
+run makes "Chat" mean two things at once, and letting Work exist with no Session breaks §5's scope chain
+(`Work → Session → Project → Space → User`) at its second rung, leaving memory and capability resolution
+undefined for headless work.
+
+**What it does *not* change.** `Chat ↔ Session` stays 1:1 for interactive Sessions; the word "Session" still
+never appears in user-facing surfaces; child Work stays in its **parent's** Session (**I8**) and gets none of
+its own; scope resolution gains no new rule. No invariant was added.
+
+**Documents changed.** `ARCH/ADR/0006-…` (new) · `ARCH/SESSION.md` (§2 kinds, §3 hierarchy second root +
+vocabulary, §5 resolution, §6 lifecycle, §8 invariants, §9 migration) · `ARCH/AUTOMATION.md` §10 (the gap
+recorded as *resolved*, implementation `P71.8`) · `ARCH/00-INDEX.md` (ADR list + accounting) · `TODO.md`
+(**P71.8** opened, 4 rows).
+
+**Implementation impact.** None yet. `SessionKind` is a new durable field; existing Sessions migrate to
+`interactive`, which preserves today's behaviour exactly. Tracked as `P71.8a–d`; `P71.3d` (shrinking
+`scheduler_service.rs` to a trigger plane) becomes safe rather than merely tidy, because its Work now has a
+legal owner.
+
+**Verification.** `node scripts/check-doc-sync.mjs` → `166 capabilities in sync (yaml == ARCH/09 == spec §0)`
+and `TODO.md 1630 = 1305 done + 325 open matches header`.
+
+## v3.81 — 2026-09-21 — External agents are the v1 engines; the built-in engine defers to post-v1 (ADR-0005)
+
+**Category:** architecture decision + scope reduction. **Capability rows:** none added, none removed — the
+census stays **166**. The native-plane rows `B10/B11/C14/C15/F16/I14–I17` are capability *identity* and are
+unaffected; what changes is the *engine* behind v1, not the capability set.
+
+**Decision.** [`ADR/0005`](ARCH/ADR/0005-external-agents-are-the-v1-engines.md) makes external agents the
+only first-class main engines for v1 and defers the built-in engine to post-v1, returning as a *governed
+baseline binding*. It amends ADR-0003's "one option among equals" for v1 scope only, adds **no** invariant,
+and leaves ADR-0003's decision text intact.
+
+**Why deferral rather than deletion.** The built-in engine is the only binding whose tools cross the
+capability plane, so it is the only path to a *fully governed* agent experience — an external agent's own
+tools do not cross Guard (**I14**) and no audit trail is claimed for them. It is also the zero-install
+first-run path. Both are preserved as post-v1 options; neither is available in v1, because external agents
+own their models and EveryAIOS must not become a second routing authority (**I4**).
+
+**Documents changed.**
+- `ARCH/ADR/0005-…` — new.
+- `ARCH/AUTOMATION.md` — **new subsystem contract** (the 14th): triggers/occurrences → Work factory, revision
+  immutability per run, concurrency + misfire policy, wait conditions, and the scheduler's exact boundary.
+- `ARCH/ROUTING.md` — **re-scoped** to agent routing + credential/usage observability. Retires the
+  `ModelCatalog → ModelRouter → Vault → ProviderTransport → model execution` chain.
+- `ARCH/CORE.md` §6 (ADR note), §7.1 (the deferral) and §11 (the model-ownership row is **amended**, not
+  deleted).
+- `ARCH/AGENT.md` §2 — the built-in engine is deferred; it is optional and every feature must be absent-safe.
+- `ARCH/17-NATIVE-AGENT.md` — archived banner added; physical move tracked as `P71.5a`.
+- `ARCH/00-INDEX.md` — ADR-0005 and `AUTOMATION.md` added to the accounting table (contracts 13 → 14).
+- `TODO.md` — **P71 opened** (19 rows), with the delegation façade as the normative prerequisite.
+
+**Implementation impact.** None yet — P71 is **opened, not landed**. The order is normative: `P71.1` (the
+`delegate.*` façade) must land **before** the removals, because delegation exists only on the built-in path
+today and removing the engine first would silently delete the multiagent feature. Four `TODO.md` rows
+currently marked `[DONE]` are reversed by P71 (P29 `NativeLoop`/`DirectGuard`, `automation_runtime`'s runtime
+seam, `SubAgentRuntime`, `SwarmSession`); each is **re-homed rather than deleted**, per **I8**/**I9**.
+
+**Verification.** `node scripts/check-doc-sync.mjs` → `166 capabilities in sync (yaml == ARCH/09 == spec §0)`
+and `TODO.md 1626 = 1305 done + 321 open matches header`. The census is unchanged at 166 because no
+capability row moved.
 
 ## v3.80 — 2026-09-15 — One terminal plane: shell integration, provenance, and the Copilot-style terminal follow
 

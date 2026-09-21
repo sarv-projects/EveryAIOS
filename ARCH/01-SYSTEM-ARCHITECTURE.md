@@ -69,7 +69,7 @@ Every subsystem placement follows this test (derived from the ownership matrix, 
   - `subagent_lifecycle_supervisor`: Enforces depth $\le 2$, concurrency $\le 6$, budget fences, and circuit breakers (I8: subagents are child Work/Runs).
 - **Frontend UI**: `agents` screen, agent picker dropdown in `chat`, right-rail `diff` viewport (3-way merge resolver), `activity` tree.
 
-### Model gateway & encrypted vault (plane 3)
+### Agent registry, discovery & encrypted vault (plane 3)
 
 - **Logic**: `crates/everyaios-vault`, `crates/everyaios-catalog`, `packages/core-providers`.
 - **Submodules & Functions**:

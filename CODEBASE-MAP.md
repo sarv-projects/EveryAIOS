@@ -8158,14 +8158,14 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 | .agents/skills/codebase-intelligence/references/ | 7 | 466 |
 | .agents/skills/skill-creator/ | 1 | 85 |
 | .agents/templates/ | 1 | 169 |
-| ARCH — the design set (+ DIAGRAMS & ADR) | 35 | 7,901 |
+| ARCH — the design set (+ DIAGRAMS & ADR) | 35 | 7,991 |
 | RESEARCH/2026-ai-landscape — other research | 11 | 970 |
 | RESEARCH/desktop_app — the prior-art & competitor corpus | 93 | 12,987 |
 | deploy/ — deployment docs | 1 | 105 |
-| docs/codebase/ | 10 | 967 |
-| root — specs, handover, and this map | 11 | 10,382 |
+| docs/codebase/ | 10 | 971 |
+| root — specs, handover, and this map | 11 | 10,651 |
 | ui/ — UI design docs | 1 | 83 |
-| **TOTAL** | **179** | **35,041** |
+| **TOTAL** | **179** | **35,404** |
 
 ### 14.1 .agents/
 
@@ -8261,7 +8261,7 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 
 ### 14.7 ARCH — the design set (+ DIAGRAMS & ADR)
 
-#### `ARCH/00-INDEX.md` — 109 lines · 16.2 KB
+#### `ARCH/00-INDEX.md` — 111 lines · 17.4 KB
 > ARCH — Derived Index (points at CORE)
 
 - opening: **⛭ ROOT AUTHORITY: [`CORE.md`](CORE.md).** Read that first.
@@ -8271,15 +8271,15 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 
 - opening: **DERIVED DOCUMENT — see [`CORE.md`](CORE.md) first.** This file is a *derived overview* of the module story.
 
-#### `ARCH/02-MODULE-LAYOUT.md` — 175 lines · 40.9 KB
+#### `ARCH/02-MODULE-LAYOUT.md` — 175 lines · 41.2 KB
 > 02 — Module Layout (derived from CORE §4 and §13)
 
 - opening: **DERIVED DOCUMENT — see [`CORE.md`](CORE.md) §4 first.** Ownership is defined by CORE's 9-question matrix (one owner per question).
 
-#### `ARCH/03-BYOK-KEYRINGS.md` — 119 lines · 14.2 KB
+#### `ARCH/03-BYOK-KEYRINGS.md` — 127 lines · 15.2 KB
 > 03 — BYOK Key-Rings: Multiple Keys per Provider, Fallback Rotation
 
-- opening: Three unrelated things get conflated in code and UI, so they are separated here once.
+- opening: **Status:** Derived document, **re-scoped by [`ADR/0005`](ADR/0005-external-agents-are-the-v1-engines.md).** It owns **EveryAIOS-managed** credentials — connector tokens, browser sessions, EveryAIOS-m
 
 #### `ARCH/04-OFFICE-ENGINE.md` — 75 lines · 9.2 KB
 > 04 — Office Engine: Open + Edit Word / Excel / PPT / PDF
@@ -8306,7 +8306,7 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 
 - opening: **DERIVED DOCUMENT — see [`CORE.md`](CORE.md) §2 and [`CAPABILITIES.md`](CAPABILITIES.md) first.** Browser is one capability pack behind one `BrowserService` façade with replaceable strategies underne
 
-#### `ARCH/09-FEATURE-MATRIX.md` — 241 lines · 101.9 KB
+#### `ARCH/09-FEATURE-MATRIX.md` — 241 lines · 102.2 KB
 > 09 — Module, Submodule & Function Matrix (the complete derivation)
 
 - opening: **SCOPE NARROWED — see [`CORE.md`](CORE.md) first.** This file’s job is the capability/feature matrix (identity + status) **only**.
@@ -8316,7 +8316,7 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 
 - opening: **Derived from [`CORE.md`](CORE.md) — the root authority; this document specializes, never restates, it.** **SCOPE REDUCED — delivery status lives in [`../TODO.md`](../TODO.md).** This document keeps
 
-#### `ARCH/11-AI-CHAT-FEATURES.md` — 176 lines · 21.8 KB
+#### `ARCH/11-AI-CHAT-FEATURES.md` — 178 lines · 22.6 KB
 > 11 — AI Chat Features: Copy · Convert · Reject (the derivation)
 
 - opening: **SPLIT PENDING — see [`CORE.md`](CORE.md) and [`AGENT.md`](AGENT.md) first.** The AI-architecture rationale here is superseded wherever it describes an EveryAIOS-owned reasoning loop: the loop belong
@@ -8336,15 +8336,15 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 
 - opening: **DERIVED DOCUMENT — see [`CORE.md`](CORE.md) §4 and [`CAPABILITIES.md`](CAPABILITIES.md) first.** Connectors are a capability pack: a connector declares a manifest, authentication, capabilities, prov
 
-#### `ARCH/16-CHAT-LOOP-RUST-PORT.md` — 186 lines · 12.0 KB
+#### `ARCH/16-CHAT-LOOP-RUST-PORT.md` — 193 lines · 12.6 KB
 > ARCH/16 — Porting the async chat loop to Rust (ConversationEngine `run()` + `runChatStream`)
 
 - opening: **Derived from [`CORE.md`](CORE.md) — the root authority; this document specializes, never restates, it.** **SUPERSEDED IN PART — see [`AGENT.md`](AGENT.md).** The premise of this document is that EveryAIOS owns the chat loop.
 
-#### `ARCH/17-NATIVE-AGENT.md` — 612 lines · 46.3 KB
+#### `ARCH/17-NATIVE-AGENT.md` — 619 lines · 46.9 KB
 > ARCH/17 — The EveryAIOS Native Agent (frozen status lifted by ADR/0003)
 
-- opening: **PARTLY SUPERSEDED — read [`CORE.md`](CORE.md), [`AGENT.md`](AGENT.md) and [`EXTERNAL-AGENTS.md`](EXTERNAL-AGENTS.md) first.** The **frozen** status of this document is lifted by `ADR/0003`.
+- opening: ⛔ **ARCHIVED — historical context, not current architecture.** Superseded by [`ADR/0005`](ADR/0005-external-agents-are-the-v1-engines.md): the built-in engine is **deferred to post-v1**, so this document no longer describes a v1 binding.
 
 #### `ARCH/ADR/0001-connector-platform-mcp-first.md` — 32 lines · 1.3 KB
 > ADR-0001 — MCP is the connector platform; no third-party aggregator
@@ -8366,7 +8366,7 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 
 - opening: - **Status:** accepted - **Date:** 2026-09-20 - **Applies to:** `CORE.md` §6 · `AGENT.md` §5.2–§5.3 · `EXTERNAL-AGENTS.md` §8 - **Amends:** [`0003-architecture-thaw-core-authority.md`](0003-architectu
 
-#### `ARCH/AGENT.md` — 279 lines · 15.8 KB
+#### `ARCH/AGENT.md` — 284 lines · 16.3 KB
 > ARCH/AGENT — the agent model: binding, adapter, bridge
 
 - opening: **Status:** Subsystem contract, derived from [`CORE.md`](CORE.md).
@@ -8381,7 +8381,7 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 
 - opening: **Status:** Subsystem contract, derived from [`CORE.md`](CORE.md) §8.
 
-#### `ARCH/CORE.md` — 682 lines · 41.8 KB
+#### `ARCH/CORE.md` — 691 lines · 42.9 KB
 > ARCH/CORE — The EveryAIOS Core Architecture (single architectural authority)
 
 - opening: **Status:** Architecture authority. This file is the **root** of the `ARCH/` set: every other architecture document derives from it and none may weaken it.
@@ -8411,8 +8411,8 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 
 - opening: **Status:** Subsystem contract, derived from [`CORE.md`](CORE.md) §5.2 and §6.
 
-#### `ARCH/ROUTING.md` — 113 lines · 4.7 KB
-> ARCH/ROUTING — catalog, router, credentials, transport, ledger
+#### `ARCH/ROUTING.md` — 137 lines · 6.1 KB
+> ARCH/ROUTING — agent routing, credentials, and usage observability
 
 - opening: **Status:** Subsystem contract, derived from [`CORE.md`](CORE.md) §4 and §8.
 
@@ -8421,7 +8421,7 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 
 - opening: **Status:** Subsystem contract, derived from [`CORE.md`](CORE.md) §6 and §7.5.
 
-#### `ARCH/SESSION.md` — 152 lines · 6.5 KB
+#### `ARCH/SESSION.md` — 178 lines · 8.8 KB
 > ARCH/SESSION — Space, Project, Workspace, Chat, Work
 
 - opening: **Status:** Subsystem contract, derived from [`CORE.md`](CORE.md).
@@ -8438,7 +8438,7 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 
 ### 14.8 RESEARCH/2026-ai-landscape — other research
 
-#### `RESEARCH/2026-ai-landscape/00-INDEX.md` — 51 lines · 3.8 KB
+#### `RESEARCH/2026-ai-landscape/00-INDEX.md` — 51 lines · 4.1 KB
 > 2026 AI Landscape — Research Archive Index
 
 - opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
@@ -8495,7 +8495,7 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 
 ### 14.9 RESEARCH/desktop_app — the prior-art & competitor corpus
 
-#### `RESEARCH/desktop_app/00-INDEX.md` — 118 lines · 87.1 KB
+#### `RESEARCH/desktop_app/00-INDEX.md` — 118 lines · 87.5 KB
 > RESEARCH — Master Index
 
 - opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
@@ -8974,12 +8974,12 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 
 - opening: **Post-thaw authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md)** (27 invariants I1–I27) **+ the subsystem contracts** (`WORK` · `SESSION` · `AGENT` · `EXTERNAL-AGENTS` · `CONTEXT` · `CAPABILITIES`
 
-#### `docs/codebase/architecture.md` — 109 lines · 8.1 KB
+#### `docs/codebase/architecture.md` — 109 lines · 8.3 KB
 > Architecture
 
 - opening: **Post-thaw authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md)** (27 invariants I1–I27) **+ the subsystem contracts** (`WORK` · `SESSION` · `AGENT` · `EXTERNAL-AGENTS` · `CONTEXT` · `CAPABILITIES`
 
-#### `docs/codebase/components.md` — 112 lines · 8.9 KB
+#### `docs/codebase/components.md` — 112 lines · 9.1 KB
 > Components
 
 - opening: **Post-thaw authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md)** (27 invariants I1–I27) **+ the subsystem contracts** (`WORK` · `SESSION` · `AGENT` · `EXTERNAL-AGENTS` · `CONTEXT` · `CAPABILITIES`
@@ -8989,12 +8989,12 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 
 - opening: **Post-thaw authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md)** (27 invariants I1–I27) **+ the subsystem contracts** (`WORK` · `SESSION` · `AGENT` · `EXTERNAL-AGENTS` · `CONTEXT` · `CAPABILITIES`
 
-#### `docs/codebase/decisions.md` — 130 lines · 8.3 KB
+#### `docs/codebase/decisions.md` — 132 lines · 8.6 KB
 > Decisions
 
 - opening: **Post-thaw authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md)** (27 invariants I1–I27) **+ the subsystem contracts** (`WORK` · `SESSION` · `AGENT` · `EXTERNAL-AGENTS` · `CONTEXT` · `CAPABILITIES`
 
-#### `docs/codebase/external-systems.md` — 70 lines · 5.1 KB
+#### `docs/codebase/external-systems.md` — 72 lines · 5.3 KB
 > External Systems
 
 - opening: **Post-thaw authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md)** (27 invariants I1–I27) **+ the subsystem contracts** (`WORK` · `SESSION` · `AGENT` · `EXTERNAL-AGENTS` · `CONTEXT` · `CAPABILITIES`
@@ -9034,37 +9034,37 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 
 - opening: **Status:** research verdicts folded from doc 68 §2/§3 into the P12.1 GTM competitive analysis (P12 queue).
 
-#### `CURRENT_RUN.md` — 2,233 lines · 228.1 KB
+#### `CURRENT_RUN.md` — 2,241 lines · 229.9 KB
 > CURRENT RUN STATE — Task Handover & Checkpoint
 
 - opening: **⚠ SESSION HANDOVER ONLY — this file carries no architecture and no scale claims.** Since the 2026-09-20 thaw (`ARCH/ADR/0003`), architecture belongs to [`ARCH/CORE.md`](ARCH/CORE.md) and its subsyst
 
-#### `DESKTOP-APP-SPEC.md` — 1,553 lines · 330.4 KB
+#### `DESKTOP-APP-SPEC.md` — 1,560 lines · 332.9 KB
 > DESKTOP-APP-SPEC.md — Complete Product Specification
 
 - opening: **Architecture authority: [`ARCH/CORE.md`](ARCH/CORE.md).** This document is the **product contract** — behavior, UI, schemas, invariants.
 
-#### `README.md` — 336 lines · 26.2 KB
+#### `README.md` — 336 lines · 26.3 KB
 > <p align="center">
 
 - opening: <p align="center"> <img src="src-tauri/icons/128x128.png" width="88" alt="EveryAIOS" /> </p>
 
-#### `SPEC-CHANGELOG.md` — 1,462 lines · 468.8 KB
+#### `SPEC-CHANGELOG.md` — 1,570 lines · 477.0 KB
 > DESKTOP-APP-SPEC.md — Specification Changelog
 
 - opening: This file records historical decisions, research transfers, implementation updates, and verification evidence for `DESKTOP-APP-SPEC.md`.
 
-#### `TEST-CASES.md` — 979 lines · 84.3 KB
+#### `TEST-CASES.md` — 1,034 lines · 90.4 KB
 > Enterprise MNC Master Test Cases Specification: EveryAIOS
 
 - opening: **Standard**: ISO/IEC/IEEE 29119 Software Testing Standard & IEEE 829 Test Documentation **Target System**: EveryAIOS — Universal Agentic OS & Desktop Harness **Release Target**: Windows 11 Desktop (P
 
-#### `TODO.md` — 2,701 lines · 792.2 KB
+#### `TODO.md` — 2,790 lines · 809.6 KB
 > EveryAIOS — Master Implementation TODO
 
 - opening: **Documentation ownership:** `DESKTOP-APP-SPEC.md` is the **product contract only** (behavior, schemas, UI layouts, invariants — not a build plan).
 
-#### `UI-DESIGN-PROMPT.md` — 360 lines · 46.0 KB
+#### `UI-DESIGN-PROMPT.md` — 360 lines · 46.3 KB
 > EveryAIOS — Production UI Design Specification
 
 - opening: **Canonical UI spec.** `ui/src` implements this document (ARCH/12 §2.1: when ARCH/12 and this file disagree on pixels, **this file wins**).
@@ -9074,14 +9074,14 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 
 - opening: Plan for the alpha → beta → RC user-testing rounds.
 
-#### `testcases.md` — 341 lines · 24.5 KB
+#### `testcases.md` — 343 lines · 25.5 KB
 > EveryAIOS Verification & Cowork Capability Test Cases Report
 
-- opening: **Date**: September 16, 2026 **Target**: EveryAIOS Desktop Cowork Runtime & Multi-Agent Swarm Subsystems **Scope**: Two-Plane Native Architecture, External Agent Swapping (OpenCode, Grok Build, Codex,
+- opening: **Date**: September 16, 2026 **Target**: EveryAIOS Desktop Cowork Runtime & Multi-Agent Swarm Subsystems **Scope**: Two-Plane Native Architecture, External Agent Swapping (OpenCode, Grok Build, Codex)
 
 ### 14.13 ui/ — UI design docs
 
-#### `ui/DESIGN-SYSTEM.md` — 83 lines · 6.8 KB
+#### `ui/DESIGN-SYSTEM.md` — 83 lines · 7.0 KB
 > EveryAIOS Design System (P11.1)
 
 - opening: **What this is:** the implementable surrogate of the "Figma/design file with all components + layouts" item.
@@ -9665,7 +9665,7 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 | `.css` | 1 |
 | **TOTAL tracked** | **1470** |
 
-Lines counted across the 1463 tracked text files at generation time: **408,647** (this map excluded — self-referential).
+Lines counted across the 1463 tracked text files at generation time: **409,010** (this map excluded — self-referential).
 
 ### 15.5 Coverage audit — is any tracked file unaccounted for?
 

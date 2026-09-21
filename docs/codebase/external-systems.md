@@ -25,9 +25,11 @@
   and the UI picker work from a local snapshot; curated seed rows are labeled
   fallback, never presented as live data.
 - **Runtime routing:** provider-qualified model selections are preserved
-  through routing; per-agent ownership rules in `ui/DESIGN-SYSTEM.md` (2026-09-12 note).
-  Post-thaw: ModelCatalog → ModelRouter → Vault → ProviderTransport → Cost/Usage ledger, and context
-  capacity comes from the resolved route, never a global registry (`ARCH/ROUTING.md`, CORE I21).
+  through routing; **re-scoped by [`ADR/0005`](../../ARCH/ADR/0005-external-agents-are-the-v1-engines.md):** the
+  `ModelCatalog → ModelRouter → Vault → ProviderTransport` chain is **retired**. EveryAIOS resolves *which
+  agent* receives the Work; the agent owns its own provider, model and authentication (`ARCH/ROUTING.md`
+  §1–§4). Model catalogue, pricing and usage/cost survive as **observations**, and context capacity still
+  comes from the resolved route, never a global registry (CORE I21).
 
 ## Network egress and retry boundaries
 

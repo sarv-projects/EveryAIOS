@@ -9,7 +9,7 @@
 >
 > **Date:** August 2026 · **Status:** Verified via GitHub API unless noted
 >
-> **⚠️ SUPERSEDED — historical archive.** This folder predates the desktop app (mid-2026 research). The live research is `../desktop_app/RESEARCH/` (docs 01–62, 255-repo ledger); several positions here were superseded by the hybrid decision — e.g. "Electron over Tauri" (00-INDEX §Doc Index) is **outdated**: the desktop app is Tauri/Rust shell + supervised Bun-compiled TS sidecar + Rust core (browser/CDP, script-eval, guards, audit, vault). Do not read this archive as current.
+> **⚠️ SUPERSEDED — historical archive.** This folder predates the desktop app (mid-2026 research). The live research is `../desktop_app/` (docs 01–91, 255-repo ledger); several positions here were superseded by the hybrid decision — e.g. "Electron over Tauri" (00-INDEX §Doc Index) is **outdated**: the desktop app is Tauri/Rust shell + supervised Bun-compiled TS sidecar + Rust core (browser/CDP, script-eval, guards, audit, vault). **Also superseded (2026-09-21):** [`../ARCH/ADR/0005`](../../ARCH/ADR/0005-external-agents-are-the-v1-engines.md) makes external agents the only v1 engines and defers the built-in engine to post-v1, so any position here that assumes an EveryAIOS-owned inference loop is not current. Do not read this archive as current.
 
 ---
 

@@ -133,7 +133,7 @@ Keep descriptions factual and tied to the repository. Do not add marketing langu
 ```
 L4  COCKPIT           ui/ — React 19 + Zustand 5 + Tailwind 4
         ↓ Tauri IPC: nativeCall("<cmd>", args)
-L3  Tauri Shell        src-tauri/ — thin Rust shell, 46 *_cmds.rs modules
+L3  Tauri Shell        src-tauri/ — thin Rust shell, 40 *_cmds.rs modules
         ↓ direct Rust calls
 L2  Rust Kernel        crates/everyaios-* — guard/vault/audit/office/browser
         ↓ stdio JSON-RPC 2.0, [u32 LE len][JSON] framing
