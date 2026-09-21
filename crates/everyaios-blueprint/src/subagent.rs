@@ -12,14 +12,14 @@
 //! - **Summary-only return** — the parent receives a [`SubAgentResult`]
 //!   (summary + status + artifacts); the child's context is not replayed.
 //! - **Limits** — max depth (no recursive spawn), max concurrent (batch
-//!   parallel), max total per run — enforced by [`SubAgentRuntime::spawn`].
+//!   parallel), max total per run — judged by [`DelegationPolicy::admit`]
+//!   over the Work graph (I8), never accounted for by a runtime of its own.
 //! - **Inter-agent messaging** — peer-review / cross-check / request-sub-
 //!   routine / handoff, endpoint-validated.
 
 use crate::blueprint::TaskStatus;
 use crate::spec::TaskSpec;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use thiserror::Error;
 
 /// The root/parent pseudo-agent id (depth 0, owns delegation).
@@ -48,7 +48,9 @@ pub struct SubAgentSpec {
     pub tools: Vec<String>,
     /// Extra denies beyond `DELEGATE_BLOCKED_TOOLS`.
     pub blocked_tools: Vec<String>,
-    /// Assigned by the runtime on spawn (parent depth + 1; root = 0).
+    /// The depth the child Work lands on, as the caller read it from the Work
+    /// graph (a root Work's child is 1). The graph is authoritative; this
+    /// field is the spec's copy of the gauge's `child_depth`.
     #[serde(default)]
     pub depth: u32,
 }
@@ -266,192 +268,117 @@ pub struct AgentMessage {
     pub body: String,
 }
 
-/// The runtime that owns spawn accounting: depth, concurrency, total, and
-/// summary-only completion. The actual LLM execution lives in the coordinator;
-/// this crate is the deterministic policy seam.
-#[derive(Debug, Default)]
-pub struct SubAgentRuntime {
-    limits: SubAgentLimits,
-    active: HashMap<String, SubAgentSpec>,
-    completed: Vec<SubAgentResult>,
-    total_spawned: u32,
+/// What the Work graph says about a delegation request (P71.3a).
+///
+/// The Work Gateway computes these from the one graph — the child's depth is
+/// its parent's link-distance from the root plus one, `active`/`total` are
+/// the delegated child Works (any parent) that are not / are terminal — so
+/// the policy below has nothing to remember and a restart cannot lose or
+/// invent an admission. `active`/`total` are `0` when the caller names no
+/// parent Work; that is also the case where only depth can be judged.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct DelegationGauge {
+    /// Depth the child Work lands on: parent's link-distance from the root
+    /// plus one (a root Work's child is depth 1).
+    pub child_depth: u32,
+    /// Delegated child Works (any parent) that are not terminal yet.
+    pub active: u32,
+    /// Delegated child Works (any parent) ever created.
+    pub total: u32,
 }
 
-impl SubAgentRuntime {
+/// The spawn **policy** — no executor, no registry, no accumulated state.
+///
+/// I8 states subagents are child Work/Runs: the durable record of a
+/// delegation is the child Work + Run + ephemeral AgentSession the Work
+/// Gateway mints, so nothing here may become a second source of truth for
+/// which children exist. What remains is the deterministic judgement —
+/// depth, concurrency, total — applied to a [`DelegationGauge`] the caller
+/// read from the graph. The executor that used to live here (and its
+/// `HashMap` of active agents) is deleted: the coordinator runs the LLM turn,
+/// the gateway holds the state, and this type only says yes or no.
+///
+/// A duplicate is refused by the caller from the graph, not here: child Work
+/// ids are deterministic (`<parent>/subagent/<task_id>`), so "already
+/// spawned" is a lookup, not a remembered set.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DelegationPolicy {
+    limits: SubAgentLimits,
+}
+
+impl DelegationPolicy {
     pub fn new(limits: SubAgentLimits) -> Self {
-        Self {
-            limits,
-            active: HashMap::new(),
-            completed: Vec::new(),
-            total_spawned: 0,
-        }
+        Self { limits }
     }
 
     pub fn limits(&self) -> SubAgentLimits {
         self.limits
     }
 
-    pub fn active_count(&self) -> usize {
-        self.active.len()
-    }
-
-    pub fn total_spawned(&self) -> u32 {
-        self.total_spawned
-    }
-
-    pub fn completed(&self) -> &[SubAgentResult] {
-        &self.completed
-    }
-
-    /// The depth a spawn at this point would land on (None ⇒ unknown parent).
-    pub fn next_depth(&self, parent_id: Option<&str>) -> Option<u32> {
-        match parent_id {
-            None => Some(0),
-            Some(p) if p == ROOT_AGENT => Some(0),
-            Some(p) => self.active.get(p).map(|s| s.depth + 1),
-        }
-    }
-
-    /// Spawn a sub-agent, enforcing duplicate / parent-existence / depth
-    /// (no-recursive-spawn) / concurrent / total limits.
-    pub fn spawn(&mut self, mut spec: SubAgentSpec) -> Result<(), SubAgentError> {
-        let task_id = spec.spec.id.clone();
-        if self.active.contains_key(&task_id) || self.completed.iter().any(|c| c.task_id == task_id)
-        {
-            return Err(SubAgentError::DuplicateTask { task_id });
-        }
-        let depth = match spec.parent_id.as_deref() {
-            None | Some(ROOT_AGENT) => 0,
-            Some(p) => {
-                let parent = self
-                    .active
-                    .get(p)
-                    .ok_or_else(|| SubAgentError::UnknownParent {
-                        task_id: task_id.clone(),
-                        parent_id: p.to_string(),
-                    })?;
-                parent.depth + 1
-            }
-        };
-        if depth > self.limits.max_depth {
+    /// The spawn admission, in one fixed order: depth (recursion) → concurrent
+    /// → total. Every arm carries the numbers it judged, so a refusal is
+    /// auditable without reading any state back.
+    pub fn admit(&self, task_id: &str, gauge: DelegationGauge) -> Result<(), SubAgentError> {
+        if gauge.child_depth > self.limits.max_depth {
             return Err(SubAgentError::DepthExceeded {
-                task_id,
-                depth,
+                task_id: task_id.to_string(),
+                depth: gauge.child_depth,
                 max_depth: self.limits.max_depth,
             });
         }
-        if self.active.len() as u32 >= self.limits.max_concurrent {
+        if gauge.active >= self.limits.max_concurrent {
             return Err(SubAgentError::ConcurrentLimitExceeded {
-                task_id,
-                active: self.active.len() as u32,
+                task_id: task_id.to_string(),
+                active: gauge.active,
                 max_concurrent: self.limits.max_concurrent,
             });
         }
-        if self.total_spawned >= self.limits.max_total {
+        if gauge.total >= self.limits.max_total {
             return Err(SubAgentError::TotalLimitExceeded {
-                task_id,
-                total: self.total_spawned,
+                task_id: task_id.to_string(),
+                total: gauge.total,
                 max_total: self.limits.max_total,
             });
         }
-        spec.depth = depth;
-        // P64.4 — children inherit denies, never escalated grants. `delegate`
-        // is stripped even if the parent listed it; `todo`/`task` stay
-        // default-deny unless this spec explicitly re-grants them.
-        let parent_grants: Vec<String> = match spec.parent_id.as_deref() {
-            None | Some(ROOT_AGENT) => spec.tools.clone(),
-            Some(p) => self
-                .active
-                .get(p)
-                .map(|s| s.tools.clone())
-                .unwrap_or_else(|| spec.tools.clone()),
-        };
-        let parent_denies = spec.blocked_tools.clone();
-        let explicit = spec.tools.clone();
-        spec.tools = derive_child_permissions(&parent_grants, &parent_denies, &explicit);
-        self.active.insert(task_id, spec);
-        self.total_spawned += 1;
         Ok(())
     }
+}
 
-    /// Granted tools after spawn-time `derive_child_permissions` (test + audit).
-    pub fn granted_tools(&self, id: &str) -> Option<&[String]> {
-        self.active.get(id).map(|s| s.tools.as_slice())
-    }
+/// What a parent ever sees of a child (WORK §8): summary + artifacts, never
+/// the transcript. The durable record is the child Work's own timeline; this
+/// projection is the single shape both delegation seams return to the parent,
+/// so "summary-only" stays a rule with one implementation.
+///
+/// Cancellation is deliberately absent: a cancelled child produces no
+/// summary at all — the truth is the child Run's `RunCancelled` event.
+pub fn parent_view(result: &SubAgentResult) -> serde_json::Value {
+    serde_json::json!({
+        "taskId": result.task_id,
+        "summary": result.summary,
+        "status": result.status,
+        "artifacts": result.artifacts,
+    })
+}
 
-    /// Spawn a batch (fan-out). Spawns as many as the limits allow, in order;
-    /// returns the ids spawned and the first error that blocked the rest.
-    pub fn spawn_batch(
-        &mut self,
-        specs: Vec<SubAgentSpec>,
-    ) -> (Vec<String>, Option<SubAgentError>) {
-        let mut spawned = Vec::new();
-        for spec in specs {
-            let id = spec.spec.id.clone();
-            match self.spawn(spec) {
-                Ok(()) => spawned.push(id),
-                Err(e) => return (spawned, Some(e)),
-            }
-        }
-        (spawned, None)
+/// Validate an inter-agent message's endpoints (P6.2). Membership is supplied
+/// by the caller from the Work graph — the delegating agent plus the live
+/// child agent sessions — so the check cannot drift from what actually
+/// exists, and no registry is kept here. Delivery stays the coordinator's job.
+pub fn validate_message_endpoints(
+    msg: &AgentMessage,
+    is_known: impl Fn(&str) -> bool,
+) -> Result<(), SubAgentError> {
+    if !is_known(&msg.from) {
+        return Err(SubAgentError::UnknownAgent {
+            agent_id: msg.from.clone(),
+        });
     }
-
-    /// Complete a sub-agent → the summary-only [`SubAgentResult`] the parent
-    /// sees. The child's context/history is dropped here.
-    pub fn complete(
-        &mut self,
-        task_id: impl Into<String>,
-        summary: impl Into<String>,
-        status: TaskStatus,
-        artifacts: Vec<String>,
-    ) -> Result<SubAgentResult, SubAgentError> {
-        let task_id = task_id.into();
-        if self.active.remove(&task_id).is_none() {
-            return Err(SubAgentError::UnknownTask { task_id });
-        }
-        let result = SubAgentResult {
-            task_id,
-            summary: summary.into(),
-            status,
-            artifacts,
-        };
-        self.completed.push(result.clone());
-        Ok(result)
+    if !is_known(&msg.to) {
+        return Err(SubAgentError::UnknownAgent {
+            agent_id: msg.to.clone(),
+        });
     }
-
-    /// The summary the parent sees for a finished task (None if still active
-    /// or unknown — the parent never gets the raw child context).
-    pub fn parent_sees_summary(&self, task_id: &str) -> Option<&SubAgentResult> {
-        self.completed.iter().find(|c| c.task_id == task_id)
-    }
-
-    /// Depth of an active agent (root = 0).
-    pub fn depth_of(&self, task_id: &str) -> Option<u32> {
-        self.active.get(task_id).map(|s| s.depth)
-    }
-
-    /// Whether `agent_id` is a known participant (active, completed, or root).
-    pub fn is_known(&self, agent_id: &str) -> bool {
-        agent_id == ROOT_AGENT
-            || self.active.contains_key(agent_id)
-            || self.completed.iter().any(|c| c.task_id == agent_id)
-    }
-
-    /// Validate an inter-agent message: both endpoints must be known. Routing
-    /// (delivery) is the coordinator's job; this is the policy check.
-    pub fn route_message(&self, msg: &AgentMessage) -> Result<(), SubAgentError> {
-        if !self.is_known(&msg.from) {
-            return Err(SubAgentError::UnknownAgent {
-                agent_id: msg.from.clone(),
-            });
-        }
-        if !self.is_known(&msg.to) {
-            return Err(SubAgentError::UnknownAgent {
-                agent_id: msg.to.clone(),
-            });
-        }
-        Ok(())
-    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -497,132 +424,153 @@ mod tests {
         assert!(!prompt.contains("parent history"));
     }
 
-    #[test]
-    fn spawn_assigns_depth_from_parent() {
-        let mut rt = SubAgentRuntime::new(SubAgentLimits::default());
-        rt.spawn(spec("root-task", "claude")).unwrap();
-        rt.spawn(spec("child", "gpt").with_parent("root-task"))
-            .unwrap();
-        assert_eq!(rt.depth_of("root-task"), Some(0));
-        assert_eq!(rt.depth_of("child"), Some(1));
+    fn gauge(child_depth: u32, active: u32, total: u32) -> DelegationGauge {
+        DelegationGauge {
+            child_depth,
+            active,
+            total,
+        }
     }
 
     #[test]
-    fn spawn_applies_derive_child_permissions() {
-        let mut rt = SubAgentRuntime::new(SubAgentLimits::default());
-        rt.spawn(spec("parent", "m").with_tools(vec![
-            "read".into(),
-            "delegate".into(),
-            "todo".into(),
-        ]))
-        .unwrap();
-        let parent = rt.granted_tools("parent").unwrap();
-        assert!(parent.contains(&"read".to_string()));
-        assert!(
-            !parent.iter().any(|t| t == "delegate"),
-            "DELEGATE_BLOCKED_TOOLS never land on a child, including the first spawn"
-        );
-        // Root spawn: explicit == grants, so `todo` (default-deny for *children*)
-        // is kept when the spec itself lists it.
-        assert!(parent.contains(&"todo".to_string()));
-        rt.spawn(
-            spec("child", "m")
-                .with_parent("parent")
-                .with_tools(vec!["read".into()]),
-        )
-        .unwrap();
-        let child = rt.granted_tools("child").unwrap();
-        assert_eq!(child, &["read".to_string()]);
-    }
-
-    #[test]
-    fn no_recursive_spawn_beyond_max_depth() {
-        let mut rt = SubAgentRuntime::new(SubAgentLimits {
-            max_depth: 2,
-            max_concurrent: 4,
-            max_total: 10,
-        });
-        rt.spawn(spec("a", "m")).unwrap(); // depth 0
-        rt.spawn(spec("b", "m").with_parent("a")).unwrap(); // depth 1
-        rt.spawn(spec("c", "m").with_parent("b")).unwrap(); // depth 2 (== max)
-        let err = rt.spawn(spec("d", "m").with_parent("c")).unwrap_err();
+    fn admission_judges_the_depth_the_graph_reports() {
+        let policy = DelegationPolicy::new(SubAgentLimits::default());
+        // A root Work's child is depth 1; its grandchild is depth 2 (== max).
+        assert!(policy.admit("child", gauge(1, 0, 0)).is_ok());
+        assert!(policy.admit("grandchild", gauge(2, 1, 1)).is_ok());
+        // Depth 3 would be recursion — refused with the numbers it judged.
         assert!(matches!(
-            err,
-            SubAgentError::DepthExceeded {
+            policy.admit("great-grandchild", gauge(3, 0, 0)),
+            Err(SubAgentError::DepthExceeded {
                 depth: 3,
                 max_depth: 2,
                 ..
-            }
+            })
         ));
     }
 
     #[test]
-    fn concurrent_and_total_limits_enforced() {
-        let mut rt = SubAgentRuntime::new(SubAgentLimits {
+    fn child_permissions_intersect_grants_and_inherit_denies() {
+        // P64.4 — the derivation the spawn seam applies: grants intersect,
+        // denies are inherited, `delegate` never lands, and `todo` stays
+        // default-deny unless the spec itself re-grants it.
+        let parent_grants = vec![
+            "read".to_string(),
+            "write".to_string(),
+            "delegate".to_string(),
+            "todo".to_string(),
+        ];
+        let denies = vec!["write".to_string()];
+        let derived = derive_child_permissions(&parent_grants, &denies, &parent_grants);
+        assert_eq!(derived, vec!["read".to_string(), "todo".to_string()]);
+        assert!(
+            !derived.iter().any(|t| t == "delegate"),
+            "DELEGATE_BLOCKED_TOOLS never land on a child"
+        );
+        // A child that lists fewer tools gets the intersection, not a superset.
+        let child = derive_child_permissions(
+            &parent_grants,
+            &denies,
+            &["read".to_string(), "write".to_string()],
+        );
+        assert_eq!(child, vec!["read".to_string()]);
+    }
+
+    #[test]
+    fn a_stricter_max_depth_refuses_a_grandchild() {
+        let policy = DelegationPolicy::new(SubAgentLimits {
+            max_depth: 1,
+            max_concurrent: 4,
+            max_total: 10,
+        });
+        assert!(policy.admit("child", gauge(1, 0, 0)).is_ok());
+        assert!(matches!(
+            policy.admit("grandchild", gauge(2, 1, 1)),
+            Err(SubAgentError::DepthExceeded {
+                depth: 2,
+                max_depth: 1,
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn concurrent_and_total_limits_come_from_the_graph() {
+        let policy = DelegationPolicy::new(SubAgentLimits {
             max_depth: 2,
             max_concurrent: 2,
             max_total: 3,
         });
-        rt.spawn(spec("a", "m")).unwrap();
-        rt.spawn(spec("b", "m")).unwrap();
-        // Concurrent cap hit (2 active).
+        // Two children running → the concurrent cap is what binds.
         assert!(matches!(
-            rt.spawn(spec("c", "m")),
+            policy.admit("c", gauge(1, 2, 2)),
+            Err(SubAgentError::ConcurrentLimitExceeded {
+                active: 2,
+                max_concurrent: 2,
+                ..
+            })
+        ));
+        // A finished child frees concurrency, so the *total* cap binds next
+        // (three ever-created children, one of them terminal).
+        assert!(matches!(
+            policy.admit("d", gauge(1, 1, 3)),
+            Err(SubAgentError::TotalLimitExceeded {
+                total: 3,
+                max_total: 3,
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn admission_order_is_depth_then_concurrent_then_total() {
+        let policy = DelegationPolicy::new(SubAgentLimits {
+            max_depth: 1,
+            max_concurrent: 1,
+            max_total: 1,
+        });
+        // All three would be exceeded → the depth arm answers.
+        assert!(matches!(
+            policy.admit("t", gauge(2, 5, 9)),
+            Err(SubAgentError::DepthExceeded { .. })
+        ));
+        // Depth fine → the concurrent arm answers.
+        assert!(matches!(
+            policy.admit("t", gauge(1, 1, 9)),
             Err(SubAgentError::ConcurrentLimitExceeded { .. })
         ));
-        // Complete one → can spawn again (total = 3).
-        rt.complete("a", "done", TaskStatus::Done, vec![]).unwrap();
-        rt.spawn(spec("c", "m")).unwrap();
-        // Free up concurrency so the *total* cap (3) is what binds next.
-        rt.complete("b", "done", TaskStatus::Done, vec![]).unwrap();
+        // Depth and concurrency fine → the total arm answers.
         assert!(matches!(
-            rt.spawn(spec("d", "m")),
+            policy.admit("t", gauge(1, 0, 1)),
             Err(SubAgentError::TotalLimitExceeded { .. })
         ));
+        // Nothing exceeded → admitted.
+        assert!(policy.admit("t", gauge(1, 0, 0)).is_ok());
     }
 
     #[test]
-    fn duplicate_and_unknown_parent_rejected() {
-        let mut rt = SubAgentRuntime::new(SubAgentLimits::default());
-        rt.spawn(spec("a", "m")).unwrap();
-        assert!(matches!(
-            rt.spawn(spec("a", "m")),
-            Err(SubAgentError::DuplicateTask { .. })
-        ));
-        assert!(matches!(
-            rt.spawn(spec("b", "m").with_parent("ghost")),
-            Err(SubAgentError::UnknownParent { .. })
-        ));
+    fn parent_view_carries_summary_and_artifacts_only() {
+        let result = SubAgentResult {
+            task_id: "coder".into(),
+            summary: "wrote the summary".into(),
+            status: TaskStatus::Done,
+            artifacts: vec!["out.md".into()],
+        };
+        let view = parent_view(&result);
+        assert_eq!(view["summary"], "wrote the summary");
+        assert_eq!(view["artifacts"][0], "out.md");
+        // Summary-only by construction: four keys, none of them the
+        // child's transcript or history.
+        assert_eq!(view.as_object().unwrap().len(), 4);
+        assert!(view.get("transcript").is_none());
+        assert!(view.get("history").is_none());
     }
 
     #[test]
-    fn parent_sees_summary_only() {
-        let mut rt = SubAgentRuntime::new(SubAgentLimits::default());
-        rt.spawn(spec("a", "m")).unwrap();
-        // Active → no summary yet.
-        assert!(rt.parent_sees_summary("a").is_none());
-        let r = rt
-            .complete(
-                "a",
-                "wrote the summary",
-                TaskStatus::Done,
-                vec!["out.md".into()],
-            )
-            .unwrap();
-        assert_eq!(r.summary, "wrote the summary");
-        assert_eq!(r.artifacts, vec!["out.md".to_string()]);
-        // Summary-only: the result has no transcript field by construction.
-        assert_eq!(
-            rt.parent_sees_summary("a").unwrap().summary,
-            "wrote the summary"
-        );
-    }
-
-    #[test]
-    fn inter_agent_messaging_validates_endpoints() {
-        let mut rt = SubAgentRuntime::new(SubAgentLimits::default());
-        rt.spawn(spec("a", "m")).unwrap();
-        rt.spawn(spec("b", "m").with_parent("a")).unwrap();
+    fn inter_agent_messaging_validates_endpoints_against_the_graph() {
+        // Membership comes from the caller (the Work graph), so the check is
+        // the same membership the graph would report.
+        let known = |id: &str| matches!(id, "a" | "b");
 
         let ok = AgentMessage {
             from: "a".into(),
@@ -630,7 +578,7 @@ mod tests {
             kind: AgentMessageKind::PeerReview,
             body: "review this".into(),
         };
-        assert!(rt.route_message(&ok).is_ok());
+        assert!(validate_message_endpoints(&ok, known).is_ok());
 
         let bad = AgentMessage {
             from: "a".into(),
@@ -639,71 +587,75 @@ mod tests {
             body: "?".into(),
         };
         assert!(matches!(
-            rt.route_message(&bad),
+            validate_message_endpoints(&bad, known),
             Err(SubAgentError::UnknownAgent { .. })
         ));
     }
 
     #[test]
-    fn spawn_batch_fans_out_within_limits() {
-        let mut rt = SubAgentRuntime::new(SubAgentLimits {
+    fn fan_out_stops_at_the_concurrent_limit() {
+        let policy = DelegationPolicy::new(SubAgentLimits {
             max_depth: 2,
             max_concurrent: 2,
             max_total: 10,
         });
-        let (spawned, err) = rt.spawn_batch(vec![spec("a", "m"), spec("b", "m"), spec("c", "m")]);
-        // max_concurrent=2 → only a,b spawn; c hits the concurrent cap.
+        // Each admitted spawn becomes a child Work, so the gauge the graph
+        // reports for the next candidate has one more active child.
+        let mut active = 0u32;
+        let mut spawned = Vec::new();
+        for id in ["a", "b", "c"] {
+            match policy.admit(id, gauge(1, active, active)) {
+                Ok(()) => {
+                    spawned.push(id.to_string());
+                    active += 1;
+                }
+                Err(e) => {
+                    assert!(matches!(e, SubAgentError::ConcurrentLimitExceeded { .. }));
+                    break;
+                }
+            }
+        }
+        // max_concurrent = 2 → a and b spawn; c hits the concurrent cap.
         assert_eq!(spawned, vec!["a".to_string(), "b".to_string()]);
-        assert!(matches!(
-            err,
-            Some(SubAgentError::ConcurrentLimitExceeded { .. })
-        ));
     }
 
     #[test]
     fn two_spec_driven_agents_different_models_run_a_plan() {
-        // P6.2 exit-criterion simulation: a planner (model X) spawns a coder
-        // (model Y) on a verify-gated plan; parent sees only the summary; the
-        // child cannot recurse.
-        let mut rt = SubAgentRuntime::new(SubAgentLimits::default());
+        // P6.2 exit-criterion simulation: a planner (model X) delegates to a
+        // coder (model Y) on a verify-gated plan. The Work graph supplies the
+        // gauge, the policy judges it, and the planner receives the
+        // summary-only projection — never the coder's transcript.
+        let policy = DelegationPolicy::new(SubAgentLimits::default());
 
-        let planner = spec("planner", "claude-sonnet").with_tools(vec![
-            "delegate".into(),
-            "read".into(),
-            "write".into(),
-        ]);
-        rt.spawn(planner).unwrap();
+        let planner = spec("planner", "claude-sonnet");
+        let coder = spec("coder", "gpt-5-codex").with_parent("planner");
+        // The planner is a root Work's child (depth 1); the coder is depth 2.
+        assert!(policy.admit(&planner.spec.id, gauge(1, 0, 0)).is_ok());
+        assert!(policy.admit(&coder.spec.id, gauge(2, 1, 1)).is_ok());
 
-        let coder = spec("coder", "gpt-5-codex")
-            .with_parent("planner")
-            .with_tools(vec!["read".into(), "write".into(), "delegate".into()]);
-        rt.spawn(coder).unwrap();
+        // Per-agent models are a property of the spec, not of any runtime.
+        assert_eq!(planner.model, "claude-sonnet");
+        assert_eq!(coder.model, "gpt-5-codex");
 
-        // Different models, correct depths.
-        assert_eq!(rt.depth_of("planner"), Some(0));
-        assert_eq!(rt.depth_of("coder"), Some(1));
-        // The coder's effective tools strip `delegate` → cannot recurse.
-        let coder_spec = rt.active.get("coder").unwrap();
-        assert_eq!(coder_spec.model, "gpt-5-codex");
-        assert!(!coder_spec
-            .effective_tools()
-            .contains(&"delegate".to_string()));
+        // The coder's derived toolset strips `delegate` → cannot recurse.
+        let parent_grants = vec![
+            "read".to_string(),
+            "write".to_string(),
+            "delegate".to_string(),
+        ];
+        let coder_tools = derive_child_permissions(&parent_grants, &[], &parent_grants);
+        assert_eq!(coder_tools, vec!["read".to_string(), "write".to_string()]);
 
-        // Coder finishes → planner receives a summary, not the transcript.
-        rt.complete(
-            "coder",
-            "implemented /health",
-            TaskStatus::Done,
-            vec!["src".into()],
-        )
-        .unwrap();
-        assert_eq!(
-            rt.parent_sees_summary("coder").unwrap().summary,
-            "implemented /health"
-        );
-        assert_eq!(
-            rt.parent_sees_summary("coder").unwrap().status,
-            TaskStatus::Done
-        );
+        // The coder finishes → the planner receives the summary-only view.
+        let result = SubAgentResult {
+            task_id: "coder".into(),
+            summary: "implemented /health".into(),
+            status: TaskStatus::Done,
+            artifacts: vec!["src".into()],
+        };
+        let view = parent_view(&result);
+        assert_eq!(view["summary"], "implemented /health");
+        assert_eq!(view["status"], "done");
+        assert_eq!(view["taskId"], "coder");
     }
 }

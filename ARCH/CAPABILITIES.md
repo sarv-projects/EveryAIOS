@@ -184,7 +184,7 @@ Conflating these is what produces either eager-process bloat or "enabled but mys
 
 A viewer is *how a human inspects a resource* — not a model capability, and not a separate subsystem. Packs
 contribute viewers, so the File Workbench's viewer registry is populated by the same manifest that supplies
-capabilities. See [DESKTOP.md](DESKTOP.md) §4.
+capabilities. See [UI.md](UI.md) §4.
 
 ---
 

@@ -421,9 +421,11 @@ pub struct ChatRelay<W, R> {
     evals: Arc<Mutex<EvalService>>,
     /// H3 unified execution kernel.
     executions: Arc<Mutex<ExecutionKernel>>,
-    /// P64.4 — sub-agent spawn accounting (depth/concurrency/total). The LLM
-    /// execution stays in the coordinator; this is the policy seam.
-    subagents: Arc<Mutex<everyaios_blueprint::SubAgentRuntime>>,
+    /// P64.4/P71.3a — sub-agent spawn policy (depth/concurrency/total). The
+    /// LLM execution stays in the coordinator and the durable state is the
+    /// child Work in `work_gateway` (I8), so this is the judgement alone: an
+    /// immutable value, not shared accounting state.
+    delegation: everyaios_blueprint::DelegationPolicy,
     /// P64.8 — the distilled-skill store `skill/*` serves. A field rather than
     /// a store built per call so tests can re-seat it (the default home is the
     /// developer's real `~/.everyaios/skills/`), matching `scheduler`.
@@ -548,24 +550,27 @@ fn skill_rpc(
 
 /// The `subagent/*` methods the coordinator drives.
 ///
-/// P64.4 — the spawn **admission** seam. This crate owns accounting (duplicate
-/// / parent-existence / depth / concurrent / total), which is the part the
-/// contract actually pins and the part the coordinator cannot enforce alone.
+/// P64.4/P71.3a — the spawn **admission** seam, with the executor deleted. I8
+/// makes subagents child Work/Runs: the durable record of a delegation is the
+/// child Work the gateway mints, and the admission numbers are read back out of
+/// that same graph, so there is no runtime here to hold them and nothing to
+/// lose on restart. The judgement itself is
+/// [`everyaios_blueprint::DelegationPolicy`] — pure over a gauge it did not
+/// build.
+///
 /// The LLM execution stays coordinator-side, so the reply is the *admitted*
 /// spec reported as running — deliberately not a fabricated `done` with an
 /// invented summary. Refusals arrive as errors, never as a silent acceptance.
 ///
-/// P69.D14 — a delegated task is also registered as a **child Work** in the
-/// one Work Gateway (parent link + Run + ephemeral AgentSession) whenever the
-/// caller names its parent `workId`; `subagent/complete`/`subagent/fail` close
-/// that child with the terminal Run event on the child's own timeline. There
-/// is no separate subagent runtime: the blueprint runtime holds only the
-/// spawn accounting and the derived permission set, and the gateway holds the
-/// durable state.
+/// P69.D14 — a delegated task is registered as a **child Work** in the one Work
+/// Gateway (parent link + Run + ephemeral AgentSession) from the `workId` the
+/// caller names; `subagent/complete`/`subagent/fail` close that child with the
+/// terminal Run event on the child's own timeline, which is also how they
+/// refuse a task that was never delegated.
 fn subagent_rpc(
     method: &str,
     params: &serde_json::Value,
-    runtime: &mut everyaios_blueprint::SubAgentRuntime,
+    policy: &everyaios_blueprint::DelegationPolicy,
     gateway: &Arc<Mutex<crate::work_gateway::WorkGateway>>,
 ) -> Result<serde_json::Value, String> {
     match method {
@@ -633,17 +638,59 @@ fn subagent_rpc(
                 None
             };
             let task_id = spec.spec.id.clone();
-            runtime.spawn(spec).map_err(|e| e.to_string())?;
-            // P69.D14 — the child Work. The caller (the turn loop) names the
-            // parent Work it is already inside, so the delegation lands in the
-            // one Work graph with a parent link, its own Run and an ephemeral
-            // AgentSession. A caller without a parent Work still gets the
-            // accounting admission — just no Work entry to point at.
-            let child = match params
+            // P71.3a — the graph is the only place a delegated child, its depth
+            // and the live counts exist. A caller that names no parent Work gets
+            // policy-only admission (depth from its own spec, zero active /
+            // total) and the reply says so, rather than passing a partial check
+            // off as a full one.
+            let parent_work_id = params
                 .get("workId")
                 .and_then(|v| v.as_str())
                 .filter(|v| !v.is_empty())
-            {
+                .map(str::to_string);
+            let (gauge, accounted_from) = match parent_work_id.as_deref() {
+                Some(parent) => {
+                    let child_work_id =
+                        crate::work_gateway::WorkGateway::child_work_id(parent, &task_id);
+                    let gw = gateway.lock().unwrap_or_else(|e| e.into_inner());
+                    if gw.get_work(&child_work_id).is_some() {
+                        // Deterministic child ids make "already spawned" a
+                        // lookup, not a remembered set — which is why the Work
+                        // graph can hold what the deleted registry used to.
+                        return Err(everyaios_blueprint::SubAgentError::DuplicateTask {
+                            task_id: task_id.clone(),
+                        }
+                        .to_string());
+                    }
+                    (gw.delegation_gauge(parent)?, "work_graph")
+                }
+                None => (
+                    everyaios_blueprint::DelegationGauge {
+                        child_depth: params.get("depth").and_then(|v| v.as_u64()).unwrap_or(0)
+                            as u32,
+                        active: 0,
+                        total: 0,
+                    },
+                    "policy_only",
+                ),
+            };
+            policy.admit(&task_id, gauge).map_err(|e| e.to_string())?;
+            // P64.4 — the child's grant set: denies inherited, `delegate` never
+            // re-granted, `todo`/`task` default-deny unless this spec lists
+            // them. The parent-grant side is the AgentBridge credential's to
+            // prove (P69.B4); until then the spec is both the grant list and
+            // the request, exactly as the coordinator sends it.
+            spec.tools = everyaios_blueprint::derive_child_permissions(
+                &spec.tools,
+                &spec.blocked_tools,
+                &spec.tools,
+            );
+            spec.depth = gauge.child_depth;
+            // P69.D14 — the child Work itself. The caller (the turn loop) names
+            // the parent Work it is already inside, so the delegation lands in
+            // the one Work graph with a parent link, its own Run and an
+            // ephemeral AgentSession.
+            let child = match parent_work_id.as_deref() {
                 Some(parent_work_id) => {
                     let agent_id = params
                         .get("agentId")
@@ -672,6 +719,9 @@ fn subagent_rpc(
                 "harness": harness,
                 "binding": binding,
                 "planes": crate::RUNTIME_PLANES.len(),
+                "tools": spec.tools,
+                "depth": spec.depth,
+                "accountedFrom": accounted_from,
                 "workId": child.as_ref().map(|c| c.work_id.clone()),
                 "runId": child.as_ref().map(|c| c.run_id.clone()),
                 "agentSessionId": child.as_ref().map(|c| c.agent_session_id.clone()),
@@ -699,41 +749,167 @@ fn subagent_rpc(
                 })
                 .unwrap_or_default();
             let failed = method == "subagent/fail";
-            let status = if failed {
-                everyaios_blueprint::TaskStatus::Failed
-            } else {
-                everyaios_blueprint::TaskStatus::Done
-            };
-            let result = runtime
-                .complete(task_id.clone(), &summary, status, artifacts)
-                .map_err(|e| e.to_string())?;
-            // Close the child Work's own timeline when the caller names the
-            // parent: terminal Run event + ephemeral session termination.
-            let child = match params
+            // The child Work *is* the record of the delegation (I8), so closing
+            // one without naming its parent is refused: there would be nothing
+            // to verify the task against and nothing to append the terminal
+            // event to. A task the graph does not know is an error, not a
+            // fabricated summary.
+            let parent_work_id = params
                 .get("workId")
                 .and_then(|v| v.as_str())
                 .filter(|v| !v.is_empty())
+                .ok_or(
+                    "subagent/complete requires workId — the child Work is the durable record of \
+                     a delegated task (I8)",
+                )?
+                .to_string();
+            let child_work_id =
+                crate::work_gateway::WorkGateway::child_work_id(&parent_work_id, &task_id);
             {
-                Some(parent_work_id) => {
-                    let mut gw = gateway.lock().unwrap_or_else(|e| e.into_inner());
-                    Some(gw.finish_child_work(
-                        parent_work_id,
-                        &task_id,
-                        if failed { "failed" } else { "completed" },
-                        params.get("reason").and_then(|v| v.as_str()),
-                    )?)
+                let mut gw = gateway.lock().unwrap_or_else(|e| e.into_inner());
+                if gw.get_work(&child_work_id).is_none() {
+                    return Err(everyaios_blueprint::SubAgentError::UnknownTask {
+                        task_id: task_id.clone(),
+                    }
+                    .to_string());
                 }
-                None => None,
+                // Terminal Run event on the child's own timeline + the
+                // ephemeral session's termination.
+                gw.finish_child_work(
+                    &parent_work_id,
+                    &task_id,
+                    if failed { "failed" } else { "completed" },
+                    params.get("reason").and_then(|v| v.as_str()),
+                )?;
+            }
+            let result = everyaios_blueprint::SubAgentResult {
+                task_id,
+                summary,
+                status: if failed {
+                    everyaios_blueprint::TaskStatus::Failed
+                } else {
+                    everyaios_blueprint::TaskStatus::Done
+                },
+                artifacts,
             };
-            Ok(serde_json::json!({
-                "task_id": result.task_id,
-                "summary": result.summary,
-                "status": if failed { "failed" } else { "completed" },
-                "artifacts": result.artifacts,
-                "workId": child.as_ref().map(|c| c.work_id.clone()),
-            }))
+            // Summary-only by construction (WORK §8): one projection, no
+            // transcript, plus the child Work id the caller closes.
+            let mut view = everyaios_blueprint::parent_view(&result);
+            view["workId"] = serde_json::json!(child_work_id);
+            Ok(view)
         }
         other => Err(format!("method not found: {other}")),
+    }
+}
+
+/// P71.1 — the delegation bridge behind the `delegate.*` shared-plane façades.
+///
+/// It holds the same two pieces the coordinator's `subagent/*` seam holds —
+/// the spawn policy and the one Work Gateway — so a delegated task from an
+/// external agent and one from the turn loop are the *same* code path:
+/// admission limits, child Work, Run and ephemeral AgentSession. There is no
+/// second delegation registry, and an unmounted bridge fails honestly rather
+/// than fabricating a spawn.
+struct DelegationBridge {
+    policy: everyaios_blueprint::DelegationPolicy,
+    gateway: Arc<Mutex<crate::work_gateway::WorkGateway>>,
+}
+
+impl crate::tools::DelegationToolBackend for DelegationBridge {
+    fn spawn(&self, params: &serde_json::Value) -> Result<serde_json::Value, String> {
+        let work_id = params
+            .get("workId")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        if work_id.is_empty() {
+            // The delegating Work is required: delegation without a parent Work
+            // would mint an unlinked run outside the Work graph (I4). Identity
+            // derivation from the bridge credential lands with the AgentBridge
+            // (P69.B4); until then the caller must name it. Never inferred from
+            // polite arguments.
+            return Err(
+                "delegate.spawn requires workId — the delegating Work (bridge-credential identity \
+                 derivation is not mounted yet)"
+                    .to_string(),
+            );
+        }
+        subagent_rpc("subagent/spawn", params, &self.policy, &self.gateway)
+    }
+
+    fn status(&self, params: &serde_json::Value) -> Result<serde_json::Value, String> {
+        let gateway = self.gateway.lock().unwrap_or_else(|e| e.into_inner());
+        let child_work_id = match params
+            .get("childWorkId")
+            .and_then(|v| v.as_str())
+            .filter(|v| !v.is_empty())
+        {
+            Some(id) => id.to_string(),
+            None => {
+                let parent = params
+                    .get("workId")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+                let task = params
+                    .get("taskId")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+                if parent.is_empty() || task.is_empty() {
+                    return Err("delegate.status requires childWorkId, or workId + taskId".into());
+                }
+                crate::work_gateway::WorkGateway::child_work_id(parent, task)
+            }
+        };
+        let Some(work) = gateway.get_work(&child_work_id) else {
+            return Err(format!("no delegated child Work `{child_work_id}`"));
+        };
+        let presence = gateway.presence(&child_work_id);
+        Ok(serde_json::json!({
+            "childWorkId": work.work_id.as_str(),
+            "parentWorkId": work.parent_work_id,
+            "runId": work.current_run_id,
+            "version": work.version,
+            "presence": presence,
+            "children": gateway.children_of(&child_work_id).len(),
+        }))
+    }
+
+    fn cancel(&self, params: &serde_json::Value) -> Result<serde_json::Value, String> {
+        let parent = params
+            .get("workId")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        let task = params
+            .get("taskId")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        if parent.is_empty() || task.is_empty() {
+            return Err("delegate.cancel requires workId + taskId".into());
+        }
+        let reason = params
+            .get("reason")
+            .and_then(|v| v.as_str())
+            .unwrap_or("cancelled by caller");
+        // Closing the child Work **is** the release (P71.3a): the terminal
+        // `RunCancelled` event on the child's own timeline lands in the same
+        // step that stops the graph counting it as active, so there is no
+        // separate accounting left to hand back. Cancelling an already-closed
+        // child is idempotent.
+        let child = {
+            let mut gw = self.gateway.lock().unwrap_or_else(|e| e.into_inner());
+            gw.finish_child_work(&parent, &task, "cancelled", Some(reason))?
+        };
+        let released = {
+            let gw = self.gateway.lock().unwrap_or_else(|e| e.into_inner());
+            gw.presence_is_terminal(&child.work_id)
+        };
+        Ok(serde_json::json!({
+            "childWorkId": child.work_id,
+            "runId": child.run_id,
+            "status": "cancelled",
+            "released": released,
+        }))
     }
 }
 
@@ -924,6 +1100,20 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
             Arc::clone(&egress),
         );
         tool_service.attach_capability_broker(Arc::clone(&capabilities));
+        // P71.1 — the `delegate.*` façade seam: the same spawn policy and Work
+        // Gateway the `subagent/*` arm uses, so delegation from an external
+        // agent cannot diverge from coordinator delegation.
+        let delegation = everyaios_blueprint::DelegationPolicy::new(
+            everyaios_blueprint::SubAgentLimits::default(),
+        );
+        let work_gateway = Arc::new(Mutex::new(
+            crate::work_gateway::WorkGateway::open_default()
+                .unwrap_or_else(|_| crate::work_gateway::WorkGateway::new()),
+        ));
+        tool_service.attach_delegation(Arc::new(DelegationBridge {
+            policy: delegation,
+            gateway: Arc::clone(&work_gateway),
+        }));
         let tools = Arc::new(Mutex::new(tool_service));
         Self {
             link,
@@ -942,17 +1132,12 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
             tools,
             evals: Arc::new(Mutex::new(EvalService::new())),
             executions: Arc::new(Mutex::new(ExecutionKernel::new())),
-            subagents: Arc::new(Mutex::new(everyaios_blueprint::SubAgentRuntime::new(
-                everyaios_blueprint::SubAgentLimits::default(),
-            ))),
+            delegation,
             skill_store: Arc::new(Mutex::new(everyaios_blueprint::SkillStore::new(
                 skills_root(),
             ))),
             terminal_plane: Arc::new(Mutex::new(None)),
-            work_gateway: Arc::new(Mutex::new(
-                crate::work_gateway::WorkGateway::open_default()
-                    .unwrap_or_else(|_| crate::work_gateway::WorkGateway::new()),
-            )),
+            work_gateway,
             capabilities,
             egress,
             tasks: Arc::new(Mutex::new(crate::task_ledger::TaskLedger::new(Box::new(
@@ -1229,7 +1414,7 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
         let tools = Arc::clone(&self.tools);
         let evals = Arc::clone(&self.evals);
         let executions = Arc::clone(&self.executions);
-        let subagents = Arc::clone(&self.subagents);
+        let delegation = self.delegation;
         let skill_store = Arc::clone(&self.skill_store);
         let terminal_plane = Arc::clone(&self.terminal_plane);
         let work_gateway = Arc::clone(&self.work_gateway);
@@ -1791,8 +1976,7 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
                     // which made `dispatchSubAgent` throw "native runtime not
                     // wired" on every delegation.
                     method if method.starts_with("subagent/") => {
-                        let mut rt = subagents.lock().unwrap_or_else(|e| e.into_inner());
-                        match subagent_rpc(method, &params, &mut rt, &work_gateway) {
+                        match subagent_rpc(method, &params, &delegation, &work_gateway) {
                             Ok(out) => {
                                 let _ = writer.reply(id, out);
                             }
@@ -3040,11 +3224,13 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// P64.4 — the spawn seam must actually enforce the shared limits, and must
-    /// report an admission rather than a fabricated completion.
+    /// P64.4/P71.3a — the spawn seam must enforce the shared limits against the
+    /// Work graph, and must report an admission rather than a fabricated
+    /// completion. There is no runtime left to hold the counts: the child Work
+    /// *is* the record.
     #[test]
     fn subagent_rpc_admits_a_spawn_and_enforces_the_limits() {
-        let mut rt = everyaios_blueprint::SubAgentRuntime::new(
+        let policy = everyaios_blueprint::DelegationPolicy::new(
             everyaios_blueprint::SubAgentLimits::default(),
         );
         let gw = Arc::new(Mutex::new(crate::work_gateway::WorkGateway::new()));
@@ -3062,14 +3248,22 @@ mod tests {
                 "blockedTools": [],
                 "workId": "w-parent",
             }),
-            &mut rt,
+            &policy,
             &gw,
         )
         .expect("an in-limits spawn is admitted");
         assert_eq!(out["task_id"], "t1");
         // The LLM execution is coordinator-side, so this is an admission.
         assert_eq!(out["status"], "running");
-        assert_eq!(rt.total_spawned(), 1);
+        assert_eq!(out["accountedFrom"], "work_graph");
+        // P64.4 — the derived grant set is reported, not just stored.
+        assert_eq!(out["tools"][0], "todo");
+        assert_eq!(out["depth"], 1);
+        // The accounting is the graph, not a counter: one delegated child.
+        assert_eq!(
+            gw.lock().unwrap().delegation_gauge("w-parent").unwrap().total,
+            1
+        );
         // P69.D14 — the spawn is a child Work with a parent link (plus its own
         // Run and ephemeral session), not a parallel runtime.
         let child = out["workId"].as_str().unwrap().to_string();
@@ -3080,15 +3274,20 @@ mod tests {
             assert_eq!(kids.len(), 1);
             assert_eq!(kids[0].parent_work_id.as_deref(), Some("w-parent"));
             assert_eq!(gw.agent_sessions_for(&child).len(), 1);
+            // The child is running, so it is an active delegation.
+            let gauge = gw.delegation_gauge("w-parent").unwrap();
+            assert_eq!((gauge.active, gauge.total, gauge.child_depth), (1, 1, 1));
         }
 
-        // A duplicate task id is refused by the runtime, not silently accepted.
+        // A duplicate task id is refused from the graph (deterministic child
+        // Work id), not silently accepted.
         assert!(super::subagent_rpc(
             "subagent/spawn",
             &serde_json::json!({
-                "spec": { "id": "t1", "goal": "again", "context": [], "acceptance": [] }
+                "spec": { "id": "t1", "goal": "again", "context": [], "acceptance": [] },
+                "workId": "w-parent",
             }),
-            &mut rt,
+            &policy,
             &gw,
         )
         .is_err());
@@ -3102,29 +3301,50 @@ mod tests {
                 "artifacts": ["src/a.rs"],
                 "workId": "w-parent",
             }),
-            &mut rt,
+            &policy,
             &gw,
         )
-        .expect("completion of an active task is accepted");
+        .expect("completion of a delegated task is accepted");
         assert_eq!(done["summary"], "did the thing");
         assert_eq!(done["artifacts"][0], "src/a.rs");
+        assert_eq!(done["workId"], "w-parent/subagent/t1");
         {
             let gw = gw.lock().unwrap();
             let sessions = gw.agent_sessions_for(&child);
             assert_eq!(sessions[0].runtime_state, "terminated");
+            // Terminal children free concurrency but stay counted in total.
+            let gauge = gw.delegation_gauge("w-parent").unwrap();
+            assert_eq!((gauge.active, gauge.total), (0, 1));
         }
+        // Closing a task the graph never saw is an error, not a summary.
+        assert!(super::subagent_rpc(
+            "subagent/complete",
+            &serde_json::json!({ "taskId": "ghost", "workId": "w-parent" }),
+            &policy,
+            &gw,
+        )
+        .is_err());
+        // A spawn that names no parent Work is admitted policy-only, and says so.
+        let loose = super::subagent_rpc(
+            "subagent/spawn",
+            &serde_json::json!({
+                "spec": { "id": "t2", "goal": "loose", "context": [], "acceptance": [] },
+                "depth": 1,
+            }),
+            &policy,
+            &gw,
+        )
+        .expect("a parentless spawn is admitted policy-only");
+        assert_eq!(loose["accountedFrom"], "policy_only");
+        assert!(loose["workId"].is_null());
         // A spec-less call is a refusal, and unknown methods stay errors.
-        assert!(
-            super::subagent_rpc("subagent/spawn", &serde_json::json!({}), &mut rt, &gw).is_err()
-        );
-        assert!(
-            super::subagent_rpc("subagent/nope", &serde_json::json!({}), &mut rt, &gw).is_err()
-        );
+        assert!(super::subagent_rpc("subagent/spawn", &serde_json::json!({}), &policy, &gw).is_err());
+        assert!(super::subagent_rpc("subagent/nope", &serde_json::json!({}), &policy, &gw).is_err());
     }
 
     #[test]
     fn subagent_rpc_scout_strips_writes() {
-        let mut rt = everyaios_blueprint::SubAgentRuntime::new(
+        let policy = everyaios_blueprint::DelegationPolicy::new(
             everyaios_blueprint::SubAgentLimits::default(),
         );
         let gw = Arc::new(Mutex::new(crate::work_gateway::WorkGateway::new()));
@@ -3139,17 +3359,20 @@ mod tests {
                 "blockedTools": [],
                 "role": "scout",
             }),
-            &mut rt,
+            &policy,
             &gw,
         )
         .expect("scout spawn is admitted");
         assert_eq!(out["role"], "scout");
-        let granted = rt.granted_tools("scout-1").unwrap();
-        assert!(granted.iter().any(|t| t == "file_ops.read"));
-        assert!(granted.iter().any(|t| t == "search.query"));
-        assert!(!granted
+        let granted: Vec<&str> = out["tools"]
+            .as_array()
+            .unwrap()
             .iter()
-            .any(|t| t == "file_ops.write" || t == "desktop.act"));
+            .filter_map(|v| v.as_str())
+            .collect();
+        assert!(granted.contains(&"file_ops.read"));
+        assert!(granted.contains(&"search.query"));
+        assert!(!granted.iter().any(|t| *t == "file_ops.write" || *t == "desktop.act"));
         assert_eq!(out["planes"], 5);
         assert_eq!(out["harness"], "inbuilt");
         assert_eq!(out["binding"]["model"], "m");
@@ -3157,7 +3380,7 @@ mod tests {
 
     #[test]
     fn subagent_rpc_refuses_cli_named_subagent_harness() {
-        let mut rt = everyaios_blueprint::SubAgentRuntime::new(
+        let policy = everyaios_blueprint::DelegationPolicy::new(
             everyaios_blueprint::SubAgentLimits::default(),
         );
         let gw = Arc::new(Mutex::new(crate::work_gateway::WorkGateway::new()));
@@ -3172,7 +3395,7 @@ mod tests {
                 "tools": [],
                 "blockedTools": [],
             }),
-            &mut rt,
+            &policy,
             &gw,
         );
         assert!(err.is_err());

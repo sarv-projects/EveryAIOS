@@ -41,8 +41,6 @@ This matters because **`local` is a first-class product concept with its own UI 
 > **Full-Stack Module:** Module 2 — **Agent Registry, Discovery, Binding & the Encrypted Vault** (`crates/everyaios-vault`, `crates/everyaios-catalog`) — the module was titled *Model Gateway & Encrypted Keyring Vault* before [`ADR/0005`](ADR/0005-external-agents-are-the-v1-engines.md).
 > **Ownership ([`CORE.md`](CORE.md) §4, §7.1):** the vault/BYOK broker is **shared execution-kernel infrastructure**, not a plane of its own. Key pools, 429 failover and key affinity are consumed by the *resolved route* ([`ROUTING.md`](ROUTING.md)) — not by a “Native agent plane”, which is retired as an owning entity (`ADR/0003`) and whose built-in engine is deferred to post-v1 (`ADR/0005`); they are never pushed into an external agent. An external ACP agent keeps its own model/account, and EveryAIOS copies **no** subscription credential. In v1 there is no built-in agent to receive a spawn-env at all; when the governed baseline binding returns it receives only the spawn-env the user explicitly configured.
 
-## 3.1 The model: provider → key pool → routing
-
 ```
 everyaios-vault (SQLCipher)
 └── providers.toml

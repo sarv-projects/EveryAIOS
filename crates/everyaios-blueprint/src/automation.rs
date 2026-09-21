@@ -2,8 +2,10 @@
 //!
 //! First-class automation steps: `run_code` (sandboxed exec via
 //! `everyaios-script`), `online_search` (the G8 cascade), plus email/calendar
-//! triggers where the connectors exist (F14/F15). These are the *shapes* — the
-//! concrete executor binds them to the sandbox / search cascade at runtime.
+//! triggers where the connectors exist (F14/F15). These are the *shapes* —
+//! the Work factory (`everyaios-core::automation_runtime::compile_work`,
+//! P71.3c) compiles them into Work + capability requests; the Work kernel
+//! executes. The automation layer never runs them.
 
 use serde::{Deserialize, Serialize};
 

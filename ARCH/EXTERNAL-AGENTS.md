@@ -65,18 +65,24 @@ effect → receipt → event`. If the bridge ever executes something itself, it 
 
 External agents see a **small, stable, task-shaped surface** — not the internal tool list.
 
-| Family | Façades |
+| Family | Façades (as shipped in `everyaios-mcp::SHARED_FACADES`) |
 |---|---|
-| Work / context | `everyaios.work.status` · `everyaios.context.recall` · `everyaios.context.snapshot` |
-| Memory | `everyaios.memory.recall` · `remember` · `forget` |
-| Workspace / artifacts | `everyaios.workspace.inspect` · `everyaios.artifact.open` |
-| Browser | `everyaios.browser.research` · `operate` · `extract` |
-| Office | `everyaios.office.open` · `inspect` · `edit` · `calculate` · `render` · `verify` |
-| Desktop | `everyaios.desktop.see` · `act` |
-| Search / connectors | `everyaios.search.query` · `everyaios.connector.*` |
+| Work | `work.create` · `work.status` |
+| **Delegation** | `delegate.spawn` · `delegate.status` · `delegate.cancel` |
+| Workspace / artifacts | `workspace.map` · `artifact.store` · `artifact.retrieve` |
+| Browser | `browser.research` · `browser.operate` · `browser.extract` |
+| Office | `office.open` · `office.inspect` · `office.edit` · `office.calculate` · `office.render` · `office.verify` |
+| Desktop / computer use | `computer_use.see` · `computer_use.act` |
+| Memory / context / search / connectors | named, not yet callable: they join this table when their façades land — a name in this table means the façade is live |
 
-Two rules: the façade set is **stable** (it is part of the cache-stable prefix — I16), and an agent never
-sees an internal implementation as a tool. Memory deliberately exposes no algorithms — no ACT-R, no FSRS, no
+**One naming rule (`P71.1b`).** A façade id is a **flat dot-hierarchy** — `office.edit`, `delegate.spawn` —
+with **no namespace prefix**. The `everyaios.` prefix belongs to capability-pack ids (e.g. `everyaios.office`
+in a pack manifest), never to façade ids; code, the MCP `tools/list` and these docs all use the flat form.
+
+Three rules: the façade set is **stable** (it is part of the cache-stable prefix — I16); an agent never
+sees an internal implementation as a tool; and **delegation is a platform feature, not a built-in engine's
+private ability** — the primary agent chooses, EveryAIOS validates, and a delegated task becomes a child
+Work in the one Work graph (`P71.1`). Memory deliberately exposes no algorithms — no ACT-R, no FSRS, no
 BM25, no graph traversal. Those are strategies behind `recall`/`remember`/`forget`.
 
 ---
@@ -227,7 +233,9 @@ the user's own permission decisions inside the agent.)*
 
 ---
 
-## 10. Migration notes- V1 must be fixed before the permission path can be described as guarded; V2/V3 before mediated mode can be
+## 10. Migration notes
+
+- V1 must be fixed before the permission path can be described as guarded; V2/V3 before mediated mode can be
 described as the primary path. **Status 2026-09-21:** V1–V3 are repaired in code (C1–C3 — implemented,
 not verified); the descriptions still may not claim guarded/primary mediation until verification runs.
 - The bridge requires the binding record first ([AGENT.md](AGENT.md) §3) — order is binding → bridge → scope.

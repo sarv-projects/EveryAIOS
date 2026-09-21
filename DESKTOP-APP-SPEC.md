@@ -420,9 +420,9 @@ Breaking a large job into simple subtasks **is viable and required**, but **not 
 | 2 | **Evidence Grounding Score**  — empirical grounding score (retrieval confidence, coverage, hedging density); risk-band gating | core-engine/risk-compass **(pure stage ported: `everyaios-engine::risk::assess_evidence_grounding`)** |
 | 3 | **Phantom Thread** — activity-aware memory pre-loading, warm set, ~0ms TTFT (target), leakage floors | core-memory/phantom-thread |
 | 4 | **Temporal Graph Anticipation** — weekly-rhythm prediction, morning briefs, beats recency by >15pts | core-memory/temporal-anticipation |
-| 5 | **Crystallization Engine** — compile non-cognitive workflow steps to deterministic 0-token loops | core-automations |
+| 5 | **Crystallization Engine** — compile non-cognitive workflow steps to deterministic 0-token loops | `everyaios-blueprint/crystallize.rs` |
 | 6 | **Spreading-Activation Retrieval** — graph proximity + per-hop decay + lateral inhibition, re-ranks FTS5/vector | core-memory/spreading-activation |
-| 7 | **Trust Ladder** — 0–100 graduated permissions; destructive ops always behind manual confirmation | core-tools/trust-ladder |
+| 7 | **Trust Ladder** — 0–100 graduated permissions; destructive ops always behind manual confirmation | core-engine/trust-ladder (advisory policy; `P69.D5`/`D6`) |
 | 8 | Knowledge-graph build — entity/triple extraction + LLM refinement + conflict resolution | core-memory/{knowledge-graph,kg-extraction,kg-llm-refinement,conflict} |
 | 9 | Correction detector + auto-promote (frustration/retry → pattern promotion, `PROMOTION_THRESHOLD=3`) | core-memory/{correction-detector,auto-promote,correction-store} |
 | 10 | Memory decay (Ebbinghaus) + familiarity/forgetting visualizers | core-memory/decay |
@@ -430,7 +430,7 @@ Breaking a large job into simple subtasks **is viable and required**, but **not 
 | 12 | Retrieval confidence scoring + source-lineage tracking | `everyaios-memory` |
 | 13 | On-device embeddings (bge-micro-v2 / gte-small ONNX), int8/vec0, HNSW-style index, hybrid BM25+vector | `everyaios-storage` |
 | 14 | Adaptive query rewrite + RAG chunking + hybrid-search | `everyaios-storage` + `everyaios-memory` |
-| 15 | Circuit-breaker / backoff / alarms (rate discipline) | core-automations |
+| 15 | Circuit-breaker / backoff / alarms (rate discipline) | `everyaios-blueprint/iteration.rs` + `everyaios-core::automation_runtime` |
 | 16 | Cache-aware cost accounting (pi EMPTY_USAGE pattern) — **Rust per-call ledger + key-affinity (A9)** | core-providers/core-ai |
 | 17 | 3-stage agent loop: RetrievalPlanner → ToolPlanner → PermissionGate (≤5 tool rounds + extra-final guard) | core-engine **(pure stages ported: `everyaios-engine::{plan,gate}` — the async stream loop stays TS/coordinator)** |
 | 18 | Multi-signal retrieval fusion (mem0 SOTA: semantic + BM25 + entity-graph fused score; +29.6 temporal / +23.1 multi-hop claims) | C3 |
@@ -1356,20 +1356,23 @@ EveryAIOS hosts agents. An agent is either **external** (Codex CLI, Claude Code,
 
 ## 5. Engine Module Map (module ownership)
 
+> **Engine scope (v1):** external agents are the engines ([`ARCH/ADR/0005`](ARCH/ADR/0005-external-agents-are-the-v1-engines.md)); the
+> built-in-engine rows below describe the vendored engine retained as the post-v1 baseline binding — implementation detail, not v1 behavior.
+
 | Area | Implementation home |
 |---|---|
-| Memory algos | `core-memory/`: spreading-activation, phantom-thread, forgetting-to-remember, temporal-anticipation, knowledge-graph, conflict, correction-detector, auto-promote, decay |
+| Memory algos | `core-memory/`: spreading-activation, phantom-thread, forgetting-to-remember, temporal-anticipation, knowledge-graph, conflict, correction-detector, auto-promote, decay — with the kernel strategies behind one interface in Rust `everyaios-memory` (`P69.D30`) |
 | RAG | `everyaios-storage` (chunking, vector-store, hybrid-search, int8/vec0, embeddings, retrieve) + `everyaios-office` renderers (pdf-text, ocr-cascade, ooxml-extractors). *Former TS `core-files`, consolidated — Tier 2c* |
-| Chat/rendering | `app-mobile/`: KatexText, RichText, reader, ReaderChatOverlay, artifacts, morning brief |
+| Chat/rendering | `ui/src/components/chat/` (RichText/Katex, artifact cards, message rendering); *the `app-mobile/` source was the external corpus this was converted from* |
 | Chat engine internals | `core-ai/`: chat/ (system-prompt 12-segment cache-affine, persona, agents, output-normalizer), **streaming/stream-session** (33ms batch, TTFT, checkpoints), router/ (SmartRouter, affinity) |
 | Context/compression | `core-ai/context/`: context-compressor, **tiered-compaction** (the compaction base; Reasonix ratio pipeline — algo 21) |
-| Providers/BYOK | `core-providers/` (clients, vault, live-pricing, catalog) + `core-ai/` router |
+| Providers/BYOK | `core-providers/` (catalogue, live-pricing, handles/usage metadata — **no credential custody**, `C4`) + `core-ai/` router |
 | Connectors | `core-connectors/`: orchestrator, connection-manager (⚠️ the composio-adapter + aggregator catalog is dropped per the  Connector-platform decision — MCP-first: MCP Servers + Native BYO-vault + Tool Catalog) |
 | Search | `core-search/`: cascades, searxng-pool, bm25-rerank, query-rewrite, fan-out, research-tiers, mcp-client |
-| Automation | `core-automations/`: workflow engine (alarms/backoff/circuit-breaker), crystallization |
+| Automation | `everyaios-blueprint/` (workflow DAG, `crystallize.rs`, circuit-breaker in `iteration.rs`) + `everyaios-core::automation_runtime`; scheduler in `coordinator/scheduler.ts` |
 | Engine | `core-engine/`: stages (tool-planner, permission-gate, retrieval-planner), trajectory, risk-compass (→ Evidence Grounding Score, ) — **pure-stage Rust port in `everyaios-engine`** (contract · plan · risk · gate; 26 tests, Alg #2/#17) |
-| Security | `core-tools/`: trust-ladder, permission-gate, tool-runtime; `core-security/`: crypto, seal |
-| Sessions/data | `core-sync/` (E2E), `core-projects/`, `core-artifacts/` |
+| Security | `core-engine/`: trust-ladder, permission-gate (advisory policy; `P69.D5`/`D6`); `core-tools/`: tool-runtime; `core-security/`: crypto, seal |
+| Sessions/data | `everyaios-core` (durable Work/session state via `work_gateway.rs`) + `everyaios-core::sync` (E2E) + `core-domain` schemas |
 | Agents | `core-agents/` registry (spec-file loader on top) |
 
 > The 157-row matrix (§0) is the exact build contract; every row traces to a module home here or a new-build item in §6. The desktop engine builds on a tested mobile-engine lineage — this is a packaging + orchestration + Rust-layer + UI project, not a rewrite.

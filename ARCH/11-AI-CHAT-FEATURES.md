@@ -1,9 +1,9 @@
 # 11 — AI Chat Features: Copy · Convert · Reject (the derivation)
 
-> **SPLIT PENDING — see [`CORE.md`](CORE.md) and [`AGENT.md`](AGENT.md) first.** The AI-architecture rationale
-> here is superseded wherever it describes an EveryAIOS-owned reasoning loop: the loop belongs to the selected
-> agent (a binding), and EveryAIOS owns the environment. The UI feature contract stays valid.
-> **Split `P69.A22` (done 2026-09-20).**
+> **Split done — see [`CORE.md`](CORE.md) and [`AGENT.md`](AGENT.md) first (`P69.A22`, 2026-09-20).** The
+> AI-architecture rationale here is superseded wherever it describes an EveryAIOS-owned reasoning loop: the
+> loop belongs to the selected agent (a binding), and EveryAIOS owns the environment. The UI feature
+> contract stays valid.
 
 ---
 

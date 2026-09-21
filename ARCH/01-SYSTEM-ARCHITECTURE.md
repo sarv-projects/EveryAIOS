@@ -87,7 +87,7 @@ Every subsystem placement follows this test (derived from the ownership matrix, 
   - `prompt_assembler`: 12-segment cache-affine prompt builder with `CACHE_BOUNDARY` markers (I16, I22: serializes Context, owns no policy).
   - `context_compaction_pipeline`: Trims volatile turns, enforces pass-by-ref handles (`refRegistry`), paginates large outputs (50KB cap) — strategies under [`CONTEXT.md`](CONTEXT.md) (I17–I20).
   - `streaming_telemetry_batcher`: 33ms batched token emission with TTFT and token cost tracking.
-  - `tauri_ipc_gateway`: 37 native Tauri command modules bridging Rust to React.
+  - `tauri_ipc_gateway`: 40 native Tauri command modules bridging Rust to React.
 - **Frontend UI**: Cockpit layout (`Layout.tsx`), `chat` screen with CoT rollups, 19 right-rail viewports with physical spring motion (CLS = 0).
 
 ### Governed MCP & capability marketplace (plane 4)

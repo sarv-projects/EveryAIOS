@@ -65,7 +65,7 @@ Compaction pipeline (triggered at thresholds; runs in the sidecar; every step ke
 ### Rule 3 — Structure instead of narrate
 - **`run`/script-eval** (08): one call does multi-step loops (`Promise.all` fan-out, pagination, bulk extraction) — 1×`run` replaces N×`snapshot+act` round-trips. BrowserOS instruction block is the template (doc 33 §6.3).
 - **Deterministic planner** (04): spreadsheet/doc operations via DSL, not prose.
-- **Crystallization** (v2.0 §P7, built in core-automations): successful multi-step workflows compile non-cognitive steps (waits, triggers, static transforms, notifications) into a native deterministic loop — **0 tokens on re-runs**.
+- **Crystallization** (v2.0 §P7, built in `everyaios-blueprint` — `crystallize.rs`; consolidated from the `core-automations` package to Rust, Tier 2d): successful multi-step workflows compile non-cognitive steps (waits, triggers, static transforms, notifications) into a native deterministic loop — **0 tokens on re-runs**.
 - **Grammar-enforced extraction** (v2.0 §P3, core-engine): weak models call tools via ```text``` code blocks; no fragile JSON.
 - **Tool-result discipline**: results returned as structured types, not prose; images binary-flagged; errors as compact error objects.
 

@@ -1,8 +1,8 @@
 # EveryAIOS — Architecture & Flow Diagrams (Mermaid)
 
-> **Generated:** 2026-09-15 · **Spec version:** v3.78 (current contract; the two-plane content in diagram 27 froze at v3.75 — see `SPEC-CHANGELOG.md`) · **Diagrams:** 28 (diagram 0 is the canonical backbone — `P69.A27`)
+> **Generated:** 2026-09-21 · **Spec version:** v3.83 (current contract; the two-plane content in diagram 27 froze at v3.75 — see `SPEC-CHANGELOG.md`) · **Diagrams:** 28 (diagram 0 is the canonical backbone — `P69.A27`)
 > **Purpose:** Every major system flow visualized. Render with any Mermaid-compatible viewer. **Reading order:** diagram 0 first — the single Work→Effect→Event backbone plus the projection split. Diagrams marked HISTORICAL describe a topology that no longer exists and are kept only so the decision stays legible; their replacements are named inline.
-> **Surgical hierarchy (doc 52 §1) + dynamic agent binding (formerly “Dynamic Chief”):** harness-driving diagrams compose external agent CLIs as **brain → core → surgeon** workers via ACP (J17/F12). The **brain tier is a swappable agent-binding slot** (built-in or **any installed** ACP loop — Claude Code, Codex, Grok Build, OpenCode, …). An external agent runs that product's loop; omitted `fs`/`terminal` means Self-contained (not “UNSUPPORTED → MCP”). Slash = `available_commands_update`. Handoff = compacted live view. Storage-intelligence (D9–D12) and G8 cascade: docs 49/52.
+> **Surgical hierarchy (doc 52 §1) + dynamic agent binding (formerly “Dynamic Chief”):** harness-driving diagrams compose external agent CLIs as **brain → core → surgeon** workers via ACP (J17/F12). The **brain tier is a swappable agent-binding slot** (**any installed** ACP loop — Claude Code, Codex, OpenCode, …; the built-in baseline binding is deferred to post-v1 per [`ADR/0005`](ADR/0005-external-agents-are-the-v1-engines.md)). An external agent runs that product's loop; omitted `fs`/`terminal` means Self-contained (not “UNSUPPORTED → MCP”). Slash = `available_commands_update`. Handoff = compacted live view. Storage-intelligence (D9–D12) and G8 cascade: docs 49/52.
 
 ---
 
@@ -17,7 +17,7 @@ flowchart TD
     PR --> CS["CONTEXT SURFACE — derived, bounded projection"]
     CS --> CE["CONTEXT ENGINEERING — 7-step order, cache-stable prefix"]
     CE --> CB["CACHE BOUNDARY"] --> PA["PROMPT ASSEMBLER — serializes, owns no policy"]
-    PA --> AG["ANY AGENT — the bound engine (built-in or external)"]
+    PA --> AG["ANY AGENT — the bound engine (an installed ACP agent)"]
     AG -->|"proposes"| W
 ```
 

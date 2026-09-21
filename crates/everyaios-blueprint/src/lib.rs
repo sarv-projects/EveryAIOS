@@ -114,8 +114,9 @@ pub use skills_index::{
 };
 pub use spec::{SpecError, TaskSpec};
 pub use subagent::{
-    AgentMessage, AgentMessageKind, SubAgentError, SubAgentLimits, SubAgentResult, SubAgentRuntime,
-    SubAgentSpec, DELEGATE_BLOCKED_TOOLS, ROOT_AGENT,
+    derive_child_permissions, parent_view, validate_message_endpoints, AgentMessage,
+    AgentMessageKind, DelegationGauge, DelegationPolicy, SubAgentError, SubAgentLimits,
+    SubAgentResult, SubAgentSpec, DELEGATE_BLOCKED_TOOLS, ROOT_AGENT,
 };
 pub use supply_chain::{
     digest as manifest_digest, hmac_sha256, ManifestBody, QuarantineEntry, SignedManifest,

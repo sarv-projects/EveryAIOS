@@ -23,7 +23,10 @@ use everyaios_blueprint::crystallize::{
     compile_to_script, decrystallize_check, StepClass, WorkflowDetector, WorkflowStep,
 };
 use everyaios_blueprint::spec::TaskSpec;
-use everyaios_blueprint::subagent::{SubAgentLimits, SubAgentRuntime, SubAgentSpec};
+use everyaios_blueprint::subagent::{
+    parent_view, DelegationPolicy, SubAgentError, SubAgentLimits, SubAgentResult, SubAgentSpec,
+};
+use everyaios_core::work_gateway::WorkGateway;
 use everyaios_blueprint::{ScriptLanguage, TaskStatus};
 use everyaios_core::chat::{ChatRelay, ChatStreamParams, ChatWireEvent};
 use everyaios_core::connector_hub::{ConnectorHub, Engine};
@@ -284,60 +287,113 @@ fn memory_persists_across_restart() {
 
 #[test]
 fn subagent_planner_two_agents_merge_results() {
-    let mut runtime = SubAgentRuntime::new(SubAgentLimits::default());
+    // P71.3a — a planner delegates two research agents. Delegation is child
+    // Work/Runs in the one Work Gateway (I8), the admission is judged from that
+    // same graph, and the planner sees the summary-only view of each child.
+    let policy = DelegationPolicy::new(SubAgentLimits::default());
+    let mut gw = WorkGateway::new();
+    gw.create_work("root-work", None, Some("s-1".into()), "session work");
 
-    // Planner (depth 0) spawns two child research agents (depth 1).
-    let planner = TaskSpec::new("planner", "coordinate research");
-    let child_a = SubAgentSpec::new(
-        TaskSpec::new("child-a", "research the storage engine"),
+    // The planner is the root Work's child → depth 1, nothing active yet.
+    let gauge = gw.delegation_gauge("root-work").unwrap();
+    assert_eq!(gauge.child_depth, 1);
+    policy.admit("planner", gauge).unwrap();
+    let planner_spec = SubAgentSpec::new(
+        TaskSpec::new("planner", "coordinate research"),
         "nvidia",
         "/tmp/work",
-    )
-    .with_parent("planner");
-    let child_b = SubAgentSpec::new(
-        TaskSpec::new("child-b", "research the guard engine"),
-        "nvidia",
-        "/tmp/work",
-    )
-    .with_parent("planner");
-    runtime
-        .spawn(SubAgentSpec::new(planner, "nvidia", "/tmp/work"))
+    );
+    // Per-agent model selection belongs to the spec, not to any runtime.
+    assert_eq!(planner_spec.model, "nvidia");
+    let planner = gw
+        .delegate_child_work(
+            "root-work",
+            "planner",
+            "coordinate research",
+            "planner-agent",
+            None,
+        )
         .unwrap();
-    runtime.spawn(child_a).unwrap();
-    runtime.spawn(child_b).unwrap();
-    assert_eq!(runtime.active_count(), 3);
-    // While active: children of the depth-1 sub-agents are depth 2 (recursion
-    // is capped), and the planner's children are depth 1.
-    assert_eq!(runtime.next_depth(Some("child-a")), Some(2));
-    assert_eq!(runtime.next_depth(Some("planner")), Some(1));
 
-    // Both children complete with summaries + artifacts.
-    runtime
-        .complete(
+    // The planner's own children land on depth 2 (the cap), two of them, and
+    // both are admitted against the graph's gauge.
+    let gauge = gw.delegation_gauge(&planner.work_id).unwrap();
+    assert_eq!(gauge.child_depth, 2);
+    policy.admit("child-a", gauge).unwrap();
+    let child_a = gw
+        .delegate_child_work(
+            &planner.work_id,
             "child-a",
-            "storage uses FTS5 + trigram",
-            TaskStatus::Done,
-            vec!["storage.md".into()],
+            "research the storage engine",
+            "child-a-agent",
+            None,
         )
         .unwrap();
-    runtime
-        .complete(
+    let gauge = gw.delegation_gauge(&planner.work_id).unwrap();
+    assert_eq!(gauge.active, 1);
+    policy.admit("child-b", gauge).unwrap();
+    let child_b = gw
+        .delegate_child_work(
+            &planner.work_id,
             "child-b",
-            "guard uses tickets + nonce",
-            TaskStatus::Done,
-            vec!["guard.md".into()],
+            "research the guard engine",
+            "child-b-agent",
+            None,
         )
+        .unwrap();
+    let gauge = gw.delegation_gauge(&planner.work_id).unwrap();
+    assert_eq!((gauge.active, gauge.total, gauge.child_depth), (2, 2, 2));
+    // A grandchild of a depth-2 child would be depth 3 → recursion, refused.
+    assert!(matches!(
+        policy.admit("grandchild", gw.delegation_gauge(&child_a.work_id).unwrap()),
+        Err(SubAgentError::DepthExceeded {
+            depth: 3,
+            max_depth: 2,
+            ..
+        })
+    ));
+
+    // Both children complete: terminal Run events on their own timelines.
+    gw.finish_child_work(&planner.work_id, "child-a", "completed", None)
+        .unwrap();
+    gw.finish_child_work(&planner.work_id, "child-b", "completed", None)
         .unwrap();
 
     // The planner (parent) sees mergeable summaries — never raw child context.
-    let merged: Vec<String> = ["child-a", "child-b"]
-        .iter()
-        .map(|id| runtime.parent_sees_summary(id).unwrap().summary.clone())
-        .collect();
+    let merged: Vec<String> = [
+        (&child_a, "research the storage engine", "storage uses FTS5 + trigram"),
+        (&child_b, "research the guard engine", "guard uses tickets + nonce"),
+    ]
+    .into_iter()
+    .map(|(child, goal, summary)| {
+        let result = SubAgentResult {
+            task_id: child.work_id.clone(),
+            summary: summary.to_string(),
+            status: TaskStatus::Done,
+            artifacts: vec![format!("{goal}.md")],
+        };
+        let view = parent_view(&result);
+        // Four keys: the transcript is not among them by construction.
+        assert_eq!(view.as_object().unwrap().len(), 4);
+        view["summary"].as_str().unwrap().to_string()
+    })
+    .collect();
+    assert_eq!(merged.len(), 2);
     assert!(merged[0].contains("FTS5"));
     assert!(merged[1].contains("tickets"));
-    assert_eq!(merged.len(), 2);
-    assert_eq!(runtime.completed().len(), 2);
+
+    // Terminal children free concurrency but stay counted in the total — both
+    // of which the graph reports without any registry remembering them.
+    let gauge = gw.delegation_gauge(&planner.work_id).unwrap();
+    assert_eq!((gauge.active, gauge.total), (0, 2));
+    // The graph also knows the whole tree: one planner, two children under it.
+    assert_eq!(gw.children_of("root-work").len(), 1);
+    assert_eq!(gw.children_of(&planner.work_id).len(), 2);
+    // Deterministic child ids: the whole tree is addressable from (parent,
+    // task) alone, which is what makes the graph a usable record.
+    assert_eq!(planner.work_id, "root-work/subagent/planner");
+    assert_eq!(child_a.work_id, "root-work/subagent/planner/subagent/child-a");
+    assert_eq!(child_b.run_id, "root-work/subagent/planner/subagent/child-b/run");
 }
 
 // ---------------------------------------------------------------------------

@@ -182,9 +182,10 @@ pub enum AuthKind {
     /// `approval_source`).
     AgentTicket,
     /// Scheduler/automation-initiated (lease + ticket). Reserved until the
-    /// automation scheduler is wired live to the funnel. The
-    /// `AutomationAudit` seam in `everyaios-core::automation_runtime` will
-    /// carry this provenance once a host installs the hook (spec §4.3).
+    /// automation trigger plane is wired live to the funnel. Provenance is
+    /// stamped by the Work factory (`everyaios-core::automation_runtime::
+    /// compile_work` — `AutomationProvenance`, P71.3c); attribution on the
+    /// audit chain rides this class (spec §4.3).
     /// Not dead code: it is part of the provenance vocabulary contract.
     #[allow(dead_code)]
     AutomationTicket,

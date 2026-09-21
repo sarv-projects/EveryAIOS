@@ -82,7 +82,7 @@ Testing is organized into **8 orthogonal dimensions**:
 ---
 
 ### Module 3: Native Desktop Cockpit & High-Performance UI Shell
-*Backend: `src-tauri` (37 command modules) | Frontend: React 19 + Zustand 5 + Tailwind 4, 12 center screens, 19 right-rail viewports*
+*Backend: `src-tauri` (40 command modules) | Frontend: React 19 + Zustand 5 + Tailwind 4, 12 center screens, 19 right-rail viewports*
 
 | Test ID | Level & Type | Objective | Preconditions | Execution Steps & Verification | Expected Outcome |
 | :--- | :--- | :--- | :--- | :--- | :--- |

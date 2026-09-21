@@ -195,8 +195,8 @@ pub enum ActProvenance {
     /// An inbuilt-agent tool call. The tool path already authorized the turn;
     /// the host files this under its agent authority class.
     Agent,
-    /// Scheduler/automation-initiated (reserved — rides the `AutomationAudit`
-    /// seam, spec §4.3).
+    /// Scheduler/automation-initiated (reserved — automation Work carries
+    /// `AutomationProvenance` from the P71.3c Work factory, spec §4.3).
     Automation,
 }
 

@@ -222,7 +222,7 @@ enforced by tests). I10–I27 are established by this document (I27 added via AD
 
 | # | Invariant | Tier |
 |---|---|---|
-| **I10** | **Provider API keys live only in `everyaios-vault`.** No TS package, agent, or projection holds or seals credential material. | doc — **violated today, see §11 V4** |
+| **I10** | **Provider API keys live only in `everyaios-vault`.** No TS package, agent, or projection holds or seals credential material. | doc — **repaired in code 2026-09-20 (`C4`, unverified; CRED-1/2/3 gate it), see §11 V4** |
 | **I11** | **All outbound network crosses `netfloor`; all writes cross `pathfloor`.** Policy is central, never per-caller. | doc + structural |
 | **I12** | **There is one authorization model and one security gate.** No module — connector, MCP, ACP, UI, or agent adapter — may bypass Guard. | doc (CI-enforced) |
 | **I13** | **Sandbox is an execution mechanism, not the security architecture.** Guard decides policy; sandbox enforces isolation; the executor performs. | doc (new) |
@@ -343,8 +343,8 @@ AgentBinding
 **The bridge is not a second kernel.** It forwards; it never performs effects. Tool calls carry their
 `space_id`/`session_id`/`work_id`/`binding_id` **implicitly from the authenticated connection**, so an
 agent cannot assert an identity it does not have. External agents see **task-shaped façades**
-(`everyaios.work.status`, `everyaios.context.recall`, `everyaios.memory.recall`,
-`everyaios.browser.research`, `everyaios.office.edit`, …), never the internal tool catalogue.
+(`work.status`, `memory.recall`, `browser.research`, `office.edit`, `delegate.spawn`, … — flat
+dot-hierarchy ids with no namespace prefix, `P71.1b`), never the internal tool catalogue.
 
 ### 7.5 Governance modes, stated honestly
 
@@ -683,7 +683,7 @@ The invariants that are machine-checkable should be machines' work, not reviewer
 | [RECOVERY.md](RECOVERY.md) | Work + checkpoint + idempotency + uncertain-effect classification |
 | [UI.md](UI.md) | the cockpit as a **projection** · mutation only through the Work Gateway · the File Workbench and its viewer registry |
 | [DESKTOP.md](DESKTOP.md) | **computer use** — windows · capture · accessibility tree · OCR/vision · verification. Deliberately separate from the browser |
-| [ROUTING.md](ROUTING.md) | catalog → router → vault → transport → cost ledger |
+| [ROUTING.md](ROUTING.md) | which external agent receives a Work · agent credentials · usage/cost observability ([`ADR/0005`](ADR/0005-external-agents-are-the-v1-engines.md)) |
 | `../DESKTOP-APP-SPEC.md` | product behavior. **Not** architecture |
 | `../TODO.md` | delivery status, sequencing, and every unit of work |
 | `../RESEARCH/` | explicitly non-normative research |

@@ -6,6 +6,7 @@
 //! platform sandbox enforcement remain explicit follow-up seams.
 
 pub use everyaios_types::AutonomyLevel;
+use everyaios_blueprint::DelegationGauge;
 use everyaios_types::{AgentBinding, BindingLifecycle, BindingUsage, RiskLevel, WorkId};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -1001,6 +1002,73 @@ impl WorkGateway {
             .values()
             .filter(|a| a.parent_work_id.as_deref() == Some(parent_work_id))
             .collect()
+    }
+
+    /// P71.3a — the delegation policy inputs, read from the **one** Work graph:
+    /// the depth a child of `parent_work_id` lands on, and the delegated child
+    /// Works that are still running / ever created.
+    ///
+    /// `SubAgentRuntime` used to keep these counts in a `HashMap` of its own;
+    /// that made a restart lose every admission it had granted. The graph is
+    /// already durable (addresses + presence), so the counts are derived here
+    /// instead of remembered: a child Work carries `parent_work_id`, and a
+    /// delegated child counts as active until its presence is terminal. A
+    /// missing presence row counts as **active** (fail-closed) rather than
+    /// quietly freeing a concurrency slot.
+    pub fn delegation_gauge(&self, parent_work_id: &str) -> Result<DelegationGauge, String> {
+        let parent_depth = self.work_depth(parent_work_id)?;
+        let mut active = 0u32;
+        let mut total = 0u32;
+        for address in self.works.values() {
+            if address.parent_work_id.is_none() {
+                continue;
+            }
+            total += 1;
+            if !self.presence_is_terminal(address.work_id.as_str()) {
+                active += 1;
+            }
+        }
+        Ok(DelegationGauge {
+            child_depth: parent_depth.saturating_add(1),
+            active,
+            total,
+        })
+    }
+
+    /// P71.3a — whether a Work's presence is terminal (completed or failed).
+    /// A missing presence row is **not** terminal: a Work nobody has reported
+    /// on yet still occupies its concurrency slot.
+    pub fn presence_is_terminal(&self, work_id: &str) -> bool {
+        self.presence.get(work_id).is_some_and(|p| {
+            matches!(
+                p.state,
+                Some(WorkPresenceState::Completed) | Some(WorkPresenceState::Failed)
+            )
+        })
+    }
+
+    /// P71.3a — how many parent links `work_id` has from the root (a root Work
+    /// is depth 0). The walk is bounded by the graph size so a malformed
+    /// parent cycle is refused instead of looping.
+    pub fn work_depth(&self, work_id: &str) -> Result<u32, String> {
+        let mut depth = 0u32;
+        let mut cursor = work_id.to_string();
+        let mut seen = 0usize;
+        loop {
+            let address = self
+                .works
+                .get(&cursor)
+                .ok_or_else(|| format!("unknown work `{cursor}`"))?;
+            let Some(parent) = address.parent_work_id.clone() else {
+                return Ok(depth);
+            };
+            seen += 1;
+            if seen > self.works.len() {
+                return Err(format!("parent cycle at work `{work_id}`"));
+            }
+            depth += 1;
+            cursor = parent;
+        }
     }
 
     /// P69.D14 — the deterministic child-Work id for a delegated task:

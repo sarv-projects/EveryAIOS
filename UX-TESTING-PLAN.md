@@ -7,12 +7,13 @@ leg is Windows desktop; Linux/WSL development is not evidence of Windows
 release readiness. WSL may be tested as an optional execution profile, but its
 paths and discovery provenance must remain distinct from Windows paths.
 
-> **Plane (ARCH/17 §17.1):** rounds must exercise the two-plane picker surface
-> (ARCH/17 §17.5): when an external agent is selected, its **native**
-> capabilities are labeled as the agent's own and the EveryAIOS additions are
-> labeled shared; when EveryAIOS Native is selected, both planes are present.
-> A tester should be able to say which layer a capability comes from without
-> reading docs.
+> **Plane ([`ARCH/AGENT.md`](ARCH/AGENT.md) §2 + [`ARCH/EXTERNAL-AGENTS.md`](ARCH/EXTERNAL-AGENTS.md); ARCH/17 is archived):**
+> rounds must exercise the two-plane picker surface: when an external agent is
+> selected, its **native** capabilities are labeled as the agent's own and the
+> EveryAIOS additions are labeled shared. (In v1, external agents are the engines —
+> the built-in baseline binding is deferred to post-v1 per [`ARCH/ADR/0005`](ARCH/ADR/0005-external-agents-are-the-v1-engines.md)
+> and is not a picker entry.) A tester should be able to say which layer a
+> capability comes from without reading docs.
 
 ## Round structure
 

@@ -5,7 +5,8 @@
 > transport and action definitions, and its actions produce a canonical `EffectRequest` that passes
 > `Guard → Executor` like any other effect. A connector may not own a permission model, an audit bypass, an
 > independent effect commit, or connector-scoped Work state.
-> **Pending rewrite: `P69.A15`-adjacent consolidation `P69.D17`.**
+> **Consolidation `P69.D17` landed in code 2026-09-20 (implemented, not verified):** connector actions produce
+> a canonical `EffectRequest` through the one ticketed executor — the contract section below is the landed shape.
 
 ## Capability-pack contract — connectors under CORE (`P69.D17`)
 

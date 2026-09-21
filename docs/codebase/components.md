@@ -34,11 +34,11 @@ coverage claim — see [tests-and-verification.md](tests-and-verification.md)).
 ## L3 — Tauri shell (`src-tauri/`)
 
 - **Responsibility:** thin command layer. `src-tauri/src/lib.rs` holds the
-  `generate_handler!` registration (351 registered commands per `scripts/ipc-parity.mjs`
-  in `scripts/gen-codebase-map.mjs` output) and is the only file with fan-out
+  `generate_handler!` registration (351 registered commands per `scripts/ipc-parity.mjs`)
+  and is the only file with fan-out
   to both crates and commands (in-degree 35, out-degree 48).
-- **Modules:** ~46 `*_cmds.rs` files (acp, agent, artifact, boot, browser,
-  calendar, catalog, cockpit, codeintel, desktop, discovery, doctor, …) plus
+- **Modules:** 40 `*_cmds.rs` files (acp, agent, agent_backend, artifact, browser,
+  calendar, catalog, cockpit, codeintel, desktop, discovery, doctor, feedback, fs, git, guard, …) plus
   `commands.rs`, `control.rs`.
 - **Rule:** commands validate + delegate; business logic lives in L2 crates.
 - **Protocol:** must match `PROTOCOL_VERSION = 1` on the UI side

@@ -85,8 +85,8 @@ pub enum ToolFamily {
     /// P48.3 — external MCP tools attached via `attach_external` (user-supplied
     /// stdio/HTTP server). Dispatched through the executor like registry tools.
     External,
-    /// P48.3 — connector writes (email/calendar). These ride the automation
-    /// runtime's `ConnectorEngine` seam with approval + audit.
+    /// P48.3 — connector writes (email/calendar). These ride the
+    /// `ConnectorToolBackend` engine seam with approval + audit.
     Connector,
     /// P64.9 — shared-plane task façades (`office.*` / `browser.*` /
     /// `computer_use.*` / `workspace.*` / `artifact.*` / `work.*`). Thin
@@ -118,9 +118,10 @@ pub trait DesktopBackend: Send + Sync {
 }
 
 /// P48.3 — the connector-write engine seam behind the `connector.*` tools
-/// (email/calendar). Backed in the host by the automation runtime's
-/// `ConnectorEngine` adapter (P42 crates); absent → honest "connector not
-/// attached" failure. Writes are gated by the normal ticket + audit path.
+/// (email/calendar). Backed in the host by a connector adapter (P42 crates);
+/// absent → honest "connector not attached" failure. Writes are gated by the
+/// normal ticket + audit path. (P71.3c: the automation layer compiles Work
+/// and instantiates the capability request — it never executes the write.)
 pub trait ConnectorToolBackend: Send + Sync {
     fn email(&self, to: Vec<String>, subject: &str, body: &str) -> Result<Value, String>;
     fn calendar(&self, title: &str, when: &str) -> Result<Value, String>;
@@ -131,6 +132,26 @@ pub trait ConnectorToolBackend: Send + Sync {
 /// absent, external tools fail honestly ("external tool session not attached").
 pub trait ExternalToolBackend: Send + Sync {
     fn call(&self, tool_id: &str, args: &Value) -> Result<Value, String>;
+}
+
+/// P71.1 — the delegation seam behind the `delegate.*` façades.
+///
+/// Delegation is a **platform feature**, not a built-in engine's private
+/// ability: the primary agent chooses, EveryAIOS validates. The host wires
+/// this to the kernel's `subagent/spawn` handler and the Work Gateway, so a
+/// delegated task is a **child Work** with a bound agent (I8) — the same path
+/// the coordinator's own delegation uses. Absent ⇒ `delegate.*` fails
+/// honestly ("delegation seam not attached"), never a faked spawn.
+pub trait DelegationToolBackend: Send + Sync {
+    /// Spawn one child Work from a `SubAgentSpec`-shaped request. The caller
+    /// names the delegating Work (`workId`); admission limits, parent link,
+    /// Run and ephemeral AgentSession are minted by the kernel.
+    fn spawn(&self, params: &Value) -> Result<Value, String>;
+    /// Read one delegated child's state (by `workId` + `taskId`, or by
+    /// `childWorkId`). Returns the child's Work address + presence.
+    fn status(&self, params: &Value) -> Result<Value, String>;
+    /// Close one delegated child as cancelled (never as a fabricated success).
+    fn cancel(&self, params: &Value) -> Result<Value, String>;
 }
 
 /// P68.9 — the shell-execution seam behind the `script.run` tool.
@@ -850,6 +871,9 @@ pub struct ToolService {
     capabilities: Option<Arc<Mutex<everyaios_guard::LocalCapabilityBroker>>>,
     /// P48.3 — attached external MCP servers (user-supplied tools).
     external: Vec<ExternalAttachment>,
+    /// P71.1 — optional delegation seam (`delegate.*` façades). Absent until
+    /// the host attaches the Work Gateway bridge; absent ⇒ honest failure.
+    delegation: Option<Arc<dyn DelegationToolBackend>>,
     /// G8 cascade (cache → SearXNG → DDG).
     search: everyaios_search::G8Cascade,
     search_transport: Arc<dyn everyaios_search::SearchTransport>,
@@ -907,6 +931,7 @@ impl ToolService {
             terminal: None,
             capabilities: None,
             external: Vec::new(),
+            delegation: None,
             // P55.8 — local-first (your own SearXNG, then the DDG fallback),
             // plus any public instances the user explicitly opted into in
             // Settings → Search.
@@ -976,6 +1001,13 @@ impl ToolService {
             tools,
             backend,
         });
+    }
+
+    /// P71.1 — attach the delegation seam so the `delegate.*` façades reach
+    /// the kernel's child-Work machinery. The host calls this once the Work
+    /// Gateway exists; until then delegation fails honestly.
+    pub fn attach_delegation(&mut self, delegation: Arc<dyn DelegationToolBackend>) {
+        self.delegation = Some(delegation);
     }
 
     /// P55.11 — the whole attach reconcile in one step: register the
@@ -1461,7 +1493,40 @@ impl ToolService {
                 self.dispatch_file_ops("file_ops.write", &mapped)
             }
             "artifact.retrieve" | "work.status" => self.dispatch_file_ops("file_ops.read", args),
+            // P71.1 — delegation is a kernel seam, not a catalog fan-out.
+            "delegate.spawn" | "delegate.status" | "delegate.cancel" => {
+                self.dispatch_delegate(facade, args)
+            }
             _ => json!({"ok": false, "error": format!("façade has no route yet: {facade}")}),
+        }
+    }
+
+    /// P71.1 — delegation façades. Delegation mints child Work through the Work
+    /// Gateway; the seam is attached by the host. When absent the façade fails
+    /// honestly — it never fabricates a spawn or a status.
+    fn dispatch_delegate(&self, facade: &str, args: &Value) -> Value {
+        let Some(backend) = self.delegation.as_ref() else {
+            return json!({
+                "ok": false,
+                "error": "delegation seam not attached — no Work Gateway bridge on this host"
+            });
+        };
+        let result = match facade {
+            "delegate.spawn" => backend.spawn(args),
+            "delegate.status" => backend.status(args),
+            "delegate.cancel" => backend.cancel(args),
+            _ => {
+                return json!({"ok": false, "error": format!("unknown delegation façade: {facade}")})
+            }
+        };
+        match result {
+            Ok(mut value) => {
+                if let Some(obj) = value.as_object_mut() {
+                    obj.insert("ok".to_string(), json!(true));
+                }
+                value
+            }
+            Err(e) => json!({"ok": false, "error": e}),
         }
     }
 
@@ -2942,12 +3007,21 @@ pub struct FacadeRoute {
     /// Whether the façade can destroy data (surfaced as the destructive hint).
     pub destructive: bool,
     /// Canonical tool ids this façade fans out to (must exist in the registry).
+    /// Empty for kernel-routed façades (`kernel_route`), which reach the
+    /// delegation seam instead of catalog tools (P71.1).
     pub targets: &'static [&'static str],
+    /// P71.1 — true when the façade is served by a kernel seam rather than a
+    /// catalog fan-out. Only `delegate.*` uses this: delegation mints a child
+    /// Work through the Work Gateway, and a fabricated catalog target would be
+    /// the parallel path I4 forbids.
+    pub kernel_route: bool,
 }
 
 /// P64.9 — the shared-plane façade table (ARCH/17 §17.5). Office 6 ·
 /// browser 3 · computer-use 2 · workspace 1 · artifact 2 · work 2 = 16
-/// surfaces over the 51-tool catalog.
+/// catalog-routed surfaces, plus the 3 kernel-routed delegation façades
+/// (`delegate.*`, P71.1) that reach the Work Gateway child-Work seam instead
+/// of the 51-tool catalog.
 pub const FACADE_ROUTES: &[FacadeRoute] = &[
     FacadeRoute {
         facade: "office.open",
@@ -2960,6 +3034,7 @@ pub const FACADE_ROUTES: &[FacadeRoute] = &[
             "office.pptx_open",
             "office.pdf_open",
         ],
+        kernel_route: false,
     },
     FacadeRoute {
         facade: "office.inspect",
@@ -2972,6 +3047,7 @@ pub const FACADE_ROUTES: &[FacadeRoute] = &[
             "office.pdf_open",
             "office.pdf_pages",
         ],
+        kernel_route: false,
     },
     FacadeRoute {
         facade: "office.edit",
@@ -2979,6 +3055,7 @@ pub const FACADE_ROUTES: &[FacadeRoute] = &[
         read_only: false,
         destructive: false,
         targets: &["office.docx_patch", "office.xlsx_edit", "office.pptx_patch"],
+        kernel_route: false,
     },
     FacadeRoute {
         facade: "office.calculate",
@@ -2986,6 +3063,7 @@ pub const FACADE_ROUTES: &[FacadeRoute] = &[
         read_only: false,
         destructive: false,
         targets: &["office.xlsx_edit", "office.xlsx_open"],
+        kernel_route: false,
     },
     FacadeRoute {
         facade: "office.render",
@@ -2993,6 +3071,7 @@ pub const FACADE_ROUTES: &[FacadeRoute] = &[
         read_only: false,
         destructive: false,
         targets: &["office.pdf_form_fill", "office.pdf_pages"],
+        kernel_route: false,
     },
     FacadeRoute {
         facade: "office.verify",
@@ -3000,6 +3079,7 @@ pub const FACADE_ROUTES: &[FacadeRoute] = &[
         read_only: true,
         destructive: false,
         targets: &["office.docx_open", "office.pdf_open"],
+        kernel_route: false,
     },
     FacadeRoute {
         facade: "browser.research",
@@ -3007,6 +3087,7 @@ pub const FACADE_ROUTES: &[FacadeRoute] = &[
         read_only: true,
         destructive: false,
         targets: &["search.query", "read", "grep"],
+        kernel_route: false,
     },
     FacadeRoute {
         facade: "browser.operate",
@@ -3014,6 +3095,7 @@ pub const FACADE_ROUTES: &[FacadeRoute] = &[
         read_only: false,
         destructive: false,
         targets: &["navigate", "snapshot", "act", "wait"],
+        kernel_route: false,
     },
     FacadeRoute {
         facade: "browser.extract",
@@ -3021,6 +3103,7 @@ pub const FACADE_ROUTES: &[FacadeRoute] = &[
         read_only: true,
         destructive: false,
         targets: &["read", "grep", "pdf", "screenshot"],
+        kernel_route: false,
     },
     FacadeRoute {
         facade: "computer_use.see",
@@ -3028,6 +3111,7 @@ pub const FACADE_ROUTES: &[FacadeRoute] = &[
         read_only: true,
         destructive: false,
         targets: &["desktop.windows", "desktop.read"],
+        kernel_route: false,
     },
     FacadeRoute {
         facade: "computer_use.act",
@@ -3035,6 +3119,7 @@ pub const FACADE_ROUTES: &[FacadeRoute] = &[
         read_only: false,
         destructive: true,
         targets: &["desktop.act"],
+        kernel_route: false,
     },
     FacadeRoute {
         facade: "workspace.map",
@@ -3042,6 +3127,7 @@ pub const FACADE_ROUTES: &[FacadeRoute] = &[
         read_only: true,
         destructive: false,
         targets: &["disk_scan", "filename_search", "file_ops.list"],
+        kernel_route: false,
     },
     FacadeRoute {
         facade: "artifact.store",
@@ -3049,6 +3135,7 @@ pub const FACADE_ROUTES: &[FacadeRoute] = &[
         read_only: false,
         destructive: false,
         targets: &["file_ops.write"],
+        kernel_route: false,
     },
     FacadeRoute {
         facade: "artifact.retrieve",
@@ -3056,6 +3143,7 @@ pub const FACADE_ROUTES: &[FacadeRoute] = &[
         read_only: true,
         destructive: false,
         targets: &["file_ops.read"],
+        kernel_route: false,
     },
     FacadeRoute {
         facade: "work.create",
@@ -3063,6 +3151,7 @@ pub const FACADE_ROUTES: &[FacadeRoute] = &[
         read_only: false,
         destructive: false,
         targets: &["file_ops.write"],
+        kernel_route: false,
     },
     FacadeRoute {
         facade: "work.status",
@@ -3070,6 +3159,35 @@ pub const FACADE_ROUTES: &[FacadeRoute] = &[
         read_only: true,
         destructive: false,
         targets: &["file_ops.read", "file_ops.list"],
+        kernel_route: false,
+    },
+    // P71.1 — the delegation family: the façade that makes delegation a
+    // platform feature instead of the built-in engine's private ability.
+    // Kernel-routed (`kernel_route`) to the Work Gateway child-Work seam;
+    // no catalog fan-out exists or should exist.
+    FacadeRoute {
+        facade: "delegate.spawn",
+        description: "Delegate a task to a child Work (spawn a subagent)",
+        read_only: false,
+        destructive: false,
+        targets: &[],
+        kernel_route: true,
+    },
+    FacadeRoute {
+        facade: "delegate.status",
+        description: "Read one delegated child's state (child Work + presence)",
+        read_only: true,
+        destructive: false,
+        targets: &[],
+        kernel_route: true,
+    },
+    FacadeRoute {
+        facade: "delegate.cancel",
+        description: "Cancel one delegated child (close its child Work)",
+        read_only: false,
+        destructive: false,
+        targets: &[],
+        kernel_route: true,
     },
 ];
 
@@ -3099,10 +3217,15 @@ fn facade_tools() -> Vec<RegisteredTool> {
             } else {
                 ("write", "medium")
             };
+            let route = if r.kernel_route {
+                "kernel: delegation (child Work)".to_string()
+            } else {
+                r.targets.join(", ")
+            };
             stamp_tier(RegisteredTool {
                 id: r.facade.to_string(),
                 family: ToolFamily::Facade,
-                description: format!("{} (façade → {})", r.description, r.targets.join(", ")),
+                description: format!("{} (façade → {route})", r.description),
                 read_only: r.read_only,
                 operation: operation.to_string(),
                 risk: risk.to_string(),

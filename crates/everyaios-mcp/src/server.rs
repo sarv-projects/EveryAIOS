@@ -162,7 +162,10 @@ pub fn tool_list_shared_plane(catalog: &ToolCatalog, ttl_ms: u64) -> ToolListRes
                 "properties": {
                     "path": { "type": "string" },
                     "url": { "type": "string" },
-                    "query": { "type": "string" }
+                    "query": { "type": "string" },
+                    "workId": { "type": "string" },
+                    "taskId": { "type": "string" },
+                    "spec": { "type": "object" }
                 }
             }),
             read_only: f.read_only,

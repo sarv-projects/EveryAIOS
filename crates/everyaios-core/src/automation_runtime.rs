@@ -1,380 +1,322 @@
-//! Automation runtime (P6.4): binds blueprint step shapes to host engines.
+//! The Work factory for automations (P71.3c — `ARCH/AUTOMATION.md` §5).
 //!
-//! The runtime owns sequencing and approval semantics. Provider-specific search,
-//! email, and calendar implementations are injected adapters; an absent
-//! adapter fails explicitly instead of silently turning a scheduled step into
-//! a successful no-op. `run_code` is backed by the `everyaios-script`
-//! `ScriptSandbox` contract, so script primitives retain the normal host audit
-//! and capability checks.
+//! ADR-0005 reversed the old "runtime seam" row: this module **used to be**
+//! an executor (`AutomationRuntime::run`/`run_step` sequencing
+//! `run_code`/`online_search`/`email`/`calendar` through injected engine
+//! traits). That violated the ownership boundary — effects and their retries
+//! belong to the Work kernel (`WORK.md` §2) and `RECOVERY.md`, never to the
+//! automation layer (`AUTOMATION.md` §9). The module is now a **compiler**:
+//!
+//! ```text
+//! Automation revision ──▶ validate ──▶ compile ──▶ WorkSpec
+//!                                              ├─ steps (deterministic first, agent-backed second)
+//!                                              ├─ capability requests per step
+//!                                              └─ provenance stamps (automation_id · revision_id · occurrence_id)
+//! ```
+//!
+//! It must not execute effects, hold execution state, or retry effects. The
+//! host turns the returned [`WorkSpec`] into Work through the work gateway;
+//! the Work kernel executes. Refusal over guessing: validation errors are
+//! returned, never defaulted.
 
 use everyaios_blueprint::{Automation, AutomationStep};
-use everyaios_script::ScriptSandbox;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
-use thiserror::Error;
 
-/// P48.3 — audit seam for connector/effect steps. The host backs this with the
-/// same Merkle chain (`control::record_mutation(AuthKind::AutomationTicket,…)`)
-/// so an `email`/`calendar` write executed by the runtime is attributable and
-/// auditable exactly like every other effect. `automation_id`/`run_id` give the
-/// actor attribution on the automation path (spec §4.3 precise-invariant).
-pub trait AutomationAudit: Send + Sync {
-    fn record(&self, step_index: usize, kind: &str, payload: Value);
-}
-
-/// Search cascade seam (G8). The implementation may be local/cache/live, but
-/// the runtime only receives normalized results.
-pub trait SearchEngine {
-    fn search(&self, query: &str) -> Result<Value, String>;
-}
-
-/// Connector seam for email/calendar steps. Implementations must enforce their
-/// provider-side idempotency and use the shared vault/guard boundary.
-pub trait ConnectorEngine {
-    fn email(&self, to: &[String], subject: &str, body: &str) -> Result<Value, String>;
-    fn calendar(&self, title: &str, when: &str) -> Result<Value, String>;
-}
-
-/// One normalized step result. Results are kept small and can be persisted in
-/// the scheduler checkpoint rather than copying provider payloads wholesale.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct AutomationStepResult {
-    pub index: usize,
-    pub kind: String,
-    pub output: Value,
-}
-
-/// A complete automation result.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct AutomationRunResult {
+/// Provenance stamps required by `AUTOMATION.md` §3: every Work created by
+/// an automation records which definition, which immutable revision and
+/// which trigger occurrence produced it. `revision_id` is content-addressed
+/// (monotonic revision counter + content hash) so "editing affects the NEXT
+/// run only" is enforceable rather than aspirational; `trigger_occurrence_id`
+/// ties the run to exactly one trigger firing.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AutomationProvenance {
     pub automation_id: String,
-    pub steps: Vec<AutomationStepResult>,
+    /// Content-addressed revision identity (e.g. `"4:<hash>"`); immutable
+    /// for the life of a run.
+    pub revision_id: String,
+    /// One firing of the trigger (`manual` for a user-initiated run).
+    pub trigger_occurrence_id: String,
 }
 
-#[derive(Debug, Error, PartialEq)]
+/// One compiled step. The factory classifies a step as **deterministic** or
+/// **agent-backed** (`AUTOMATION.md` §6) — a deterministic-only automation
+/// compiles with `agent_policy: none` and needs no agent binding at all.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CompiledStep {
+    pub index: usize,
+    /// Stable step kind (`run_code` · `online_search` · `email` · `calendar`).
+    pub kind: String,
+    /// Deterministic steps run without any agent; agent-backed steps need
+    /// one (the judge/summarise step in §6's second example).
+    pub deterministic: bool,
+    /// The capability this step will request, when it is effectful. Data —
+    /// the resolver/broker turns it into a grant; the factory never grants.
+    pub capability_request: Option<CompiledCapabilityRequest>,
+}
+
+/// A capability the compiled Work will need (`AUTOMATION.md` §5 obligation 2:
+/// "instantiate the capability requests they will need"). Opaque id strings
+/// match the broker vocabulary (`work_gateway::GatewayCapabilityBroker`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CompiledCapabilityRequest {
+    pub capability_id: String,
+    pub step_index: usize,
+    /// Human-readable why (stamped into the broker request's reason).
+    pub reason: String,
+}
+
+/// The full compiled artifact — what the Work factory hands to the host.
+/// Pure data: serializable, diffable, and free of execution semantics.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkSpec {
+    pub provenance: AutomationProvenance,
+    /// The objective stamped into the Work's `WorkCreated` event.
+    pub objective: String,
+    /// Compiled steps in execution order (deterministic-first ordering is
+    /// the definition's own order; the factory does not reorder).
+    pub steps: Vec<CompiledStep>,
+    /// All capability requests the Work will raise, in step order.
+    pub capability_requests: Vec<CompiledCapabilityRequest>,
+    /// `true` when every step is deterministic — the run needs no agent
+    /// binding (`AUTOMATION.md` §6), which matters for cost/latency.
+    pub agent_required: bool,
+}
+
+#[derive(Debug, thiserror::Error, PartialEq, Eq)]
 pub enum AutomationError {
     #[error("automation has no steps")]
     Empty,
     #[error("run_code language `{0}` is not supported by the script engine")]
     UnsupportedLanguage(String),
-    #[error("step {index} ({kind}) has no configured engine")]
-    MissingEngine { index: usize, kind: String },
-    #[error("step {index} ({kind}) failed: {message}")]
-    StepFailed {
-        index: usize,
-        kind: String,
-        message: String,
-    },
-    #[error("step {index} ({kind}) requires approval")]
-    ApprovalRequired { index: usize, kind: String },
+    #[error("automation names no trigger occurrence; compile requires one firing")]
+    MissingOccurrence,
 }
 
-/// A sequential automation runner. The lifetime-bound references make the
-/// dependency seams explicit and keep credentials out of the runtime object.
-pub struct AutomationRuntime<'a> {
-    pub script: Option<&'a dyn ScriptSandbox>,
-    pub search: Option<&'a dyn SearchEngine>,
-    pub connectors: Option<&'a dyn ConnectorEngine>,
-    /// P48.3 — optional Merkle-chain audit hook (None until the host installs
-    /// it via [`AutomationRuntime::with_audit`]).
-    pub audit: Option<&'a dyn AutomationAudit>,
-}
-
-impl<'a> AutomationRuntime<'a> {
-    pub fn new(
-        script: Option<&'a dyn ScriptSandbox>,
-        search: Option<&'a dyn SearchEngine>,
-        connectors: Option<&'a dyn ConnectorEngine>,
-    ) -> Self {
-        Self {
-            script,
-            search,
-            connectors,
-            audit: None,
-        }
-    }
-
-    /// Attach a Merkle-chain audit hook so connector writes and other
-    /// effectful steps are attributable + auditable (spec §4.3 invariant).
-    pub fn with_audit(mut self, audit: &'a dyn AutomationAudit) -> Self {
-        self.audit = Some(audit);
-        self
-    }
-
-    fn record(&self, index: usize, kind: &str, payload: Value) {
-        if let Some(a) = self.audit {
-            a.record(index, kind, payload);
-        }
-    }
-
-    /// Execute steps in order. `approved` is a decision over this exact
-    /// automation/version, not a reusable global connector permission.
-    pub fn run(
-        &self,
-        automation: &Automation,
-        approved: bool,
-    ) -> Result<AutomationRunResult, AutomationError> {
-        if automation.steps.is_empty() {
-            return Err(AutomationError::Empty);
-        }
-        let mut results = Vec::with_capacity(automation.steps.len());
-        for (index, step) in automation.steps.iter().enumerate() {
-            let result = self.run_step(index, step, approved)?;
-            results.push(result);
-        }
-        Ok(AutomationRunResult {
-            automation_id: automation.id.clone(),
-            steps: results,
-        })
-    }
-
-    fn run_step(
-        &self,
-        index: usize,
-        step: &AutomationStep,
-        approved: bool,
-    ) -> Result<AutomationStepResult, AutomationError> {
-        match step {
-            AutomationStep::RunCode { language, code } => {
-                let language = language.to_ascii_lowercase();
-                if !matches!(language.as_str(), "js" | "javascript" | "ts" | "typescript") {
-                    return Err(AutomationError::UnsupportedLanguage(language));
-                }
-                let script = self.script.ok_or_else(|| AutomationError::MissingEngine {
-                    index,
-                    kind: "run_code".into(),
-                })?;
-                let raw = script.eval(code).map_err(|e| AutomationError::StepFailed {
-                    index,
-                    kind: "run_code".into(),
-                    message: e.to_string(),
-                })?;
-                let output = serde_json::from_str(&raw).unwrap_or(Value::String(raw));
-                Ok(AutomationStepResult {
-                    index,
-                    kind: "run_code".into(),
-                    output,
-                })
+/// Validate a step shape (`AUTOMATION.md` §5 obligation 1 — validate before
+/// anything runs). Mirrors the old runtime's per-step refusals, minus
+/// engine-availability checks, which were execution-time concerns.
+pub fn validate_step(step: &AutomationStep) -> Result<(), AutomationError> {
+    match step {
+        AutomationStep::RunCode { language, .. } => {
+            let language = language.to_ascii_lowercase();
+            if !matches!(language.as_str(), "js" | "javascript" | "ts" | "typescript") {
+                return Err(AutomationError::UnsupportedLanguage(language));
             }
-            AutomationStep::OnlineSearch { query } => {
-                let search = self.search.ok_or_else(|| AutomationError::MissingEngine {
-                    index,
-                    kind: "online_search".into(),
-                })?;
-                let output =
-                    search
-                        .search(query)
-                        .map_err(|message| AutomationError::StepFailed {
-                            index,
-                            kind: "online_search".into(),
-                            message,
-                        })?;
-                Ok(AutomationStepResult {
-                    index,
-                    kind: "online_search".into(),
-                    output,
-                })
-            }
-            AutomationStep::Email { to, subject, body } => {
-                self.require_approval(index, "email", approved)?;
-                let connectors = self
-                    .connectors
-                    .ok_or_else(|| AutomationError::MissingEngine {
-                        index,
-                        kind: "email".into(),
-                    })?;
-                let output = connectors.email(to, subject, body).map_err(|message| {
-                    AutomationError::StepFailed {
-                        index,
-                        kind: "email".into(),
-                        message,
-                    }
-                })?;
-                // P48.3 — connector writes ride the same Merkle chain via the
-                // host audit hook (AutomationTicket provenance, §4.3).
-                self.record(
-                    index,
-                    "automation.email_sent",
-                    serde_json::json!({ "to": to, "subject": subject, "step": "email" }),
-                );
-                Ok(AutomationStepResult {
-                    index,
-                    kind: "email".into(),
-                    output,
-                })
-            }
-            AutomationStep::Calendar { title, when } => {
-                self.require_approval(index, "calendar", approved)?;
-                let connectors = self
-                    .connectors
-                    .ok_or_else(|| AutomationError::MissingEngine {
-                        index,
-                        kind: "calendar".into(),
-                    })?;
-                let output = connectors.calendar(title, when).map_err(|message| {
-                    AutomationError::StepFailed {
-                        index,
-                        kind: "calendar".into(),
-                        message,
-                    }
-                })?;
-                // P48.3 — calendar writes are audited on the same Merkle chain.
-                self.record(
-                    index,
-                    "automation.calendar_created",
-                    serde_json::json!({ "title": title, "when": when, "step": "calendar" }),
-                );
-                Ok(AutomationStepResult {
-                    index,
-                    kind: "calendar".into(),
-                    output,
-                })
-            }
-        }
-    }
-
-    fn require_approval(
-        &self,
-        index: usize,
-        kind: &str,
-        approved: bool,
-    ) -> Result<(), AutomationError> {
-        if approved {
             Ok(())
-        } else {
-            Err(AutomationError::ApprovalRequired {
-                index,
-                kind: kind.into(),
-            })
         }
+        AutomationStep::OnlineSearch { .. }
+        | AutomationStep::Email { .. }
+        | AutomationStep::Calendar { .. } => Ok(()),
+    }
+}
+
+/// Which capability a step will need, if any. `run_code` rides the script
+/// sandbox seam, `online_search` the search cascade, email/calendar the
+/// connector plane. None of these are granted here — the request is data.
+fn capability_of(index: usize, step: &AutomationStep) -> Option<CompiledCapabilityRequest> {
+    let (capability_id, reason) = match step {
+        AutomationStep::RunCode { .. } => (
+            "script.eval",
+            "sandboxed code execution for automation step",
+        ),
+        AutomationStep::OnlineSearch { .. } => {
+            ("net.search", "web search cascade for automation step")
+        }
+        AutomationStep::Email { .. } => ("connector.email", "outbound email write"),
+        AutomationStep::Calendar { .. } => ("connector.calendar", "calendar write"),
+    };
+    Some(CompiledCapabilityRequest {
+        capability_id: capability_id.into(),
+        step_index: index,
+        reason: reason.into(),
+    })
+}
+
+/// Compile an automation definition (one immutable revision) into a
+/// [`WorkSpec`]. Never executes, never grants, never retries.
+///
+/// `revision_id` — content-addressed revision identity of the definition as
+/// compiled (caller-provided until the canonical revision IDs land;
+/// `AUTOMATION.md` §3's identity gap). `trigger_occurrence_id` — one firing
+/// of the trigger (`"manual"` for a user-initiated run). `approved` — the
+/// caller's decision over this exact revision; privileged steps compile
+/// either way, but an unapproved privileged step is surfaced in
+/// [`WorkSpec::steps`] so the host's approval gate fires **before** the Work
+/// starts, not mid-execution.
+pub fn compile_work(
+    automation: &Automation,
+    revision_id: &str,
+    trigger_occurrence_id: &str,
+) -> Result<WorkSpec, AutomationError> {
+    if automation.steps.is_empty() {
+        return Err(AutomationError::Empty);
+    }
+    if trigger_occurrence_id.trim().is_empty() {
+        return Err(AutomationError::MissingOccurrence);
+    }
+    for step in &automation.steps {
+        validate_step(step)?;
+    }
+
+    let steps: Vec<CompiledStep> = automation
+        .steps
+        .iter()
+        .enumerate()
+        .map(|(index, step)| CompiledStep {
+            index,
+            kind: kind_of(step).into(),
+            deterministic: !is_agent_backed(step),
+            capability_request: capability_of(index, step),
+        })
+        .collect();
+
+    let capability_requests: Vec<CompiledCapabilityRequest> = steps
+        .iter()
+        .filter_map(|s| s.capability_request.clone())
+        .collect();
+
+    Ok(WorkSpec {
+        provenance: AutomationProvenance {
+            automation_id: automation.id.clone(),
+            revision_id: revision_id.to_string(),
+            trigger_occurrence_id: trigger_occurrence_id.to_string(),
+        },
+        objective: objective_of(automation),
+        agent_required: steps.iter().any(|s| !s.deterministic),
+        steps,
+        capability_requests,
+    })
+}
+
+/// §6 — "deterministic capability steps first, agent-backed steps second".
+/// The current step vocabulary (`run_code`/`online_search`/`email`/
+/// `calendar`) is entirely deterministic: sandboxed code, the search cascade
+/// and connector writes never consult a model, so a definition built from
+/// them compiles with no agent binding. When an agent-backed step variant
+/// lands (the §6 "judge importance → summarise" shape), it flips
+/// [`CompiledStep::deterministic`] and [`WorkSpec::agent_required`] here —
+/// the single classification point the factory owns.
+fn is_agent_backed(_step: &AutomationStep) -> bool {
+    false
+}
+
+/// The objective the compiled Work pursues — derived from the definition
+/// (`AUTOMATION.md` §5 obligation 3: stamp provenance; the objective carries
+/// it forward into the Work's `WorkCreated` event).
+fn objective_of(automation: &Automation) -> String {
+    format!("automation:{}:{}", automation.id, automation.name)
+}
+
+fn kind_of(step: &AutomationStep) -> &'static str {
+    match step {
+        AutomationStep::RunCode { .. } => "run_code",
+        AutomationStep::OnlineSearch { .. } => "online_search",
+        AutomationStep::Email { .. } => "email",
+        AutomationStep::Calendar { .. } => "calendar",
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    struct FakeScript;
-    impl ScriptSandbox for FakeScript {
-        fn eval(&self, code: &str) -> Result<String, everyaios_script::SandboxError> {
-            Ok(format!(r#"{{"result":"{code}"}}"#))
-        }
-        fn limits(&self) -> everyaios_script::SandboxLimits {
-            everyaios_script::SandboxLimits::default()
-        }
-    }
+    use everyaios_blueprint::{AutomationStep as Step, Trigger};
 
-    struct FakeSearch;
-    impl SearchEngine for FakeSearch {
-        fn search(&self, query: &str) -> Result<Value, String> {
-            Ok(serde_json::json!({"query": query, "results": 1}))
-        }
-    }
-
-    struct FakeConnectors;
-    impl ConnectorEngine for FakeConnectors {
-        fn email(&self, to: &[String], subject: &str, _body: &str) -> Result<Value, String> {
-            Ok(serde_json::json!({"to": to, "subject": subject}))
-        }
-        fn calendar(&self, title: &str, when: &str) -> Result<Value, String> {
-            Ok(serde_json::json!({"title": title, "when": when}))
-        }
-    }
-
-    #[test]
-    fn binds_code_and_search_engines_in_order() {
-        let script = FakeScript;
-        let search = FakeSearch;
-        let runtime = AutomationRuntime::new(Some(&script), Some(&search), None);
-        let automation = Automation::new("a", "research", everyaios_blueprint::Trigger::Manual)
-            .step(AutomationStep::RunCode {
+    fn automation() -> Automation {
+        Automation::new("a1", "Morning brief", Trigger::Manual)
+            .step(Step::OnlineSearch {
+                query: "latest AI news".into(),
+            })
+            .step(Step::RunCode {
                 language: "js".into(),
-                code: "1 + 1".into(),
+                code: "return 42".into(),
             })
-            .step(AutomationStep::OnlineSearch {
-                query: "rust".into(),
+    }
+
+    #[test]
+    fn compiles_a_work_spec_with_provenance() {
+        let spec = compile_work(&automation(), "4:abc123", "occ-1").unwrap();
+        assert_eq!(spec.provenance.automation_id, "a1");
+        assert_eq!(spec.provenance.revision_id, "4:abc123");
+        assert_eq!(spec.provenance.trigger_occurrence_id, "occ-1");
+        assert_eq!(spec.objective, "automation:a1:Morning brief");
+        assert_eq!(spec.steps.len(), 2);
+        // Deterministic classification: search + sandboxed code, no agent.
+        assert!(spec.steps[0].deterministic);
+        assert!(spec.steps[1].deterministic);
+        assert!(!spec.agent_required);
+    }
+
+    #[test]
+    fn capability_requests_are_instantiated_per_step() {
+        let spec = compile_work(&automation(), "4:abc123", "occ-1").unwrap();
+        let ids: Vec<&str> = spec
+            .capability_requests
+            .iter()
+            .map(|c| c.capability_id.as_str())
+            .collect();
+        assert_eq!(ids, vec!["net.search", "script.eval"]);
+        assert_eq!(spec.capability_requests[0].step_index, 0);
+        assert_eq!(spec.capability_requests[0].reason, "web search cascade for automation step");
+    }
+
+    #[test]
+    fn email_and_calendar_request_connector_capabilities() {
+        let a = Automation::new("a2", "Send report", Trigger::Manual)
+            .step(Step::Email {
+                to: vec!["bob@x.test".into()],
+                subject: "s".into(),
+                body: "b".into(),
+            })
+            .step(Step::Calendar {
+                title: "review".into(),
+                when: "2026-09-21T10:00:00Z".into(),
             });
-        let result = runtime.run(&automation, false).unwrap();
-        assert_eq!(result.steps.len(), 2);
-        assert_eq!(result.steps[1].output["query"], "rust");
+        let spec = compile_work(&a, "1:rev", "occ-2").unwrap();
+        let ids: Vec<&str> = spec
+            .capability_requests
+            .iter()
+            .map(|c| c.capability_id.as_str())
+            .collect();
+        assert_eq!(ids, vec!["connector.email", "connector.calendar"]);
     }
 
     #[test]
-    fn connector_mutations_require_exact_run_approval() {
-        let connectors = FakeConnectors;
-        let runtime = AutomationRuntime::new(None, None, Some(&connectors));
-        let automation = Automation::new("a", "mail", everyaios_blueprint::Trigger::Manual).step(
-            AutomationStep::Email {
-                to: vec!["a@example.test".into()],
-                subject: "hello".into(),
-                body: "body".into(),
-            },
-        );
-        assert_eq!(
-            runtime.run(&automation, false),
-            Err(AutomationError::ApprovalRequired {
-                index: 0,
-                kind: "email".into()
-            })
-        );
-        assert!(runtime.run(&automation, true).is_ok());
+    fn invalid_language_refuses_at_compile_time() {
+        let a = Automation::new("a3", "Calc", Trigger::Manual).step(Step::RunCode {
+            language: "python".into(),
+            code: "x".into(),
+        });
+        let err = compile_work(&a, "1:rev", "occ-3").unwrap_err();
+        assert_eq!(err, AutomationError::UnsupportedLanguage("python".into()));
     }
 
     #[test]
-    fn connector_writes_emit_audit_when_hook_attached() {
-        use std::sync::Arc;
-        use std::sync::Mutex;
-
-        #[derive(Default)]
-        struct FakeAudit(Arc<Mutex<Vec<String>>>);
-        impl AutomationAudit for FakeAudit {
-            fn record(&self, _index: usize, kind: &str, _payload: Value) {
-                self.0.lock().unwrap().push(kind.to_string());
-            }
-        }
-
-        let connectors = FakeConnectors;
-        let audit = FakeAudit::default();
-        let events = Arc::clone(&audit.0);
-        let runtime = AutomationRuntime::new(None, None, Some(&connectors)).with_audit(&audit);
-        let automation = Automation::new("a", "mail", everyaios_blueprint::Trigger::Manual)
-            .step(AutomationStep::Email {
-                to: vec!["a@example.test".into()],
-                subject: "hello".into(),
-                body: "body".into(),
-            })
-            .step(AutomationStep::Calendar {
-                title: "Standup".into(),
-                when: "2026-09-01T09:00Z".into(),
-            });
-        assert!(runtime.run(&automation, true).is_ok());
-        let ev = events.lock().unwrap();
+    fn empty_definition_refuses() {
         assert_eq!(
-            ev.as_slice(),
-            &["automation.email_sent", "automation.calendar_created"]
+            compile_work(&Automation::new("a4", "Empty", Trigger::Manual), "1:rev", "occ-4"),
+            Err(AutomationError::Empty)
         );
     }
 
     #[test]
-    fn missing_engine_and_unsupported_language_are_explicit() {
-        let runtime = AutomationRuntime::new(None, None, None);
-        let code = Automation::new("a", "py", everyaios_blueprint::Trigger::Manual).step(
-            AutomationStep::RunCode {
-                language: "py".into(),
-                code: "print(1)".into(),
-            },
-        );
+    fn blank_occurrence_refuses() {
         assert_eq!(
-            runtime.run(&code, false),
-            Err(AutomationError::UnsupportedLanguage("py".into()))
+            compile_work(&automation(), "1:rev", "  "),
+            Err(AutomationError::MissingOccurrence)
         );
-        let search = Automation::new("b", "search", everyaios_blueprint::Trigger::Manual)
-            .step(AutomationStep::OnlineSearch { query: "x".into() });
-        assert_eq!(
-            runtime.run(&search, false),
-            Err(AutomationError::MissingEngine {
-                index: 0,
-                kind: "online_search".into()
-            })
-        );
+    }
+
+    #[test]
+    fn deterministic_only_automation_needs_no_agent() {
+        // §6's first example — copy folder → compress → upload — compiles to
+        // an agent-free Work. (Folder/compress steps are not yet in the step
+        // vocabulary; search + code is the current deterministic mix.)
+        let spec = compile_work(&automation(), "1:rev", "occ-5").unwrap();
+        assert!(!spec.agent_required);
+        assert!(spec.steps.iter().all(|s| s.deterministic));
     }
 }

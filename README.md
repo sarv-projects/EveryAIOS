@@ -220,7 +220,7 @@ The architecture is documented in detail starting from [`ARCH/CORE.md`](ARCH/COR
 - [`ARCH/MEMORY.md`](ARCH/MEMORY.md) — four memory classes (Context · Episodic · Knowledge · Procedural), with ACT-R as a strategy
 - [`ARCH/EXTERNAL-AGENTS.md`](ARCH/EXTERNAL-AGENTS.md) — ACP/MCP surfaces, the agent bridge, and what governance can honestly be claimed
 - [`ARCH/09-FEATURE-MATRIX.md`](ARCH/09-FEATURE-MATRIX.md) — the 166-row capability matrix
-- [`ARCH/17-NATIVE-AGENT.md`](ARCH/17-NATIVE-AGENT.md) — the two-plane model: what belongs to the agent vs. what belongs to EveryAIOS *(its original "frozen" status is lifted by [`ARCH/ADR/0003`](ARCH/ADR/0003-architecture-thaw-core-authority.md); `CORE.md` supersedes it)*
+- [`ARCH/17-NATIVE-AGENT.md`](ARCH/17-NATIVE-AGENT.md) — the two-plane model: what belongs to the agent vs. what belongs to EveryAIOS *(**archived** — historical context; superseded by [`ARCH/ADR/0005`](ARCH/ADR/0005-external-agents-are-the-v1-engines.md); its original "frozen" status was lifted by [`ARCH/ADR/0003`](ARCH/ADR/0003-architecture-thaw-core-authority.md))*
 - [`DESKTOP-APP-SPEC.md`](DESKTOP-APP-SPEC.md) — the normative product contract
 - [`TODO.md`](TODO.md) — the delivery ledger: what is built, what is open, and what is next
 

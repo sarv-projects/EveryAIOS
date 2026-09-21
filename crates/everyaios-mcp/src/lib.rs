@@ -714,10 +714,16 @@ pub struct FacadeDef {
     pub risk: &'static str,
     /// Canonical inbuilt tool names this façade fans out to.
     pub fans_out_to: &'static [&'static str],
+    /// P71.1 — true when the façade is served by a kernel seam (the Work
+    /// Gateway delegation bridge) rather than catalog fan-out. Kernel-routed
+    /// façades carry an empty `fans_out_to` by design: delegation mints child
+    /// Work through the one executor, never a parallel tool.
+    pub kernel_route: bool,
 }
 
-/// P64.9 — the 16 shared-plane façades (ARCH/17 §17.5): office 6 · browser 3
-/// · computer-use 2 · workspace 1 · artifact 2 · work 2.
+/// P64.9 — the shared-plane façades (ARCH/17 §17.5): office 6 · browser 3
+/// · computer-use 2 · workspace 1 · artifact 2 · work 2 · delegate 3
+/// (P71.1 — kernel-routed to the Work Gateway delegation seam).
 pub const SHARED_FACADES: &[FacadeDef] = &[
     FacadeDef {
         name: "office.open",
@@ -726,6 +732,7 @@ pub const SHARED_FACADES: &[FacadeDef] = &[
         destructive: false,
         risk: "low",
         fans_out_to: &["office_open"],
+        kernel_route: false,
     },
     FacadeDef {
         name: "office.inspect",
@@ -734,6 +741,7 @@ pub const SHARED_FACADES: &[FacadeDef] = &[
         destructive: false,
         risk: "low",
         fans_out_to: &["office_open"],
+        kernel_route: false,
     },
     FacadeDef {
         name: "office.edit",
@@ -742,6 +750,7 @@ pub const SHARED_FACADES: &[FacadeDef] = &[
         destructive: false,
         risk: "medium",
         fans_out_to: &["office_edit"],
+        kernel_route: false,
     },
     FacadeDef {
         name: "office.calculate",
@@ -750,6 +759,7 @@ pub const SHARED_FACADES: &[FacadeDef] = &[
         destructive: false,
         risk: "medium",
         fans_out_to: &["office_edit", "office_open"],
+        kernel_route: false,
     },
     FacadeDef {
         name: "office.render",
@@ -758,6 +768,7 @@ pub const SHARED_FACADES: &[FacadeDef] = &[
         destructive: false,
         risk: "medium",
         fans_out_to: &["office_export", "office_open"],
+        kernel_route: false,
     },
     FacadeDef {
         name: "office.verify",
@@ -766,6 +777,7 @@ pub const SHARED_FACADES: &[FacadeDef] = &[
         destructive: false,
         risk: "low",
         fans_out_to: &["office_open"],
+        kernel_route: false,
     },
     FacadeDef {
         name: "browser.research",
@@ -774,6 +786,7 @@ pub const SHARED_FACADES: &[FacadeDef] = &[
         destructive: false,
         risk: "medium",
         fans_out_to: &["search_web", "read", "deep_research"],
+        kernel_route: false,
     },
     FacadeDef {
         name: "browser.operate",
@@ -782,6 +795,7 @@ pub const SHARED_FACADES: &[FacadeDef] = &[
         destructive: false,
         risk: "high",
         fans_out_to: &["navigate", "snapshot", "act", "wait"],
+        kernel_route: false,
     },
     FacadeDef {
         name: "browser.extract",
@@ -790,6 +804,7 @@ pub const SHARED_FACADES: &[FacadeDef] = &[
         destructive: false,
         risk: "low",
         fans_out_to: &["read", "grep", "pdf", "screenshot"],
+        kernel_route: false,
     },
     FacadeDef {
         name: "computer_use.see",
@@ -798,6 +813,7 @@ pub const SHARED_FACADES: &[FacadeDef] = &[
         destructive: false,
         risk: "low",
         fans_out_to: &["windows", "tabs"],
+        kernel_route: false,
     },
     FacadeDef {
         name: "computer_use.act",
@@ -806,6 +822,7 @@ pub const SHARED_FACADES: &[FacadeDef] = &[
         destructive: true,
         risk: "high",
         fans_out_to: &["act", "wait"],
+        kernel_route: false,
     },
     FacadeDef {
         name: "workspace.map",
@@ -814,6 +831,7 @@ pub const SHARED_FACADES: &[FacadeDef] = &[
         destructive: false,
         risk: "low",
         fans_out_to: &["disk_scan", "filename_search"],
+        kernel_route: false,
     },
     FacadeDef {
         name: "artifact.store",
@@ -822,6 +840,7 @@ pub const SHARED_FACADES: &[FacadeDef] = &[
         destructive: false,
         risk: "medium",
         fans_out_to: &["disk_scan", "disk_cleanup"],
+        kernel_route: false,
     },
     FacadeDef {
         name: "artifact.retrieve",
@@ -830,6 +849,7 @@ pub const SHARED_FACADES: &[FacadeDef] = &[
         destructive: false,
         risk: "low",
         fans_out_to: &["disk_scan", "filename_search"],
+        kernel_route: false,
     },
     FacadeDef {
         name: "work.create",
@@ -838,6 +858,7 @@ pub const SHARED_FACADES: &[FacadeDef] = &[
         destructive: false,
         risk: "medium",
         fans_out_to: &["memory_store", "disk_scan"],
+        kernel_route: false,
     },
     FacadeDef {
         name: "work.status",
@@ -846,6 +867,37 @@ pub const SHARED_FACADES: &[FacadeDef] = &[
         destructive: false,
         risk: "low",
         fans_out_to: &["memory_retrieve", "memory_review_due"],
+        kernel_route: false,
+    },
+    // P71.1 — the delegation family. Delegation is a platform feature, not a
+    // built-in engine's private ability: the primary agent chooses, EveryAIOS
+    // validates. These route to the Work Gateway child-Work seam.
+    FacadeDef {
+        name: "delegate.spawn",
+        description: "Delegate a task to a child Work (spawn a subagent)",
+        read_only: false,
+        destructive: false,
+        risk: "medium",
+        fans_out_to: &[],
+        kernel_route: true,
+    },
+    FacadeDef {
+        name: "delegate.status",
+        description: "Read one delegated child's state (child Work + presence)",
+        read_only: true,
+        destructive: false,
+        risk: "low",
+        fans_out_to: &[],
+        kernel_route: true,
+    },
+    FacadeDef {
+        name: "delegate.cancel",
+        description: "Cancel one delegated child (close its child Work)",
+        read_only: false,
+        destructive: false,
+        risk: "medium",
+        fans_out_to: &[],
+        kernel_route: true,
     },
 ];
 
@@ -873,15 +925,27 @@ pub fn validate_facades() -> Result<(), String> {
                 f.name
             ));
         }
-        if f.fans_out_to.is_empty() {
-            return Err(format!("façade {:?} fans out to nothing", f.name));
-        }
-        for t in f.fans_out_to {
-            if find_inbuilt_tool(t).is_none() {
+        if f.kernel_route {
+            // P71.1 — kernel-routed façades (`delegate.*`) reach the Work
+            // Gateway delegation seam and deliberately fan out to no catalog
+            // tool; a catalog target here would be the parallel path I4 forbids.
+            if !f.fans_out_to.is_empty() {
                 return Err(format!(
-                    "façade {:?} fans out to unknown tool {t:?}",
+                    "façade {:?} is kernel-routed but fans out to catalog tools",
                     f.name
                 ));
+            }
+        } else {
+            if f.fans_out_to.is_empty() {
+                return Err(format!("façade {:?} fans out to nothing", f.name));
+            }
+            for t in f.fans_out_to {
+                if find_inbuilt_tool(t).is_none() {
+                    return Err(format!(
+                        "façade {:?} fans out to unknown tool {t:?}",
+                        f.name
+                    ));
+                }
             }
         }
         // Destructive façades must be high-risk + mutating (same Guard path

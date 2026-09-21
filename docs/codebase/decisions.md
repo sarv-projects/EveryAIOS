@@ -41,7 +41,7 @@ docs, code, or Git history, that is stated explicitly.
 
 - **Decision:** `src-tauri/` validates and delegates only; business logic lives
   in crates.
-- **Provenance:** structure itself — 339 registered commands across ~46
+- **Provenance:** structure itself — 351 registered commands across 40
   `*_cmds.rs` modules delegating into 22 crates; `AGENTS.md` §10/§12. Git
   history: `docs/ipc-parity` CI checks keep the two sides aligned.
 

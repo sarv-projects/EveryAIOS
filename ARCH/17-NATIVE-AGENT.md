@@ -24,12 +24,13 @@
 > **Ownership:** This is architecture, not delivery. Delivery status for every row lives in `../TODO.md` (phase **P64**). Capability *identity* stays in `../capabilities.yaml` + `09-FEATURE-MATRIX.md` + `../DESKTOP-APP-SPEC.md` §0. This file **adds no ids of its own** — but the native-plane capabilities it freezes are now first-class rows in those three surfaces (v3.76: **B10** · **B11** · **C14** · **C15** · **F16** · **I14** · **I15** · **I16** · **I17**), so the contract and this document cannot be read two ways. Everything else derives behavior, boundaries, and schemas for existing rows (B1–B9, C*, D*, E9, F*, G*, H*, I*, J*).
 > **Non-negotiables carried from `00-INDEX.md`:** one effect-authorization model · one append-only event log · one Progress timeline · Work is the durable unit. ARCH/17 must not weaken any of them.
 
-## Where this content moves (`P69.A26` — pending split)
+## Where this content moved (`P69.A26` — split landed)
 
 - **Agent model** (binding, adapter, behavior profile, switching, control layers): [`AGENT.md`](AGENT.md).
 - **Protocols and shared plane** (ACP lifecycle, MCP capability surface, `AgentBridge`, task-shaped façades,
   governance modes): [`EXTERNAL-AGENTS.md`](EXTERNAL-AGENTS.md).
-- **Preserved here until the split lands:** the tool/agent schema catalog (§§17.4–17.6), the shared-plane
+- **Preserved here as archive reference** (live content already lives in the docs named above; physical move is
+  `P71.5a`): the tool/agent schema catalog (§§17.4–17.6), the shared-plane
   façade list (§17.5), the prompt/context/routing schemas as implementation detail (§17.7 — policy in
   [`CONTEXT.md`](CONTEXT.md)), edge cases (§17.8), peer-schema provenance (§17.9), gap register (§17.10),
   and the Settings read models (§17.12).

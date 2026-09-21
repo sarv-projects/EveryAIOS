@@ -8158,14 +8158,14 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 | .agents/skills/codebase-intelligence/references/ | 7 | 466 |
 | .agents/skills/skill-creator/ | 1 | 85 |
 | .agents/templates/ | 1 | 169 |
-| ARCH — the design set (+ DIAGRAMS & ADR) | 38 | 8,447 |
+| ARCH — the design set (+ DIAGRAMS & ADR) | 38 | 8,450 |
 | RESEARCH/2026-ai-landscape — other research | 11 | 970 |
 | RESEARCH/desktop_app — the prior-art & competitor corpus | 93 | 12,987 |
 | deploy/ — deployment docs | 1 | 105 |
 | docs/codebase/ | 10 | 971 |
-| root — specs, handover, and this map | 11 | 10,651 |
+| root — specs, handover, and this map | 11 | 10,655 |
 | ui/ — UI design docs | 1 | 83 |
-| **TOTAL** | **182** | **35,860** |
+| **TOTAL** | **182** | **35,867** |
 
 ### 14.1 .agents/
 
@@ -8271,12 +8271,12 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 
 - opening: **DERIVED DOCUMENT — see [`CORE.md`](CORE.md) first.** This file is a *derived overview* of the module story.
 
-#### `ARCH/02-MODULE-LAYOUT.md` — 175 lines · 41.2 KB
+#### `ARCH/02-MODULE-LAYOUT.md` — 176 lines · 41.3 KB
 > 02 — Module Layout (derived from CORE §4 and §13)
 
 - opening: **DERIVED DOCUMENT — see [`CORE.md`](CORE.md) §4 first.** Ownership is defined by CORE's 9-question matrix (one owner per question).
 
-#### `ARCH/03-BYOK-KEYRINGS.md` — 127 lines · 15.2 KB
+#### `ARCH/03-BYOK-KEYRINGS.md` — 125 lines · 15.2 KB
 > 03 — BYOK Key-Rings: Multiple Keys per Provider, Fallback Rotation
 
 - opening: **Status:** Derived document, **re-scoped by [`ADR/0005`](ADR/0005-external-agents-are-the-v1-engines.md).** It owns **EveryAIOS-managed** credentials — connector tokens, browser sessions, EveryAIOS-m
@@ -8286,7 +8286,7 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 
 - opening: **The user requirement, verbatim:** *"must have the capability to open excel, word, ppt, pdf, etc — all types of files, Microsoft files — edit."* Design rules: **surgical, byte-preserving** edits (nev
 
-#### `ARCH/05-TOKEN-ECONOMY.md` — 187 lines · 18.5 KB
+#### `ARCH/05-TOKEN-ECONOMY.md` — 187 lines · 18.6 KB
 > 05 — Context Engineering: Minimize Inputs, Maximize Output Power
 
 - opening: **SCOPE REDUCED — see [`CORE.md`](CORE.md) §8 and [`CONTEXT.md`](CONTEXT.md) first.** The research here is retained, but its status changed: prefix-cache economics, tool-result size control and pass-b
@@ -8319,19 +8319,19 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 #### `ARCH/11-AI-CHAT-FEATURES.md` — 178 lines · 22.6 KB
 > 11 — AI Chat Features: Copy · Convert · Reject (the derivation)
 
-- opening: **SPLIT PENDING — see [`CORE.md`](CORE.md) and [`AGENT.md`](AGENT.md) first.** The AI-architecture rationale here is superseded wherever it describes an EveryAIOS-owned reasoning loop: the loop belong
+- opening: **Split done — see [`CORE.md`](CORE.md) and [`AGENT.md`](AGENT.md) first (`P69.A22`, 2026-09-20).** The AI-architecture rationale here is superseded wherever it describes an EveryAIOS-owned reasoning
 
-#### `ARCH/12-UI-SPEC.md` — 907 lines · 74.0 KB
+#### `ARCH/12-UI-SPEC.md` — 907 lines · 74.1 KB
 > 12 — UI/UX Specification: Desktop Layout & Interaction Design
 
 - opening: **Derived from [`CORE.md`](CORE.md) — the root authority; this document specializes, never restates, it.** **CONTRACT RE-SCOPED — see [`UI.md`](UI.md) first.** This document remains the authority for layout and interaction *detail*.
 
-#### `ARCH/13-PROMPT-ANATOMY.md` — 51 lines · 2.9 KB
+#### `ARCH/13-PROMPT-ANATOMY.md` — 51 lines · 3.0 KB
 > ARCH/13 — Prompt Anatomy
 
 - opening: **Derived from [`CORE.md`](CORE.md) — the root authority; this document specializes, never restates, it.** **ABSORBED — see [`CONTEXT.md`](CONTEXT.md).** The prompt assembler is the *serializer* of Co
 
-#### `ARCH/15-CONNECT-STORE.md` — 158 lines · 11.1 KB
+#### `ARCH/15-CONNECT-STORE.md` — 159 lines · 11.2 KB
 > Connect Store — remote MCP + OAuth connectors (the "click → sign in → use" surface)
 
 - opening: **DERIVED DOCUMENT — see [`CORE.md`](CORE.md) §4 and [`CAPABILITIES.md`](CAPABILITIES.md) first.** Connectors are a capability pack: a connector declares a manifest, authentication, capabilities, prov
@@ -8341,7 +8341,7 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 
 - opening: **Derived from [`CORE.md`](CORE.md) — the root authority; this document specializes, never restates, it.** **SUPERSEDED IN PART — see [`AGENT.md`](AGENT.md).** The premise of this document is that EveryAIOS owns the chat loop.
 
-#### `ARCH/17-NATIVE-AGENT.md` — 619 lines · 46.9 KB
+#### `ARCH/17-NATIVE-AGENT.md` — 620 lines · 47.0 KB
 > ARCH/17 — The EveryAIOS Native Agent (frozen status lifted by ADR/0003)
 
 - opening: ⛔ **ARCHIVED — historical context, not current architecture.** Superseded by [`ADR/0005`](ADR/0005-external-agents-are-the-v1-engines.md): the built-in engine is **deferred to post-v1**, so this document no longer describes a v1 binding.
@@ -8396,7 +8396,7 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 
 - opening: **Status:** Subsystem contract, derived from [`CORE.md`](CORE.md) §8.
 
-#### `ARCH/CORE.md` — 691 lines · 42.9 KB
+#### `ARCH/CORE.md` — 691 lines · 43.1 KB
 > ARCH/CORE — The EveryAIOS Core Architecture (single architectural authority)
 
 - opening: **Status:** Architecture authority. This file is the **root** of the `ARCH/` set: every other architecture document derives from it and none may weaken it.
@@ -8406,12 +8406,12 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 
 - opening: **Status:** Subsystem contract, derived from [`CORE.md`](CORE.md).
 
-#### `ARCH/DIAGRAMS.md` — 1,144 lines · 45.7 KB
+#### `ARCH/DIAGRAMS.md` — 1,144 lines · 45.8 KB
 > EveryAIOS — Architecture & Flow Diagrams (Mermaid)
 
-- opening: **Generated:** 2026-09-15 · **Spec version:** v3.78 (current contract; the two-plane content in diagram 27 froze at v3.75 — see `SPEC-CHANGELOG.md`) · **Diagrams:** 28 (diagram 0 is the canonical back
+- opening: **Generated:** 2026-09-21 · **Spec version:** v3.83 (current contract; the two-plane content in diagram 27 froze at v3.75 — see `SPEC-CHANGELOG.md`) · **Diagrams:** 28 (diagram 0 is the canonical back
 
-#### `ARCH/EXTERNAL-AGENTS.md` — 236 lines · 13.5 KB
+#### `ARCH/EXTERNAL-AGENTS.md` — 238 lines · 13.5 KB
 > ARCH/EXTERNAL-AGENTS — protocol surfaces and the shared plane
 
 - opening: **Status:** Subsystem contract, derived from [`CORE.md`](CORE.md).
@@ -9054,12 +9054,12 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 
 - opening: **⚠ SESSION HANDOVER ONLY — this file carries no architecture and no scale claims.** Since the 2026-09-20 thaw (`ARCH/ADR/0003`), architecture belongs to [`ARCH/CORE.md`](ARCH/CORE.md) and its subsyst
 
-#### `DESKTOP-APP-SPEC.md` — 1,560 lines · 332.9 KB
+#### `DESKTOP-APP-SPEC.md` — 1,563 lines · 333.7 KB
 > DESKTOP-APP-SPEC.md — Complete Product Specification
 
 - opening: **Architecture authority: [`ARCH/CORE.md`](ARCH/CORE.md).** This document is the **product contract** — behavior, UI, schemas, invariants.
 
-#### `README.md` — 336 lines · 26.3 KB
+#### `README.md` — 336 lines · 26.4 KB
 > <p align="center">
 
 - opening: <p align="center"> <img src="src-tauri/icons/128x128.png" width="88" alt="EveryAIOS" /> </p>
@@ -9074,17 +9074,17 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 
 - opening: **Standard**: ISO/IEC/IEEE 29119 Software Testing Standard & IEEE 829 Test Documentation **Target System**: EveryAIOS — Universal Agentic OS & Desktop Harness **Release Target**: Windows 11 Desktop (P
 
-#### `TODO.md` — 2,790 lines · 809.6 KB
+#### `TODO.md` — 2,790 lines · 809.7 KB
 > EveryAIOS — Master Implementation TODO
 
 - opening: **Documentation ownership:** `DESKTOP-APP-SPEC.md` is the **product contract only** (behavior, schemas, UI layouts, invariants — not a build plan).
 
-#### `UI-DESIGN-PROMPT.md` — 360 lines · 46.3 KB
+#### `UI-DESIGN-PROMPT.md` — 360 lines · 46.8 KB
 > EveryAIOS — Production UI Design Specification
 
 - opening: **Canonical UI spec.** `ui/src` implements this document (ARCH/12 §2.1: when ARCH/12 and this file disagree on pixels, **this file wins**).
 
-#### `UX-TESTING-PLAN.md` — 66 lines · 3.8 KB
+#### `UX-TESTING-PLAN.md` — 67 lines · 4.0 KB
 > UX Testing Plan — 5 testers × 3 rounds (P11.6.3)
 
 - opening: Plan for the alpha → beta → RC user-testing rounds.
@@ -9680,7 +9680,7 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 | `.css` | 1 |
 | **TOTAL tracked** | **1473** |
 
-Lines counted across the 1466 tracked text files at generation time: **409,469** (this map excluded — self-referential).
+Lines counted across the 1466 tracked text files at generation time: **409,476** (this map excluded — self-referential).
 
 ### 15.5 Coverage audit — is any tracked file unaccounted for?
 

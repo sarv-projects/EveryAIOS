@@ -112,8 +112,8 @@ pub use worktrees::{
 
 pub use adapter::{exact_command_consent, is_install_script, Stage0Adapter};
 pub use automation_runtime::{
-    AutomationError, AutomationRunResult, AutomationRuntime, AutomationStepResult, ConnectorEngine,
-    SearchEngine,
+    AutomationError, AutomationProvenance, CompiledCapabilityRequest, CompiledStep, WorkSpec,
+    compile_work, validate_step,
 };
 pub use blueprint::{load_all as load_blueprints, load_blueprint, AgentBlueprint, BlueprintError};
 pub use capability_manifest::{generate_manifest, CapabilityManifest};

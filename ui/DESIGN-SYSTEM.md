@@ -20,7 +20,7 @@
 | Hover `--surface-3` | `#F0EFEB` | `#353330` | |
 | Ink `--foreground` | `#26251E` | `#F0EFEB` | warm near-black |
 | Muted `--muted-foreground` | `#6B6860` | `#B9B6AD` | |
-| Brand (sole accent) | `#2563EB` | `#3B82F6` | **the v3.78 cool-blue semantic accent token (P66.5 landed)**; `[data-accent]` overrides it, so every surface follows the active accent choice |
+| Brand (sole accent) | `#2563EB` | `#5E99F7` | **the v3.78 cool-blue semantic accent token (P66.5 landed)**; `[data-accent]` overrides it, so every surface follows the active accent choice |
 | Success / Warning / Danger / Info | `#117E39` / `#966703` / `#D72323` / `#2563EB` | `#1FB757` / `#D29104` / `#E97777` / `#5E99F7` | semantic only, and tuned per theme |
 
 > **Contrast (P66.5).** Every semantic token is measured against WCAG 2.2 AA by
@@ -31,7 +31,7 @@ table. Light-mode status hues were darkened and dark-mode ones brightened
 > wants a *darker* hue, on a dark card a *brighter* one. That is also why the
 > label on a dark accent is the dark ink rather than white.
 
-> **Landed (P66.5):** brand is a *semantic* token — `--brand` (cool-blue `221 83% 53%` light / `217 91% 60%` dark) with `[data-accent]` overrides for sky / emerald / violet / amber, so Settings can offer selectable accent themes and every viewport inherits the active choice. The retired orange `#F54E00` is no longer reachable: the whole legacy `orange-*` utility family is aliased to `--brand`, and `amber-*` / `yellow-*` to `--warning`, in the `@theme inline` map in `globals.css`. Status meanings (success/live/warning/error) keep their own semantic colors; orange is neither the brand nor a selection state. The semantic status tokens also carry dark-canvas values, which they previously did not.
+> **Landed (P66.5):** brand is a *semantic* token — `--brand` (cool-blue `221 83% 53%` light / `217 91% 67%` dark) with `[data-accent]` overrides for sky / emerald / violet / amber, so Settings can offer selectable accent themes and every viewport inherits the active choice. The retired orange `#F54E00` is no longer reachable: the whole legacy `orange-*` utility family is aliased to `--brand`, and `amber-*` / `yellow-*` to `--warning`, in the `@theme inline` map in `globals.css`. Status meanings (success/live/warning/error) keep their own semantic colors; orange is neither the brand nor a selection state. The semantic status tokens also carry dark-canvas values, which they previously did not.
 
 **Radius** `--radius: 0.5rem` (sm/md/lg/xl derived). **Fonts** Inter (sans) +
 JetBrains Mono (mono). **Spacing** 4px grid. **Motion** 150–300ms

@@ -155,6 +155,6 @@ out to remove.
 ## 11. Migration notes
 
 The existing five-tier model is replaced by the four classes above; the seven algorithms, ACT-R, FSRS and
-the temporal graph are **retained as strategies** (`P69.A18`, `P69.D6`). The temporal-graph research is not
+the temporal graph are **retained as strategies** (`P69.A18`, `P69.D30`). The temporal-graph research is not
 being discarded — it is being moved below the contract, where it can be replaced without touching the
 architecture.

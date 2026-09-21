@@ -17,8 +17,8 @@
   per-seat license.
 - **Differentiator to lead with:** the same "reports from messy inputs"
   workflow Cowork advertises, but **open**: input from any file/URL/email/
-  voice memo, output to docx/md/email — and every mutation guard-ticketed,
-  zero founder servers.
+  voice memo, output to docx/md/email — and every mutation carries authorization
+  provenance (tickets for agents, trusted user gestures for humans), zero founder servers.
 
 ### Gemini Notebook / corpus-first research surface (doc 68 §2.2)
 - **What it is:** pick sources (files/URLs) → grounded, cited answers +
