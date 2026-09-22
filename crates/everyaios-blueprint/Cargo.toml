@@ -16,3 +16,7 @@ toml = { workspace = true }
 # P69.D32 — the runtime verification contract (`crate::verify`) lives here; the
 # eval harness is *not* a dependency of this crate (it depends on us).
 everyaios-guard = { path = "../everyaios-guard" }
+# P71.3f — `DelegationPolicy::admit` judges the canonical `AgentReadiness`; the
+# state is declared once in the leaf contract crate, so the delegation gate
+# cannot drift from what the picker renders.
+everyaios-types = { path = "../everyaios-types" }

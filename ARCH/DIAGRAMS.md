@@ -79,8 +79,9 @@ graph TB
 ## 2. Agent Turn Lifecycle
 
 > **HISTORICAL (`P69.A27`) — the sidecar-owned loop topology no longer exists.** The loop belongs to the
-> bound agent ([`AGENT.md`](AGENT.md)); kept so the pre-thaw wiring stays legible. The surviving parity
-> contract is `ARCH/16-CHAT-LOOP-RUST-PORT.md` §5.
+> bound agent ([`AGENT.md`](AGENT.md)); kept so the pre-thaw wiring stays legible. The parity contract it
+> referred to lives in the **archive** ([`archive/16-CHAT-LOOP-RUST-PORT.md`](archive/16-CHAT-LOOP-RUST-PORT.md)
+> §5, archived 2026-09-22 — `P71.5a`) and is retained only for the post-v1 governed-baseline return.
 
 ```mermaid
 sequenceDiagram

@@ -166,17 +166,21 @@ export default function ChatPanel() {
   const closedSessions = useAppStore((s) => s.closedSessions)
   const nowDoing = activeSession ? deriveNowDoing(activeSession) : null
 
-  // Bugfix — Pause must actually stop the live Rust stream, not just flip the
-  // UI flag. The stream id captured by `sendUserMessage` drives `chat_cancel`;
-  // Rust then emits the terminal `done`/`cancelled` event that ends the turn.
+  // P71.2c — Pause must actually stop the running turn, not just flip the UI
+  // flag. The turn runs inside the session's bound agent, so the cancel goes to
+  // that agent's live ACP session; the terminal event ends the turn. The native
+  // provider stream (and its `chat_cancel` handle) went with the built-in
+  // engine, so there is no stream id to cancel.
   const cancelLiveStream = async (sessionId: string) => {
-    const streamId = store.liveStreamId[sessionId]
-    if (!streamId) return
-    const { chatCancel } = await import('@/lib/tauri')
+    const bound =
+      store.sessionChiefs[sessionId] ?? store.userDefaultChief ?? ''
+    const handle = bound ? store.acpHandles[bound] : undefined
+    if (!handle) return
+    const { acpCancel } = await import('@/lib/acp')
     try {
-      await chatCancel(streamId)
+      await acpCancel(handle)
     } catch {
-      /* stream already finished — nothing to cancel */
+      /* session already finished — nothing to cancel */
     }
   }
   const onTogglePause = async () => {

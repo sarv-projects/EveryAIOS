@@ -9,8 +9,8 @@ import {
 
 describe("P30.5 mention-driven sessions", () => {
   test("extracts handles, not sentence punctuation", () => {
-    const hits = extractMentions("hey @claude, can you review this? @everyaios too.");
-    expect(hits.map((h) => h.handle)).toEqual(["claude", "everyaios"]);
+    const hits = extractMentions("hey @claude, can you review this? @codex too.");
+    expect(hits.map((h) => h.handle)).toEqual(["claude", "codex"]);
     // trailing comma is not part of the handle
     expect(hits[0]!.mention).toBe("@claude");
   });
@@ -44,9 +44,19 @@ describe("P30.5 mention-driven sessions", () => {
 
   test("registering a custom handle (P32.2 name-your-agent)", () => {
     const reg = new MentionRegistry(builtinMentionSeed());
-    reg.register("mira", "everyaios-native");
+    reg.register("mira", "claude-code");
     const plan = routeMention({ text: "@mira summarize this", source: "telegram", threadId: "t3" }, reg);
     expect(plan.opensSession).toBe(true);
-    expect(plan.agentId).toBe("everyaios-native");
+    expect(plan.agentId).toBe("claude-code");
+  });
+
+  test("no built-in handle is seeded (ADR-0005)", () => {
+    const seed = builtinMentionSeed();
+    expect(seed.everyaios).toBeUndefined();
+    // An @everyaios mention resolves to no agent and opens no session.
+    const reg = new MentionRegistry(seed);
+    const plan = routeMention({ text: "@everyaios do this", source: "slack", threadId: "t9" }, reg);
+    expect(plan.opensSession).toBe(false);
+    expect(plan.agentId).toBe("");
   });
 });

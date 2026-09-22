@@ -32,7 +32,7 @@ document keeps the segment anatomy below as implementation detail.
 ## Segment schema and cache invariants
 
 The authoritative segment table now lives in [`CONTEXT.md`](CONTEXT.md) (the assembler serializes,
-the selector decides); `17-NATIVE-AGENT.md` §17.7 is the historical source (split landed — `P69.A26`; `ARCH/17` archived, physical move tracked as `P71.5a`).
+the selector decides); [`archive/17-NATIVE-AGENT.md`](archive/17-NATIVE-AGENT.md) §17.7 is the historical source (split landed — `P69.A26`; archived 2026-09-22 — `P71.5a`).
 Segments **1–7**
 above the boundary (SOUL.md identity scanned before insertion · shipped
 instructions · persona tone · style memory · **tool definitions**) must stay

@@ -856,6 +856,17 @@ mod tests {
         }
     }
 
+    /// A stand-in host Guard seam that approves — the lifecycle test's
+    /// purpose is the request→decision→resume round trip, not the policy.
+    /// (The fail-closed default is covered by the DenyAllGate tests.)
+    struct AllowGate;
+
+    impl PermissionGate for AllowGate {
+        fn decide(&self, _req: &PermissionRequest) -> Approval {
+            Approval::allow()
+        }
+    }
+
     #[test]
     fn acp_chief_negotiates_not_governed_without_mcp_or_sandbox() {
         let t = Scripted {
@@ -908,7 +919,10 @@ mod tests {
             ]),
             sent: Vec::new(),
         };
-        let mut chief = AcpChief::spawn(t, client_info());
+        // P69.C1 — the host's Guard seam must be attached to approve; the
+        // fail-closed default (DenyAllGate) denies without one.
+        let mut chief = AcpChief::spawn(t, client_info())
+            .with_permission_gate(Arc::new(AllowGate));
         chief.initialize(&"s1".into()).unwrap();
         let h = chief
             .start_session(SessionOptions {

@@ -152,7 +152,8 @@ export interface ConnectionRecord {
 }
 
 export type ScheduleTrigger = 'cron' | 'interval' | 'event' | 'webhook'
-export type ScheduleState = 'idle' | 'running' | 'paused' | 'failed' | 'disabled'
+/** P71.3d — trigger plane: firing-paused or enabled; run status lives in Work. */
+export type ScheduleState = 'armed' | 'paused' | 'disabled'
 
 export interface ScheduleSettings {
   id: string
@@ -170,9 +171,8 @@ export interface ScheduleSettings {
   enabled: boolean
   configHash: string
   nextRunAt?: number
-  lastRunAt?: number
-  /** Completed-run counter as the scheduler reports it (display only). */
-  runs: number
+  /** Last trigger firing (occurrence record — not a run outcome, `I3`). */
+  lastFiredAt?: number
   state: ScheduleState
 }
 

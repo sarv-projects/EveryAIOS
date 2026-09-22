@@ -24,7 +24,7 @@ use std::time::Duration;
 
 use everyaios_audit::session_log::{EventInput, EventType, SessionLog};
 use everyaios_core::execution::{ExecutionKernel, ExecutionPhase, ExecutionTrigger};
-use everyaios_core::scheduler_service::{RunState, SchedulerService, TriggerSpec};
+use everyaios_core::scheduler_service::{SchedulerService, TriggerSpec};
 use everyaios_core::task_ledger::{FileStore, TaskKind, TaskLedger, TaskStatus};
 use everyaios_guard::ticket::{
     ApprovalSource, AuthorizationTicket, TicketError, TicketState, TicketStore,
@@ -192,7 +192,7 @@ fn vault_open_in_unwritable_location_fails_honestly() {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn scheduler_lease_crash_reconciles_to_idle() {
+fn scheduler_trigger_registry_survives_crash() {
     let dir = temp_dir("sched-lease");
     let path = dir.join("scheduler.json");
     let job_id = {
@@ -206,22 +206,24 @@ fn scheduler_lease_crash_reconciles_to_idle() {
             None,
             0,
         );
-        // A worker takes the lease, then the process dies (drop = SIGKILL).
-        svc.lease_start("nightly", 1_000).expect("lease");
-        svc.persist().expect("persist leased state");
+        // A firing is recorded, then the process dies (drop = SIGKILL).
+        svc.mark_fired("nightly", 1_000).expect("firing recorded");
+        svc.persist().expect("persist fired state");
         "nightly".to_string()
     };
-    // Reload: the dead lease reconciles to Idle so the next cycle reassigns
-    // instead of deadlocking — and the checkpoint is preserved.
+    // Reload: the trigger registry (definitions + occurrences) survives; the
+    // slipped schedule fires once on resume (`run_once_on_resume`), then
+    // `mark_fired` advances it — no replay of missed occurrences.
     let reloaded = SchedulerService::load_or_new(path);
     let job = reloaded.get(&job_id).expect("job survives the crash");
-    assert!(
-        matches!(job.state, RunState::Idle),
-        "P50.5.6: dead lease must reconcile to Idle, got {:?}",
-        job.state
+    assert_eq!(
+        job.last_fired_at,
+        Some(1_000),
+        "P50.5.6: the occurrence record survives the crash"
     );
+    assert!(!job.paused, "no stuck execution state to reconcile: a trigger plane holds no lease");
     let _ = std::fs::remove_dir_all(&dir);
-    eprintln!("P50.5.6: crashed scheduler lease reconciled to Idle");
+    eprintln!("P50.5.6: crashed scheduler trigger registry survived, occurrence recorded");
 }
 
 #[test]

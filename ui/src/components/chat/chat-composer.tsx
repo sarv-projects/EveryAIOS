@@ -290,7 +290,9 @@ export default function ChatComposer({ budget, centered }: Props) {
   // items submit as `session/prompt` text (never a local intercept).
   const externalChief = useAppStore((s) => {
     const sid = s.activeSessionId
-    const chief = s.sessionChiefs[sid] ?? s.userDefaultChief ?? 'inbuilt'
+    // P71.2c — there is no built-in engine, so an unbound session names no
+    // agent at all. The retired built-in spellings are not bindings.
+    const chief = s.sessionChiefs[sid] ?? s.userDefaultChief ?? ''
     return chief !== 'inbuilt' && chief !== 'everyaios-native' && chief !== 'everyaios' && chief !== ''
       ? chief
       : null
@@ -405,7 +407,7 @@ export default function ChatComposer({ budget, centered }: Props) {
     // pinned, EveryAIOS `/help /mode /model /undo /compact /clear /export`
     // must NOT steal the agent's `/` (e.g. Claude Code `/compact`). Return
     // false so the text goes to the ACP channel as `session/prompt` text.
-    const effChief = st.sessionChiefs[st.activeSessionId] ?? st.userDefaultChief ?? 'inbuilt'
+    const effChief = st.sessionChiefs[st.activeSessionId] ?? st.userDefaultChief ?? ''
     const externalPinned =
       effChief !== 'inbuilt' && effChief !== 'everyaios-native' && effChief !== 'everyaios' && effChief !== ''
     if (externalPinned) return false

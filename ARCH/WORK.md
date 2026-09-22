@@ -187,3 +187,9 @@ set, the canonical event vocabulary, the explicit projection rule, and the state
 workflow, subagent, multirun and blueprint sources are all *triggers*, never runtimes. Collapsing the
 remaining duplicates (a second Execution-state vocabulary, duplicate event writers, workflow-owned state) is
 `P69.D` and `P69.F2`.
+
+> **In code (`P71.3g`, implemented 2026-09-21 — not yet verified):** §4's lifecycle is now the canonical
+> `everyaios_types::WorkState` (including the four `Waiting*` sub-states, `Verifying` and `Recoverable`
+> as a first-class outcome), and §8's waits are `WaitReason`/`WaitCondition`. The Work Gateway projects
+> both onto presence (`work_state` + `wait` alongside the client-presence state), the transition door is
+> typed, and a `Recoverable` run projects as *blocked*, never *failed* (**I15**).

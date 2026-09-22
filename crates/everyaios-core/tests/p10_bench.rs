@@ -434,16 +434,15 @@ fn stress_hundred_scheduled_tasks() {
     let due = sched.due(1_700_000_060);
     assert_eq!(due.len(), 100, "all 100 due: {due:?}");
     for id in &due {
-        let lease = sched.lease_start(id, 1_700_000_060).unwrap();
-        let fence = lease["fence"].as_str().unwrap().to_string();
-        sched
-            .lease_finish(id, true, 1_700_000_060, Some(&fence))
-            .unwrap();
+        sched.mark_fired(id, 1_700_000_060).unwrap();
     }
     let elapsed = start.elapsed();
     eprintln!("[bench] 100 scheduled tasks fired: {elapsed:?}");
     assert_eq!(sched.list().len(), 100, "no jobs lost");
-    assert!(sched.list().iter().all(|j| j.successes == 1));
+    assert!(
+        sched.list().iter().all(|j| j.last_fired_at == Some(1_700_000_060)),
+        "every firing recorded"
+    );
     // Heap stays bounded after the burst.
     if let Some(mb) = rss_mb() {
         assert!(mb < 512.0, "heap after 100 tasks: {mb:.1} MB");

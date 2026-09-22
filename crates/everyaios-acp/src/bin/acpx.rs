@@ -110,7 +110,7 @@ fn doctor(registry: &LaunchRegistry, json: bool) -> i32 {
     let mut reports = Vec::new();
     let mut all_ok = true;
     for m in &registry.agents {
-        let plan = registry.launch_plan(&m.id, None);
+        let plan = registry.launch_plan(&m.id);
         let (command, ok) = match plan {
             Some(p) => {
                 let present = on_path(&p.command);
@@ -168,7 +168,7 @@ fn doctor(registry: &LaunchRegistry, json: bool) -> i32 {
 /// The doctor gate: refuse to run an agent whose command is missing.
 fn doctor_gate(registry: &LaunchRegistry, agent: &str, json: bool) -> Result<LaunchPlan, String> {
     let plan = registry
-        .launch_plan(agent, None)
+        .launch_plan(agent)
         .ok_or_else(|| format!("unknown agent `{agent}` — see `acpx doctor`"))?;
     if !on_path(&plan.command) {
         return Err(format!(

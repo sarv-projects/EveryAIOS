@@ -1,7 +1,9 @@
 // P6.4 (B7/H14) — scheduled-task bridge. Thin wrappers over the Tauri
 // `scheduler_*` commands; in a plain-browser preview every call falls back to
-// the demo set so the UI stays explorable. The durable state machine lives in
-// Rust (`everyaios-core::SchedulerService`); these are just the wire + types.
+// the demo set so the UI stays explorable. The scheduler is a **trigger
+// plane** (P71.3d — `ARCH/AUTOMATION.md` §9): definitions, triggers and
+// occurrence records only — no leases, retries or run ledger. Run history is
+// the Event Log's; these are just the wire + types.
 
 import { invoke, inTauri } from "./tauri";
 import { bridgeCall } from "./runtime";
@@ -13,7 +15,7 @@ export type SchedulerTrigger =
   | { type: "event"; kind: string; filter: string }
   | { type: "webhook"; path: string; schema: string[] };
 
-/** Mirror of the Rust `Job` serde shape. */
+/** Mirror of the Rust trigger-plane `Job` serde shape. */
 export interface SchedulerJob {
   id: string;
   name: string;
@@ -26,17 +28,13 @@ export interface SchedulerJob {
     scope?: string;
   };
   enabled: boolean;
-  state:
-    | { state: "idle" }
-    | { state: "running"; leaseExpiresAt: number }
-    | { state: "paused"; resumeDeadline?: number }
-    | { state: "failed"; retries: number; nextRetryAt?: number };
-  checkpoint: number;
+  /** Trigger-plane pause: stop firing without losing the definition. */
+  paused: boolean;
   nextRunAt?: number;
-  lastRunAt?: number;
-  runs: number;
-  successes: number;
-  failures: number;
+  /** Last firing (occurrence record — "why did this run?"). */
+  lastFiredAt?: number;
+  /** Rolling 1h firing timestamps (frequency admission). */
+  recentFires: number[];
 }
 
 export interface SchedulerList {
@@ -51,7 +49,7 @@ export interface NudgeSuggestion {
   observedAt: string[];
 }
 
-/** Demo jobs — the preview-mode fallback (mirror the real shapes). */
+/** Demo jobs — the preview-mode fallback (mirror the real trigger-plane shape). */
 const DEMO_JOBS: SchedulerJob[] = [
   {
     id: "j-daily-brief",
@@ -61,13 +59,8 @@ const DEMO_JOBS: SchedulerJob[] = [
     steps: [{ step: "online_search", query: "latest AI news" }],
     policy: { suppressOnBattery: true, maxRunsPerHour: 1 },
     enabled: true,
-    state: { state: "idle" },
-    checkpoint: 0,
-    nextRunAt: undefined,
-    lastRunAt: undefined,
-    runs: 12,
-    successes: 12,
-    failures: 0,
+    paused: false,
+    recentFires: [],
   },
   {
     id: "j-ci-fixer",
@@ -77,11 +70,8 @@ const DEMO_JOBS: SchedulerJob[] = [
     steps: [{ step: "run_code", language: "bash", code: "# fix the build" }],
     policy: { suppressOnBattery: false, maxRunsPerHour: 4 },
     enabled: true,
-    state: { state: "idle" },
-    checkpoint: 0,
-    runs: 7,
-    successes: 5,
-    failures: 2,
+    paused: false,
+    recentFires: [],
   },
   {
     id: "j-dep-scan",
@@ -91,11 +81,8 @@ const DEMO_JOBS: SchedulerJob[] = [
     steps: [{ step: "run_code", language: "bash", code: "# npm audit" }],
     policy: { suppressOnBattery: true },
     enabled: false,
-    state: { state: "idle" },
-    checkpoint: 0,
-    runs: 3,
-    successes: 3,
-    failures: 0,
+    paused: false,
+    recentFires: [],
   },
 ];
 
@@ -147,13 +134,10 @@ export async function schedulerEnable(id: string, enabled: boolean): Promise<boo
   });
 }
 
-export async function schedulerPause(
-  id: string,
-  resumeDeadline?: number,
-): Promise<boolean> {
+export async function schedulerPause(id: string): Promise<boolean> {
   return bridgeCall({
     operation: 'scheduler pause',
-    live: () => invoke<boolean>('scheduler_pause', { id, resumeDeadline }),
+    live: () => invoke<boolean>('scheduler_pause', { id }),
     preview: () => true,
   });
 }
@@ -212,7 +196,7 @@ export async function schedulerNudge(goal: string, ts?: number): Promise<boolean
   });
 }
 
-// ---- P51.32 — cron-continuity + incidents + doctor (Hermes pattern) --------
+// ---- P51.32 — notepad + incidents + doctor (Hermes pattern) ----------------
 
 /** One incident ledger row (unacked first, explicit ack only). */
 export interface SchedulerIncident {
@@ -225,17 +209,18 @@ export interface SchedulerIncident {
   [k: string]: unknown;
 }
 
-/** A job's continuity bundle (last output + notepad) for the next run. */
-export interface SchedulerContinuity {
+/** A job's durable notepad (the only continuity the trigger plane keeps). */
+export interface SchedulerNotepad {
+  notepad: string;
   [k: string]: unknown;
 }
 
-/** P51.32a — read a job's continuity bundle (last output + notepad). */
-export async function schedulerContinuity(id: string): Promise<SchedulerContinuity> {
+/** P51.32a — read a job's durable notepad. */
+export async function schedulerNotepadGet(id: string): Promise<SchedulerNotepad> {
   return bridgeCall({
-    operation: 'scheduler continuity',
-    live: () => invoke<SchedulerContinuity>('scheduler_continuity', { id }),
-    preview: () => ({}),
+    operation: 'scheduler notepad read',
+    live: () => invoke<SchedulerNotepad>('scheduler_notepad_get', { id }),
+    preview: () => ({ notepad: '' }),
   });
 }
 
@@ -266,21 +251,12 @@ export async function schedulerIncidentAck(id: string): Promise<boolean> {
   });
 }
 
-/** P51.32f — read-only cron health (missed runs, dead leases, queue depth). */
+/** P51.32f — read-only trigger-plane health (missed schedule fires, registry depth). */
 export async function schedulerDoctor(): Promise<Record<string, unknown>> {
   return bridgeCall({
     operation: 'scheduler doctor',
     live: () => invoke<Record<string, unknown>>('scheduler_doctor'),
     preview: () => ({}),
-  });
-}
-
-/** P51.32g — runs ledger (recent job runs with outcome). */
-export async function schedulerRuns(): Promise<unknown[]> {
-  return bridgeCall({
-    operation: 'scheduler runs',
-    live: () => invoke<unknown[]>('scheduler_runs'),
-    preview: () => [],
   });
 }
 

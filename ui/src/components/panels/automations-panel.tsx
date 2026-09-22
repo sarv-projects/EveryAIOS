@@ -30,7 +30,6 @@ import {
   schedulerPause,
   schedulerResume,
   schedulerRunNow,
-  schedulerRuns,
   type SchedulerIncident,
   type SchedulerJob,
   triggerLabel,
@@ -66,73 +65,23 @@ const TEMPLATES = [
   { name: 'Log Rotator', desc: 'Archive + trim agent logs over 30 days', trigger: 'interval 86400', runs: 31 },
 ]
 
-// Mock run history — what a completed/paused/failed run looks like.
-const RUN_HISTORY = [
-  { id: 'r1', job: 'CI Fixer', ts: 'today 09:12', result: 'success' as const, detail: 'Fixed TS build — 2 commits', cost: '$0.04', dur: '1m 12s' },
-  { id: 'r2', job: 'Morning brief', ts: 'today 08:00', result: 'success' as const, detail: '12 sources · 3 highlights', cost: '$0.18', dur: '2m 04s' },
-  { id: 'r3', job: 'CI Fixer', ts: 'yesterday 16:41', result: 'failed' as const, detail: 'Timeout after 3 retries', cost: '$0.11', dur: '4m 55s' },
-  { id: 'r4', job: 'Weekly deps scan', ts: 'Mon 06:00', result: 'success' as const, detail: '2 CVEs found · 1 patched', cost: '$0.09', dur: '58s' },
-  { id: 'r5', job: 'CI Fixer', ts: 'Mon 11:20', result: 'success' as const, detail: 'Fixed flaky e2e test', cost: '$0.06', dur: '2m 31s' },
-  { id: 'r6', job: 'Morning brief', ts: 'Sun 08:00', result: 'success' as const, detail: '9 sources · 2 highlights', cost: '$0.15', dur: '1m 48s' },
-  { id: 'r7', job: 'Slack triage', ts: 'Fri 17:03', result: 'success' as const, detail: 'Triage: 3 urgent · 8 later', cost: '$0.21', dur: '3m 10s' },
-]
-
-/** P51.32g — live runs ledger (replaces the fixture table in Tauri). */
+/**
+ * P71.3d — the scheduler is a trigger plane, so it keeps **no run history**
+ * (the Event Log owns that, `I3`; `AUTOMATION.md` §9). The History tab points
+ * at the owning surface instead of showing a fake ledger.
+ *
+ * P71.8c — each firing's Work lives in an **automation** Session with no Chat
+ * (`ADR-0006`); this panel is the surface that owns it. A run is opened by
+ * creating a Chat from its Session (the §7 affordance) — the 1:1 rule then
+ * holds again for that Session. Nothing here fabricates a hidden Chat per run.
+ */
 function LiveRuns() {
-  const [runs, setRuns] = useState<unknown[] | null>(null)
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    let alive = true
-    schedulerRuns()
-      .then((r) => alive && setRuns(r))
-      .catch((cause) => alive && setError(cause instanceof Error ? cause.message : 'runs ledger unavailable'))
-    return () => {
-      alive = false
-    }
-  }, [])
-
-  if (error) {
-    return (
-      <div className="rounded-lg border border-red-500/30 bg-red-500/5 px-4 py-8 text-center text-xs text-red-300">
-        Runs ledger unavailable: {error}
-      </div>
-    )
-  }
-  if (runs === null) {
-    return (
-      <div className="rounded-lg border border-dashed border-border px-4 py-8 text-center text-xs text-muted-foreground">
-        Loading runs ledger…
-      </div>
-    )
-  }
-  if (runs.length === 0) {
-    return (
-      <div className="rounded-lg border border-dashed border-border px-4 py-8 text-center text-xs text-muted-foreground">
-        No runs recorded yet — the ledger fills as the scheduler executes jobs.
-      </div>
-    )
-  }
   return (
-    <div className="space-y-1.5">
-      {runs.map((r, i) => {
-        const row = (r ?? {}) as Record<string, unknown>
-        const when = typeof row.at === 'string' || typeof row.at === 'number' ? String(row.at) : ''
-        const job = typeof row.jobId === 'string' || typeof row.name === 'string' ? String(row.jobId ?? row.name) : ''
-        const status = typeof row.status === 'string' || typeof row.outcome === 'string' ? String(row.status ?? row.outcome) : ''
-        return (
-          <div key={i} className="rounded-lg border border-border bg-card px-3 py-2 font-mono text-[11px]">
-            <div className="flex items-center justify-between gap-2">
-              <span className="truncate text-foreground">{job || 'run'}</span>
-              <span className="shrink-0 text-muted-foreground">{when}</span>
-            </div>
-            <div className="mt-0.5 flex items-center justify-between gap-2 text-muted-foreground">
-              <span className="truncate">{status || 'recorded'}</span>
-              {typeof row.detail === 'string' && <span className="truncate">{row.detail}</span>}
-            </div>
-          </div>
-        )
-      })}
+    <div className="rounded-lg border border-dashed border-border px-4 py-8 text-center text-xs text-muted-foreground">
+      Run history lives in the Event Log and the Activity timeline — the
+      scheduler records trigger firings only (when a trigger fired and why),
+      never run outcomes. Each run's Work is owned by an automation Session
+      (no Chat); open one to inspect or continue it.
     </div>
   )
 }
@@ -383,11 +332,8 @@ export default function AutomationsPanel() {
     const newJob: SchedulerJob = {
       ...args,
       enabled: true,
-      state: { state: 'idle' },
-      checkpoint: 0,
-      runs: 0,
-      successes: 0,
-      failures: 0,
+      paused: false,
+      recentFires: [],
     }
     setAutomations((prev) => [newJob, ...prev])
     setNlInput('')
@@ -419,11 +365,8 @@ export default function AutomationsPanel() {
     const newJob: SchedulerJob = {
       ...args,
       enabled: true,
-      state: { state: 'idle' },
-      checkpoint: 0,
-      runs: 0,
-      successes: 0,
-      failures: 0,
+      paused: false,
+      recentFires: [],
     }
     setAutomations((prev) => [newJob, ...prev])
     notify(`Created automation from “${t.name}” template — ${triggerLabel(trigger)}`)
@@ -442,11 +385,11 @@ export default function AutomationsPanel() {
   const runNow = (id: string) => void schedulerRunNow(id).catch((error) => reportActionError('Running automation', error))
   const pauseJob = (id: string) =>
     void schedulerPause(id)
-      .then(() => setAutomations((prev) => prev.map((a) => a.id === id ? { ...a, state: { state: 'paused' as const, resumeDeadline: undefined } } : a)))
+      .then(() => setAutomations((prev) => prev.map((a) => a.id === id ? { ...a, paused: true } : a)))
       .catch((error) => reportActionError('Pausing automation', error))
   const resumeJob = (id: string) =>
     void schedulerResume(id)
-      .then(() => setAutomations((prev) => prev.map((a) => a.id === id ? { ...a, state: { state: 'idle' as const } } : a)))
+      .then(() => setAutomations((prev) => prev.map((a) => a.id === id ? { ...a, paused: false } : a)))
       .catch((error) => reportActionError('Resuming automation', error))
   const removeJob = (id: string) =>
     void schedulerDelete(id)
@@ -546,83 +489,6 @@ export default function AutomationsPanel() {
                 </div>
               ))}
             </div>
-          ) : tab === 'history' && !inTauri() ? (
-            <div className="rounded-lg border border-border bg-card">
-              <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
-                <div className="flex items-center gap-1.5">
-                  <History className="h-3.5 w-3.5 text-brand" />
-                  <span className="text-xs font-medium text-foreground">Recent runs</span>
-                </div>
-                <div className="flex items-center gap-3">
-                  {/* P35.1 — the spark-draw consumer: a 7-run success trend
-                      sparkline over RUN_HISTORY (oldest → newest, success up). */}
-                  <svg
-                    viewBox="0 0 64 18"
-                    className="spark-draw h-4 w-16 text-emerald-400"
-                    aria-label="Success trend over the last 7 runs"
-                  >
-                    {RUN_HISTORY.slice()
-                      .reverse()
-                      .map((r, i) => {
-                        const x = 4 + i * ((64 - 8) / Math.max(1, RUN_HISTORY.length - 1))
-                        const y = r.result === 'success' ? 3 : 14
-                        return (
-                          <circle key={r.id} cx={x} cy={y} r="2" fill="currentColor" />
-                        )
-                      })}
-                    <polyline
-                      points={RUN_HISTORY.slice()
-                        .reverse()
-                        .map((r, i) => {
-                          const x = 4 + i * ((64 - 8) / Math.max(1, RUN_HISTORY.length - 1))
-                          return `${x},${r.result === 'success' ? 3 : 14}`
-                        })
-                        .join(' ')}
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1"
-                    />
-                  </svg>
-                  <span className="font-mono text-[10px] text-muted-foreground">last 7 days</span>
-                </div>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full font-mono text-[11px]">
-                  <thead className="sticky top-0 bg-zinc-900/90 backdrop-blur">
-                    <tr className="text-left text-[9px] uppercase tracking-wide text-muted-foreground">
-                      <th className="px-3 py-1.5 font-normal">When</th>
-                      <th className="px-3 py-1.5 font-normal">Job</th>
-                      <th className="px-3 py-1.5 font-normal">Result</th>
-                      <th className="hidden px-3 py-1.5 font-normal sm:table-cell">Detail</th>
-                      <th className="hidden px-3 py-1.5 font-normal md:table-cell">Cost</th>
-                      <th className="hidden px-3 py-1.5 font-normal md:table-cell">Duration</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {RUN_HISTORY.map((r) => (
-                      <tr key={r.id} className="border-t border-border/50 hover:bg-accent/40">
-                        <td className="px-3 py-1.5 text-muted-foreground">{r.ts}</td>
-                        <td className="px-3 py-1.5 text-foreground">{r.job}</td>
-                        <td className="px-3 py-1.5">
-                          {r.result === 'success' ? (
-                            <span className="inline-flex items-center gap-1 text-emerald-300">
-                              <Check className="h-3 w-3" /> success
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 text-red-300">
-                              <X className="h-3 w-3" /> failed
-                            </span>
-                          )}
-                        </td>
-                        <td className="hidden px-3 py-1.5 text-muted-foreground sm:table-cell">{r.detail}</td>
-                        <td className="hidden px-3 py-1.5 text-brand/80 md:table-cell">{r.cost}</td>
-                        <td className="hidden px-3 py-1.5 text-muted-foreground md:table-cell">{r.dur}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
           ) : tab === 'history' ? (
             <LiveRuns />
           ) : tab === 'health' ? (
@@ -650,9 +516,11 @@ export default function AutomationsPanel() {
             {automations.map((a) => {
               const Trigger = TRIGGER_ICON[a.trigger.type]
               const Icon = Trigger.icon
-              const paused = a.state.state === 'paused'
-              const running = a.state.state === 'running'
-              const failed = a.state.state === 'failed'
+              // P71.3d — the scheduler is a trigger plane: only a pause flag
+              // and firing records exist here. Run-level status (running /
+              // failed / waiting for approval) belongs to the Work/Event
+              // surfaces, not to the schedule.
+              const paused = a.paused
               return (
                 <div
                   key={a.id}
@@ -675,16 +543,6 @@ export default function AutomationsPanel() {
                         {paused && (
                           <Badge variant="outline" className="border-warning/40 bg-warning/10 text-[9px] text-warning">
                             Paused
-                          </Badge>
-                        )}
-                        {running && (
-                          <Badge variant="outline" className="border-emerald-500/40 bg-emerald-500/10 text-[9px] text-emerald-300">
-                            Running
-                          </Badge>
-                        )}
-                        {failed && (
-                          <Badge variant="outline" className="border-rose-500/40 bg-rose-500/10 text-[9px] text-rose-300">
-                            Retrying
                           </Badge>
                         )}
                       </div>
@@ -740,19 +598,11 @@ export default function AutomationsPanel() {
 
                   <div className="mt-3 flex items-center justify-between text-[11px] text-muted-foreground">
                     <div className="flex items-center gap-2 font-mono">
-                      <span>Runs: {a.runs}</span>
-                      <span className="text-emerald-400">
-                        <Check className="mr-0.5 inline h-3 w-3" />
-                        {a.successes}
-                      </span>
-                      <span className="text-red-400">
-                        <X className="mr-0.5 inline h-3 w-3" />
-                        {a.failures}
-                      </span>
+                      <span>Fires (1h): {a.recentFires.length}</span>
                     </div>
                     <span className="text-[10px]">
-                      Last run:{' '}
-                      {a.lastRunAt ? new Date(a.lastRunAt * 1000).toLocaleString() : 'never'}
+                      Last fired:{' '}
+                      {a.lastFiredAt ? new Date(a.lastFiredAt * 1000).toLocaleString() : 'never'}
                     </span>
                   </div>
                 </div>

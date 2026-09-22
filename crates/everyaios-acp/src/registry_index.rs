@@ -426,8 +426,6 @@ impl RegistryIndex {
                 distribution: dist,
                 protocol: HarnessProtocol::Acp,
                 env,
-                backend_env_keys: vec![],
-                is_default: false,
             };
             reg.upsert(manifest);
         }
@@ -567,12 +565,11 @@ mod tests {
             matches!(&cline.distribution, Distribution::Npx { args, .. } if args == &vec!["--acp".to_string()])
         );
 
-        // Devin (binary) keeps a PATH command; the default (inbuilt) is untouched.
+        // Devin (binary) keeps a PATH command; no built-in default exists (ADR-0005 §D1).
         let devin = reg.get("devin").unwrap();
         assert!(
             matches!(&devin.distribution, Distribution::Binary { command, .. } if command == "devin")
         );
-        assert!(reg.default_manifest().unwrap().is_default);
     }
 
     #[test]

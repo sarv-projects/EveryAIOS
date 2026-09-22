@@ -57,7 +57,9 @@ pub struct AppState {
     pub guard_service: Arc<Mutex<GuardService>>,
     /// F12/J17 (ACP harness bridge): live ACP agent sessions keyed by handle
     /// id — spawned via `acp_launch`, driven via `acp_prompt`/`acp_cancel`.
-    pub(crate) acp_sessions: Mutex<std::collections::HashMap<String, AcpHandle>>,
+    /// P71.3f — shared with the mounted readiness source, so the live handshake
+    /// state readiness reports is the same map the launch path writes.
+    pub(crate) acp_sessions: Arc<Mutex<std::collections::HashMap<String, AcpHandle>>>,
     /// H4: Merkle chain of mutations (Excel / ACP-install / undo).
     pub audit: Mutex<everyaios_audit::merkle::MerkleChain>,
     /// Durable NDJSON audit log (best-effort; None if the file couldn't open).

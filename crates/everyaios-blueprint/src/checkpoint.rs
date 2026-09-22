@@ -7,6 +7,7 @@
 //! directory (blueprint → optional `AgentConfig` frontmatter).
 
 use crate::blueprint::Blueprint;
+use everyaios_types::CheckpointId;
 use crate::frontmatter::AgentConfig;
 #[cfg(test)]
 use crate::frontmatter::Isolation;
@@ -18,6 +19,11 @@ use thiserror::Error;
 /// A durable snapshot of a plan at a turn boundary.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Checkpoint {
+    /// P71.3g — the canonical checkpoint id (`ARCH/RECOVERY.md` §7). Snapshot
+    /// files written before ids existed deserialize as unassigned, so a resume
+    /// can still read them without inventing an identity for them.
+    #[serde(default)]
+    pub checkpoint_id: CheckpointId,
     pub blueprint: Blueprint,
     /// Non-empty when frozen on circuit-break (B6 MCQ pattern).
     #[serde(default)]
@@ -30,10 +36,17 @@ pub struct Checkpoint {
 impl Checkpoint {
     pub fn new(blueprint: Blueprint) -> Self {
         Self {
+            checkpoint_id: CheckpointId::unassigned(),
             blueprint,
             frozen_reason: None,
             version: 0,
         }
+    }
+
+    /// Attach the canonical id (a step checkpoint knows its `(work, step)`).
+    pub fn with_id(mut self, checkpoint_id: CheckpointId) -> Self {
+        self.checkpoint_id = checkpoint_id;
+        self
     }
 
     pub fn is_frozen(&self) -> bool {
@@ -59,6 +72,9 @@ impl Blueprint {
         version: u32,
     ) -> Result<(), CheckpointError> {
         let cp = Checkpoint {
+            // A file-targeted snapshot has no `(work, step)` to derive from;
+            // the per-step path (`checkpoint_step_to`) assigns the id.
+            checkpoint_id: CheckpointId::unassigned(),
             blueprint: self.clone(),
             frozen_reason: frozen_reason.map(str::to_string),
             version,
@@ -98,6 +114,11 @@ fn atomic_write_json<T: Serialize>(path: &Path, value: &T) -> Result<(), Checkpo
 /// that owned the run when the step landed.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct StepCheckpoint {
+    /// P71.3g — the canonical checkpoint id (`ckpt:<work>/<step>`). Rows written
+    /// before ids existed deserialize as unassigned and are re-derived on read
+    /// (deterministic, so no row is given a new identity).
+    #[serde(default)]
+    pub checkpoint_id: CheckpointId,
     /// Owning work id (`execution/begin*` id, e.g. `ex:3`).
     pub work_id: String,
     /// Monotonic step within the work (1-based).
@@ -161,8 +182,11 @@ impl Blueprint {
         }
         std::fs::create_dir_all(dir)?;
         let snapshot_file = step_snapshot_name(work_id, step);
+        let checkpoint_id = CheckpointId::for_step(work_id, step);
+        // The snapshot carries the same identity as its index row.
         self.checkpoint_to(&dir.join(&snapshot_file), None, step)?;
         let row = StepCheckpoint {
+            checkpoint_id,
             work_id: work_id.to_string(),
             step,
             git_sha,
@@ -193,7 +217,13 @@ impl Blueprint {
                 continue;
             }
             let bytes = std::fs::read(entry.path())?;
-            let row: StepCheckpoint = serde_json::from_slice(&bytes)?;
+            let mut row: StepCheckpoint = serde_json::from_slice(&bytes)?;
+            if row.checkpoint_id.is_assigned() {
+                // already identified
+            } else {
+                // Legacy row (written before ids existed): re-derive, never mint.
+                row.checkpoint_id = CheckpointId::for_step(&row.work_id, row.step);
+            }
             if row.work_id == work_id {
                 out.push(row);
             }

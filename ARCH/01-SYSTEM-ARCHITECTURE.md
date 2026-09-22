@@ -65,7 +65,7 @@ Every subsystem placement follows this test (derived from the ownership matrix, 
 - **Submodules & Functions**:
   - `acp_client_server`: Bidirectional stdio JSON-RPC transport driving external agents.
   - `worktree_swarm_manager`: Isolated Git worktrees (`.everyaios/worktrees/task-<id>`) with serialized queue and disk headroom reservations.
-  - `multirun_fanout_engine`: Fans out 1 prompt across up to 5 concurrent models in parallel worktrees with 3-way merge fusion (I9: a strategy over Runs, not an execution kernel).
+  - `multirun_fanout_engine`: Fans one Work out to up to 5 Runs — each bound to an agent binding in its own worktree — and reduces them (keep-best / attributed fuse). Agent/run-centric, never a model list (I9: a strategy over Runs, not an execution kernel; ADR-0005: an external agent owns its own model).
   - `subagent_lifecycle_supervisor`: Enforces depth $\le 2$, concurrency $\le 6$, budget fences, and circuit breakers (I8: subagents are child Work/Runs).
 - **Frontend UI**: `agents` screen, agent picker dropdown in `chat`, right-rail `diff` viewport (3-way merge resolver), `activity` tree.
 

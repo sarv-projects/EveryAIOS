@@ -98,13 +98,13 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Syn
         local_cmds::local_models,
         local_cmds::local_ensure,
         local_cmds::local_hardware,
-        crate::chat_stream,
+        // P71.2c — `chat_stream`, `chat_cancel`, `chat_tool_retry`,
+        // `plan_execute` and `plan_respond` are deleted with the built-in
+        // engine (ADR-0005 §2). A turn runs on the bound external agent's
+        // channel: `acp_launch` → `acp_prompt` → `acp_cancel` (or
+        // `acp_shutdown`). The events they fed are gone with them.
         crate::agui_send,
         crate::agui_listen,
-        crate::chat_cancel,
-        crate::chat_tool_retry,
-        crate::plan_execute,
-        crate::plan_respond,
         crate::usage_snapshot,
         crate::session_totals,
         // P55.8 — the SearXNG endpoint config + searx.space instance feed.
@@ -242,13 +242,12 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Syn
         scheduler_cmds::scheduler_fire_webhook,
         scheduler_cmds::scheduler_nudges,
         scheduler_cmds::scheduler_nudge,
-        // P51.32: continuity/notepad, incidents, doctor, runs ledger.
-        scheduler_cmds::scheduler_continuity,
+        // P51.32: notepad, incidents, doctor (runs history is the Event Log's).
+        scheduler_cmds::scheduler_notepad_get,
         scheduler_cmds::scheduler_notepad_append,
         scheduler_cmds::scheduler_incidents,
         scheduler_cmds::scheduler_incident_ack,
         scheduler_cmds::scheduler_doctor,
-        scheduler_cmds::scheduler_runs,
         tasks_cmds::tasks_list,
         tasks_cmds::tasks_show,
         tasks_cmds::tasks_cancel,

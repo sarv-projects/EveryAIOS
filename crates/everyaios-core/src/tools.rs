@@ -154,6 +154,39 @@ pub trait DelegationToolBackend: Send + Sync {
     fn cancel(&self, params: &Value) -> Result<Value, String>;
 }
 
+/// P71.3f — the one readiness source behind `agent/readiness`.
+///
+/// The shell owns the runtime facts (install records, PATH/App-Paths
+/// discovery, live ACP handshakes, the agent's own auth state), so it mounts
+/// this source; the kernel reads it for the delegation gate, the trigger
+/// plane's doctor and the picker's façade. An **unmounted** source is never
+/// treated as ready: readers get [`everyaios_types::AgentReadiness::Unknown`],
+/// which fails every gate that requires `Ready`.
+///
+/// Implementations return the fact they hold. A state that cannot be
+/// determined is `Unknown` — never a guessed `Ready`.
+pub trait AgentReadinessSource: Send + Sync {
+    fn readiness(&self, agent_id: &str) -> everyaios_types::AgentReadiness;
+}
+
+/// The mounted readiness source (P71.3f). `None` ⇒ nothing probed, so every
+/// read is `Unknown` rather than a fabricated state.
+pub type SharedAgentReadiness =
+    Arc<Mutex<Option<Arc<dyn AgentReadinessSource>>>>;
+
+/// Read one agent's readiness from a shared source (the one accessor both the
+/// relay RPC and the delegation seam use).
+pub fn read_agent_readiness(
+    source: &SharedAgentReadiness,
+    agent_id: &str,
+) -> everyaios_types::AgentReadiness {
+    let mounted = source.lock().unwrap_or_else(|e| e.into_inner()).clone();
+    match mounted {
+        Some(src) => src.readiness(agent_id),
+        None => everyaios_types::AgentReadiness::Unknown,
+    }
+}
+
 /// P68.9 — the shell-execution seam behind the `script.run` tool.
 ///
 /// The agent's command execution must land in the **one PTY plane** — the same
@@ -4443,7 +4476,14 @@ mod tests {
             assert!(seen.insert(r.facade), "duplicate façade {}", r.facade);
             // destructive ⇒ mutating (never a readOnly destructive).
             assert!(!(r.destructive && r.read_only), "{}", r.facade);
-            assert!(!r.targets.is_empty(), "{}", r.facade);
+            // Catalog façades fan out to ≥1 native tool; kernel-routed
+            // façades (P71.1 `delegate.*`) dispatch to a kernel seam and
+            // deliberately carry **no** catalog fan-out.
+            if r.kernel_route {
+                assert!(r.targets.is_empty(), "{}", r.facade);
+            } else {
+                assert!(!r.targets.is_empty(), "{}", r.facade);
+            }
         }
         assert!(FACADE_ROUTES.len() >= 14, "got {}", FACADE_ROUTES.len());
         // Registry serves façades alongside natives with matching hints.

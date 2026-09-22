@@ -216,10 +216,11 @@ export const FIRST_CLASS_NATIVE_TOOLS: ListedTool[] = [
           enum: ["scout", "worker", "verifier"],
           description: "P60.3 Scout (read-only facts) / Worker (execute brief) / Verifier (mechanical checks; never the Worker's claim)",
         },
-        models: {
+        agents: {
           type: "array",
           items: { type: "string" },
-          description: "P51.10 optional multi-run: same task on ≤5 models",
+          description:
+            "P71.3e optional multi-run fan-out: the same task attempted by ≤5 agent bindings in parallel worktrees (agent/run-centric — an external agent owns its own model)",
         },
       },
       required: ["agentId", "task"],
@@ -1140,29 +1141,39 @@ export async function dispatchSubAgent(
   return toSummaryOnlyResult(raw as Record<string, unknown>);
 }
 
-/** P51.10 — live consumer of the Rust `execution/multirun` admission (≤5 models). */
+/**
+ * P51.10 — live consumer of the Rust `execution/multirun` admission.
+ *
+ * P71.3e — a fan-out is several **Runs of one Work**, each bound to an agent
+ * binding: agent/run-centric, never a model list (ADR-0005 — an external agent
+ * owns its own model). The member Run ids are derived in Rust, so the sidecar
+ * never fabricates a kernel id and the Work is required (fail-closed).
+ */
 export async function dispatchMultiRun(
   request: ToolRequest,
   params: {
     id: string;
-    taskId: string;
-    modelIds: string[];
+    workId: string;
+    agentIds: string[];
     worktreeIds?: string[];
     mode?: "keep_best" | "fuse";
-    outcomes?: Array<{ modelId: string; output: string; score: number }>;
+    outcomes?: Array<{ agentId: string; output: string; score: number; runId?: string }>;
     diff?: string;
   },
 ): Promise<Record<string, unknown>> {
-  if (params.modelIds.length === 0) {
-    throw new Error("multirun requires at least one model — fail-closed");
+  if (!params.workId) {
+    throw new Error("multirun requires workId — a strategy groups Runs of one Work");
   }
-  if (params.modelIds.length > 5) {
-    throw new Error(`multirun supports at most 5 models, got ${params.modelIds.length}`);
+  if (params.agentIds.length === 0) {
+    throw new Error("multirun requires at least one agent binding — fail-closed");
+  }
+  if (params.agentIds.length > 5) {
+    throw new Error(`multirun supports at most 5 Runs, got ${params.agentIds.length}`);
   }
   const raw = await request("execution/multirun", {
     id: params.id,
-    taskId: params.taskId,
-    modelIds: params.modelIds,
+    workId: params.workId,
+    agentIds: params.agentIds,
     worktreeIds: params.worktreeIds ?? [],
     mode: params.mode ?? "keep_best",
     ...(params.outcomes ? { outcomes: params.outcomes } : {}),

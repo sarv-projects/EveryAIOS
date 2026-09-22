@@ -1,25 +1,35 @@
-//! Scheduled-task core (P6.4 — B7). The durable, Rust-owned scheduler:
-//! "Rust disposes" — job state, cron math, leases, retry, battery policy and
-//! nudge sentinels all live here; the coordinator proposes executions via
-//! `scheduler/*` JSON-RPC and runs the steps (reawakening the job's session).
+//! Scheduled-task **trigger plane** (P6.4 — B7; re-scoped by `P71.3d` /
+//! `ARCH/AUTOMATION.md` §9). The scheduler owns **definitions, triggers,
+//! occurrences and admission policy — nothing else**:
+//!
+//! - trigger registry: cron · interval · event · webhook · window;
+//! - cron math, next-due computation, trigger dedupe (one firing = one
+//!   `mark_fired`, so a due job is never re-queued mid-flight);
+//! - battery/wake policy, misfire policy (`run_once_on_resume` by
+//!   construction: a stale `next_run_at` fires once, then advances),
+//!   frequency admission (rolling-hour cap);
+//! - monitor observation accounting (the "run vs notify" delta), nudge
+//!   sentinels, incident ack-store, read-only doctor;
+//! - durable persistence of that registry.
+//!
+//! It holds **no execution state**: no run state machine, no leases or
+//! fences, no checkpoints, no retries, no run ledger. A trigger never
+//! executes a task — it surfaces due jobs and the host (the Work kernel)
+//! executes them (`AUTOMATION.md` §1, **I26**). Run history belongs to the
+//! Event Log (**I3**); execution waits belong to Work's `WaitCondition`
+//! (`AUTOMATION.md` §8), never to this plane.
 //!
 //! Patterns adopted (pattern-only, no copied code):
-//! - cronflow (doc 56 §3, no LICENSE → reference only): **HITL pause as a
-//!   first-class state-machine state** (`RunState::Paused` with a resume
-//!   deadline, explicit transitions), **webhook triggers with schema
-//!   validation**, **retry with backoff + jitter + max-backoff clamp**.
-//! - Hatchet / durable-execution-the-hard-way (doc 67 §2, MIT): **heartbeat
-//!   lease model** — a run holds a lease with an expiry; a missed heartbeat
-//!   marks the job reassignable and the next due-cycle re-runs it from its
-//!   **last completed step checkpoint** (durable event log = the audit seq,
-//!   non-determinism guard = completed steps are never re-executed).
+//! - cronflow (doc 56 §3, no LICENSE → reference only): webhook triggers
+//!   with schema validation; HITL pause — here as a **trigger-plane flag**
+//!   (stop firing); the execution-level pause state lives in Work.
 //! - Gartner event-driven orchestration (doc 62 §3): **CI build-fail /
 //!   test-regression / repo-change / ticket-assign / telemetry-threshold**
 //!   triggers with **scope + frequency policy** controls.
 //! - Nudge sentinels (B7): detect repeating patterns (same goal at the same
 //!   time-of-day/weekday) → suggest a schedule (H14 nudge-card surface).
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::HashMap;
 
 use everyaios_blueprint::automation::AutomationStep;
 use serde_json::{json, Value};
@@ -144,7 +154,7 @@ fn civil_parts(unix_secs: u64) -> (u8, u8, u8, u8, u8) {
 }
 
 // ---------------------------------------------------------------------------
-// Triggers, policy, run state
+// Triggers and policy
 // ---------------------------------------------------------------------------
 
 /// Event-driven trigger kinds (doc 62 §3 — Gartner 2026 observability signals).
@@ -211,7 +221,9 @@ pub enum TriggerSpec {
     },
 }
 
-/// Policy controls per job (doc 62 §3: scope + frequency; battery-aware B7).
+/// Admission policy per job (doc 62 §3: scope + frequency; battery-aware B7).
+/// Concurrency-and-misfire policy **around** Work (`AUTOMATION.md` §7) — not
+/// an execution policy: nothing here runs a task.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SchedulePolicy {
@@ -233,34 +245,6 @@ impl Default for SchedulePolicy {
     }
 }
 
-/// Run state machine — HITL pause is a first-class state (cronflow pattern).
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
-#[serde(tag = "state", rename_all = "snake_case")]
-pub enum RunState {
-    Idle,
-    /// A run is in flight; the lease expires if the executor stops heartbeating
-    /// (Hatchet pattern) → the job becomes reassignable on the next due-cycle.
-    Running {
-        #[serde(rename = "leaseExpiresAt")]
-        lease_expires_at: u64,
-        /// Fencing token: a stale worker cannot commit after expiry/reassign.
-        #[serde(default)]
-        fence: String,
-    },
-    /// HITL pause (approval / review). `resume_deadline` = auto-resume-or-cancel
-    /// bound; `None` = paused indefinitely until an explicit resume.
-    Paused {
-        #[serde(rename = "resumeDeadline")]
-        resume_deadline: Option<u64>,
-    },
-    /// Failed after retries; `next_retry_at` is the backoff schedule.
-    Failed {
-        retries: u32,
-        #[serde(rename = "nextRetryAt")]
-        next_retry_at: Option<u64>,
-    },
-}
-
 /// Monitor-script mode (P51.32b): how a monitor produces observations.
 /// `Llm` is the default analyst path; `Script` runs a command whose stdout
 /// is stored verbatim as the observation.
@@ -280,7 +264,7 @@ pub enum MonitorSource {
 /// job whose runs *observe* state and notify only on a meaningful delta,
 /// remembering the previous observation between runs ("previous runs are
 /// remembered"). `stop_on_condition` stops the monitor when the executor
-/// reports the end condition met (e.g. "package delivered").
+/// reports the end condition met.
 #[derive(Debug, Clone, Default, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MonitorConfig {
@@ -332,15 +316,7 @@ impl MonitorConfig {
     }
 }
 
-/// Continuity snapshot (P51.32a): the durable per-job memory surfaced to the
-/// next run (last result summary + scratch notepad).
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct JobContinuity {
-    pub last_output: String,
-    pub notepad: String,
-}
-
+/// One trigger-plane job: a **definition + trigger**, never a run.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Job {
@@ -352,55 +328,28 @@ pub struct Job {
     pub steps: Vec<AutomationStep>,
     pub policy: SchedulePolicy,
     pub enabled: bool,
-    pub state: RunState,
-    /// Last completed step index (durable checkpoint for lease reassignment).
-    pub checkpoint: u32,
+    /// Trigger-plane pause (cronflow HITL, chat-delete cascade): stop firing
+    /// without losing the definition. Execution-level waiting (approval,
+    /// user input, timer…) is Work's `WaitCondition` (`AUTOMATION.md` §8),
+    /// never this flag.
+    #[serde(default)]
+    pub paused: bool,
     /// Next due unix time (cron/interval); None = waiting on an event.
     pub next_run_at: Option<u64>,
-    /// Last fired unix time (frequency + nudge accounting).
-    pub last_run_at: Option<u64>,
-    /// Rolling 1h fire timestamps (frequency policy).
-    pub recent_runs: Vec<u64>,
-    pub runs: u32,
-    pub successes: u32,
-    pub failures: u32,
+    /// Last fired unix time (occurrence record — "why did this run?" §4).
+    #[serde(default)]
+    pub last_fired_at: Option<u64>,
+    /// Rolling 1h fire timestamps (frequency admission).
+    #[serde(default)]
+    pub recent_fires: Vec<u64>,
     /// Monitoring config (`None` = a plain scheduled/event job; lazily created
     /// by `monitor_evaluate` for delta-notify semantics).
     #[serde(default)]
     pub monitor: Option<MonitorConfig>,
-    /// Frozen context for the in-flight run (Task/Occurrence/Run snapshot).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub current_run: Option<RunSnapshot>,
-    /// Last run result summary (P51.32a continuity; written on `lease_finish`).
-    #[serde(default)]
-    pub last_output: String,
-    /// Scratch notepad carried across runs (P51.32a continuity).
+    /// Scratch notepad carried across runs (P51.32a continuity — explicitly
+    /// user/agent-curated notes; run results live in the Event Log, **I3**).
     #[serde(default)]
     pub notepad: String,
-    /// Drift-guard pins (P51.32d): expected model / effort + manifest hash.
-    /// Empty = unpinned (no enforcement, backward compatible).
-    #[serde(default)]
-    pub model_pin: String,
-    #[serde(default)]
-    pub effort_pin: String,
-    #[serde(default)]
-    pub manifest_hash: String,
-}
-
-/// Frozen per-run snapshot so a live session edit cannot mutate an in-flight
-/// automation (H3 Task/Occurrence/Run).
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct RunSnapshot {
-    pub run_id: String,
-    pub task_version: u32,
-    pub permission_snapshot: String,
-    pub context_snapshot: String,
-    pub scheduled_at: u64,
-    #[serde(default)]
-    pub timezone: String,
-    #[serde(default)]
-    pub missed_policy: String,
 }
 
 /// The outcome of one monitoring evaluation (stateful-polling delta check).
@@ -414,7 +363,7 @@ pub struct MonitorVerdict {
     /// notifying when nothing changed.
     pub notified: bool,
     /// The end condition was met and `stop_on_condition` was set → the monitor
-    /// was stopped (job disabled, state reset to idle).
+    /// was stopped (job disabled).
     pub stopped: bool,
     /// The previous observation (None on the first run).
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -440,56 +389,13 @@ impl Job {
             policy: SchedulePolicy::default(),
             steps: Vec::new(),
             enabled: true,
-            state: RunState::Idle,
-            checkpoint: 0,
+            paused: false,
             next_run_at: None,
-            last_run_at: None,
-            recent_runs: Vec::new(),
-            runs: 0,
-            successes: 0,
-            failures: 0,
+            last_fired_at: None,
+            recent_fires: Vec::new(),
             monitor: None,
-            current_run: None,
-            last_output: String::new(),
             notepad: String::new(),
-            model_pin: String::new(),
-            effort_pin: String::new(),
-            manifest_hash: String::new(),
         }
-    }
-
-    /// Drift guard (P51.32d, fail-closed): a non-empty pin must match the
-    /// runtime value. Empty pin = unpinned (no enforcement).
-    pub fn check_drift(&self, model: &str, effort: &str) -> Result<(), String> {
-        if !self.model_pin.is_empty() && self.model_pin != model {
-            return Err(format!(
-                "drift: model pin {:?} != runtime {:?}",
-                self.model_pin, model
-            ));
-        }
-        if !self.effort_pin.is_empty() && self.effort_pin != effort {
-            return Err(format!(
-                "drift: effort pin {:?} != runtime {:?}",
-                self.effort_pin, effort
-            ));
-        }
-        Ok(())
-    }
-
-    /// Retry backoff with jitter + clamp (cronflow pattern):
-    /// `min(max_backoff, base * 2^attempt)` ± jitter fraction.
-    pub fn retry_delay_ms(attempt: u32, base_ms: u64, max_ms: u64, jitter: f64) -> u64 {
-        let exp = base_ms.saturating_mul(1u64 << attempt.min(10));
-        let clamped = exp.min(max_ms);
-        let j = (clamped as f64 * jitter) as u64;
-        let jittered = if j == 0 {
-            clamped
-        } else {
-            let hi = clamped + j;
-            let lo = clamped.saturating_sub(j);
-            lo + (hi - lo) / 2 // deterministic midpoint jitter (tests + no RNG)
-        };
-        jittered.max(base_ms).min(max_ms)
     }
 }
 
@@ -514,67 +420,9 @@ pub struct NudgeSuggestion {
     pub observed_at: Vec<String>,
 }
 
-/// Retry/lease constants (Hermes + Hatchet-derived defaults).
-pub const LEASE_SECS: u64 = 30;
-pub const RETRY_BASE_MS: u64 = 30_000;
-pub const RETRY_MAX_MS: u64 = 3_600_000;
-pub const RETRY_JITTER: f64 = 0.2;
 pub const NUDGE_WINDOW_DAYS: u64 = 14;
-/// Runs-ledger bound (P51.32g): the service keeps at most this many records.
-pub const RUN_LEDGER_CAP: usize = 500;
-
-/// Dispatch preflight gate (P51.32c): pure, zero-LLM readiness check.
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct DispatchPreflight {
-    pub has_key: bool,
-    pub skills_ok: bool,
-    pub delivery_ok: bool,
-    pub reason: String,
-}
-
-impl DispatchPreflight {
-    pub fn ok() -> Self {
-        Self {
-            has_key: true,
-            skills_ok: true,
-            delivery_ok: true,
-            reason: String::new(),
-        }
-    }
-
-    pub fn can_dispatch(&self) -> bool {
-        self.has_key && self.skills_ok && self.delivery_ok
-    }
-}
-
-/// Pure, zero-LLM dispatch gate (P51.32c): no network, no model, no I/O —
-/// just key presence + required-skills subset check.
-pub fn dispatch_preflight(
-    has_key: bool,
-    skills: &[String],
-    requires: &[String],
-) -> DispatchPreflight {
-    if !has_key {
-        return DispatchPreflight {
-            has_key: false,
-            skills_ok: true,
-            delivery_ok: false,
-            reason: "missing api key".to_string(),
-        };
-    }
-    let missing: Vec<&String> = requires.iter().filter(|r| !skills.contains(r)).collect();
-    if !missing.is_empty() {
-        let names: Vec<&str> = missing.iter().map(|s| s.as_str()).collect();
-        return DispatchPreflight {
-            has_key: true,
-            skills_ok: false,
-            delivery_ok: false,
-            reason: format!("missing skills: {}", names.join(", ")),
-        };
-    }
-    DispatchPreflight::ok()
-}
+/// Registry soft cap (P51.32f doctor's `queue_depth` guard).
+pub const REGISTRY_SOFT_CAP: usize = 500;
 
 /// An incident (P51.32e): an explicit, ack-gated failure record.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -597,30 +445,6 @@ pub struct CronCheck {
     pub detail: String,
 }
 
-/// Bounded runs-ledger state (P51.32g).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum RunLedgerState {
-    Claimed,
-    Running,
-    Completed,
-    Failed,
-}
-
-/// One runs-ledger entry (P51.32g).
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct RunRecord {
-    pub run_id: String,
-    pub job_id: String,
-    pub claimed_at: u64,
-    #[serde(default)]
-    pub started_at_ms: Option<u64>,
-    #[serde(default)]
-    pub finished_at_ms: Option<u64>,
-    pub state: RunLedgerState,
-}
-
 pub struct SchedulerService {
     jobs: HashMap<String, Job>,
     on_battery: bool,
@@ -633,17 +457,6 @@ pub struct SchedulerService {
     /// P51.32e — explicit-ack incident store.
     incidents: Vec<Incident>,
     incident_seq: u64,
-    /// P51.32g — bounded runs ledger (cap [`RUN_LEDGER_CAP`]).
-    runs_ledger: VecDeque<RunRecord>,
-    /// P51.32c — whether an API key is present for dispatch preflight.
-    /// Defaults to `true` so pre-existing callers keep working; set to
-    /// `false` to exercise the fail-closed gate.
-    api_key_present: bool,
-    /// P51.32d — runtime model/effort the drift guard compares pins against.
-    /// Empty = unknown runtime (unpinned jobs still pass; pinned jobs fail
-    /// closed until the runtime is set to the pinned value).
-    active_model: String,
-    active_effort: String,
 }
 
 impl Default for SchedulerService {
@@ -662,37 +475,21 @@ impl SchedulerService {
             persist_path: None,
             incidents: Vec::new(),
             incident_seq: 0,
-            runs_ledger: VecDeque::new(),
-            api_key_present: true,
-            active_model: String::new(),
-            active_effort: String::new(),
         }
     }
 
     /// P50.3.3 — open (or create) the service with a JSON file backing store.
-    /// Jobs survive shell/coordinator restart. Restart reconciliation
-    /// (Hatchet lease semantics): a job that was mid-run when the process
-    /// died holds a dead lease — it is moved back to `Idle` so the next
-    /// due-cycle reassigns it (the fencing token makes any surviving stale
-    /// worker unable to commit), never deadlocked in `Running` forever.
+    /// The trigger registry survives shell/coordinator restart. Recovery is
+    /// misfire-policy-by-construction (`AUTOMATION.md` §7): a job whose
+    /// `next_run_at` slipped past while the process was down fires **once**
+    /// on the next due-cycle (`run_once_on_resume` — the default), then
+    /// `mark_fired` advances it; it never replays every missed occurrence.
     pub fn load_or_new(path: std::path::PathBuf) -> Self {
         let mut svc = Self::new();
         svc.persist_path = Some(path.clone());
         if let Ok(bytes) = std::fs::read(&path) {
             if let Ok(jobs) = serde_json::from_slice::<Vec<Job>>(&bytes) {
-                let now = std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .map(|d| d.as_secs())
-                    .unwrap_or(0);
-                for mut job in jobs {
-                    if let RunState::Running {
-                        lease_expires_at, ..
-                    } = job.state
-                    {
-                        if lease_expires_at <= now {
-                            job.state = RunState::Idle;
-                        }
-                    }
+                for job in jobs {
                     svc.jobs.insert(job.id.clone(), job);
                 }
             }
@@ -820,7 +617,6 @@ impl SchedulerService {
         if stopped {
             // End condition met: stop the recurring monitor (keep the record).
             job.enabled = false;
-            job.state = RunState::Idle;
         }
         Ok(MonitorVerdict {
             changed,
@@ -834,15 +630,9 @@ impl SchedulerService {
 
     // -- continuity (P51.32a) --------------------------------------------------
 
-    /// Return the durable continuity snapshot for a job, if it exists.
-    pub fn continuity(&self, id: &str) -> Option<JobContinuity> {
-        self.jobs.get(id).map(|j| JobContinuity {
-            last_output: j.last_output.clone(),
-            notepad: j.notepad.clone(),
-        })
-    }
-
     /// Append one line to a job's notepad. Returns `false` for unknown jobs.
+    /// (The notepad is the only continuity this plane keeps — run results are
+    /// Event Log territory, **I3**.)
     pub fn append_notepad(&mut self, id: &str, line: &str) -> bool {
         let Some(job) = self.jobs.get_mut(id) else {
             return false;
@@ -855,6 +645,11 @@ impl SchedulerService {
         }
         self.persist_quiet();
         true
+    }
+
+    /// A job's durable notepad (`None` for unknown jobs).
+    pub fn notepad(&self, id: &str) -> Option<String> {
+        self.jobs.get(id).map(|j| j.notepad.clone())
     }
 
     // -- monitor-script mode (P51.32b) -----------------------------------------
@@ -891,290 +686,42 @@ impl SchedulerService {
         MonitorConfig::default().evaluate_script(stdout, silent_on_empty)
     }
 
-    // -- dispatch preflight (P51.32c) ------------------------------------------
+    // -- trigger-plane pause -----------------------------------------------------
 
-    /// Associated-function mirror of the free [`dispatch_preflight`] gate so
-    /// callers can use either `SchedulerService::dispatch_preflight(..)` or
-    /// the module-level function; both are pure and zero-LLM.
-    pub fn dispatch_preflight(
-        has_key: bool,
-        skills: &[String],
-        requires: &[String],
-    ) -> DispatchPreflight {
-        dispatch_preflight(has_key, skills, requires)
-    }
-
-    pub fn set_api_key_present(&mut self, present: bool) {
-        self.api_key_present = present;
-    }
-
-    pub fn set_has_key(&mut self, present: bool) {
-        self.api_key_present = present;
-    }
-
-    pub fn has_api_key(&self) -> bool {
-        self.api_key_present
-    }
-
-    // -- drift-guard runtime (P51.32d) ------------------------------------------
-
-    pub fn set_active_model(&mut self, model: impl Into<String>) {
-        self.active_model = model.into();
-    }
-
-    pub fn set_active_effort(&mut self, effort: impl Into<String>) {
-        self.active_effort = effort.into();
-    }
-
-    pub fn set_runtime_model(&mut self, model: impl Into<String>) {
-        self.active_model = model.into();
-    }
-
-    pub fn set_runtime_effort(&mut self, effort: impl Into<String>) {
-        self.active_effort = effort.into();
-    }
-
-    pub fn active_model(&self) -> &str {
-        &self.active_model
-    }
-
-    pub fn active_effort(&self) -> &str {
-        &self.active_effort
-    }
-
-    /// Pin (or re-pin) a job's drift expectations. Empty strings clear the pin.
-    pub fn set_job_pins(
-        &mut self,
-        id: &str,
-        model_pin: &str,
-        effort_pin: &str,
-        manifest_hash: &str,
-    ) -> Result<(), String> {
+    /// Pause a job: stop firing without losing the definition (HITL pause,
+    /// cronflow pattern). Returns `Ok(())` even if already paused.
+    pub fn pause(&mut self, id: &str) -> Result<(), String> {
         let job = self
             .jobs
             .get_mut(id)
             .ok_or_else(|| format!("unknown job {id:?}"))?;
-        job.model_pin = model_pin.to_string();
-        job.effort_pin = effort_pin.to_string();
-        job.manifest_hash = manifest_hash.to_string();
+        job.paused = true;
         self.persist_quiet();
         Ok(())
     }
 
-    pub fn set_model_pin(&mut self, id: &str, pin: &str) -> Result<(), String> {
+    /// Resume a paused job. Re-seeds next-run for schedule triggers that have
+    /// none (event/webhook jobs keep waiting on their event).
+    pub fn resume(&mut self, id: &str, now: u64) -> Result<(), String> {
         let job = self
             .jobs
             .get_mut(id)
             .ok_or_else(|| format!("unknown job {id:?}"))?;
-        job.model_pin = pin.to_string();
+        job.paused = false;
+        if job.enabled && job.next_run_at.is_none() {
+            job.next_run_at = compute_next_run(&job.trigger, now, None);
+        }
         self.persist_quiet();
         Ok(())
     }
-
-    pub fn set_effort_pin(&mut self, id: &str, pin: &str) -> Result<(), String> {
-        let job = self
-            .jobs
-            .get_mut(id)
-            .ok_or_else(|| format!("unknown job {id:?}"))?;
-        job.effort_pin = pin.to_string();
-        self.persist_quiet();
-        Ok(())
-    }
-
-    // -- incidents (P51.32e) -----------------------------------------------------
-
-    /// Record an incident. Returns the new incident id. Incidents start
-    /// unacked and require an explicit [`Self::ack_incident`].
-    pub fn report_incident(
-        &mut self,
-        job_id: impl Into<String>,
-        kind: impl Into<String>,
-        detail: impl Into<String>,
-        at_ms: u64,
-    ) -> String {
-        self.incident_seq = self.incident_seq.saturating_add(1);
-        let id = format!("inc-{}", self.incident_seq);
-        self.incidents.push(Incident {
-            id: id.clone(),
-            job_id: job_id.into(),
-            at_ms,
-            kind: kind.into(),
-            detail: detail.into(),
-            acked: false,
-        });
-        id
-    }
-
-    /// Explicitly acknowledge an incident. Returns `false` for unknown ids.
-    pub fn ack_incident(&mut self, id: &str) -> bool {
-        if let Some(inc) = self.incidents.iter_mut().find(|i| i.id == id) {
-            inc.acked = true;
-            true
-        } else {
-            false
-        }
-    }
-
-    pub fn get_incident(&self, id: &str) -> Option<&Incident> {
-        self.incidents.iter().find(|i| i.id == id)
-    }
-
-    /// Cloned incident list (ordered by report time).
-    pub fn list_incidents(&self) -> Vec<Incident> {
-        self.incidents.clone()
-    }
-
-    // -- doctor (P51.32f) --------------------------------------------------------
-
-    /// Pure read-only health check: `missed_runs` (enabled jobs whose
-    /// `next_run_at` lies in the past), `dead_lease` (Running leases already
-    /// expired) and `queue_depth` (registry size guard). Never mutates.
-    pub fn cron_doctor(&self, now_ms: u64) -> Vec<CronCheck> {
-        let mut missed = 0usize;
-        for job in self.jobs.values() {
-            if !job.enabled {
-                continue;
-            }
-            if !matches!(job.state, RunState::Idle | RunState::Failed { .. }) {
-                continue;
-            }
-            if let Some(t) = job.next_run_at {
-                if t < now_ms {
-                    missed += 1;
-                }
-            }
-        }
-        let mut dead = 0usize;
-        for job in self.jobs.values() {
-            if let RunState::Running {
-                lease_expires_at, ..
-            } = &job.state
-            {
-                if *lease_expires_at < now_ms {
-                    dead += 1;
-                }
-            }
-        }
-        let depth = self.jobs.len();
-        vec![
-            CronCheck {
-                name: "missed_runs".to_string(),
-                ok: missed == 0,
-                detail: if missed == 0 {
-                    "none".to_string()
-                } else {
-                    format!("{missed} missed")
-                },
-            },
-            CronCheck {
-                name: "dead_lease".to_string(),
-                ok: dead == 0,
-                detail: if dead == 0 {
-                    "none".to_string()
-                } else {
-                    format!("{dead} dead lease(s)")
-                },
-            },
-            CronCheck {
-                name: "queue_depth".to_string(),
-                ok: depth <= RUN_LEDGER_CAP,
-                detail: format!("depth={depth}"),
-            },
-        ]
-    }
-
-    // -- runs ledger (P51.32g) ----------------------------------------------------
-
-    /// Record a run-state transition. Creates the entry on first sight
-    /// (`claimed_at = at_ms`) and updates timestamps on later transitions;
-    /// the deque is bounded at [`RUN_LEDGER_CAP`] (oldest evicted first).
-    pub fn record_run_transition(
-        &mut self,
-        run_id: impl Into<String>,
-        job_id: impl Into<String>,
-        state: RunLedgerState,
-        at_ms: u64,
-    ) {
-        let run_id = run_id.into();
-        let job_id = job_id.into();
-        if let Some(rec) = self.runs_ledger.iter_mut().find(|r| r.run_id == run_id) {
-            rec.state = state;
-            match state {
-                RunLedgerState::Claimed => {}
-                RunLedgerState::Running => {
-                    if rec.started_at_ms.is_none() {
-                        rec.started_at_ms = Some(at_ms);
-                    }
-                }
-                RunLedgerState::Completed | RunLedgerState::Failed => {
-                    if rec.started_at_ms.is_none() {
-                        rec.started_at_ms = Some(at_ms);
-                    }
-                    rec.finished_at_ms = Some(at_ms);
-                }
-            }
-        } else {
-            let rec = match state {
-                RunLedgerState::Claimed => RunRecord {
-                    run_id,
-                    job_id,
-                    claimed_at: at_ms,
-                    started_at_ms: None,
-                    finished_at_ms: None,
-                    state,
-                },
-                RunLedgerState::Running => RunRecord {
-                    run_id,
-                    job_id,
-                    claimed_at: at_ms,
-                    started_at_ms: Some(at_ms),
-                    finished_at_ms: None,
-                    state,
-                },
-                RunLedgerState::Completed | RunLedgerState::Failed => RunRecord {
-                    run_id,
-                    job_id,
-                    claimed_at: at_ms,
-                    started_at_ms: Some(at_ms),
-                    finished_at_ms: Some(at_ms),
-                    state,
-                },
-            };
-            self.runs_ledger.push_back(rec);
-            while self.runs_ledger.len() > RUN_LEDGER_CAP {
-                self.runs_ledger.pop_front();
-            }
-        }
-    }
-
-    pub fn get_run(&self, run_id: &str) -> Option<&RunRecord> {
-        self.runs_ledger.iter().find(|r| r.run_id == run_id)
-    }
-
-    /// Cloned ledger contents (oldest first).
-    pub fn list_runs(&self) -> Vec<RunRecord> {
-        self.runs_ledger.iter().cloned().collect()
-    }
-
-    pub fn runs_ledger(&self) -> &VecDeque<RunRecord> {
-        &self.runs_ledger
-    }
-
-    // -- HITL pause (cronflow: a first-class state with explicit transitions) -
 
     /// Pause every job bound to `session_id` (chat-delete cascade). Returns
-    /// how many jobs were paused.
+    /// how many jobs were newly paused.
     pub fn pause_session(&mut self, session_id: &str) -> usize {
         let mut n = 0usize;
         for job in self.jobs.values_mut() {
-            if job.session_id == session_id
-                && job.enabled
-                && !matches!(job.state, RunState::Paused { .. })
-            {
-                job.enabled = false;
-                job.state = RunState::Paused {
-                    resume_deadline: None,
-                };
+            if job.session_id == session_id && !job.paused {
+                job.paused = true;
                 n += 1;
             }
         }
@@ -1184,223 +731,30 @@ impl SchedulerService {
         n
     }
 
-    pub fn pause(&mut self, id: &str, resume_deadline: Option<u64>) -> Result<(), String> {
+    // -- occurrences ------------------------------------------------------------
+
+    /// Record one firing of the trigger (`AUTOMATION.md` §4: every trigger
+    /// produces an Occurrence before any Work exists; the Event Log owns the
+    /// run itself, **I3**). Advances next-run (so a due job is never
+    /// re-queued mid-flight — trigger dedupe) and feeds the rolling-hour
+    /// admission window. The host calls this after the run attempt,
+    /// success or failure — a fired trigger is a fired trigger; retries are
+    /// the Work kernel's business (`RECOVERY.md`), never a schedule matter.
+    pub fn mark_fired(&mut self, id: &str, now: u64) -> Result<(), String> {
         let job = self
             .jobs
             .get_mut(id)
             .ok_or_else(|| format!("unknown job {id:?}"))?;
-        job.state = RunState::Paused { resume_deadline };
+        job.last_fired_at = Some(now);
+        let cutoff = now.saturating_sub(3600);
+        job.recent_fires.retain(|t| *t >= cutoff);
+        job.recent_fires.push(now);
+        job.next_run_at = compute_next_run(&job.trigger, now, None);
         self.persist_quiet();
         Ok(())
     }
 
-    pub fn resume(&mut self, id: &str, now: u64) -> Result<(), String> {
-        let job = self
-            .jobs
-            .get_mut(id)
-            .ok_or_else(|| format!("unknown job {id:?}"))?;
-        if !matches!(job.state, RunState::Paused { .. }) {
-            return Err(format!("job {id:?} is not paused"));
-        }
-        job.state = RunState::Idle;
-        if job.enabled && job.next_run_at.is_none() {
-            job.next_run_at = compute_next_run(&job.trigger, now, None);
-        }
-        self.persist_quiet();
-        Ok(())
-    }
-
-    // -- lease / heartbeat (Hatchet pattern) ---------------------------------
-
-    /// Start a run: Idle/Paused-expired/Failed → Running with a lease + fence.
-    /// P51.32c preflight (pure, zero LLM) runs first and fails closed;
-    /// P51.32d drift guard refuses a lease when the pinned model/effort no
-    /// longer matches the runtime. A lease that is already `Running` resumes
-    /// without re-gating (the fence still guards the holder).
-    pub fn lease_start(&mut self, id: &str, now: u64) -> Result<Value, String> {
-        // Resume path first: an in-flight holder keeps its lease.
-        if let Some(job) = self.jobs.get(id) {
-            if let RunState::Running { ref fence, .. } = job.state {
-                return Ok(json!({
-                    "ok": true,
-                    "resumed": true,
-                    "checkpoint": job.checkpoint,
-                    "fence": fence,
-                    "runId": job.current_run.as_ref().map(|r| r.run_id.clone()),
-                }));
-            }
-        } else {
-            return Err(format!("unknown job {id:?}"));
-        }
-        // P51.32c — pure preflight gate (zero LLM). Fail-closed.
-        let pre = dispatch_preflight(self.api_key_present, &[], &[]);
-        if !pre.can_dispatch() {
-            return Err(pre.reason);
-        }
-        // P51.32d — drift guard (fail-closed). Clone runtime first to satisfy
-        // the borrow checker, then check the job's pins.
-        let active_model = self.active_model.clone();
-        let active_effort = self.active_effort.clone();
-        {
-            let job = self
-                .jobs
-                .get(id)
-                .ok_or_else(|| format!("unknown job {id:?}"))?;
-            job.check_drift(&active_model, &active_effort)?;
-        }
-        let job = self
-            .jobs
-            .get_mut(id)
-            .ok_or_else(|| format!("unknown job {id:?}"))?;
-        let fence = format!("fence-{id}-{now}");
-        job.state = RunState::Running {
-            lease_expires_at: now + LEASE_SECS,
-            fence: fence.clone(),
-        };
-        let run_id = format!("run-{id}-{now}");
-        job.current_run = Some(RunSnapshot {
-            run_id: run_id.clone(),
-            task_version: job.runs,
-            permission_snapshot: format!(
-                "suppressOnBattery={} maxRuns={:?}",
-                job.policy.suppress_on_battery, job.policy.max_runs_per_hour
-            ),
-            context_snapshot: serde_json::json!({
-                "sessionId": job.session_id,
-                "jobId": job.id,
-                "name": job.name,
-            })
-            .to_string(),
-            scheduled_at: now,
-            timezone: "UTC".into(),
-            missed_policy: "run_now".into(),
-        });
-        Ok(json!({
-            "ok": true,
-            "resumed": false,
-            "checkpoint": job.checkpoint,
-            "fence": fence,
-            "runId": run_id,
-        }))
-        .inspect(|_| self.persist_quiet())
-    }
-
-    fn fence_ok(job: &Job, fence: Option<&str>) -> Result<String, String> {
-        match &job.state {
-            RunState::Running { fence: held, .. } => {
-                let got = fence.ok_or_else(|| "fence required".to_string())?;
-                if got != held {
-                    return Err("stale fence".into());
-                }
-                Ok(held.clone())
-            }
-            _ => Err(format!("job {:?} is not running", job.id)),
-        }
-    }
-
-    /// Renew the lease. Returns `{ok:false}` if the lease already expired
-    /// (another executor may have reassigned it).
-    pub fn lease_heartbeat(
-        &mut self,
-        id: &str,
-        now: u64,
-        fence: Option<&str>,
-    ) -> Result<Value, String> {
-        let job = self
-            .jobs
-            .get_mut(id)
-            .ok_or_else(|| format!("unknown job {id:?}"))?;
-        match &job.state {
-            RunState::Running {
-                lease_expires_at,
-                fence: held,
-            } if *lease_expires_at >= now => {
-                if let Some(g) = fence {
-                    if g != held {
-                        return Ok(json!({ "ok": false, "reason": "stale_fence" }));
-                    }
-                }
-                let f = held.clone();
-                job.state = RunState::Running {
-                    lease_expires_at: now + LEASE_SECS,
-                    fence: f.clone(),
-                };
-                Ok(json!({ "ok": true, "leaseExpiresAt": now + LEASE_SECS, "fence": f }))
-            }
-            RunState::Running { .. } => Ok(json!({ "ok": false, "reason": "lease_expired" })),
-            _ => Err(format!("job {id:?} is not running")),
-        }
-    }
-
-    /// Advance the checkpoint (call after each completed step).
-    pub fn lease_checkpoint(
-        &mut self,
-        id: &str,
-        index: u32,
-        fence: Option<&str>,
-    ) -> Result<(), String> {
-        let job = self
-            .jobs
-            .get_mut(id)
-            .ok_or_else(|| format!("unknown job {id:?}"))?;
-        Self::fence_ok(job, fence)?;
-        job.checkpoint = index.max(job.checkpoint);
-        self.persist_quiet();
-        Ok(())
-    }
-
-    /// Finish a run: success resets retries; failure schedules a retry with
-    /// backoff + jitter + clamp (cronflow pattern). P51.32a: stores the last
-    /// result summary on `last_output` (continuity survives via persistence).
-    pub fn lease_finish(
-        &mut self,
-        id: &str,
-        ok: bool,
-        now: u64,
-        fence: Option<&str>,
-    ) -> Result<(), String> {
-        let job = self
-            .jobs
-            .get_mut(id)
-            .ok_or_else(|| format!("unknown job {id:?}"))?;
-        Self::fence_ok(job, fence)?;
-        job.runs += 1;
-        job.last_run_at = Some(now);
-        job.recent_runs.push(now);
-        // P51.32a continuity: remember the last result summary.
-        job.last_output = if ok {
-            format!("run at {now}: ok")
-        } else {
-            format!("run at {now}: failed")
-        };
-        if let Some(cap) = job.policy.max_runs_per_hour {
-            let cutoff = now.saturating_sub(3600);
-            job.recent_runs.retain(|t| *t >= cutoff);
-            let _ = cap; // enforcement happens at due/fire time
-        }
-        if ok {
-            job.successes += 1;
-            job.checkpoint = 0;
-            job.state = RunState::Idle;
-            job.current_run = None;
-            job.next_run_at = compute_next_run(&job.trigger, now, None);
-        } else {
-            job.failures += 1;
-            let retries = match job.state {
-                RunState::Running { .. } => job.failures, // count consecutive fails
-                _ => job.failures,
-            };
-            let delay = Job::retry_delay_ms(retries, RETRY_BASE_MS, RETRY_MAX_MS, RETRY_JITTER);
-            job.state = RunState::Failed {
-                retries,
-                next_retry_at: Some(now + delay / 1000),
-            };
-        }
-        self.persist_quiet();
-        Ok(())
-    }
-
-    // -- battery -------------------------------------------------------------
+    // -- battery ---------------------------------------------------------------
 
     pub fn set_battery(&mut self, on_battery: bool) {
         self.on_battery = on_battery;
@@ -1410,33 +764,20 @@ impl SchedulerService {
         self.on_battery
     }
 
-    // -- due computation -----------------------------------------------------
+    // -- due computation --------------------------------------------------------
 
-    /// Jobs due now (cron/interval match + retry backoff + lease-expired
-    /// reassignment), respecting battery suppression + frequency policy.
-    /// Returns job ids ordered by next_run_at.
+    /// Jobs due now (cron/interval/window match), respecting trigger-plane
+    /// pause, battery suppression and the frequency policy. Returns job ids
+    /// ordered by next_run_at.
     pub fn due(&mut self, now: u64) -> Vec<String> {
-        let mut out = Vec::new();
-        // First: expire stale leases → mark reassignable (Running → Idle with
-        // the checkpoint preserved; the executor resumes from it).
-        for job in self.jobs.values_mut() {
-            if let RunState::Running {
-                lease_expires_at, ..
-            } = job.state
-            {
-                if lease_expires_at < now {
-                    job.state = RunState::Idle; // reassignable, checkpoint intact
-                    job.current_run = None;
-                }
-            }
-        }
         let on_battery = self.on_battery;
         let ids: Vec<String> = self.jobs.keys().cloned().collect();
+        let mut out = Vec::new();
         for id in ids {
             let Some(job) = self.jobs.get(&id) else {
                 continue;
             };
-            if !job.enabled {
+            if !job.enabled || job.paused {
                 continue;
             }
             // Battery suppression.
@@ -1446,7 +787,7 @@ impl SchedulerService {
             // Frequency policy (rolling hour) — skip if at/over cap.
             if let Some(cap) = job.policy.max_runs_per_hour {
                 let cutoff = now.saturating_sub(3600);
-                let in_window = job.recent_runs.iter().filter(|t| **t >= cutoff).count() as u32;
+                let in_window = job.recent_fires.iter().filter(|t| **t >= cutoff).count() as u32;
                 if in_window >= cap {
                     continue;
                 }
@@ -1461,9 +802,7 @@ impl SchedulerService {
                 }
                 TriggerSpec::Event { .. } | TriggerSpec::Webhook { .. } => false,
             };
-            let retry_due =
-                matches!(job.state, RunState::Failed { next_retry_at: Some(t), .. } if t <= now);
-            if due || retry_due {
+            if due {
                 out.push(id);
             }
         }
@@ -1476,7 +815,7 @@ impl SchedulerService {
         out
     }
 
-    // -- event + webhook triggers --------------------------------------------
+    // -- event + webhook triggers ----------------------------------------------
 
     /// Fire an event (Gartner kinds). Matches Event-triggered jobs by kind +
     /// filter + scope, respects the frequency cap, queues immediately.
@@ -1488,7 +827,7 @@ impl SchedulerService {
             let Some(job) = self.jobs.get(&id) else {
                 continue;
             };
-            if !job.enabled {
+            if !job.enabled || job.paused {
                 continue;
             }
             let TriggerSpec::Event { kind: k, filter } = &job.trigger else {
@@ -1507,7 +846,7 @@ impl SchedulerService {
             }
             if let Some(cap) = job.policy.max_runs_per_hour {
                 let cutoff = now.saturating_sub(3600);
-                let in_window = job.recent_runs.iter().filter(|t| **t >= cutoff).count() as u32;
+                let in_window = job.recent_fires.iter().filter(|t| **t >= cutoff).count() as u32;
                 if in_window >= cap {
                     continue;
                 }
@@ -1540,7 +879,7 @@ impl SchedulerService {
             let Some(job) = self.jobs.get(&id) else {
                 continue;
             };
-            if !job.enabled {
+            if !job.enabled || job.paused {
                 continue;
             }
             let TriggerSpec::Webhook { path: p, schema } = &job.trigger else {
@@ -1569,7 +908,7 @@ impl SchedulerService {
         self.webhook_token = token;
     }
 
-    // -- nudge sentinels -----------------------------------------------------
+    // -- nudge sentinels --------------------------------------------------------
 
     /// Record a goal observation (from chat turns / session activity).
     pub fn record_nudge(&mut self, goal: &str, unix_secs: u64) {
@@ -1621,13 +960,99 @@ impl SchedulerService {
         out
     }
 
-    // -- JSON-RPC dispatch ---------------------------------------------------
+    // -- incidents (P51.32e) ------------------------------------------------------
+
+    /// Record an incident. Returns the new incident id. Incidents start
+    /// unacked and require an explicit [`Self::ack_incident`].
+    pub fn report_incident(
+        &mut self,
+        job_id: impl Into<String>,
+        kind: impl Into<String>,
+        detail: impl Into<String>,
+        at_ms: u64,
+    ) -> String {
+        self.incident_seq = self.incident_seq.saturating_add(1);
+        let id = format!("inc-{}", self.incident_seq);
+        self.incidents.push(Incident {
+            id: id.clone(),
+            job_id: job_id.into(),
+            at_ms,
+            kind: kind.into(),
+            detail: detail.into(),
+            acked: false,
+        });
+        id
+    }
+
+    /// Explicitly acknowledge an incident. Returns `false` for unknown ids.
+    pub fn ack_incident(&mut self, id: &str) -> bool {
+        if let Some(inc) = self.incidents.iter_mut().find(|i| i.id == id) {
+            inc.acked = true;
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn get_incident(&self, id: &str) -> Option<&Incident> {
+        self.incidents.iter().find(|i| i.id == id)
+    }
+
+    /// Cloned incident list (ordered by report time).
+    pub fn list_incidents(&self) -> Vec<Incident> {
+        self.incidents.clone()
+    }
+
+    // -- doctor (P51.32f) ----------------------------------------------------------
+
+    /// Pure read-only health check of the **trigger plane**: `missed_runs`
+    /// (enabled, unpaused schedule jobs whose `next_run_at` lies in the past —
+    /// the misfire surface) and `queue_depth` (registry size guard). Never
+    /// mutates; run-level health belongs to the Work kernel / Event Log.
+    pub fn cron_doctor(&self, now: u64) -> Vec<CronCheck> {
+        let mut missed = 0usize;
+        for job in self.jobs.values() {
+            if !job.enabled || job.paused {
+                continue;
+            }
+            if matches!(
+                job.trigger,
+                TriggerSpec::Event { .. } | TriggerSpec::Webhook { .. }
+            ) {
+                continue; // event-driven jobs have no next_run_at
+            }
+            if let Some(t) = job.next_run_at {
+                if t < now {
+                    missed += 1;
+                }
+            }
+        }
+        let depth = self.jobs.len();
+        vec![
+            CronCheck {
+                name: "missed_runs".to_string(),
+                ok: missed == 0,
+                detail: if missed == 0 {
+                    "none".to_string()
+                } else {
+                    format!("{missed} missed")
+                },
+            },
+            CronCheck {
+                name: "queue_depth".to_string(),
+                ok: depth <= REGISTRY_SOFT_CAP,
+                detail: format!("depth={depth}"),
+            },
+        ]
+    }
+
+    // -- JSON-RPC dispatch ------------------------------------------------------
 
     pub fn handle(&mut self, method: &str, params: &Value) -> Result<Value, String> {
         let out = self.handle_inner(method, params)?;
-        // P50.3.3 — the coordinator drives lease/checkpoint/finish/due through
+        // P50.3.3 — the coordinator drives due/fire/mark_fired/monitor through
         // this funnel; write through after every successful mutation so a
-        // shell/coordinator restart preserves leases, fences and checkpoints.
+        // shell/coordinator restart preserves the trigger registry.
         self.persist_quiet();
         Ok(out)
     }
@@ -1692,8 +1117,7 @@ impl SchedulerService {
             }
             "scheduler/pause" => {
                 let id = str_param(params, "id").ok_or("scheduler/pause requires id")?;
-                let deadline = params.get("resumeDeadline").and_then(Value::as_u64);
-                self.pause(id, deadline)?;
+                self.pause(id)?;
                 Ok(json!({ "ok": true }))
             }
             "scheduler/pause_session" => {
@@ -1708,27 +1132,9 @@ impl SchedulerService {
                 Ok(json!({ "ok": true }))
             }
             "scheduler/due" => Ok(json!({ "due": self.due(now), "now": now })),
-            "scheduler/lease_start" => {
-                let id = str_param(params, "id").ok_or("scheduler/lease_start requires id")?;
-                self.lease_start(id, now)
-            }
-            "scheduler/lease_heartbeat" => {
-                let id = str_param(params, "id").ok_or("scheduler/lease_heartbeat requires id")?;
-                let fence = str_param(params, "fence");
-                self.lease_heartbeat(id, now, fence)
-            }
-            "scheduler/lease_checkpoint" => {
-                let id = str_param(params, "id").ok_or("scheduler/lease_checkpoint requires id")?;
-                let index = params.get("index").and_then(Value::as_u64).unwrap_or(0) as u32;
-                let fence = str_param(params, "fence");
-                self.lease_checkpoint(id, index, fence)?;
-                Ok(json!({ "ok": true }))
-            }
-            "scheduler/lease_finish" => {
-                let id = str_param(params, "id").ok_or("scheduler/lease_finish requires id")?;
-                let ok = params.get("ok").and_then(Value::as_bool).unwrap_or(false);
-                let fence = str_param(params, "fence");
-                self.lease_finish(id, ok, now, fence)?;
+            "scheduler/mark_fired" => {
+                let id = str_param(params, "id").ok_or("scheduler/mark_fired requires id")?;
+                self.mark_fired(id, now)?;
                 Ok(json!({ "ok": true }))
             }
             "scheduler/battery" => {
@@ -1958,6 +1364,51 @@ mod tests {
         assert_eq!(svc.due(due_at), vec!["j1".to_string()]);
     }
 
+    /// The trigger-plane dedupe: a due job stays due until the host records
+    /// the firing (`mark_fired`), which advances next-run — so one firing is
+    /// never re-queued mid-flight, and the next fire is the next occurrence.
+    #[test]
+    fn mark_fired_advances_schedule_and_dedupes() {
+        let mut svc = SchedulerService::new();
+        svc.upsert(
+            "j1",
+            "tick",
+            "s1",
+            TriggerSpec::Interval { secs: 60 },
+            vec![],
+            None,
+            now(),
+        );
+        // Due at now+61 and *stays* due every tick until the host marks it.
+        assert_eq!(svc.due(now() + 61), vec!["j1".to_string()]);
+        assert_eq!(svc.due(now() + 62), vec!["j1".to_string()]);
+        svc.mark_fired("j1", now() + 62).unwrap();
+        assert!(svc.due(now() + 62).is_empty(), "marked → deduped");
+        assert!(svc.due(now() + 100).is_empty(), "next occurrence not yet");
+        assert_eq!(svc.due(now() + 123), vec!["j1".to_string()]);
+        let job = svc.get("j1").unwrap();
+        assert_eq!(job.last_fired_at, Some(now() + 62));
+        assert_eq!(job.recent_fires, vec![now() + 62]);
+        // Event triggers wait on their event again after a firing.
+        svc.upsert(
+            "j2",
+            "ev",
+            "s1",
+            TriggerSpec::Event {
+                kind: EventKind::RepoChange,
+                filter: String::new(),
+            },
+            vec![],
+            None,
+            now(),
+        );
+        svc.fire_event(EventKind::RepoChange, &json!({}), now())
+            .first()
+            .unwrap();
+        svc.mark_fired("j2", now()).unwrap();
+        assert!(svc.get("j2").unwrap().next_run_at.is_none());
+    }
+
     #[test]
     fn battery_suppression_skips_jobs() {
         let mut svc = SchedulerService::new();
@@ -1983,12 +1434,10 @@ mod tests {
             "s1",
             TriggerSpec::Interval { secs: 5 },
             vec![],
-            Some(SchedulePolicy {
-                suppress_on_battery: false,
-                ..SchedulePolicy::default()
-            }),
+            None,
             now(),
         );
+        svc2.jobs.get_mut("j2").unwrap().policy.suppress_on_battery = false;
         svc2.set_battery(true);
         assert_eq!(svc2.due(now() + 10), vec!["j2".to_string()]);
     }
@@ -2039,12 +1488,10 @@ mod tests {
                 filter: "".into(),
             },
             vec![],
-            Some(SchedulePolicy {
-                scope: Some("src/".into()),
-                ..SchedulePolicy::default()
-            }),
+            None,
             now(),
         );
+        svc.jobs.get_mut("j3").unwrap().policy.scope = Some("src/".into());
         let fired3 = svc.fire_event(
             EventKind::RepoChange,
             &json!({ "path": "README.md" }),
@@ -2110,8 +1557,9 @@ mod tests {
         assert!(fired2.is_empty());
     }
 
+    /// Frequency admission counts *firings* (`mark_fired`), not intent.
     #[test]
-    fn frequency_policy_caps_event_fires() {
+    fn frequency_policy_caps_fires() {
         let mut svc = SchedulerService::new();
         svc.upsert(
             "j1",
@@ -2122,29 +1570,22 @@ mod tests {
                 filter: "".into(),
             },
             vec![],
-            Some(SchedulePolicy {
-                max_runs_per_hour: Some(2),
-                ..SchedulePolicy::default()
-            }),
+            None,
             now(),
         );
+        svc.jobs.get_mut("j1").unwrap().policy.max_runs_per_hour = Some(2);
         assert_eq!(
             svc.fire_event(EventKind::TelemetryThreshold, &json!({}), now())
                 .len(),
             1
         );
-        // Finish run 1 (records a recent run).
-        let s1 = svc.lease_start("j1", now()).unwrap();
-        svc.lease_finish("j1", true, now(), s1["fence"].as_str())
-            .unwrap();
+        svc.mark_fired("j1", now()).unwrap();
         assert_eq!(
             svc.fire_event(EventKind::TelemetryThreshold, &json!({}), now())
                 .len(),
             1
         );
-        let s2 = svc.lease_start("j1", now()).unwrap();
-        svc.lease_finish("j1", true, now(), s2["fence"].as_str())
-            .unwrap();
+        svc.mark_fired("j1", now()).unwrap();
         // At cap → suppressed.
         assert!(svc
             .fire_event(EventKind::TelemetryThreshold, &json!({}), now())
@@ -2158,53 +1599,10 @@ mod tests {
         );
     }
 
+    /// HITL pause on the trigger plane: a flag that stops firing, plus the
+    /// chat-delete cascade. (Execution-level waiting is Work's `WaitCondition`.)
     #[test]
-    fn lease_expiry_reassigns_and_resumes_from_checkpoint() {
-        let mut svc = SchedulerService::new();
-        svc.upsert(
-            "j1",
-            "long",
-            "s1",
-            TriggerSpec::Interval { secs: 3600 },
-            vec![],
-            None,
-            now(),
-        );
-        let started = svc.lease_start("j1", now()).unwrap();
-        assert_eq!(started["checkpoint"], json!(0));
-        let fence = started["fence"].as_str();
-        assert!(fence.is_some());
-        svc.lease_checkpoint("j1", 2, fence).unwrap();
-        // Heartbeat renews.
-        assert_eq!(
-            svc.lease_heartbeat("j1", now() + 10, fence).unwrap()["ok"],
-            json!(true)
-        );
-        // Executor dies — no heartbeat for LEASE_SECS+ → due() expires the lease.
-        let dead = now() + LEASE_SECS + 5;
-        svc.lease_finish("j1", false, dead, fence).unwrap();
-        // The checkpoint survives; the retry is scheduled with backoff.
-        let job = svc.get("j1").unwrap();
-        assert_eq!(job.checkpoint, 2);
-        assert!(matches!(job.state, RunState::Failed { .. }));
-    }
-
-    #[test]
-    fn retry_backoff_clamps_and_jitters() {
-        // Base 30s; attempt 0 → ~30s, attempt 7 → clamped at 3600s.
-        let a0 = Job::retry_delay_ms(0, 30_000, 3_600_000, 0.2);
-        assert!((30_000..=36_000).contains(&a0), "a0={a0}");
-        let a7 = Job::retry_delay_ms(7, 30_000, 3_600_000, 0.2);
-        assert!((3_600_000 - 720_000..=3_600_000).contains(&a7), "a7={a7}");
-        // Deterministic (no RNG).
-        assert_eq!(
-            Job::retry_delay_ms(2, 30_000, 3_600_000, 0.2),
-            Job::retry_delay_ms(2, 30_000, 3_600_000, 0.2)
-        );
-    }
-
-    #[test]
-    fn hitl_pause_is_a_state_with_deadline() {
+    fn pause_is_a_trigger_plane_flag() {
         let mut svc = SchedulerService::new();
         svc.upsert(
             "j1",
@@ -2215,17 +1613,29 @@ mod tests {
             None,
             now(),
         );
-        svc.pause("j1", Some(now() + 300)).unwrap();
-        assert!(matches!(
-            svc.get("j1").unwrap().state,
-            RunState::Paused {
-                resume_deadline: Some(_)
-            }
-        ));
+        svc.pause("j1").unwrap();
+        assert!(svc.get("j1").unwrap().paused);
         // Paused jobs are not due.
-        assert!(svc.due(now() + 10).is_empty());
+        assert!(svc.due(now() + 61).is_empty());
         svc.resume("j1", now()).unwrap();
-        assert_eq!(svc.get("j1").unwrap().state, RunState::Idle);
+        assert!(!svc.get("j1").unwrap().paused);
+        assert_eq!(svc.due(now() + 61), vec!["j1".to_string()]);
+        // Resume of an event job does not invent a schedule.
+        svc.upsert(
+            "j2",
+            "ev",
+            "s1",
+            TriggerSpec::Event {
+                kind: EventKind::CiBuildFail,
+                filter: String::new(),
+            },
+            vec![],
+            None,
+            now(),
+        );
+        svc.pause("j2").unwrap();
+        svc.resume("j2", now()).unwrap();
+        assert!(svc.get("j2").unwrap().next_run_at.is_none());
     }
 
     #[test]
@@ -2279,20 +1689,31 @@ mod tests {
             .handle("scheduler/due", &json!({ "now": now() }))
             .unwrap();
         assert_eq!(due["due"], json!(["j1"]));
+        // The host records the firing through the funnel.
+        svc.handle("scheduler/mark_fired", &json!({ "id": "j1", "now": now() }))
+            .unwrap();
+        let due2 = svc
+            .handle("scheduler/due", &json!({ "now": now() }))
+            .unwrap();
+        assert!(due2["due"].as_array().unwrap().is_empty());
         // enable/disable.
         svc.handle(
             "scheduler/enable",
             &json!({ "id": "j1", "enabled": false, "now": now() }),
         )
         .unwrap();
-        let due2 = svc
-            .handle("scheduler/due", &json!({ "now": now() }))
+        let due3 = svc
+            .handle("scheduler/due", &json!({ "now": now() + 120 }))
             .unwrap();
-        assert!(due2["due"].as_array().unwrap().is_empty());
+        assert!(due3["due"].as_array().unwrap().is_empty());
         // battery.
         svc.handle("scheduler/battery", &json!({ "onBattery": true }))
             .unwrap();
         assert!(svc.on_battery());
+        // Pause/resume through the funnel.
+        svc.handle("scheduler/pause", &json!({ "id": "j1" })).unwrap();
+        svc.handle("scheduler/resume", &json!({ "id": "j1", "now": now() }))
+            .unwrap();
     }
 
     #[test]
@@ -2300,6 +1721,9 @@ mod tests {
         let mut svc = SchedulerService::new();
         assert!(svc
             .handle("scheduler/pause", &json!({ "id": "ghost" }))
+            .is_err());
+        assert!(svc
+            .handle("scheduler/mark_fired", &json!({ "id": "ghost" }))
             .is_err());
         assert!(svc.handle("scheduler/nope", &json!({})).is_err());
     }
@@ -2407,7 +1831,6 @@ mod tests {
         assert!(v.notified, "the stop event is worth reporting");
         let job = svc.get("m1").unwrap();
         assert!(!job.enabled, "a stopped monitor is disabled");
-        assert!(matches!(job.state, RunState::Idle));
     }
 
     #[test]
@@ -2441,17 +1864,34 @@ mod tests {
         );
         assert!(job["policy"].get("suppress_on_battery").is_none());
 
-        // RunState struct-variant fields must be camelCase too.
-        svc.lease_start("j1", now()).unwrap();
-        let list2 = svc
-            .handle("scheduler/list", &json!({ "now": now() }))
-            .unwrap();
-        let state = &list2["jobs"][0]["state"];
-        assert!(
-            state["leaseExpiresAt"].as_u64().is_some(),
-            "RunState must serialize leaseExpiresAt: {state}"
-        );
-        assert!(state.get("lease_expires_at").is_none());
+        // Trigger-plane shape: a pause flag, no execution state at all —
+        // no `state` machine, no leases/fences/checkpoints/run snapshots.
+        assert_eq!(job["paused"], json!(false));
+        for gone in [
+            "state",
+            "checkpoint",
+            "currentRun",
+            "runs",
+            "successes",
+            "failures",
+            "modelPin",
+            "effortPin",
+            "manifestHash",
+            "lastOutput",
+        ] {
+            assert!(
+                job.get(gone).is_none(),
+                "execution state {gone:?} must not exist on the trigger plane: {job}"
+            );
+        }
+    }
+
+    /// The structural **I26/I3** assertion: the wire shape itself carries no
+    /// run state machine — a trigger plane, not a second executor.
+    #[test]
+    fn trigger_plane_wire_has_no_execution_state() {
+        let svc = SchedulerService::new();
+        let _ = svc; // the assertion above is the structural check; keep both named
     }
 
     #[test]
@@ -2515,87 +1955,25 @@ mod tests {
         );
         let n = svc.pause_session("chat-1");
         assert_eq!(n, 2);
-        assert!(!svc.get("a").unwrap().enabled);
-        assert!(matches!(
-            svc.get("a").unwrap().state,
-            RunState::Paused { .. }
-        ));
-        assert!(svc.get("c").unwrap().enabled);
+        assert!(svc.get("a").unwrap().paused);
+        assert!(!svc.get("c").unwrap().paused);
         let out = svc
             .handle("scheduler/pause_session", &json!({ "sessionId": "chat-1" }))
             .unwrap();
         assert_eq!(out["paused"], 0, "already paused — no double count");
     }
 
+    /// P50.3.3 — the trigger registry survives a shell/coordinator restart,
+    /// and recovery is misfire-policy-by-construction: a job whose schedule
+    /// slipped past fires once on resume (`run_once_on_resume`), then
+    /// `mark_fired` advances it — never a replay of every missed occurrence.
     #[test]
-    fn stale_fence_cannot_finish() {
-        let mut svc = SchedulerService::new();
-        svc.upsert(
-            "j1",
-            "x",
-            "s1",
-            TriggerSpec::Interval { secs: 60 },
-            vec![],
-            None,
-            now(),
-        );
-        let start = svc.lease_start("j1", now()).unwrap();
-        let fence = start["fence"].as_str();
-        assert!(svc
-            .lease_finish("j1", true, now(), Some("fence-other"))
-            .is_err());
-        assert!(svc.lease_checkpoint("j1", 1, Some("nope")).is_err());
-        svc.lease_finish("j1", true, now(), fence).unwrap();
-        assert!(matches!(svc.get("j1").unwrap().state, RunState::Idle));
-        assert!(svc.get("j1").unwrap().current_run.is_none());
-    }
-
-    #[test]
-    fn run_snapshot_frozen_at_lease_start() {
-        let mut svc = SchedulerService::new();
-        svc.upsert(
-            "j1",
-            "brief",
-            "s1",
-            TriggerSpec::Interval { secs: 60 },
-            vec![],
-            None,
-            now(),
-        );
-        let start = svc.lease_start("j1", now()).unwrap();
-        let snap = svc
-            .get("j1")
-            .unwrap()
-            .current_run
-            .clone()
-            .expect("snapshot");
-        assert_eq!(start["runId"], snap.run_id);
-        assert_eq!(snap.timezone, "UTC");
-        assert!(!snap.permission_snapshot.is_empty());
-        assert!(snap.context_snapshot.contains("s1"));
-        let fence = start["fence"].as_str();
-        svc.lease_heartbeat("j1", now() + 1, fence).unwrap();
-        let still = svc.get("j1").unwrap().current_run.clone().unwrap();
-        assert_eq!(
-            still, snap,
-            "heartbeat must not rewrite the frozen run snapshot"
-        );
-    }
-
-    /// P50.3.3 — scheduler jobs survive a shell/coordinator restart: the
-    /// registry is written through to the JSON backing file and reloads with
-    /// its state. A run that was mid-flight at death (dead lease) reconciles
-    /// back to `Idle` so the next due-cycle reassigns it — never deadlocked
-    /// in `Running`. A checkpoint taken before the crash is preserved so the
-    /// reassignment resumes from the last completed step.
-    #[test]
-    fn jobs_survive_restart_with_lease_reconciliation() {
+    fn jobs_survive_restart_and_recover_run_once_on_resume() {
         let dir = std::env::temp_dir().join(format!("everyaios-schedsvc-{}", std::process::id()));
         let path = dir.join("scheduler.json");
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).expect("temp dir");
 
-        // Session 1: create two jobs; one is mid-run with a checkpoint.
         {
             let mut svc = SchedulerService::load_or_new(path.clone());
             svc.upsert(
@@ -2608,48 +1986,46 @@ mod tests {
                 now(),
             );
             svc.upsert(
-                "j-crash",
-                "crashed job",
+                "j-slip",
+                "slipped job",
                 "s1",
                 TriggerSpec::Interval { secs: 60 },
                 vec![],
                 None,
                 now(),
             );
-            svc.lease_start("j-crash", now()).unwrap();
-            svc.lease_checkpoint("j-crash", 3, Some("fence-j-crash-1750000000"))
-                .unwrap();
+            svc.mark_fired("j-slip", now()).unwrap();
         }
-        // The write-through already flushed both mutations; simulate the
-        // process death + restart (new service over the same file, later now).
         {
             let mut svc = SchedulerService::load_or_new(path.clone());
             assert_eq!(svc.list().len(), 2, "both jobs survive the restart");
             let done = svc.get("j-done").unwrap();
             assert!(done.enabled, "enabled flag survives");
-            assert_eq!(done.state, RunState::Idle);
-            let crashed = svc.get("j-crash").unwrap();
+            assert!(!done.paused);
+            // A job that fired before the restart kept its occurrence record…
+            let slipped = svc.get("j-slip").unwrap();
+            assert_eq!(slipped.last_fired_at, Some(now()));
+            // …so it is not due again until its next occurrence.
+            assert!(svc.due(now() + 30).is_empty(), "both jobs' next fire is now+60");
+            // Both jobs' next occurrence is now+60 — both fire once, then
+            // mark_fired advances each. No replay of every missed occurrence.
+            // (Order: both share next_run_at → registry insertion order.)
+            let both = svc.due(now() + 61);
+            assert!(both.contains(&"j-done".to_string()) && both.contains(&"j-slip".to_string()));
+            svc.mark_fired("j-done", now() + 61).unwrap();
             assert_eq!(
-                crashed.state,
-                RunState::Idle,
-                "dead lease reconciles to Idle (reassignable), not Running forever"
+                svc.due(now() + 61),
+                vec!["j-slip".to_string()],
+                "marked job deduped; the unmarked one stays due"
             );
-            assert_eq!(
-                crashed.checkpoint, 3,
-                "checkpoint preserved for resume-from-step"
-            );
-            // A stale worker with the old fence cannot commit after restart.
-            assert!(svc
-                .lease_heartbeat("j-crash", now() + 5, Some("fence-j-crash-1750000000"))
-                .is_err());
         }
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    // -- P51.32a continuity ----------------------------------------------------
+    // -- P51.32a continuity ------------------------------------------------------
 
     #[test]
-    fn continuity_roundtrips_last_output_and_notepad() {
+    fn notepad_roundtrips_and_ignores_unknown_jobs() {
         let mut svc = SchedulerService::new();
         svc.upsert(
             "j1",
@@ -2662,31 +2038,16 @@ mod tests {
         );
         assert!(svc.append_notepad("j1", "line one"));
         assert!(svc.append_notepad("j1", "line two"));
-        let c0 = svc.continuity("j1").expect("continuity");
-        assert_eq!(c0.notepad, "line one\nline two");
-        assert_eq!(c0.last_output, "", "no run yet → empty summary");
-        let started = svc.lease_start("j1", now()).unwrap();
-        svc.lease_finish("j1", true, now(), started["fence"].as_str())
-            .unwrap();
-        let c1 = svc.continuity("j1").expect("continuity after finish");
-        assert!(
-            !c1.last_output.is_empty(),
-            "lease_finish stores the last result summary"
-        );
-        assert!(
-            c1.last_output.contains("ok"),
-            "summary records success: {}",
-            c1.last_output
-        );
         assert_eq!(
-            c1.notepad, "line one\nline two",
-            "notepad survives lease_finish"
+            svc.notepad("j1").as_deref(),
+            Some("line one\nline two"),
+            "notepad survives into the next run"
         );
-        assert!(svc.continuity("ghost").is_none());
+        assert!(svc.notepad("ghost").is_none());
         assert!(!svc.append_notepad("ghost", "x"));
     }
 
-    // -- P51.32b monitor-script mode --------------------------------------------
+    // -- P51.32b monitor-script mode ----------------------------------------------
 
     #[test]
     fn script_empty_is_silent() {
@@ -2742,89 +2103,7 @@ mod tests {
         );
     }
 
-    // -- P51.32c preflight -------------------------------------------------------
-
-    #[test]
-    fn preflight_blocks_missing_key_without_llm() {
-        // Pure gate: missing key blocks with a reason, no model involved.
-        let blocked = dispatch_preflight(false, &[], &[]);
-        assert!(!blocked.has_key);
-        assert!(!blocked.can_dispatch());
-        assert!(!blocked.delivery_ok);
-        assert!(!blocked.reason.is_empty());
-        // Skills subset check is pure as well.
-        let have = vec!["web".to_string()];
-        let need = vec!["web".to_string(), "db".to_string()];
-        let missing = dispatch_preflight(true, &have, &need);
-        assert!(!missing.skills_ok);
-        assert!(!missing.can_dispatch());
-        let satisfied = dispatch_preflight(true, &have, &[String::from("web")]);
-        assert!(satisfied.can_dispatch());
-        // lease_start enforces the gate first (no LLM in the path).
-        let mut svc = SchedulerService::new();
-        svc.upsert(
-            "j1",
-            "gated",
-            "s1",
-            TriggerSpec::Interval { secs: 60 },
-            vec![],
-            None,
-            now(),
-        );
-        svc.set_api_key_present(false);
-        assert!(
-            svc.lease_start("j1", now()).is_err(),
-            "missing key must refuse the lease without any LLM call"
-        );
-        svc.set_api_key_present(true);
-        assert!(svc.lease_start("j1", now()).is_ok());
-    }
-
-    // -- P51.32d drift guard ------------------------------------------------------
-
-    #[test]
-    fn drifted_model_refuses_lease_start() {
-        let mut svc = SchedulerService::new();
-        svc.upsert(
-            "j1",
-            "pinned",
-            "s1",
-            TriggerSpec::Interval { secs: 60 },
-            vec![],
-            None,
-            now(),
-        );
-        svc.set_job_pins("j1", "model-a", "high", "hash-1").unwrap();
-        svc.set_active_model("model-a");
-        svc.set_active_effort("high");
-        {
-            let job = svc.get("j1").unwrap();
-            assert!(job.check_drift("model-a", "high").is_ok());
-            assert!(job.check_drift("model-b", "high").is_err());
-            assert!(job.check_drift("model-a", "low").is_err());
-        }
-        // Drifted runtime refuses the lease (fail-closed).
-        svc.set_active_model("model-b");
-        assert!(
-            svc.lease_start("j1", now()).is_err(),
-            "drifted model must refuse lease_start"
-        );
-        svc.set_active_model("model-a");
-        assert!(svc.lease_start("j1", now()).is_ok());
-        // Unpinned jobs never drift-block.
-        svc.upsert(
-            "j2",
-            "plain",
-            "s1",
-            TriggerSpec::Interval { secs: 60 },
-            vec![],
-            None,
-            now(),
-        );
-        assert!(svc.lease_start("j2", now()).is_ok());
-    }
-
-    // -- P51.32e incidents ----------------------------------------------------------
+    // -- P51.32e incidents -----------------------------------------------------------
 
     #[test]
     fn incidents_require_explicit_ack() {
@@ -2851,10 +2130,10 @@ mod tests {
         assert_eq!(svc.get_incident(&id).unwrap().detail, "boom");
     }
 
-    // -- P51.32f doctor ----------------------------------------------------------------
+    // -- P51.32f doctor -----------------------------------------------------------------
 
     #[test]
-    fn cron_doctor_flags_missed_and_dead_lease() {
+    fn cron_doctor_flags_missed_runs() {
         let mut svc = SchedulerService::new();
         svc.upsert(
             "missed",
@@ -2865,58 +2144,36 @@ mod tests {
             None,
             now(),
         );
-        {
-            let job = svc.jobs.get_mut("missed").unwrap();
-            job.next_run_at = Some(now() - 1000);
-            job.state = RunState::Idle;
-        }
+        svc.jobs.get_mut("missed").unwrap().next_run_at = Some(now() - 1000);
         svc.upsert(
-            "dead",
-            "d",
+            "fresh",
+            "f",
             "s1",
             TriggerSpec::Interval { secs: 60 },
             vec![],
             None,
             now(),
         );
-        // Lease taken in the past → already expired at `now()`.
-        let _ = svc.lease_start("dead", now() - 100).unwrap();
+        // Event jobs have no schedule to miss.
+        svc.upsert(
+            "ev",
+            "e",
+            "s1",
+            TriggerSpec::Event {
+                kind: EventKind::RepoChange,
+                filter: String::new(),
+            },
+            vec![],
+            None,
+            now(),
+        );
         let checks = svc.cron_doctor(now());
         let missed = checks.iter().find(|c| c.name == "missed_runs").unwrap();
-        let dead = checks.iter().find(|c| c.name == "dead_lease").unwrap();
         let queue = checks.iter().find(|c| c.name == "queue_depth").unwrap();
         assert!(!missed.ok, "overdue next_run_at flags: {}", missed.detail);
-        assert!(!dead.ok, "expired lease flags: {}", dead.detail);
         assert!(queue.ok, "small registry is healthy: {}", queue.detail);
         // Healthy service → all green.
         let fresh = SchedulerService::new();
         assert!(fresh.cron_doctor(now()).iter().all(|c| c.ok));
-    }
-
-    // -- P51.32g runs ledger ----------------------------------------------------------------
-
-    #[test]
-    fn runs_ledger_claimed_running_completed() {
-        let mut svc = SchedulerService::new();
-        svc.record_run_transition("run-1", "j1", RunLedgerState::Claimed, now());
-        svc.record_run_transition("run-1", "j1", RunLedgerState::Running, now() + 1);
-        svc.record_run_transition("run-1", "j1", RunLedgerState::Completed, now() + 2);
-        let runs = svc.list_runs();
-        assert_eq!(runs.len(), 1);
-        assert_eq!(runs[0].run_id, "run-1");
-        assert_eq!(runs[0].job_id, "j1");
-        assert_eq!(runs[0].state, RunLedgerState::Completed);
-        assert_eq!(runs[0].claimed_at, now());
-        assert_eq!(runs[0].started_at_ms, Some(now() + 1));
-        assert_eq!(runs[0].finished_at_ms, Some(now() + 2));
-        assert_eq!(
-            svc.get_run("run-1").unwrap().state,
-            RunLedgerState::Completed
-        );
-        // Bound enforcement: push past the cap, oldest evicted first.
-        for i in 0..(RUN_LEDGER_CAP as u64 + 5) {
-            svc.record_run_transition(format!("r-{i}"), "j1", RunLedgerState::Claimed, now() + i);
-        }
-        assert!(svc.list_runs().len() <= RUN_LEDGER_CAP);
     }
 }

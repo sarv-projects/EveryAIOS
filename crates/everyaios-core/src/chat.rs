@@ -322,48 +322,10 @@ pub enum ChatWireEvent {
     },
 }
 
-/// Parameters for one chat turn (mirrors the coordinator's `chat/stream`).
-#[derive(Debug, Clone)]
-pub struct ChatStreamParams {
-    pub session_id: String,
-    /// Durable Work grouping key. Defaults to the session at the Tauri boundary.
-    pub work_id: Option<String>,
-    pub stream_id: String,
-    pub text: String,
-    pub surface: Option<String>,
-    pub agent_id: Option<String>,
-    /// P1.9 (A6/A7): `None` lets the coordinator's task→model router pick;
-    /// `Some` is the explicit user/model lock (wins over routing).
-    pub provider: Option<String>,
-    pub model: Option<String>,
-    pub persona_id: Option<String>,
-    pub soul_md: Option<String>,
-    /// P4.7 — documents to inject below the cache boundary (J6
-    /// `<user_document>` wrapping); the chat-overlay scopes a turn to an
-    /// open document by passing its extracted text here.
-    pub user_documents: Option<Vec<UserDocument>>,
-    /// P5/P6 project scope carried into the coordinator prompt/policy context.
-    pub project_id: Option<String>,
-    /// P38 — the session's effective Chief (pin → user default → inbuilt),
-    /// forwarded to the coordinator's single dispatch guard. The UI resolves
-    /// it; external Chiefs are refused by the coordinator (see
-    /// `dispatchByChief` in `packages/coordinator/src/chat.ts`).
-    pub primary_chief: Option<String>,
-    /// P50.3.6 — the shell's live vault key set (provider ids with keys),
-    /// forwarded so the coordinator gates the *taken* route on the same set
-    /// the display feed used. `None` ⇒ ungated (legacy/test callers); an
-    /// empty vec gates every keyed provider out (fail-closed).
-    pub credentialed_providers: Option<Vec<String>>,
-}
-
-/// P4.7 — a user-attached document for `<user_document>` wrapping (J6).
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct UserDocument {
-    pub title: String,
-    pub content: String,
-}
-
+/// Relay errors. P71.2c removed `SidecarRejected` and `AgentNotReady` with the
+/// built-in dispatch they belonged to: a relay call is now always served
+/// in-process, and the readiness refusal is a plain refusal at the ACP turn
+/// boundary (`src-tauri`'s `acp_prompt`), which is where the state is known.
 #[derive(Debug, thiserror::Error)]
 pub enum ChatRelayError {
     #[error("link error: {0}")]
@@ -377,8 +339,6 @@ pub enum ChatRelayError {
         limit: f64,
         spent: f64,
     },
-    #[error("sidecar rejected chat/stream: {0}")]
-    SidecarRejected(String),
 }
 
 /// The relay: owns the link + vault + UI callback + stream→session map.
@@ -387,21 +347,6 @@ pub struct ChatRelay<W, R> {
     vault: Arc<Mutex<Vault>>,
     /// stream_id → session_id (for post-turn budget checks).
     sessions: Arc<Mutex<HashMap<String, String>>>,
-    /// Provider base-url overrides (from config; also used by tests).
-    base_urls: Arc<Mutex<HashMap<String, String>>>,
-    /// P55.5 — resolved per-provider endpoints (base URL + wire dialect +
-    /// headers, incl. the OpenCode per-conversation session headers) built by
-    /// the shell from the live models.dev catalog + user-config profiles.
-    /// This is what makes "every models.dev provider" work on a chat turn
-    /// instead of only the handful of hardcoded defaults.
-    endpoints: Arc<Mutex<HashMap<String, everyaios_vault::ProviderEndpoint>>>,
-    /// P55.6 — the durable user-config profile store (`providers.json`), the
-    /// non-secret half of a custom provider (the key stays in the vault).
-    profiles: Arc<Mutex<Option<everyaios_catalog::ProfileStore>>>,
-    /// P1.8 (A5): keyless local endpoints (ollama / llamafile). When the
-    /// sidecar requests one of these providers the broker routes to the
-    /// local runtime — no key ring, GBNF grammar passthrough (B5).
-    local_endpoints: Arc<Mutex<LocalEndpointMap>>,
     /// P5.1/P5.3/P5.4/P5.9: the in-process memory dispatch (facts, planner,
     /// ghost index, usage ledger) the sidecar calls via `memory/*` methods.
     memory: Arc<Mutex<MemoryService>>,
@@ -426,6 +371,10 @@ pub struct ChatRelay<W, R> {
     /// child Work in `work_gateway` (I8), so this is the judgement alone: an
     /// immutable value, not shared accounting state.
     delegation: everyaios_blueprint::DelegationPolicy,
+    /// P71.3f — the shell-mounted readiness source. The picker, the delegation
+    /// gate and the turn gate all read this one state; unmounted ⇒ `Unknown`,
+    /// which is never ready (fail-closed).
+    readiness: crate::tools::SharedAgentReadiness,
     /// P64.8 — the distilled-skill store `skill/*` serves. A field rather than
     /// a store built per call so tests can re-seat it (the default home is the
     /// developer's real `~/.everyaios/skills/`), matching `scheduler`.
@@ -572,6 +521,7 @@ fn subagent_rpc(
     params: &serde_json::Value,
     policy: &everyaios_blueprint::DelegationPolicy,
     gateway: &Arc<Mutex<crate::work_gateway::WorkGateway>>,
+    readiness: everyaios_types::AgentReadiness,
 ) -> Result<serde_json::Value, String> {
     match method {
         "subagent/spawn" => {
@@ -674,7 +624,13 @@ fn subagent_rpc(
                     "policy_only",
                 ),
             };
-            policy.admit(&task_id, gauge).map_err(|e| e.to_string())?;
+            let member_agent_id = params
+                .get("agentId")
+                .and_then(|v| v.as_str())
+                .unwrap_or(harness);
+            policy
+                .admit(&task_id, gauge, member_agent_id, readiness)
+                .map_err(|e| e.to_string())?;
             // P64.4 — the child's grant set: denies inherited, `delegate` never
             // re-granted, `todo`/`task` default-deny unless this spec lists
             // them. The parent-grant side is the AgentBridge credential's to
@@ -778,7 +734,11 @@ fn subagent_rpc(
                 gw.finish_child_work(
                     &parent_work_id,
                     &task_id,
-                    if failed { "failed" } else { "completed" },
+                    if failed {
+                        everyaios_types::WorkState::Failed
+                    } else {
+                        everyaios_types::WorkState::Completed
+                    },
                     params.get("reason").and_then(|v| v.as_str()),
                 )?;
             }
@@ -813,6 +773,23 @@ fn subagent_rpc(
 struct DelegationBridge {
     policy: everyaios_blueprint::DelegationPolicy,
     gateway: Arc<Mutex<crate::work_gateway::WorkGateway>>,
+    /// P71.3f — the shell-mounted readiness facts. The spawn gate reads the
+    /// member's state here rather than trusting a boolean on the wire.
+    readiness: crate::tools::SharedAgentReadiness,
+}
+
+/// P71.3f — the readiness that gates a spawned member: an external agent's
+/// state is read from the mounted source, and an unmounted source is `Unknown`
+/// (not admitted).
+///
+/// ADR-0005: nothing ships with the app, so there is no built-in member that
+/// is `Ready` by construction — an unnamed agent reads as `Unknown` and the
+/// policy refuses it by name instead of silently substituting an engine.
+fn member_readiness(
+    source: &crate::tools::SharedAgentReadiness,
+    agent_id: &str,
+) -> everyaios_types::AgentReadiness {
+    crate::tools::read_agent_readiness(source, agent_id)
 }
 
 impl crate::tools::DelegationToolBackend for DelegationBridge {
@@ -833,7 +810,23 @@ impl crate::tools::DelegationToolBackend for DelegationBridge {
                     .to_string(),
             );
         }
-        subagent_rpc("subagent/spawn", params, &self.policy, &self.gateway)
+        // P71.3f — the member's readiness is read from the mounted source; an
+        // unprobed or unnamed agent is `Unknown` and `DelegationPolicy::admit`
+        // refuses it by name. No harness is assumed: an unnamed spawn must
+        // never fall back to a built-in identity (ADR-0005).
+        let agent_id = params
+            .get("agentId")
+            .and_then(|v| v.as_str())
+            .or_else(|| params.get("harness").and_then(|v| v.as_str()))
+            .unwrap_or("");
+        let readiness = member_readiness(&self.readiness, agent_id);
+        subagent_rpc(
+            "subagent/spawn",
+            params,
+            &self.policy,
+            &self.gateway,
+            readiness,
+        )
     }
 
     fn status(&self, params: &serde_json::Value) -> Result<serde_json::Value, String> {
@@ -898,7 +891,12 @@ impl crate::tools::DelegationToolBackend for DelegationBridge {
         // child is idempotent.
         let child = {
             let mut gw = self.gateway.lock().unwrap_or_else(|e| e.into_inner());
-            gw.finish_child_work(&parent, &task, "cancelled", Some(reason))?
+            gw.finish_child_work(
+                &parent,
+                &task,
+                everyaios_types::WorkState::Cancelled,
+                Some(reason),
+            )?
         };
         let released = {
             let gw = self.gateway.lock().unwrap_or_else(|e| e.into_inner());
@@ -1110,19 +1108,21 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
             crate::work_gateway::WorkGateway::open_default()
                 .unwrap_or_else(|_| crate::work_gateway::WorkGateway::new()),
         ));
+        // P71.3f — one readiness handle shared by the delegation seam and the
+        // relay's own gates. The shell mounts the facts (`mount_readiness`);
+        // until then every read is `Unknown` and nothing is admitted.
+        let readiness: crate::tools::SharedAgentReadiness =
+            Arc::new(Mutex::new(None));
         tool_service.attach_delegation(Arc::new(DelegationBridge {
             policy: delegation,
             gateway: Arc::clone(&work_gateway),
+            readiness: Arc::clone(&readiness),
         }));
         let tools = Arc::new(Mutex::new(tool_service));
         Self {
             link,
             vault,
             sessions: Arc::new(Mutex::new(HashMap::new())),
-            base_urls: Arc::new(Mutex::new(HashMap::new())),
-            endpoints: Arc::new(Mutex::new(HashMap::new())),
-            profiles: Arc::new(Mutex::new(None)),
-            local_endpoints: Arc::new(Mutex::new(HashMap::new())),
             memory: Arc::new(Mutex::new(load_persistent_memory())),
             guard,
             plan: Arc::new(Mutex::new(PlanService::new())),
@@ -1133,6 +1133,7 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
             evals: Arc::new(Mutex::new(EvalService::new())),
             executions: Arc::new(Mutex::new(ExecutionKernel::new())),
             delegation,
+            readiness,
             skill_store: Arc::new(Mutex::new(everyaios_blueprint::SkillStore::new(
                 skills_root(),
             ))),
@@ -1272,29 +1273,6 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
         self
     }
 
-    /// Register a keyless local endpoint (P1.8/A5). The src-tauri shell uses
-    /// [`crate::LocalManager`] for discovery (ollama always, llamafile only
-    /// when a binary exists) before calling this.
-    pub fn with_local(&self, provider: &str, endpoint: LocalEndpoint) -> &Self {
-        self.grant_egress_url(&endpoint.base_url);
-        self.local_endpoints
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .insert(provider.to_string(), endpoint);
-        self
-    }
-
-    /// Override a provider base URL (config / tests).
-    pub fn with_base_url(&self, provider: &str, url: impl Into<String>) -> &Self {
-        let url = url.into();
-        self.grant_egress_url(&url);
-        self.base_urls
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .insert(provider.to_string(), url);
-        self
-    }
-
     /// **P62.4** — a user-chosen endpoint is an authorized destination, so
     /// grant its host through the network floor.
     ///
@@ -1311,56 +1289,6 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
         if let Ok(mut e) = self.egress.lock() {
             e.grant_url(url);
         }
-    }
-
-    /// **P55.5** — register a resolved provider endpoint (base URL + wire
-    /// dialect + headers). The shell builds these from the live models.dev
-    /// catalog and the user-config profiles at boot; every chat turn then
-    /// routes to the provider's real endpoint instead of a hardcoded subset.
-    pub fn with_endpoint(
-        &self,
-        provider: &str,
-        endpoint: everyaios_vault::ProviderEndpoint,
-    ) -> &Self {
-        self.grant_egress_url(&endpoint.base_url);
-        self.endpoints
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .insert(provider.to_string(), endpoint);
-        self
-    }
-
-    /// **P63** — retire a provider endpoint when it stops being connected (its
-    /// last vault key was removed, or its profile was deleted). Without this
-    /// the resolved-endpoint map is append-only for the life of the process,
-    /// so the next turn could still dial a provider the user just disconnected.
-    ///
-    /// The egress grant for the old `base_url` is intentionally **not** revoked:
-    /// grants are an additive, user-authorized destination set, and the agent
-    /// tool path is unaffected because it floors destinations on its own
-    /// (`urlfloor`), never through this relay map.
-    pub fn remove_endpoint(&self, provider: &str) -> bool {
-        self.endpoints
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .remove(provider)
-            .is_some()
-    }
-
-    /// **P55.6** — attach the durable provider-profile store. The relay reads
-    /// it when resolving endpoints, so a base URL entered in Settings is
-    /// actually used by the next turn (it used to be discarded).
-    pub fn with_profiles(&self, store: everyaios_catalog::ProfileStore) -> &Self {
-        *self.profiles.lock().unwrap_or_else(|e| e.into_inner()) = Some(store);
-        self
-    }
-
-    /// The attached profile store, if any.
-    pub fn profiles(&self) -> Option<everyaios_catalog::ProfileStore> {
-        self.profiles
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .clone()
     }
 
     /// The sidecar link (cancel path + tests).
@@ -1395,18 +1323,23 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
             .notify("agui/event", serde_json::json!({ "line": line }))
     }
 
-    /// Start the long-lived consumer loop (call ONCE per link). Handles
-    /// `provider/stream` requests (broker in Rust) and forwards `chat/*`
-    /// notifications to `on_event`, including the post-turn budget kill.
+    /// Start the long-lived consumer loop (call ONCE per link). Serves the
+    /// in-process services the coordinator drives (`memory/*`, `guard/*`,
+    /// `tool/*`, `subagent/*`, `skill/*`, `usage/recent`, `agent/readiness`, …)
+    /// and forwards `chat/*` notifications to `on_event`, including the
+    /// post-turn budget kill.
+    ///
+    /// P71.2c — it no longer brokers **provider inference**: `provider/stream`
+    /// and every endpoint/profile map that fed it were deleted with the
+    /// built-in engine. A turn now runs on the bound external agent's own
+    /// channel (`acp_prompt`), which owns its provider, model and credentials
+    /// (ADR-0005 §2, `ARCH/ROUTING.md` §1).
     pub fn spawn(&self) {
         let vault = Arc::clone(&self.vault);
         let receiver = self.link.receiver();
         let writer = self.link.writer();
         let sessions = Arc::clone(&self.sessions);
         let on_event = Arc::clone(&self.on_event);
-        let base_urls = Arc::clone(&self.base_urls);
-        let endpoints = Arc::clone(&self.endpoints);
-        let local_endpoints = Arc::clone(&self.local_endpoints);
         let memory = Arc::clone(&self.memory);
         let guard = Arc::clone(&self.guard);
         let plan = Arc::clone(&self.plan);
@@ -1421,6 +1354,7 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
         let capabilities = Arc::clone(&self.capabilities);
         let egress = Arc::clone(&self.egress);
         let tasks = Arc::clone(&self.tasks);
+        let readiness = Arc::clone(&self.readiness);
         let agui = self.agui.clone();
 
         std::thread::spawn(move || loop {
@@ -1430,28 +1364,6 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
             };
             match inbound {
                 Inbound::Request { id, method, params } => match method.as_str() {
-                    "provider/stream" => {
-                        // Ack immediately, then run the broker on its own
-                        // thread (never block the reader/consumer loop).
-                        let _ = writer.reply(id, serde_json::json!({ "accepted": true }));
-                        let w2 = writer.clone();
-                        let vault2 = Arc::clone(&vault);
-                        let base2 = Arc::clone(&base_urls);
-                        let ep2 = Arc::clone(&endpoints);
-                        let local2 = Arc::clone(&local_endpoints);
-                        let capabilities2 = Arc::clone(&capabilities);
-                        std::thread::spawn(move || {
-                            let _ = stream_provider(
-                                vault2,
-                                base2,
-                                ep2,
-                                local2,
-                                capabilities2,
-                                params,
-                                w2,
-                            );
-                        });
-                    }
                     // ARCH/05 durable-observation seam: the coordinator
                     // hydrates its RouteDecision ring at boot from the vault's
                     // `token_usage` ledger (provider/model/cost per completed
@@ -1472,6 +1384,30 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
                                 let _ = writer.reply_error(id, &e.to_string());
                             }
                         }
+                    }
+                    // P71.3f — one readiness read for every caller: the picker
+                    // façade, the trigger plane's doctor and the sidecar's own
+                    // gates all ask this. Served from the shell's mounted
+                    // source; unmounted ⇒ `unknown`, never a guessed `ready`.
+                    "agent/readiness" => {
+                        let agent_id = params
+                            .get("agentId")
+                            .and_then(serde_json::Value::as_str)
+                            .unwrap_or("");
+                        let state = crate::tools::read_agent_readiness(&readiness, agent_id);
+                        let _ = writer.reply(
+                            id,
+                            serde_json::json!({
+                                "agentId": agent_id,
+                                "readiness": state.as_str(),
+                                "ready": state.is_ready(),
+                                "installed": state.is_installed(),
+                                "launchable": state.is_launchable(),
+                                "needsAuth": state.needs_auth(),
+                                "canDelegate": state.can_delegate(),
+                                "reason": state.summary(),
+                            }),
+                        );
                     }
                     // P5.1/P5.3/P5.4/P5.9: memory + usage dispatch. Runs on
                     // the consumer loop (fast, deterministic, no I/O) so the
@@ -1604,60 +1540,62 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
                             }
                         }
                     }
-                    // P6.4 (B7): scheduled-task dispatch. The coordinator
-                    // ticks `scheduler/due`, starts/finishes leases, fires
-                    // events + webhooks; Rust owns the job state.
+                    // P6.4 (B7) / P71.3d — scheduled-task dispatch over the
+                    // **trigger plane**. The coordinator ticks
+                    // `scheduler/due`, records firings (`mark_fired`) and
+                    // fires events + webhooks; Rust owns the trigger registry
+                    // only. Execution is the Work kernel's business (the run
+                    // lifecycle mirrors below keep their ExecutionLedger
+                    // presence via `scheduler/due` + `scheduler/mark_fired`).
                     method if method.starts_with("scheduler/") => {
                         let mut svc = scheduler.lock().unwrap_or_else(|e| e.into_inner());
                         match svc.handle(method, &params) {
                             Ok(out) => {
-                                if method == "scheduler/lease_start" {
-                                    if let Some(jid) = params.get("id").and_then(|v| v.as_str()) {
-                                        let run_id = out
-                                            .get("runId")
-                                            .and_then(|v| v.as_str())
-                                            .unwrap_or(jid)
-                                            .to_string();
-                                        let mut k =
-                                            executions.lock().unwrap_or_else(|e| e.into_inner());
-                                        let ex = k.begin_named(
-                                            run_id,
-                                            crate::execution::ExecutionTrigger::Scheduler,
-                                            jid,
-                                            jid,
-                                            None,
-                                            String::new(),
-                                            format!(r#"{{"jobId":"{jid}"}}"#),
-                                            vec![],
-                                        );
-                                        k.alias(&format!("job:{jid}"), &ex.id);
-                                        let _ = k.transition(
-                                            &ex.id,
-                                            crate::execution::ExecutionPhase::Running,
-                                        );
+                                // A trigger firing becomes an ExecutionLedger
+                                // run (alias `job:<id>`) when the host starts
+                                // executing it; `mark_fired` closes it.
+                                if method == "scheduler/due" {
+                                    if let Some(jobs) = out.get("due").and_then(|v| v.as_array()) {
+                                        for jid in jobs.iter().filter_map(|v| v.as_str()) {
+                                            let mut k = executions
+                                                .lock()
+                                                .unwrap_or_else(|e| e.into_inner());
+                                            if k.by_alias(&format!("job:{jid}")).is_some() {
+                                                continue; // already in flight
+                                            }
+                                            let ex = k.begin_named(
+                                                format!("sched-{jid}"),
+                                                crate::execution::ExecutionTrigger::Scheduler,
+                                                jid,
+                                                jid,
+                                                None,
+                                                String::new(),
+                                                format!(r#"{{"jobId":"{jid}"}}"#),
+                                                vec![],
+                                            );
+                                            k.alias(&format!("job:{jid}"), &ex.id);
+                                            let _ = k.transition(
+                                                &ex.id,
+                                                crate::execution::ExecutionPhase::Running,
+                                            );
+                                        }
                                     }
                                 }
-                                if method == "scheduler/lease_finish" {
+                                if method == "scheduler/mark_fired" {
                                     if let Some(jid) = params.get("id").and_then(|v| v.as_str()) {
-                                        let ok = params
-                                            .get("ok")
-                                            .and_then(|v| v.as_bool())
-                                            .unwrap_or(false);
                                         let mut k =
                                             executions.lock().unwrap_or_else(|e| e.into_inner());
                                         if let Some(eid) =
                                             k.by_alias(&format!("job:{jid}")).map(|e| e.id.clone())
                                         {
-                                            let next = if ok {
-                                                crate::execution::ExecutionPhase::Completed
-                                            } else {
-                                                crate::execution::ExecutionPhase::Failed
-                                            };
                                             let _ = k.transition(
                                                 &eid,
                                                 crate::execution::ExecutionPhase::Verifying,
                                             );
-                                            let _ = k.transition(&eid, next);
+                                            let _ = k.transition(
+                                                &eid,
+                                                crate::execution::ExecutionPhase::Completed,
+                                            );
                                         }
                                     }
                                 }
@@ -1811,15 +1749,56 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
                                 }
                             }
                             if method == "execution/transition" {
+                                // P71.3g — the wire state is the canonical
+                                // `WorkState` spelling; an unknown spelling is
+                                // refused (never silently coerced into a made-up
+                                // state), and a supplied wait condition parks the
+                                // run with its reason attached.
                                 if let (Some(work_id), Some(execution_id), Some(state)) = (
                                     params.get("workId").and_then(|v| v.as_str()),
                                     params.get("id").and_then(|v| v.as_str()),
                                     params.get("state").and_then(|v| v.as_str()),
                                 ) {
-                                    let _ = work_gateway
-                                        .lock()
-                                        .unwrap_or_else(|e| e.into_inner())
-                                        .record_execution_transition(work_id, execution_id, state);
+                                    match everyaios_types::WorkState::try_parse(state) {
+                                        Some(parsed) => {
+                                            let mut gw = work_gateway
+                                                .lock()
+                                                .unwrap_or_else(|e| e.into_inner());
+                                            let wait = params
+                                                .get("wait")
+                                                .filter(|v| !v.is_null())
+                                                .and_then(|v| {
+                                                    serde_json::from_value::<everyaios_types::WaitCondition>(
+                                                        v.clone(),
+                                                    )
+                                                    .ok()
+                                                });
+                                            let outcome = match wait {
+                                                Some(condition) => gw.record_wait(
+                                                    work_id,
+                                                    execution_id,
+                                                    &condition,
+                                                ),
+                                                None => gw.record_execution_transition(
+                                                    work_id,
+                                                    execution_id,
+                                                    parsed,
+                                                ),
+                                            };
+                                            if let Err(e) = outcome {
+                                                let _ = writer.reply_error(id.clone(), &e);
+                                            }
+                                        }
+                                        None => {
+                                            let _ = writer.reply_error(
+                                                id.clone(),
+                                                &format!(
+                                                    "execution/transition: unknown state {state:?} \
+                                                     (expected a canonical WorkState spelling)"
+                                                ),
+                                            );
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -1976,7 +1955,17 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
                     // which made `dispatchSubAgent` throw "native runtime not
                     // wired" on every delegation.
                     method if method.starts_with("subagent/") => {
-                        match subagent_rpc(method, &params, &delegation, &work_gateway) {
+                        // P71.3f — the readiness gate reads the same mounted
+                        // source the delegation seam and the turn gate use. An
+                        // unnamed member is `Unknown`, never a built-in
+                        // fallback (ADR-0005).
+                        let agent_id = params
+                            .get("agentId")
+                            .and_then(serde_json::Value::as_str)
+                            .or_else(|| params.get("harness").and_then(serde_json::Value::as_str))
+                            .unwrap_or("");
+                        let member = member_readiness(&readiness, agent_id);
+                        match subagent_rpc(method, &params, &delegation, &work_gateway, member) {
                             Ok(out) => {
                                 let _ = writer.reply(id, out);
                             }
@@ -2461,222 +2450,21 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
         });
     }
 
-    /// Start one chat turn: J11 budget pre-flight, then dispatch `chat/stream`
-    /// to the coordinator (which runs the ConversationEngine). Returns once the
-    /// sidecar acknowledges; the stream itself arrives via `on_event`.
-    pub fn start_stream(&self, params: ChatStreamParams) -> Result<(), ChatRelayError> {
-        // J11 pre-flight: refuse before ANY dispatch when the session is at or
-        // over its hard $ budget (the ledger is the durable spend record).
-        // Do this before registering the stream so a refused request cannot
-        // leave a stale stream→session entry behind.
-        let spent = self
-            .vault
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .session_spend(&params.session_id)?;
-        if spent >= DEFAULT_SESSION_BUDGET_USD {
-            return Err(ChatRelayError::BudgetExceeded {
-                session: params.session_id.clone(),
-                limit: DEFAULT_SESSION_BUDGET_USD,
-                spent,
-            });
-        }
-
-        // Register immediately before dispatch. The sidecar may acknowledge
-        // and emit the first notification in the same frame burst, so this
-        // must happen before `request()`.
-        self.sessions
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .insert(params.stream_id.clone(), params.session_id.clone());
-
-        let ack = self.link.request(
-            "chat/stream",
-            serde_json::json!({
-                "sessionId": params.session_id,
-                "workId": params.work_id.unwrap_or_else(|| params.session_id.clone()),
-                "streamId": params.stream_id,
-                "text": params.text,
-                "surface": params.surface,
-                "agentId": params.agent_id,
-                "provider": params.provider,
-                "model": params.model,
-                "personaId": params.persona_id,
-                "soulMd": params.soul_md,
-                "userDocuments": params.user_documents,
-                "projectId": params.project_id,
-                "primaryChief": params.primary_chief,
-                "credentialedProviders": params.credentialed_providers,
-            }),
-        );
-        let ack = match ack {
-            Ok(value) => value,
-            Err(error) => {
-                self.sessions
-                    .lock()
-                    .unwrap_or_else(|e| e.into_inner())
-                    .remove(&params.stream_id);
-                return Err(error.into());
-            }
-        };
-        if !ack
-            .get("accepted")
-            .and_then(|a| a.as_bool())
-            .unwrap_or(false)
-        {
-            self.sessions
-                .lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .remove(&params.stream_id);
-            return Err(ChatRelayError::SidecarRejected(ack.to_string()));
-        }
-
-        Ok(())
-    }
-
-    /// S0.5: re-run a failed tool through the same guarded exec→commit path.
-    ///
-    /// P49: `work_id` is the real Work the retry belongs to. The coordinator
-    /// registers stream identity from `workId` (`registerStreamIdentity`), so
-    /// passing the session id here would file the retry under a fabricated
-    /// Work. Falls back to `session_id` only when the caller has no Work —
-    /// the same convention as `chat/stream` (see `params.work_id
-    /// .unwrap_or_else(|| params.session_id.clone())`).
-    pub fn retry_tool(
+    /// P71.3f — mount the one readiness source (the shell owns the runtime
+    /// facts). Until this is called, every read is `AgentReadiness::Unknown`
+    /// and the delegation/turn gates refuse external agents by name.
+    pub fn mount_readiness(
         &self,
-        session_id: &str,
-        stream_id: &str,
-        tool_id: &str,
-        args: serde_json::Value,
-        agent_id: Option<&str>,
-        work_id: Option<&str>,
-    ) -> Result<(), ChatRelayError> {
-        let mut body = serde_json::json!({
-            "sessionId": session_id,
-            "streamId": stream_id,
-            "toolId": tool_id,
-            "args": args,
-            "workId": work_id.unwrap_or(session_id),
-        });
-        if let Some(a) = agent_id {
-            body["agentId"] = serde_json::Value::String(a.to_string());
-        }
-        let ack = self.link.request("chat/tool_retry", body)?;
-        if !ack
-            .get("accepted")
-            .and_then(|a| a.as_bool())
-            .unwrap_or(false)
-        {
-            return Err(ChatRelayError::SidecarRejected(ack.to_string()));
-        }
-        Ok(())
+        source: Arc<dyn crate::tools::AgentReadinessSource>,
+    ) -> &Self {
+        *self.readiness.lock().unwrap_or_else(|e| e.into_inner()) = Some(source);
+        self
     }
 
-    /// Cancel a running stream (abort UI → Rust → sidecar → provider).
-    pub fn cancel(&self, stream_id: &str) -> Result<(), ChatRelayError> {
-        self.link
-            .writer()
-            .notify("chat/cancel", serde_json::json!({ "streamId": stream_id }))?;
-        Ok(())
-    }
-
-    /// Cancel every in-flight stream bound to `session_id` (unix `agent/stop`).
-    pub fn cancel_session(&self, session_id: &str) -> Result<Vec<String>, ChatRelayError> {
-        let ids: Vec<String> = self
-            .sessions
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .iter()
-            .filter(|(_, s)| s.as_str() == session_id)
-            .map(|(id, _)| id.clone())
-            .collect();
-        for id in &ids {
-            self.cancel(id)?;
-        }
-        Ok(ids)
-    }
-
-    /// Stage-0 (P6.3): dispatch a blueprint plan to the coordinator's plan
-    /// executor. The coordinator begins the plan breaker via `plan/begin`,
-    /// steps it per LLM turn/tool call, and emits `chat/interrupt` on a trip
-    /// and `chat/plan_done` at the end. Returns once the coordinator acks.
-    /// `work_id` is the canonical Work this plan belongs to. The coordinator
-    /// registers plan stream identity from `workId` (its `PlanExecutionParams`
-    /// has carried the field since P49), so omitting it here would file the
-    /// plan's lifecycle events under a fabricated Work. Falls back to
-    /// `session_id` — the same convention as `chat/stream`.
-    // Eight parameters is the honest shape of this directive (identity, plan
-    // identity, stream identity, the task tree, optional provider/model, and
-    // the Work it belongs to); bundling them into a struct would only move the
-    // arity, not remove it.
-    #[allow(clippy::too_many_arguments)]
-    pub fn start_plan(
-        &self,
-        session_id: &str,
-        plan_id: &str,
-        stream_id: &str,
-        tasks: serde_json::Value,
-        provider: Option<&str>,
-        model: Option<&str>,
-        work_id: Option<&str>,
-    ) -> Result<(), ChatRelayError> {
-        let mut body = serde_json::json!({
-            "sessionId": session_id,
-            "planId": plan_id,
-            "streamId": stream_id,
-            "tasks": tasks,
-            "workId": work_id.unwrap_or(session_id),
-        });
-        if let Some(p) = provider {
-            body["provider"] = serde_json::Value::String(p.to_string());
-        }
-        if let Some(m) = model {
-            body["model"] = serde_json::Value::String(m.to_string());
-        }
-        let ack = self.link.request("plan/execute", body)?;
-        if !ack
-            .get("accepted")
-            .and_then(|a| a.as_bool())
-            .unwrap_or(false)
-        {
-            return Err(ChatRelayError::SidecarRejected(ack.to_string()));
-        }
-        Ok(())
-    }
-
-    /// P6.4 (B7): trigger one due-check + execution pass in the coordinator's
-    /// scheduler executor (the tray's "Run automations now" + the UI's
-    /// Run-now path). Returns the executed job ids.
-    pub fn tick_scheduler(&self) -> Result<Vec<String>, ChatRelayError> {
-        let ack = self
-            .link
-            .request("scheduler/execute", serde_json::json!({}))?;
-        Ok(ack
-            .get("executed")
-            .and_then(|a| a.as_array())
-            .map(|a| {
-                a.iter()
-                    .filter_map(|v| v.as_str().map(str::to_string))
-                    .collect()
-            })
-            .unwrap_or_default())
-    }
-
-    /// Stage-0 (P6.3): forward the user's MCQ card choice back to the
-    /// coordinator's plan executor (which is waiting on that interrupt).
-    pub fn respond_plan(&self, break_id: &str, choice: &str) -> Result<(), ChatRelayError> {
-        let ack = self.link.request(
-            "plan/respond",
-            serde_json::json!({ "breakId": break_id, "choice": choice }),
-        )?;
-        if !ack
-            .get("resolved")
-            .and_then(|a| a.as_bool())
-            .unwrap_or(false)
-        {
-            return Err(ChatRelayError::SidecarRejected(ack.to_string()));
-        }
-        Ok(())
+    /// P71.3f — the one readiness read (the relay's `agent/readiness` RPC and
+    /// the turn gate both use it; one accessor, one state).
+    pub fn agent_readiness(&self, agent_id: &str) -> everyaios_types::AgentReadiness {
+        crate::tools::read_agent_readiness(&self.readiness, agent_id)
     }
 }
 
@@ -2692,21 +2480,32 @@ fn handle_work_gateway(
                 .get("workId")
                 .and_then(|v| v.as_str())
                 .ok_or("work/create requires workId")?;
-            let address = gateway.create_work(
-                id,
-                params
-                    .get("projectId")
-                    .and_then(|v| v.as_str())
-                    .map(str::to_owned),
-                params
-                    .get("sessionId")
-                    .and_then(|v| v.as_str())
-                    .map(str::to_owned),
-                params
-                    .get("objective")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or(""),
-            );
+            // P71.8a — the session kind comes from the wire (the sidecar knows
+            // which trigger is creating this Work); it is a record property,
+            // never inferred. Unstated ⇒ interactive (existing rows).
+            let session_kind = params
+                .get("sessionKind")
+                .and_then(|v| v.as_str())
+                .map(everyaios_types::SessionKind::parse)
+                .unwrap_or(everyaios_types::SessionKind::Interactive);
+            let address = gateway
+                .create_work_in_session(
+                    id,
+                    params
+                        .get("projectId")
+                        .and_then(|v| v.as_str())
+                        .map(str::to_owned),
+                    params
+                        .get("sessionId")
+                        .and_then(|v| v.as_str())
+                        .map(str::to_owned),
+                    session_kind,
+                    params
+                        .get("objective")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or(""),
+                )
+                .map_err(|e| e.to_string())?;
             serde_json::to_value(address).map_err(|e| e.to_string())
         }
         "work/get" => {
@@ -2891,192 +2690,6 @@ fn emit(on_event: &Arc<Mutex<EventSink>>, ev: ChatWireEvent) {
 /// Run the broker for a coordinator `provider/stream` request and push the
 /// deltas back as `chat/provider_chunk` notifications. Runs on its own thread;
 /// keys never leave this process (the sidecar only sees chunk deltas).
-fn stream_provider(
-    vault: Arc<Mutex<Vault>>,
-    base_urls: Arc<Mutex<HashMap<String, String>>>,
-    endpoints: Arc<Mutex<HashMap<String, everyaios_vault::ProviderEndpoint>>>,
-    local_endpoints: Arc<Mutex<LocalEndpointMap>>,
-    capabilities: Arc<Mutex<everyaios_guard::LocalCapabilityBroker>>,
-    params: serde_json::Value,
-    writer: WriterHandle<impl Write>,
-) -> Result<(), crate::sidecar_link::LinkError> {
-    let provider = params
-        .get("provider")
-        .and_then(|p| p.as_str())
-        .unwrap_or("")
-        .to_string();
-    let model = params
-        .get("model")
-        .and_then(|m| m.as_str())
-        .unwrap_or("")
-        .to_string();
-    let session_id = params
-        .get("sessionId")
-        .and_then(|s| s.as_str())
-        .unwrap_or("")
-        .to_string();
-    let stream_id = params
-        .get("streamId")
-        .and_then(|s| s.as_str())
-        .unwrap_or("")
-        .to_string();
-    let messages = params
-        .get("messages")
-        .cloned()
-        .unwrap_or(serde_json::Value::Null);
-    let tools = params.get("tools").cloned();
-    let tool_choice = params
-        .get("tool_choice")
-        .cloned()
-        .or_else(|| params.get("toolChoice").cloned());
-
-    // Optional P49 capability metadata is validated before the vault broker is
-    // constructed. It contains only an opaque grant reference; secret values
-    // remain exclusively inside everyaios-vault.
-    if let Some(raw) = params.get("capabilityInvocation") {
-        let invocation: everyaios_guard::CapabilityInvocation = serde_json::from_value(raw.clone())
-            .map_err(|e| {
-                crate::sidecar_link::LinkError::Remote(format!(
-                    "invalid capability invocation: {e}"
-                ))
-            })?;
-        invocation.validate().map_err(|e| {
-            crate::sidecar_link::LinkError::Remote(format!("invalid capability invocation: {e}"))
-        })?;
-        if invocation.run_id != session_id {
-            return Err(crate::sidecar_link::LinkError::Remote(
-                "capability invocation run/session mismatch".into(),
-            ));
-        }
-        let request = everyaios_guard::CapabilityRequest {
-            run_id: invocation.run_id.clone(),
-            capability: invocation.capability.clone(),
-            operation: invocation.operation.clone(),
-        };
-        capabilities
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .invoke(&invocation.grant_id, &request)
-            .map_err(|e| {
-                crate::sidecar_link::LinkError::Remote(format!("capability denied: {e}"))
-            })?;
-    }
-
-    // The vault guard must outlive the broker (Broker<'a> borrows the vault).
-    let v = vault.lock().unwrap_or_else(|e| e.into_inner());
-    let mut broker = Broker::new(&v);
-    for (p, url) in base_urls.lock().unwrap_or_else(|e| e.into_inner()).iter() {
-        broker = broker.with_base_url(p, url.clone());
-    }
-    // P55.5: resolved endpoints win over the plain base-url map — they carry
-    // the wire dialect (Anthropic `/messages`) and per-provider headers.
-    for (p, ep) in endpoints.lock().unwrap_or_else(|e| e.into_inner()).iter() {
-        broker = broker.with_endpoint(p, ep.clone());
-    }
-    // P1.8 (A5): keyless local endpoints route inside the broker.
-    for (p, ep) in local_endpoints
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .iter()
-    {
-        broker = broker.with_local(p, ep.clone());
-    }
-
-    // P3.3 (J14): propagate distributed trace context across the broker
-    // boundary so provider HTTP requests carry the traceparent header.
-    let trace_ctx = crate::tracing::TraceContext::new_root(true);
-    let mut trace_headers = std::collections::HashMap::new();
-    trace_ctx.inject_headers(&mut trace_headers);
-    broker = broker.with_extra_headers(trace_headers);
-
-    // S0.3: forward tools + tool_choice so hosted providers get native
-    // function defs and local ollama/llamafile derive JSON-mode grammar
-    // (grammar_from_body) from the same body.
-    let mut body = serde_json::json!({ "model": model, "messages": messages });
-    let has_tools = tools
-        .as_ref()
-        .and_then(|t| t.as_array())
-        .is_some_and(|a| !a.is_empty());
-    if let Some(t) = tools {
-        body["tools"] = t;
-    }
-    if let Some(tc) = tool_choice {
-        body["tool_choice"] = tc;
-    }
-    match broker.chat_completion_stream(&provider, &model, &session_id, body) {
-        Ok(events) => {
-            let finished_by_length = events.iter().any(|e| e.finish.as_deref() == Some("length"));
-            let native_calls = assemble_tool_calls(&events, finished_by_length);
-            let text: String = events.iter().filter_map(|e| e.delta.clone()).collect();
-            let json_calls = if native_calls.is_empty() && has_tools {
-                let mut calls = extract_json_tool_calls(&text);
-                if calls.is_empty() {
-                    let fixed = everyaios_memory::repair_tool_json(&text);
-                    if fixed.repaired {
-                        calls = extract_json_tool_calls(&fixed.json);
-                    }
-                }
-                calls
-            } else {
-                Vec::new()
-            };
-            let hide_json_text = !json_calls.is_empty();
-            for ev in &events {
-                if !hide_json_text {
-                    if let Some(delta) = &ev.delta {
-                        writer.notify(
-                            "chat/provider_chunk",
-                            serde_json::json!({ "streamId": stream_id, "delta": delta }),
-                        )?;
-                    }
-                }
-                if let Some(finish) = &ev.finish {
-                    writer.notify(
-                        "chat/provider_chunk",
-                        serde_json::json!({ "streamId": stream_id, "finish": finish }),
-                    )?;
-                }
-                if let Some(u) = ev.usage {
-                    writer.notify(
-                        "chat/provider_chunk",
-                        serde_json::json!({
-                            "streamId": stream_id,
-                            "usage": {
-                                "promptTokens": u.prompt,
-                                "completionTokens": u.output,
-                            },
-                        }),
-                    )?;
-                }
-            }
-            for (name, args) in native_calls.into_iter().chain(json_calls) {
-                writer.notify(
-                    "chat/provider_chunk",
-                    serde_json::json!({
-                        "streamId": stream_id,
-                        "toolCall": { "id": name, "args": args },
-                    }),
-                )?;
-            }
-        }
-        Err(e) => {
-            // Surface the failure to the sidecar so the engine ends cleanly.
-            // (Full broker-error surfacing to the UI is a later pass — the
-            // pre-flight + ledger checks already fail closed on budget/keys.)
-            writer.notify(
-                "chat/provider_chunk",
-                serde_json::json!({ "streamId": stream_id, "error": e.to_string() }),
-            )?;
-        }
-    }
-    // Stream end marker — the engine's provider generator closes.
-    writer.notify(
-        "chat/provider_chunk",
-        serde_json::json!({ "streamId": stream_id, "ended": true }),
-    )?;
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     /// P64.6 — a preflight `root` that the coordinator left at `.` (it has no
@@ -3250,6 +2863,7 @@ mod tests {
             }),
             &policy,
             &gw,
+            everyaios_types::AgentReadiness::Ready,
         )
         .expect("an in-limits spawn is admitted");
         assert_eq!(out["task_id"], "t1");
@@ -3289,6 +2903,7 @@ mod tests {
             }),
             &policy,
             &gw,
+            everyaios_types::AgentReadiness::Ready,
         )
         .is_err());
         // Completion closes the child's own timeline (terminal Run event +
@@ -3303,6 +2918,7 @@ mod tests {
             }),
             &policy,
             &gw,
+            everyaios_types::AgentReadiness::Ready,
         )
         .expect("completion of a delegated task is accepted");
         assert_eq!(done["summary"], "did the thing");
@@ -3322,6 +2938,7 @@ mod tests {
             &serde_json::json!({ "taskId": "ghost", "workId": "w-parent" }),
             &policy,
             &gw,
+            everyaios_types::AgentReadiness::Ready,
         )
         .is_err());
         // A spawn that names no parent Work is admitted policy-only, and says so.
@@ -3333,13 +2950,58 @@ mod tests {
             }),
             &policy,
             &gw,
+            everyaios_types::AgentReadiness::Ready,
         )
         .expect("a parentless spawn is admitted policy-only");
         assert_eq!(loose["accountedFrom"], "policy_only");
         assert!(loose["workId"].is_null());
         // A spec-less call is a refusal, and unknown methods stay errors.
-        assert!(super::subagent_rpc("subagent/spawn", &serde_json::json!({}), &policy, &gw).is_err());
-        assert!(super::subagent_rpc("subagent/nope", &serde_json::json!({}), &policy, &gw).is_err());
+        assert!(super::subagent_rpc(
+            "subagent/spawn",
+            &serde_json::json!({}),
+            &policy,
+            &gw,
+            everyaios_types::AgentReadiness::Ready,
+        )
+        .is_err());
+        assert!(super::subagent_rpc(
+            "subagent/nope",
+            &serde_json::json!({}),
+            &policy,
+            &gw,
+            everyaios_types::AgentReadiness::Ready,
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn subagent_spawn_refuses_an_unready_member_by_name() {
+        // P71.3f — installed is not ready: the delegation gate refuses the
+        // member and names the state, instead of spawning into a failure.
+        let policy = everyaios_blueprint::DelegationPolicy::new(
+            everyaios_blueprint::SubAgentLimits::default(),
+        );
+        let gw = Arc::new(Mutex::new(crate::work_gateway::WorkGateway::new()));
+        gw.lock()
+            .unwrap()
+            .create_work("w-parent", None, Some("s-1".into()), "parent objective");
+        let err = super::subagent_rpc(
+            "subagent/spawn",
+            &serde_json::json!({
+                "spec": { "id": "t1", "goal": "do the thing", "context": [], "acceptance": [] },
+                "agentId": "claude",
+                "harness": "acp",
+                "workId": "w-parent",
+            }),
+            &policy,
+            &gw,
+            everyaios_types::AgentReadiness::AuthRequired,
+        )
+        .expect_err("an auth-required member must not be admitted");
+        assert!(err.contains("claude"), "got: {err}");
+        assert!(err.contains("auth_required"), "got: {err}");
+        // Nothing was minted: the graph holds no delegated child.
+        assert!(gw.lock().unwrap().children_of("w-parent").is_empty());
     }
 
     #[test]
@@ -3361,6 +3023,7 @@ mod tests {
             }),
             &policy,
             &gw,
+            everyaios_types::AgentReadiness::Ready,
         )
         .expect("scout spawn is admitted");
         assert_eq!(out["role"], "scout");
@@ -3397,6 +3060,7 @@ mod tests {
             }),
             &policy,
             &gw,
+            everyaios_types::AgentReadiness::Ready,
         );
         assert!(err.is_err());
         assert!(err.unwrap_err().contains("CLI-named"));

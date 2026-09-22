@@ -61,7 +61,6 @@ pub mod migrate;
 pub mod migration;
 pub mod models;
 pub mod multirun;
-pub mod native_loop;
 pub mod openai_server;
 pub mod orphan;
 pub mod pairing;
@@ -185,7 +184,7 @@ pub use reader::{
     extract_text, ReaderChunk, ReaderDocument, ReaderError, ReaderFormat, ReaderHit, ReaderIndex,
 };
 pub use rss_measure::{measure_self, measure_tree, snapshot, RssSnapshot};
-pub use scheduler_service::SchedulerService;
+pub use scheduler_service::{CronCheck, SchedulerService};
 pub use sidecar_link::{Inbound, LinkError, SidecarLink, WriterHandle};
 pub use supervisor::{ProcessSupervisor, SupervisorError, SupervisorState};
 pub use sync::{

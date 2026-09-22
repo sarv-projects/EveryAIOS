@@ -28,6 +28,8 @@ use everyaios_blueprint::subagent::{
 };
 use everyaios_core::work_gateway::WorkGateway;
 use everyaios_blueprint::{ScriptLanguage, TaskStatus};
+// P71.3f — the delegation gate judges the canonical readiness state.
+use everyaios_types::AgentReadiness;
 use everyaios_core::chat::{ChatRelay, ChatStreamParams, ChatWireEvent};
 use everyaios_core::connector_hub::{ConnectorHub, Engine};
 use everyaios_core::connectors::gmail::GmailConnector;
@@ -36,7 +38,7 @@ use everyaios_core::guard_service::GuardService;
 use everyaios_core::memory_service::MemoryService;
 use everyaios_core::messaging::{InboundMessage, MessageDispatcher, StubAdapter};
 use everyaios_core::providers::{ProviderConfig, ProviderKey, ProvidersFile};
-use everyaios_core::scheduler_service::{RunState, SchedulePolicy, SchedulerService, TriggerSpec};
+use everyaios_core::scheduler_service::{SchedulePolicy, SchedulerService, TriggerSpec};
 use everyaios_core::sidecar_link::SidecarLink;
 use everyaios_core::tools::ToolService;
 use everyaios_guard::granter::{CapabilityGranter, GrantRequest, HostGrant, TrustFlags};
@@ -297,7 +299,9 @@ fn subagent_planner_two_agents_merge_results() {
     // The planner is the root Work's child → depth 1, nothing active yet.
     let gauge = gw.delegation_gauge("root-work").unwrap();
     assert_eq!(gauge.child_depth, 1);
-    policy.admit("planner", gauge).unwrap();
+    policy
+        .admit("planner", gauge, "planner-agent", AgentReadiness::Ready)
+        .unwrap();
     let planner_spec = SubAgentSpec::new(
         TaskSpec::new("planner", "coordinate research"),
         "nvidia",
@@ -319,7 +323,9 @@ fn subagent_planner_two_agents_merge_results() {
     // both are admitted against the graph's gauge.
     let gauge = gw.delegation_gauge(&planner.work_id).unwrap();
     assert_eq!(gauge.child_depth, 2);
-    policy.admit("child-a", gauge).unwrap();
+    policy
+        .admit("child-a", gauge, "child-a-agent", AgentReadiness::Ready)
+        .unwrap();
     let child_a = gw
         .delegate_child_work(
             &planner.work_id,
@@ -331,7 +337,9 @@ fn subagent_planner_two_agents_merge_results() {
         .unwrap();
     let gauge = gw.delegation_gauge(&planner.work_id).unwrap();
     assert_eq!(gauge.active, 1);
-    policy.admit("child-b", gauge).unwrap();
+    policy
+        .admit("child-b", gauge, "child-b-agent", AgentReadiness::Ready)
+        .unwrap();
     let child_b = gw
         .delegate_child_work(
             &planner.work_id,
@@ -345,7 +353,12 @@ fn subagent_planner_two_agents_merge_results() {
     assert_eq!((gauge.active, gauge.total, gauge.child_depth), (2, 2, 2));
     // A grandchild of a depth-2 child would be depth 3 → recursion, refused.
     assert!(matches!(
-        policy.admit("grandchild", gw.delegation_gauge(&child_a.work_id).unwrap()),
+        policy.admit(
+            "grandchild",
+            gw.delegation_gauge(&child_a.work_id).unwrap(),
+            "grandchild-agent",
+            AgentReadiness::Ready,
+        ),
         Err(SubAgentError::DepthExceeded {
             depth: 3,
             max_depth: 2,
@@ -354,9 +367,9 @@ fn subagent_planner_two_agents_merge_results() {
     ));
 
     // Both children complete: terminal Run events on their own timelines.
-    gw.finish_child_work(&planner.work_id, "child-a", "completed", None)
+    gw.finish_child_work(&planner.work_id, "child-a", everyaios_types::WorkState::Completed, None)
         .unwrap();
-    gw.finish_child_work(&planner.work_id, "child-b", "completed", None)
+    gw.finish_child_work(&planner.work_id, "child-b", everyaios_types::WorkState::Completed, None)
         .unwrap();
 
     // The planner (parent) sees mergeable summaries — never raw child context.
@@ -578,7 +591,9 @@ fn scheduled_task_fires_headless() {
         1_700_000_000,
     );
 
-    // Headless daemon tick: jobs due at `now` are returned, leases taken.
+    // Headless daemon tick: jobs due at `now` are returned; the host records
+    // each firing (`mark_fired` — the trigger-plane dedupe), which advances
+    // the schedule. Execution itself is the Work kernel's business.
     let due = sched.due(1_700_000_060);
     assert!(
         due.contains(&"job-cron".to_string()),
@@ -586,21 +601,15 @@ fn scheduled_task_fires_headless() {
     );
     assert!(due.contains(&"job-int".to_string()));
 
-    let lease = sched.lease_start("job-cron", 1_700_000_060).unwrap();
-    let fence = lease["fence"].as_str().unwrap().to_string();
-    assert_eq!(lease["ok"], true);
-    // Advance the checkpoint (step 1 of N) then finish the run.
-    sched.lease_checkpoint("job-cron", 1, Some(&fence)).unwrap();
-    sched
-        .lease_finish("job-cron", true, 1_700_000_060, Some(&fence))
-        .unwrap();
+    sched.mark_fired("job-cron", 1_700_000_060).unwrap();
+    sched.mark_fired("job-int", 1_700_000_060).unwrap();
     let job = sched.get("job-cron").unwrap();
-    assert_eq!(job.successes, 1);
-    assert_eq!(job.runs, 1);
-    assert!(
-        matches!(job.state, RunState::Idle),
-        "finished run returns to idle"
-    );
+    assert_eq!(job.last_fired_at, Some(1_700_000_060));
+    assert_eq!(job.recent_fires, vec![1_700_000_060]);
+    // The firing dedupes: no longer due at the same instant…
+    assert!(!sched.due(1_700_000_060).contains(&"job-cron".to_string()));
+    // …but due again at the next occurrence.
+    assert!(sched.due(1_700_000_120).contains(&"job-cron".to_string()));
 }
 
 // ---------------------------------------------------------------------------

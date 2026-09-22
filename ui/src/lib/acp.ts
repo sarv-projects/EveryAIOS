@@ -1,8 +1,8 @@
 // F12 / J17 — ACP harness bridge client (doc 45 §1, doc 57 §2). The agent
-// picker: one manifest per agent (the `ollama launch` pattern), same chat bar,
-// agent differs. The default (`everyaios`) is the inbuilt engine with all
-// first-party capabilities; every other entry drives an external agent CLI
-// over ACP stdio and obeys the same Guard-2 ticket card.
+// picker: one manifest per agent, same chat bar, agent differs. Every entry
+// drives an external agent CLI over ACP stdio and obeys the same Guard-2
+// ticket card; there is no built-in engine and no assumed default
+// (`ARCH/ADR/0005`).
 
 import { invoke } from "./tauri";
 import { nativeCall } from './runtime';
@@ -25,8 +25,10 @@ export type AuthMode =
   | "keyless"
   | "unknown";
 
-/** How the agent is distributed / driven. */
-export type HarnessProtocol = "inbuilt" | "acp" | "model_backend";
+/** How the agent is driven. ADR-0005: `acp` is the whole v1 vocabulary —
+ * the retired built-in (`inbuilt`) and model-backend (`model_backend`) paths
+ * are gone and return post-v1. */
+export type HarnessProtocol = "acp";
 
 /** The agent's advertised ACP auth method (`authMethods` in initialize). */
 export interface AuthMethod {
@@ -43,7 +45,6 @@ export interface HarnessManifest {
   description: string;
   authMode: AuthMode;
   protocol: HarnessProtocol;
-  isDefault: boolean;
   /** P50.3.9 — governance truth (present on every row from the shell). */
   governance?: GovernanceInfo;
 }
@@ -150,6 +151,9 @@ export type RuntimeLocation =
 
 /** One agent's install state (F8/P66 — flip Install ↔ Launch honestly). */
 export interface InstallState {
+  /** P71.3f — the canonical readiness state; the booleans below are its
+   * projections (kept for surfaces that still read them). */
+  readiness?: AgentReadiness;
   /** EveryAIOS-managed install or package-manager-ready launch path. */
   installed: boolean;
   /** A catalog entry has a verified runtime location, including WSL-only. */
@@ -210,25 +214,70 @@ export function acpIdFor(catalogId: string): string {
   return CATALOG_TO_ACP[catalogId] ?? catalogId;
 }
 
-/** The launch registry (the picker). Default = inbuilt EveryAIOS. */
 /** P69.D1 — one directory entry, composed server-side by
  * `everyaios_agents::AgentDirectory`. The UI renders these rows; it never
- * merges agent lists of its own (the ACP registry, the local bundle store and
- * the inbuilt engine meet in one place, in Rust). */
+ * merges agent lists of its own (the ACP registry and the local bundle store
+ * meet in one place, in Rust). ADR-0005: there is no built-in row and no
+ * default agent. */
 export interface AgentDirectoryEntry {
   id: string;
   name: string;
   description: string;
   protocol: HarnessProtocol;
   authMode: AuthMode;
-  isDefault: boolean;
   /** Where the row came from — provenance the picker must be able to show. */
-  source: 'inbuilt' | 'acp_registry' | 'discovered' | 'local_bundle' | 'mcp';
+  source: 'acp_registry' | 'discovered' | 'local_bundle' | 'mcp';
+  /** P71.3f — the one readiness state (Rust is the authority). */
+  readiness: AgentReadiness;
+  /** Whether the agent may serve a turn right now (ready | degraded). */
+  ready: boolean;
+  /** Derived from `readiness` — never a second truth. */
   installed: boolean;
   /** Whether the user may remove this row (discovered / local bundles only). */
   removable: boolean;
   /** Install/distribution hint, e.g. `npx: @scope/pkg` — never a secret. */
   locator: string | null;
+}
+
+/// P71.3f — the canonical readiness vocabulary (`everyaios_types::AgentReadiness`
+/// is the authority; this is the wire projection). `installed` is not `ready`:
+/// an installed agent can still be unauthenticated, unnegotiated or degraded,
+/// and the UI must say which.
+export type AgentReadiness =
+  | 'unknown'
+  | 'discovered'
+  | 'installed'
+  | 'launchable'
+  | 'protocol_compatible'
+  | 'auth_required'
+  | 'authenticating'
+  | 'ready'
+  | 'degraded'
+  | 'unavailable'
+  | 'failed'
+
+/// A runtime is present on this machine.
+export function isAgentInstalled(r: AgentReadiness): boolean {
+  return (
+    r === 'installed' ||
+    r === 'launchable' ||
+    r === 'protocol_compatible' ||
+    r === 'auth_required' ||
+    r === 'authenticating' ||
+    r === 'ready' ||
+    r === 'degraded'
+  )
+}
+
+/// The agent may serve a turn (top rung, or top rung with a stated reduction).
+export function isAgentReady(r: AgentReadiness): boolean {
+  return r === 'ready' || r === 'degraded'
+}
+
+/// The readiness half of "allowed as a subagent" — the Rust delegation gate
+/// applies the same rule, so the UI never offers what the kernel will refuse.
+export function canAgentDelegate(r: AgentReadiness): boolean {
+  return r === 'ready'
 }
 
 export interface AgentDirectorySnapshot {

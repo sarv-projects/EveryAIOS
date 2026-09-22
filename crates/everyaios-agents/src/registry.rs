@@ -101,7 +101,7 @@ impl AgentRegistry {
             id: id.to_string(),
             name: b.name,
             emoji: b.emoji,
-            engine: format!("{:?}", b.engine),
+            engine: crate::bundle::EngineBinding::label(b.engine.as_ref()),
             disabled: disabled_for(&self.agent_dir(id)),
             description: b.description,
         })

@@ -15,7 +15,7 @@
 
 use std::collections::BTreeMap;
 
-use everyaios_types::AgentDefinition;
+use everyaios_types::{AgentDefinition, AgentReadiness};
 
 use crate::bundle::AgentBundle;
 
@@ -24,8 +24,6 @@ use crate::bundle::AgentBundle;
 /// authored locally, and the UI must be able to say which is which.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum AgentSource {
-    /// Our inbuilt engine — always present, never installed.
-    Inbuilt,
     /// A curated ACP registry row (`registry.json`).
     AcpRegistry,
     /// A runtime discovered on this machine (installed CLI/server).
@@ -40,7 +38,6 @@ impl AgentSource {
     /// Stable wire spelling (the UI reads this verbatim).
     pub fn as_str(self) -> &'static str {
         match self {
-            AgentSource::Inbuilt => "inbuilt",
             AgentSource::AcpRegistry => "acp_registry",
             AgentSource::Discovered => "discovered",
             AgentSource::LocalBundle => "local_bundle",
@@ -48,10 +45,22 @@ impl AgentSource {
         }
     }
 
-    /// Whether an entry from this source can go away again (the inbuilt
-    /// engine and curated rows cannot be uninstalled).
+    /// Whether an entry from this source can go away again (curated catalog
+    /// rows cannot be uninstalled).
     pub fn is_removable(self) -> bool {
         matches!(self, AgentSource::Discovered | AgentSource::LocalBundle)
+    }
+
+    /// The readiness an entry of this provenance starts at — a *floor*, not a
+    /// claim: the host replaces it with the probed fact. A local bundle's
+    /// runtime is assumed present, a discovered CLI/server is present, and a
+    /// catalog row without a runtime is only discovered. No source starts at
+    /// `Ready` any more: nothing ships with the app (ADR-0005).
+    pub fn default_readiness(self) -> AgentReadiness {
+        match self {
+            AgentSource::LocalBundle | AgentSource::Discovered => AgentReadiness::Installed,
+            AgentSource::AcpRegistry | AgentSource::Mcp => AgentReadiness::Discovered,
+        }
     }
 }
 
@@ -61,9 +70,11 @@ impl AgentSource {
 pub struct AgentDirectoryEntry {
     pub definition: AgentDefinition,
     pub source: AgentSource,
-    /// Whether the runtime is usable right now. `false` is rendered as
-    /// "installable"/"unavailable" — never as a silently missing row.
-    pub installed: bool,
+    /// The one readiness state (P71.3f — `everyaios_types::AgentReadiness`).
+    /// Replaces the `installed` boolean: an entry whose runtime is present but
+    /// which is not authenticated, not protocol-compatible, or not usable in
+    /// this environment says so instead of collapsing to one bit.
+    pub readiness: AgentReadiness,
     /// Install/launch hint (registry id, executable, or bundle path). Opaque
     /// to the kernel; shown to the user when they ask "why can't I run this?".
     pub locator: Option<String>,
@@ -74,14 +85,26 @@ impl AgentDirectoryEntry {
         Self {
             definition,
             source,
-            installed: matches!(source, AgentSource::Inbuilt | AgentSource::LocalBundle),
+            readiness: source.default_readiness(),
             locator: None,
         }
     }
 
-    pub fn with_installed(mut self, installed: bool) -> Self {
-        self.installed = installed;
+    /// Replace the readiness state with a fact the host probed.
+    pub fn with_readiness(mut self, readiness: AgentReadiness) -> Self {
+        self.readiness = readiness;
         self
+    }
+
+    /// Whether a runtime is present — **derived** from the one state, never a
+    /// second field to keep in sync.
+    pub fn installed(&self) -> bool {
+        self.readiness.is_installed()
+    }
+
+    /// Whether the agent may serve a turn right now.
+    pub fn ready(&self) -> bool {
+        self.readiness.is_ready()
     }
 
     pub fn with_locator(mut self, locator: impl Into<String>) -> Self {
@@ -144,9 +167,13 @@ impl AgentDirectory {
         self.entries.is_empty()
     }
 
-    /// Add a user bundle's definition under `LocalBundle` provenance.
+    /// Add a user bundle's definition under `LocalBundle` provenance. An
+    /// unbound bundle (no engine chosen) is a **draft**, not an agent —
+    /// nothing is inserted and `None` is returned (ADR-0005: no row may
+    /// present a brain that does not exist).
     pub fn upsert_bundle(&mut self, bundle: &AgentBundle) -> Option<AgentDirectoryEntry> {
-        self.insert(bundle.definition(), AgentSource::LocalBundle)
+        let definition = bundle.definition()?;
+        self.insert(definition, AgentSource::LocalBundle)
     }
 
     /// Add every bundle in a registry, returning how many entries exist after
@@ -158,18 +185,19 @@ impl AgentDirectory {
         self.entries.len()
     }
 
-    /// The picker's default: the inbuilt engine if present, else the first
-    /// installed entry, else nothing — never an arbitrary row.
+    /// The picker's default: the first **ready** entry, else nothing — never
+    /// an arbitrary row, never an assumed built-in. Selection is user-owned
+    /// (the shell returns `defaultAgentId: null`); this only answers "what
+    /// could run right now" when a surface must preselect something.
     pub fn default_entry(&self) -> Option<&AgentDirectoryEntry> {
-        self.entries
-            .values()
-            .find(|e| e.definition.is_default)
-            .or_else(|| {
-                self.entries
-                    .values()
-                    .find(|e| e.source == AgentSource::Inbuilt && e.installed)
-            })
-            .or_else(|| self.entries.values().find(|e| e.installed))
+        self.entries.values().find(|e| e.ready())
+    }
+
+    /// The picker's selectable rows: readiness `Ready` or `Degraded`. A row
+    /// that is only installed/launchable stays visible with its state ("why
+    /// can't I run this?") but is not offered as a choice.
+    pub fn selectable(&self) -> Vec<&AgentDirectoryEntry> {
+        self.entries.values().filter(|e| e.ready()).collect()
     }
 }
 
@@ -178,44 +206,87 @@ mod tests {
     use super::*;
     use everyaios_types::{AgentId, AgentProtocol, AuthMode};
 
-    fn def(id: &str, is_default: bool) -> AgentDefinition {
+    fn def(id: &str) -> AgentDefinition {
         AgentDefinition {
             id: AgentId::new(id),
             name: id.to_string(),
             description: String::new(),
             protocol: AgentProtocol::Acp,
             auth_mode: AuthMode::Subscription,
-            is_default,
             capabilities: Vec::new(),
             extension_mechanisms: Vec::new(),
         }
     }
 
     #[test]
-    fn list_is_id_ordered_and_default_prefers_the_flagged_row() {
+    fn list_is_id_ordered_and_default_is_the_first_ready_row() {
         let mut dir = AgentDirectory::new();
-        dir.insert(def("zeta", false), AgentSource::AcpRegistry);
-        dir.insert(def("alpha", false), AgentSource::Discovered);
-        dir.insert(def("inbuilt", true), AgentSource::Inbuilt);
+        dir.insert(def("zeta"), AgentSource::AcpRegistry);
+        dir.insert(def("alpha"), AgentSource::Discovered);
+        dir.upsert(
+            AgentDirectoryEntry::new(def("beta"), AgentSource::Discovered)
+                .with_readiness(AgentReadiness::Ready),
+        );
 
         let ids: Vec<&str> = dir.list().iter().map(|e| e.definition.id.as_str()).collect();
-        assert_eq!(ids, vec!["alpha", "inbuilt", "zeta"]);
-        assert_eq!(dir.default_entry().unwrap().definition.id.as_str(), "inbuilt");
+        assert_eq!(ids, vec!["alpha", "beta", "zeta"]);
+        // Only `beta` is ready — nothing is assumed to be the default.
+        assert_eq!(dir.default_entry().unwrap().definition.id.as_str(), "beta");
+    }
+
+    #[test]
+    fn unbound_bundles_never_join_the_directory() {
+        // ADR-0005: a draft bundle (no engine bound) is not an agent.
+        let mut dir = AgentDirectory::new();
+        let draft = AgentBundle::new("Draft");
+        assert!(dir.upsert_bundle(&draft).is_none());
+        assert!(dir.is_empty());
+
+        let mut bound = AgentBundle::new("Bound");
+        bound.engine = Some(crate::bundle::EngineBinding::Acp("claude-code".into()));
+        assert!(dir.upsert_bundle(&bound).is_some());
+        assert_eq!(dir.len(), 1);
     }
 
     #[test]
     fn discovery_never_claims_installed_and_removal_is_source_scoped() {
         let mut dir = AgentDirectory::new();
-        dir.insert(def("cursor", false), AgentSource::AcpRegistry);
-        assert!(!dir.get("cursor").unwrap().installed);
+        dir.insert(def("cursor"), AgentSource::AcpRegistry);
+        assert!(!dir.get("cursor").unwrap().installed());
+        assert_eq!(
+            dir.get("cursor").unwrap().readiness,
+            AgentReadiness::Discovered
+        );
         assert!(!AgentSource::AcpRegistry.is_removable());
 
         dir.upsert(
-            AgentDirectoryEntry::new(def("local", false), AgentSource::LocalBundle)
-                .with_installed(true)
+            AgentDirectoryEntry::new(def("local"), AgentSource::LocalBundle)
+                .with_readiness(AgentReadiness::Installed)
                 .with_locator("/tmp/agent.toml"),
         );
-        assert!(dir.get("local").unwrap().installed);
+        assert!(dir.get("local").unwrap().installed());
+        // Installed is not ready: the picker must not offer it.
+        assert!(!dir.get("local").unwrap().ready());
         assert!(AgentSource::LocalBundle.is_removable());
+    }
+
+    #[test]
+    fn selectable_rows_are_the_ready_ones_only() {
+        let mut dir = AgentDirectory::new();
+        dir.upsert(
+            AgentDirectoryEntry::new(def("claude"), AgentSource::AcpRegistry)
+                .with_readiness(AgentReadiness::AuthRequired),
+        );
+        dir.upsert(
+            AgentDirectoryEntry::new(def("codex"), AgentSource::Discovered)
+                .with_readiness(AgentReadiness::Degraded),
+        );
+        let ids: Vec<&str> = dir
+            .selectable()
+            .iter()
+            .map(|e| e.definition.id.as_str())
+            .collect();
+        // `claude` is installed but auth-required → visible, not selectable.
+        assert_eq!(ids, vec!["codex"]);
     }
 }

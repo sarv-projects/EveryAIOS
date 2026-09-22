@@ -39,7 +39,7 @@ export interface AgentModel {
   recommendedFor?: string
 }
 
-import type { RuntimeLocation } from './acp'
+import { isAgentReady, type AgentReadiness, type RuntimeLocation } from './acp'
 
 export type ModelProvider =
   | 'anthropic'
@@ -61,6 +61,10 @@ export interface AgentRuntime {
   tagline: string
   /** Install/discovery status on this machine */
   status: AgentInstallStatus
+  /** P71.3f — the canonical readiness state from the Rust directory. When
+   * present it answers `isRuntimeUsable`; `status` stays the UI's interaction
+   * vocabulary (disabled/updating are user/install activity, not readiness). */
+  readiness?: AgentReadiness
   /** A verified runtime location was found, even if it cannot launch yet. */
   discovered?: boolean
   /** The current adapter can launch this runtime in this environment. */
@@ -522,12 +526,40 @@ export function isNativeRuntime(agentId: string | undefined): boolean {
 
 /** A runtime is usable when it is the inbuilt orchestrator (always live) or
  * its install was verified on this machine. Anything else must not present
- * models — the model list loads live only after install. */
+ * models — the model list loads live only after install.
+ *
+ * P71.3f — when the canonical readiness is present it decides: installable is
+ * not usable (`launchable` only means the process can start, not that it can
+ * serve a turn), so an installed-but-unauthenticated runtime stays out of the
+ * model lists. The boolean fallbacks below remain for curated rows that
+ * predate the directory read. */
 export function isRuntimeUsable(a: AgentRuntime | undefined): boolean {
   if (!a) return false
   if (a.id === NATIVE_AGENT_ID) return true
+  if (a.readiness !== undefined) return isAgentReady(a.readiness)
   if (a.launchable !== undefined) return a.launchable
   return a.status === 'installed' || a.status === 'updating'
+}
+
+/** P71.3f — project the one readiness state onto the UI's interaction status.
+ * `disabled` (user policy) and `updating` (install activity) are preserved:
+ * they are not readiness states, so readiness must not overwrite them. */
+export function readinessToInstallStatus(
+  readiness: AgentReadiness,
+  current?: AgentInstallStatus,
+): AgentInstallStatus {
+  if (current === 'disabled' || current === 'updating') return current
+  if (isAgentReady(readiness)) return 'installed'
+  if (
+    readiness === 'discovered' ||
+    readiness === 'unknown' ||
+    readiness === 'unavailable' ||
+    readiness === 'failed'
+  ) {
+    return 'available'
+  }
+  // installed | launchable | protocol_compatible | auth_required | authenticating
+  return 'discovered'
 }
 
 /** Model rows this runtime is allowed to display.

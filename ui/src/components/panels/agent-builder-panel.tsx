@@ -43,8 +43,11 @@ export default function AgentBuilderPanel() {
   const [templateId, setTemplateId] = useState<string>('general')
   const [name, setName] = useState<string>('')
   const [emoji, setEmoji] = useState<string>('🤖')
-  const [engineKind, setEngineKind] = useState<'inbuilt' | 'acp' | 'model-only'>('inbuilt')
-  const [acpCli, setAcpCli] = useState<string>('claude-code')
+  // ADR-0005: v1's engine is an installed ACP agent. The wizard does not
+  // prefill any CLI — a hardcoded default agent is the bug this removes — so
+  // the user must name the agent they installed before the bundle can save.
+  const [engineKind, setEngineKind] = useState<'acp' | 'model-only'>('acp')
+  const [acpCli, setAcpCli] = useState<string>('')
   const [provider, setProvider] = useState<string>('')
   const [model, setModel] = useState<string>('')
   const [mcpServers, setMcpServers] = useState<string>('')
@@ -105,6 +108,8 @@ export default function AgentBuilderPanel() {
     const t = AGENT_TEMPLATES.find((x) => x.id === id)
     setName(t?.label ?? '')
     setEmoji(t?.emoji ?? '🤖')
+    setEngineKind('acp')
+    setAcpCli('')
     setMcpServers(t?.preset.mcpServers.join(', ') ?? '')
     setConnectors(t?.preset.connectors.join(', ') ?? '')
     setSkills(t?.preset.skills.join(', ') ?? '')
@@ -117,10 +122,14 @@ export default function AgentBuilderPanel() {
   const splitIds = (raw: string): string[] =>
     raw.split(',').map((s) => s.trim()).filter(Boolean)
 
+  /** A bundle may only save with a bound engine (ADR-0005). Model-only needs
+   * no id; ACP needs the installed agent's id. */
+  const engineReady = engineKind === 'model-only' || acpCli.trim().length > 0
+
   const build = (): AgentBundle => {
     const b = bundleFromTemplate(templateId, name || 'My Agent', emoji)
     b.engine =
-      engineKind === 'acp' ? { kind: 'acp', cli: acpCli } : { kind: engineKind }
+      engineKind === 'acp' ? { kind: 'acp', cli: acpCli.trim() } : { kind: 'model-only' }
     if (provider || model) b.model = { provider: provider || undefined, model: model || undefined }
     b.mcpServers = splitIds(mcpServers)
     b.connectors = splitIds(connectors)
@@ -297,9 +306,11 @@ export default function AgentBuilderPanel() {
         <div className="space-y-3">
           <div className="rounded-lg border border-border bg-card p-3">
             <div className="mb-2 text-xs font-medium text-foreground">Engine binding (P31.8)</div>
+            <div className="mb-2 text-[11px] text-muted-foreground">
+              Your agent runs an installed external agent (ADR-0005). EveryAIOS has no built-in engine in v1.
+            </div>
             {(
               [
-                ['inbuilt', 'Inbuilt (EveryAIOS)'],
                 ['acp', 'ACP agent (installed CLI)'],
                 ['model-only', 'Model-only (chat, no tools)'],
               ] as const
@@ -318,9 +329,14 @@ export default function AgentBuilderPanel() {
               <input
                 value={acpCli}
                 onChange={(e) => setAcpCli(e.target.value)}
-                placeholder="claude-code"
+                placeholder="installed agent id (e.g. claude-code)"
                 className="mt-2 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-brand/50"
               />
+            )}
+            {!engineReady && (
+              <div className="mt-2 text-[11px] text-amber-500">
+                Name the installed agent this bundle runs — a bundle with no engine cannot be saved.
+              </div>
             )}
           </div>
           <div className="rounded-lg border border-border bg-card p-3">
@@ -397,7 +413,9 @@ export default function AgentBuilderPanel() {
             </button>
             <button
               onClick={saveAgent}
-              className="rounded-md bg-brand px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-hover"
+              disabled={!engineReady}
+              title={engineReady ? undefined : 'Bind an engine in step 2 first'}
+              className="rounded-md bg-brand px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-50"
             >
               {saved ? <span className="flex items-center gap-1"><Check className="h-3.5 w-3.5" /> Saved</span> : 'Save agent'}
             </button>
@@ -505,7 +523,7 @@ export default function AgentBuilderPanel() {
                   <div className="truncate text-xs text-muted-foreground">{b.description}</div>
                   <div className="mt-0.5 flex flex-wrap gap-1 text-[10px] text-muted-foreground">
                     <span className="rounded bg-background/60 px-1.5 py-0.5">
-                      engine: {b.engine.kind}
+                      engine: {b.engine ? (b.engine.kind === 'acp' ? `acp:${b.engine.cli}` : 'model-only') : 'unbound'}
                     </span>
                     {b.model.model && (
                       <span className="rounded bg-background/60 px-1.5 py-0.5">

@@ -34,7 +34,7 @@
 > others use community/known public client IDs (override anytime). 4 new vault
 > oauth tests (110 vault tests total).
 >
-> **Settings ownership (ARCH/17 §17.12 — read models move with the `P69.A26` split → AGENT.md + EXTERNAL-AGENTS.md):** this document defines the shared connector/store backend; the Settings Control Center composes its `ConnectionRecord` read model and must not create a second connector registry. The connect store, its OAuth providers and the MCP
+> **Settings ownership (the Settings Control Center read-model contract — historically `ARCH/17` §17.12, now [`AGENT.md`](AGENT.md) + [`EXTERNAL-AGENTS.md`](EXTERNAL-AGENTS.md) since the `P69.A26` split and the 2026-09-22 archive move — `P71.5a`):** this document defines the shared connector/store backend; the Settings Control Center composes its `ConnectionRecord` read model and must not create a second connector registry. The connect store, its OAuth providers and the MCP
 > children it instals are **Shared Cowork Plane** — connector capabilities are
 > borrowed by every agent (Native included) through the shared façade, and raw
 > OAuth tokens never leave the vault for an agent. The monitored-transport note

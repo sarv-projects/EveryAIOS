@@ -32,7 +32,7 @@ flowchart TD
 | Input | Meaning |
 |---|---|
 | **capability match** | what the Work's Steps require vs the agent's negotiated manifest |
-| **readiness** | installed · launchable · protocol-compatible · authenticated · negotiated · ready |
+| **readiness** | one canonical state — `Unknown · Discovered · Installed · Launchable · ProtocolCompatible · AuthRequired · Authenticating · Ready · Degraded · Unavailable · Failed` ([`AGENT.md`](AGENT.md) §3.1) |
 | **user policy** | fixed agent · inherit primary · primary chooses · resolver chooses |
 | **delegation policy** | whether this agent is allowed as a worker — depth · concurrency · budget |
 | **scope** | the Work's Session/Project scope and remaining budget |

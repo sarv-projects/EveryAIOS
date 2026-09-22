@@ -36,10 +36,6 @@ export default function AutomationEditor({ automation, onClose, onSaved }: Props
   const [expr, setExpr] = useState(triggerExpr(automation.trigger))
   const [saving, setSaving] = useState(false)
 
-  const successRate = Math.round(
-    (automation.successes / Math.max(automation.runs, 1)) * 100,
-  )
-
   // No scheduler-update IPC exists: saving recreates the job (delete +
   // create) with the edited trigger, preserving id/name/session/steps/policy.
   // Run history resets with the new record — said plainly in the confirm.
@@ -160,22 +156,26 @@ export default function AutomationEditor({ automation, onClose, onSaved }: Props
           </p>
         </div>
 
-        {/* === Right: live stats === */}
+        {/* === Right: trigger-plane stats (P71.3d — firings, not run outcomes;
+            run results live in the Event Log, I3) === */}
         <div className="space-y-3">
           <div className="rounded-md border border-border bg-background/40 p-3">
             <div className="mb-2 flex items-center justify-between">
               <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                 <Clock className="h-3 w-3" />
-                Runs
+                Trigger
               </div>
               <span className="font-mono text-[10px] text-muted-foreground">
-                {automation.runs} total · {automation.successes} ok · {automation.failures} failed
+                fires (1h): {automation.recentFires.length}
               </span>
             </div>
             <div className="flex items-center gap-2">
               <Shield className="h-3 w-3 text-emerald-400" />
-              <span className="font-mono text-sm font-semibold text-emerald-300">{successRate}%</span>
-              <span className="text-[10px] text-muted-foreground">success rate</span>
+              <span className="font-mono text-[10px] text-muted-foreground">
+                {automation.lastFiredAt != null
+                  ? `last fired ${new Date(automation.lastFiredAt * 1000).toLocaleString()}`
+                  : 'never fired'}
+              </span>
             </div>
             {automation.nextRunAt != null && (
               <p className="mt-1 font-mono text-[10px] text-muted-foreground">

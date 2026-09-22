@@ -12,9 +12,15 @@
 //! *sources*; `everyaios_agents::AgentDirectory` composes them into one
 //! canonical record set so the UI never keeps a parallel agent map.
 
+use std::sync::Arc;
+
 use everyaios_agents::{AgentDirectory, AgentDirectoryEntry, AgentSource};
+use everyaios_core::tools::AgentReadinessSource;
 use everyaios_types::{AgentDefinition, AgentId, AgentProtocol, AuthMode};
 use serde_json::json;
+use tauri::State;
+
+use crate::AppState;
 
 /// The registry root — `~/.everyaios/agents` (honors `EVERYAIOS_HOME`).
 fn registry() -> everyaios_agents::registry::AgentRegistry {
@@ -84,8 +90,6 @@ pub fn agent_registry_set_disabled(id: String, disabled: bool) -> Result<(), Str
 /// Project a launch manifest onto the canonical `AgentDefinition`.
 fn definition_from_manifest(m: &everyaios_acp::HarnessManifest) -> AgentDefinition {
     let protocol = match m.protocol {
-        everyaios_acp::HarnessProtocol::Inbuilt => AgentProtocol::Inbuilt,
-        everyaios_acp::HarnessProtocol::ModelBackend => AgentProtocol::ModelBackend,
         everyaios_acp::HarnessProtocol::Acp => AgentProtocol::Acp,
     };
     AgentDefinition {
@@ -103,7 +107,6 @@ fn definition_from_manifest(m: &everyaios_acp::HarnessManifest) -> AgentDefiniti
             everyaios_acp::AuthMode::Keyless => AuthMode::Keyless,
             everyaios_acp::AuthMode::Unknown => AuthMode::Unknown,
         },
-        is_default: m.is_default,
         capabilities: Vec::new(),
         extension_mechanisms: Vec::new(),
     }
@@ -125,39 +128,43 @@ fn entry_json(entry: &AgentDirectoryEntry) -> serde_json::Value {
         "name": entry.definition.name,
         "description": entry.definition.description,
         "protocol": match entry.definition.protocol {
-            AgentProtocol::Inbuilt => "inbuilt",
             AgentProtocol::Acp => "acp",
-            AgentProtocol::ModelBackend => "model_backend",
+            AgentProtocol::ModelOnly => "model_only",
         },
         "authMode": entry.definition.auth_mode.as_str(),
-        "isDefault": entry.definition.is_default,
         "source": entry.source.as_str(),
-        "installed": entry.installed,
+        // P71.3f — the canonical readiness state; `installed` is its derived
+        // projection (kept for surfaces that still read the boolean).
+        "readiness": entry.readiness.as_str(),
+        "ready": entry.ready(),
+        "installed": entry.installed(),
         "removable": entry.source.is_removable(),
         "locator": entry.locator,
     })
 }
 
-/// The one agent directory (P69.D1): inbuilt engine + ACP launch registry +
-/// saved `agent.toml` bundles, composed server-side and returned id-ordered.
+/// The one agent directory (P69.D1): the ACP launch registry + saved
+/// `agent.toml` bundles, composed server-side and returned id-ordered.
+/// ADR-0005: there is no built-in row — every entry is an external agent or a
+/// user bundle.
 ///
 /// The UI reads this as a façade; it never merges agent lists of its own.
 #[tauri::command]
-pub fn agent_directory_list() -> Result<serde_json::Value, String> {
+pub fn agent_directory_list(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
     let mut dir = AgentDirectory::new();
+    // P71.3f — rows carry the probed readiness (install facts + live handshake
+    // state), not a boolean the caller would have to keep in sync.
+    let source = crate::acp_cmds::ShellAgentReadiness {
+        sessions: Arc::clone(&state.acp_sessions),
+    };
+    let readiness_of = |id: &str| source.readiness(id);
 
     let launch = crate::acp_cmds::launch_registry();
     for manifest in &launch.agents {
-        let source = if manifest.protocol == everyaios_acp::HarnessProtocol::Inbuilt {
-            AgentSource::Inbuilt
-        } else {
-            AgentSource::AcpRegistry
-        };
-        let installed = manifest.protocol == everyaios_acp::HarnessProtocol::Inbuilt
-            || crate::acp_cmds::agent_installed(&manifest.id);
+        // Every launch-registry row is an external ACP agent (ADR-0005 §D1).
         dir.upsert(
-            AgentDirectoryEntry::new(definition_from_manifest(manifest), source)
-                .with_installed(installed)
+            AgentDirectoryEntry::new(definition_from_manifest(manifest), AgentSource::AcpRegistry)
+                .with_readiness(readiness_of(&manifest.id))
                 .with_locator(distribution_label(&manifest.distribution)),
         );
     }
@@ -175,7 +182,8 @@ pub fn agent_directory_list() -> Result<serde_json::Value, String> {
     let rows: Vec<serde_json::Value> = dir.list().iter().map(|e| entry_json(e)).collect();
     Ok(json!({
         "agents": rows,
-        "defaultAgentId": launch.default_agent,
+        // No default agent exists (ADR-0005 §D1); selection is user-owned.
+        "defaultAgentId": serde_json::Value::Null,
         "bundleCount": bundle_count,
         "total": dir.len(),
     }))

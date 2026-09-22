@@ -5,10 +5,26 @@ export interface WorkAddress {
   workId: string
   projectId?: string
   sessionId?: string
+  /** P71.8a — the owning Session's kind (`ADR-0006`); a record property, never
+   * inferred from whether a Chat exists. */
+  sessionKind?: 'interactive' | 'automation' | 'delegated'
   ownerId?: string
   nodeId?: string
   currentRunId?: string
   version: number
+}
+
+/** P71.8c — non-interactive Sessions surface **through their owner**: an
+ * automation run appears in the Automation screen's run list, a delegated
+ * Session in the Activity/work timeline. They never invent a Chat. */
+export function sessionOwnerSurface(
+  kind: WorkAddress['sessionKind'],
+): 'chat' | 'automation' | 'activity' {
+  switch (kind) {
+    case 'automation': return 'automation'
+    case 'delegated': return 'activity'
+    default: return 'chat'
+  }
 }
 
 export interface WorkPresence {
@@ -52,7 +68,10 @@ export type DomainEvent = {
   data: { runId: string; checkpoint: number }
 } | {
   kind: 'run_waiting'
-  data: { runId: string; reason: string }
+  data: { runId: string; reason: string; wait?: { reason: string; detail?: string; deadlineMs?: number; resumeOn?: string } }
+} | {
+  kind: 'run_interrupted'
+  data: { runId: string; reason?: string }
 } | {
   kind: 'run_failed'
   data: { runId: string; reason: string }
@@ -160,9 +179,53 @@ export function presenceLabel(state: string | undefined): string {
     case 'blocked': return 'Blocked'
     case 'completed': return 'Completed'
     case 'failed': return 'Failed'
+    case 'cancelled': return 'Cancelled'
     case 'offline': return 'Offline'
     case 'reconnecting': return 'Reconnecting'
     default: return state ?? 'Connected'
+  }
+}
+
+/** P71.3g — the canonical Work lifecycle states (`ARCH/WORK.md` §4); Rust's
+ * `everyaios_types::WorkState` is the authority, this is the wire projection. */
+export type WorkLifecycleState =
+  | 'created' | 'planning' | 'ready' | 'running'
+  | 'waiting_tool' | 'waiting_approval' | 'waiting_user' | 'checkpointed'
+  | 'verifying' | 'completed' | 'failed' | 'cancelled' | 'paused' | 'recoverable'
+
+/** Human label for a Work lifecycle state. */
+export function workStateLabel(state: string | undefined): string {
+  switch (state) {
+    case 'created': return 'Created'
+    case 'planning': return 'Planning'
+    case 'ready': return 'Ready'
+    case 'running': return 'Running'
+    case 'waiting_tool': return 'Running a tool'
+    case 'waiting_approval': return 'Waiting for approval'
+    case 'waiting_user': return 'Waiting for you'
+    case 'checkpointed': return 'Checkpointed'
+    case 'verifying': return 'Verifying'
+    case 'completed': return 'Completed'
+    case 'failed': return 'Failed'
+    case 'cancelled': return 'Cancelled'
+    case 'paused': return 'Paused'
+    // Recoverable is resumable with knowns and unknowns — never "failed".
+    case 'recoverable': return 'Interrupted — resumable'
+    default: return state ?? 'Unknown'
+  }
+}
+
+/** Human label for a wait reason (`AUTOMATION.md` §8). */
+export function waitReasonLabel(reason: string | undefined): string {
+  switch (reason) {
+    case 'approval': return 'approval pending'
+    case 'user_input': return 'waiting for your answer'
+    case 'timer': return 'on a timer'
+    case 'external_event': return 'waiting for an event'
+    case 'resource': return 'waiting for a resource'
+    case 'agent': return 'waiting on another agent'
+    case 'retry': return 'retrying shortly'
+    default: return reason ?? 'unknown wait'
   }
 }
 
@@ -195,7 +258,15 @@ export function describeWorkEvent(envelope: WorkEventEnvelope): WorkEventDescrip
         case 'run_checkpointed':
           return { label: `Run ${shortId(ev.data.runId)} checkpoint ${ev.data.checkpoint}`, tone: 'run', status: 'done' }
         case 'run_waiting':
-          return { label: `Run ${shortId(ev.data.runId)} waiting`, detail: ev.data.reason, tone: 'approval', status: 'active' }
+          return {
+            label: `Run ${shortId(ev.data.runId)} waiting — ${waitReasonLabel(ev.data.wait?.reason ?? ev.data.reason)}`,
+            detail: ev.data.wait?.resumeOn ?? ev.data.wait?.detail,
+            tone: 'approval',
+            status: 'active',
+          }
+        case 'run_interrupted':
+          // Recoverable: the effect outcome is unknown — say so, never "failed".
+          return { label: `Run ${shortId(ev.data.runId)} interrupted — resumable`, detail: ev.data.reason, tone: 'run', status: 'active' }
         case 'run_paused':
           return { label: `Run ${shortId(ev.data.runId)} paused`, tone: 'run', status: 'active' }
         case 'run_completed':

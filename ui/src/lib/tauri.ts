@@ -113,40 +113,6 @@ export async function schedulerPauseSession(sessionId: string): Promise<number> 
   return invoke<number>("scheduler_pause_session", { sessionId });
 }
 
-/** P1.4: start a chat turn. Resolves with the streamId. */
-export async function chatStream(args: {
-  sessionId: string;
-  text: string;
-  provider?: string;
-  model?: string;
-  /** P1.5 — persona tone overlay (core-ai PERSONA_PRESETS). */
-  personaId?: string;
-  /** IPC surface used by the native chat_stream command. */
-  surface?: "chat" | "reader" | "bubble" | "automation";
-  /** P1.5 — Hermes SOUL.md identity block (Slot #1, injection-scanned). */
-  soulMd?: string;
-  /** F12/J17 — selected agent id (None = inbuilt engine). */
-  agentId?: string;
-  /** P4.7 — documents to inject below the cache boundary (J6 wrapping). */
-  userDocuments?: { title: string; content: string }[];
-  /** P50.3.6 — live provider-key set used by the route credential gate. */
-  credentialedProviders?: string[];
-  /** P38 — the session's effective Chief (pin → default → inbuilt); the
-   * coordinator's dispatch guard asserts it so an external Chief never runs
-   * inbuilt by accident. */
-  primaryChief?: string;
-  /** Canonical Work identity; native defaults this to sessionId. */
-  workId?: string;
-  projectId?: string;
-}): Promise<string> {
-  return invoke<string>("chat_stream", args);
-}
-
-/** P1.4: cancel a running stream (abort → Rust → sidecar → provider). */
-export async function chatCancel(streamId: string): Promise<void> {
-  return invoke("chat_cancel", { streamId });
-}
-
 /** S0.5: re-run a failed tool through the same Guard-2 ticket path. */
 export async function chatToolRetry(args: {
   sessionId: string;

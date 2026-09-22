@@ -533,9 +533,12 @@ pub fn settings_default_model_set(
         "configured",
         || {
             // Native-vs-external two-plane guard: the native catalog must not
-            // override an external agent's own model surface.
+            // override an external agent's own model surface. With the built-in
+            // identity retired (P71.2a) every pin names an external agent, so
+            // an unset pin is the only pass-through — no spelling unlocks a
+            // native model while an agent is bound (ADR-0005 §5).
             if let Ok(cfg) = everyaios_core::Config::load() {
-                if cfg.primary_chief != "inbuilt" && cfg.primary_chief != "everyaios" {
+                if !cfg.primary_chief.trim().is_empty() {
                     return Err(format!(
                         "primary chief '{}' owns its model — selecting a native catalog model while an external agent is active is forbidden",
                         cfg.primary_chief
@@ -571,12 +574,11 @@ pub fn settings_default_model_set(
 // P65.2 — AgentSettings assembler
 // ---------------------------------------------------------------------------
 
-/// Pure `modelOwner` rule: `native` for the inbuilt engine, `managed` only
-/// when a verified launch-time (P63) binding exists, otherwise `agent`.
-fn model_owner_for(is_inbuilt: bool, has_verified_binding: bool) -> &'static str {
-    if is_inbuilt {
-        "native"
-    } else if has_verified_binding {
+/// Pure `modelOwner` rule: `managed` only when a verified launch-time (P63)
+/// binding exists, otherwise the agent owns its model (ADR-0005 §D6 — there
+/// is no inbuilt engine for the native catalog to serve).
+fn model_owner_for(has_verified_binding: bool) -> &'static str {
+    if has_verified_binding {
         "managed"
     } else {
         "agent"
@@ -587,15 +589,11 @@ fn model_owner_for(is_inbuilt: bool, has_verified_binding: bool) -> &'static str
 /// without occupancy; subscription agents need an explicit sign-in.
 fn agent_readiness(
     installed: bool,
-    is_inbuilt: bool,
     auth_mode: &str,
     live_handle: bool,
     live_auth_required: bool,
     key_available: bool,
 ) -> &'static str {
-    if is_inbuilt {
-        return "ready";
-    }
     if !installed {
         return "not_installed";
     }
@@ -625,22 +623,16 @@ fn agent_readiness(
 }
 
 fn auth_mode_for(manifest: &everyaios_acp::HarnessManifest) -> &'static str {
-    use everyaios_acp::HarnessProtocol;
-    if manifest.protocol == HarnessProtocol::Inbuilt {
-        return "keyless";
-    }
     // P69.C11 — one canonical serializer: the enum's own spelling, exactly as
     // `ui/src/lib/acp.ts` declares it. No hand-maintained second mapping.
     manifest.auth_mode.as_str()
 }
 
 fn protocol_for(manifest: &everyaios_acp::HarnessManifest) -> &'static str {
-    match manifest.protocol {
-        everyaios_acp::HarnessProtocol::Inbuilt => "inbuilt",
-        // The registry's launch plane is ACP today; `ModelBackend` agents are
-        // driven through the same ACP spawn seam with env injection.
-        everyaios_acp::HarnessProtocol::Acp | everyaios_acp::HarnessProtocol::ModelBackend => "acp",
-    }
+    // The registry's launch plane is ACP only (ADR-0005 §D1 — external agents
+    // are the v1 engines).
+    let _ = manifest;
+    "acp"
 }
 
 /// Map the shell's install-provenance JSON into the discriminated
@@ -731,24 +723,15 @@ fn runtime_location_from_json(v: &Value) -> RuntimeLocation {
     }
 }
 
-fn native_caps(is_inbuilt: bool) -> Vec<String> {
-    if is_inbuilt {
-        vec![
-            "loop".into(),
-            "planning".into(),
-            "routing".into(),
-            "memory-reasoning".into(),
-            "verification".into(),
-            "native-tools".into(),
-        ]
-    } else {
-        vec![
-            "own-loop".into(),
-            "own-tools".into(),
-            "own-model".into(),
-            "own-permissions".into(),
-        ]
-    }
+fn native_caps() -> Vec<String> {
+    // Every v1 engine is an external agent (ADR-0005 §D1): its native plane
+    // is its own loop/tools/model/permissions, never EveryAIOS's.
+    vec![
+        "own-loop".into(),
+        "own-tools".into(),
+        "own-model".into(),
+        "own-permissions".into(),
+    ]
 }
 
 fn shared_caps() -> Vec<String> {
@@ -765,16 +748,12 @@ fn shared_caps() -> Vec<String> {
 /// rows. Defaults come from live install/health state; every row applies from
 /// the next turn/run and is frozen into the Work manifest at creation — never
 /// retrofitted onto an in-flight run.
-fn session_loadout_for(is_inbuilt: bool, ready: bool, health: &str) -> Vec<SessionLoadoutRow> {
+fn session_loadout_for(ready: bool, health: &str) -> Vec<SessionLoadoutRow> {
     let mut rows = Vec::new();
-    for cap in native_caps(is_inbuilt) {
+    for cap in native_caps() {
         rows.push(SessionLoadoutRow {
             capability_id: cap,
-            source: if is_inbuilt {
-                "everyaios-native".to_string()
-            } else {
-                "agent-native".to_string()
-            },
+            source: "agent-native".to_string(),
             native_or_shared: "native".to_string(),
             enabled: ready,
             health: health.to_string(),
@@ -807,8 +786,7 @@ fn build_agent_settings(
     state: &AppState,
     manifest: &everyaios_acp::HarnessManifest,
 ) -> AgentSettings {
-    let is_inbuilt = manifest.protocol == everyaios_acp::HarnessProtocol::Inbuilt;
-    let installed = is_inbuilt || crate::acp_cmds::agent_installed(&manifest.id);
+    let installed = crate::acp_cmds::agent_installed(&manifest.id);
     let auth_mode = auth_mode_for(manifest).to_string();
 
     // Live ACP truth: any handle launched under this agent id, plus its
@@ -866,14 +844,12 @@ fn build_agent_settings(
         .map(|b| b.refusal.is_none() && !b.provider_id.is_empty())
         .unwrap_or(false)
         && crate::agent_backend_cmds::has_managed_binding(state, &manifest.id);
-    let model_owner = model_owner_for(is_inbuilt, verified_binding).to_string();
+    let model_owner = model_owner_for(verified_binding).to_string();
 
     // Key availability for readiness (boolean only — never the key).
-    let key_available = binding.as_ref().map(|b| b.key_present).unwrap_or(false)
-        || manifest.protocol == everyaios_acp::HarnessProtocol::Inbuilt;
+    let key_available = binding.as_ref().map(|b| b.key_present).unwrap_or(false);
     let readiness = agent_readiness(
         installed,
-        is_inbuilt,
         &auth_mode,
         live_handle,
         live_auth_required,
@@ -891,22 +867,21 @@ fn build_agent_settings(
 
     // Occupancy proof: the one provenance builder in `acp_cmds` (install
     // record / PATH / App-Paths / WSL probe) mapped into the discriminated
-    // union. Inbuilt ships with the app, so it reports `unavailable` here by
-    // design — its occupancy is `installed: true`, not a path.
+    // union. Catalog membership alone never claims occupancy.
     let location_json = crate::acp_cmds::runtime_location_for(&manifest.id);
     AgentSettings {
         agent_id: manifest.id.clone(),
         installed,
         protocol: protocol_for(manifest).to_string(),
         auth_mode,
-        native_capabilities: native_caps(is_inbuilt),
+        native_capabilities: native_caps(),
         shared_capabilities: shared_caps(),
         model_owner,
         backend_binding: binding,
         config_options,
         readiness: readiness.clone(),
         location: runtime_location_from_json(&location_json),
-        session_loadout: session_loadout_for(is_inbuilt, readiness == "ready", &health),
+        session_loadout: session_loadout_for(readiness == "ready", &health),
     }
 }
 

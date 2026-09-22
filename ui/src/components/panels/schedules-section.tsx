@@ -33,18 +33,13 @@ import {
 } from '@/lib/settings'
 import { Row, SectionShell } from './settings-shared'
 
+// P71.3d — trigger plane: the only states are firing-paused and enabled.
+// Run status (running/failed/waiting) belongs to the Work/Event surfaces.
 function stateBadge(job: SchedulerJob) {
-  const s = job.state.state
-  if (s === 'running') {
-    return <Badge className="bg-sky-500/15 text-[9px] text-sky-300">running</Badge>
-  }
-  if (s === 'paused') {
+  if (job.paused) {
     return <Badge className="bg-warning/15 text-[9px] text-warning">paused</Badge>
   }
-  if (s === 'failed') {
-    return <Badge className="bg-red-500/15 text-[9px] text-red-300">retrying</Badge>
-  }
-  return <Badge variant="secondary" className="text-[9px]">idle</Badge>
+  return <Badge variant="secondary" className="text-[9px]">{job.enabled ? 'armed' : 'off'}</Badge>
 }
 
 /** CLS=0 skeleton: exact-fit rows so the list never pushes layout on load. */
@@ -135,15 +130,15 @@ export default function SchedulesSection() {
   }
 
   const pauseOrResume = async (job: SchedulerJob) => {
-    const paused = job.state.state === 'paused'
+    const paused = job.paused
     setBusyId(job.id)
     try {
       if (paused) {
         await schedulerResume(job.id)
-        setJobs((prev) => (prev ?? []).map((j) => (j.id === job.id ? { ...j, state: { state: 'idle' as const } } : j)))
+        setJobs((prev) => (prev ?? []).map((j) => (j.id === job.id ? { ...j, paused: false } : j)))
       } else {
         await schedulerPause(job.id)
-        setJobs((prev) => (prev ?? []).map((j) => (j.id === job.id ? { ...j, state: { state: 'paused' as const, resumeDeadline: undefined } } : j)))
+        setJobs((prev) => (prev ?? []).map((j) => (j.id === job.id ? { ...j, paused: true } : j)))
       }
     } catch (e) {
       notify(`${paused ? 'Resuming' : 'Pausing'} schedule failed: ${e instanceof Error ? e.message : String(e)}`, 'error')
@@ -227,7 +222,7 @@ export default function SchedulesSection() {
                 <div className="mt-0.5 font-mono text-[10px] text-muted-foreground">
                   {triggerLabel(job.trigger)}
                   {typeof job.nextRunAt === 'number' ? ` · next ${new Date(job.nextRunAt * 1000).toLocaleString()}` : ''}
-                  {` · ${job.runs} runs`}
+                  {typeof job.lastFiredAt === 'number' ? ` · last fired ${new Date(job.lastFiredAt * 1000).toLocaleString()}` : ''}
                 </div>
                 <div className="mt-1.5 flex items-center gap-1.5">
                   <Button
@@ -247,9 +242,9 @@ export default function SchedulesSection() {
                     className="h-6 px-2 text-[10px]"
                     disabled={busy}
                     onClick={() => void pauseOrResume(job)}
-                    aria-label={job.state.state === 'paused' ? `Resume ${job.name}` : `Pause ${job.name}`}
+                    aria-label={job.paused ? `Resume ${job.name}` : `Pause ${job.name}`}
                   >
-                    {job.state.state === 'paused' ? 'Resume' : 'Pause'}
+                    {job.paused ? 'Resume' : 'Pause'}
                   </Button>
                   <span className="ml-auto flex items-center gap-1.5">
                     <span className="font-mono text-[9px] text-muted-foreground">

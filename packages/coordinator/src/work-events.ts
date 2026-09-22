@@ -33,17 +33,23 @@ export type WorkRunState =
 
 export type RequestFn = (method: string, params: unknown) => Promise<unknown>;
 
-/** Create the per-session work item once; never errors on the second call. */
+/** Create the per-session work item once; never errors on the second call.
+ *
+ * `sessionKind` (P71.8a) is stated by the caller from the record it created —
+ * a chat turn's Work is `interactive`; a trigger's Work is `automation` with no
+ * Chat (ADR-0006). Unstated defaults to `interactive` on the kernel side. */
 export async function ensureWork(
   request: RequestFn,
   workId: string,
   sessionId: string,
   objective = "",
+  sessionKind: "interactive" | "automation" | "delegated" = "interactive",
 ): Promise<void> {
   try {
     await request("work/create", {
       workId,
       sessionId,
+      sessionKind,
       objective,
     });
   } catch {

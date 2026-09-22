@@ -46,15 +46,14 @@ use crate::AppState;
 /// Monotonic ACP handle-id source (never reuses an id within a process).
 static ACP_COUNTER: AtomicU64 = AtomicU64::new(1);
 
-/// P38 — read the `primary_chief` default (`inbuilt` | ACP agent id). The
-/// dispatcher resolves: explicit session value → this default → `inbuilt`.
-/// P53.3 — `known` is the live launch-registry id set (inbuilt + every
-/// registry agent), never a hardcoded trio.
+/// P38 — read the `primary_chief` default (an installed ACP agent id; empty
+/// means none is chosen). ADR-0005: there is no built-in fallback, so an
+/// unset default resolves to *no agent* rather than to an engine.
+/// P53.3 — `known` is the live launch-registry id set, never a hardcoded trio.
 #[tauri::command]
 pub fn chief_default_get() -> Result<serde_json::Value, String> {
     let cfg = Config::load().map_err(|e| e.to_string())?;
-    let mut known = vec!["inbuilt".to_string()];
-    known.extend(launch_registry().agents.iter().map(|m| m.id.clone()));
+    let known: Vec<String> = launch_registry().agents.iter().map(|m| m.id.clone()).collect();
     Ok(serde_json::json!({
         "primaryChief": cfg.primary_chief,
         "known": known
@@ -62,13 +61,14 @@ pub fn chief_default_get() -> Result<serde_json::Value, String> {
 }
 
 /// P53.3 — set the `primary_chief` default. Occupancy is **any installed**
-/// agent: the id must be in the launch registry **and** installed (an
-/// EveryAIOS install record or a PATH-discovered binary — `inbuilt` is always
-/// installed). Unknown or not-installed ids are refused fail-closed so a typo
-/// or a missing binary never silently falls back to the inbuilt engine.
+/// agent: the id must be in the launch registry **and** installed (an EveryAIOS
+/// install record or a PATH-discovered binary). Unknown or not-installed ids
+/// are refused fail-closed, and no id is privileged — a typo or a missing
+/// binary must never silently fall back to a built-in engine, because none
+/// exists (ADR-0005).
 #[tauri::command]
 pub fn chief_default_set(primary_chief: String) -> Result<String, String> {
-    if primary_chief != "inbuilt" && launch_registry().get(&primary_chief).is_none() {
+    if launch_registry().get(&primary_chief).is_none() {
         return Err(format!(
             "unknown primary_chief {primary_chief:?} — no registered launch path (fail-closed, no silent fallback)"
         ));
@@ -85,9 +85,10 @@ pub fn chief_default_set(primary_chief: String) -> Result<String, String> {
     Ok(primary_chief)
 }
 
-/// P53.3 — installed-ness for Chief occupancy: `inbuilt` always; otherwise an
-/// EveryAIOS install record **or** a PATH-discovered binary (the same two legs
-/// `acp_install_status` reports — one predicate, no second definition).
+/// P53.3 — installed-ness for Chief occupancy: an EveryAIOS install record
+/// **or** a PATH-discovered binary (the same two legs `acp_install_status`
+/// reports — one predicate, no second definition). No id is installed by
+/// construction (ADR-0005).
 fn install_outcome_usable(outcome: &everyaios_acp::InstallOutcome) -> bool {
     match outcome.kind.as_str() {
         // A stale pointer is not occupancy. The executable must still be
@@ -110,22 +111,140 @@ fn resolve_native_binary(command: &str) -> Option<std::path::PathBuf> {
     resolve_on_path(command).or_else(|| discover_windows_app_path(command))
 }
 
-pub(crate) fn agent_installed(agent_id: &str) -> bool {
-    if agent_id == "inbuilt" || agent_id == "everyaios" {
-        return true;
-    }
+/// P71.3f — the **live** facts readiness needs, read off one launched handle:
+/// `(auth_required, has_session)`. A handle only exists when the `initialize`
+/// handshake succeeded, which is what makes `ProtocolCompatible` observable.
+fn live_facts(handle: &AcpHandle) -> (bool, bool) {
+    (handle.auth_required, handle.session.session_id().is_some())
+}
+
+/// P71.3f — the cold readiness derivation (no live session): registry presence,
+/// install record, PATH/App-Paths/WSL discovery, package-manager readiness.
+/// The derived booleans the older surfaces read (`installed`, `launchable`,
+/// `discovered`) are projections of this one state — never a second truth.
+///
+/// `Failed`/`Unavailable` are reachable only from attempt records the shell
+/// does not keep yet (a failed launch is reported to the caller today), so the
+/// cold path never claims them.
+pub(crate) fn agent_readiness(agent_id: &str) -> everyaios_types::AgentReadiness {
+    use everyaios_types::AgentReadiness;
+    // ADR-0005 — no built-in row ships, so nothing is `Ready` by construction;
+    // every id is probed like any other external agent.
     let registry = launch_registry();
-    if let Some(outcome) = installer().installed(agent_id) {
-        return install_outcome_usable(&outcome);
+    let Some(manifest) = registry.get(agent_id) else {
+        // An id no registry knows is not "discovered": nothing was found.
+        return AgentReadiness::Unknown;
+    };
+    if installer()
+        .installed(agent_id)
+        .is_some_and(|o| install_outcome_usable(&o))
+    {
+        return AgentReadiness::Installed;
     }
-    match registry.get(agent_id).map(|m| &m.distribution) {
-        Some(Distribution::Binary { command, .. }) => {
+    // Path/App-Paths/WSL discovery or a self-installing package manager means
+    // the runtime can actually be started here.
+    let launchable = match &manifest.distribution {
+        Distribution::Binary { command, .. } => {
             !command.is_empty() && resolve_native_binary(command).is_some()
         }
-        Some(Distribution::Npx { .. }) => resolve_on_path("npx").is_some(),
-        Some(Distribution::Uvx { .. }) => resolve_on_path("uvx").is_some(),
-        None => false,
+        Distribution::Npx { .. } => resolve_on_path("npx").is_some(),
+        Distribution::Uvx { .. } => resolve_on_path("uvx").is_some(),
+    };
+    if launchable {
+        return AgentReadiness::Launchable;
     }
+    AgentReadiness::Discovered
+}
+
+/// P71.3f — cold facts plus the live handshake state. A live handle outranks
+/// install facts: the process negotiated, so readiness is at least
+/// `ProtocolCompatible`; `auth_required` on the handle is `AuthRequired`; a
+/// negotiated session is `Ready`.
+pub(crate) fn agent_readiness_with_live(
+    agent_id: &str,
+    live: Option<(bool, bool)>,
+) -> everyaios_types::AgentReadiness {
+    use everyaios_types::AgentReadiness;
+    match live {
+        Some((true, _)) => AgentReadiness::AuthRequired,
+        Some((false, true)) => AgentReadiness::Ready,
+        Some((false, false)) => AgentReadiness::ProtocolCompatible,
+        None => agent_readiness(agent_id),
+    }
+}
+
+/// P71.3f — the shell's mounted [`everyaios_core::tools::AgentReadinessSource`]:
+/// install/discovery facts plus the live ACP handshake state from
+/// `AppState::acp_sessions`. This is the one place the picker, the delegation
+/// gate and the trigger plane's doctor read agent readiness from.
+pub(crate) struct ShellAgentReadiness {
+    pub(crate) sessions: Arc<std::sync::Mutex<std::collections::HashMap<String, AcpHandle>>>,
+}
+
+/// P71.3f — the trigger plane's doctor reads readiness through this check
+/// (`ARCH/AUTOMATION.md` §9). `ok` means at least one agent is `Ready`; the
+/// detail counts each rung so a support pass sees *which* rung is missing
+/// rather than a single opaque boolean.
+pub(crate) fn agents_doctor_check(
+    sessions: Arc<std::sync::Mutex<std::collections::HashMap<String, AcpHandle>>>,
+) -> everyaios_core::CronCheck {
+    use everyaios_core::tools::AgentReadinessSource;
+    use everyaios_types::AgentReadiness;
+    let source = ShellAgentReadiness { sessions };
+    let registry = launch_registry();
+    let (mut ready, mut launchable, mut needs_auth, mut discovered) = (0usize, 0, 0, 0);
+    for manifest in &registry.agents {
+        match source.readiness(&manifest.id) {
+            state if state.is_ready() => ready += 1,
+            state if state.needs_auth() => needs_auth += 1,
+            state if state.is_launchable() => launchable += 1,
+            _ => discovered += 1,
+        }
+    }
+    let unavailable: Vec<&str> = registry
+        .agents
+        .iter()
+        .filter(|m| source.readiness(&m.id) == AgentReadiness::Unknown)
+        .map(|m| m.id.as_str())
+        .collect();
+    everyaios_core::CronCheck {
+        name: "agents".to_string(),
+        ok: ready > 0,
+        detail: format!(
+            "{ready} ready · {launchable} launchable · {needs_auth} auth-required · \
+             {discovered} discovered{} — an unready agent blocks its firings with the state \
+             as the reason, never a silent model swap",
+            if unavailable.is_empty() {
+                String::new()
+            } else {
+                format!(" · {} unprobed ({})", unavailable.len(), unavailable.join(", "))
+            }
+        ),
+    }
+}
+
+impl everyaios_core::tools::AgentReadinessSource for ShellAgentReadiness {
+    fn readiness(&self, agent_id: &str) -> everyaios_types::AgentReadiness {
+        let live = self
+            .sessions
+            .lock()
+            .ok()
+            .and_then(|sessions| {
+                sessions
+                    .values()
+                    .find(|h| h.agent_id == agent_id)
+                    .map(live_facts)
+            });
+        agent_readiness_with_live(agent_id, live)
+    }
+}
+
+/// P71.3f — occupancy is now a **projection** of the readiness state, so the
+/// answer to "is this agent installed?" and "is this agent ready?" cannot
+/// disagree (the old pair could: `installed` was true for agents that could
+/// not run).
+pub(crate) fn agent_installed(agent_id: &str) -> bool {
+    agent_readiness(agent_id).is_installed()
 }
 
 /// The launch registry the runtime actually resolves against: the curated
@@ -200,7 +319,7 @@ pub(crate) struct AcpHandle {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AcpHandleInfo {
-    handle: String,
+    pub(crate) handle: String,
     agent_id: String,
     agent_name: String,
     session_id: String,
@@ -240,7 +359,10 @@ impl From<(&AcpHandle, &str)> for AcpHandleInfo {
 /// imply EveryAIOS audit coverage for effects an external agent performs
 /// inside its own process.
 /// - `GovernedMediated` — every effect flows through the EveryAIOS executor
-///   (Guard-2 ticket → receipt on the one audit trail). Inbuilt engine only.
+///   (Guard-2 ticket → receipt on the one audit trail). No registry row is
+///   this today: it belonged to the retired built-in engine, and an external
+///   agent's own tools never cross Guard — the class stays in the vocabulary
+///   for the post-v1 governed baseline (ADR-0005 §3 has the honest split).
 /// - `SelfContained` — the agent's `session/request_permission` requests are
 ///   answered by the shared GuardService (mediated at the ACP boundary), but
 ///   effects the agent performs internally (its own shell, files, network)
@@ -255,19 +377,14 @@ pub fn acp_agents() -> Vec<serde_json::Value> {
         .agents
         .iter()
         .map(|m| {
-            let (class, audited_effects, note) = if m.is_default {
-                (
-                    "GovernedMediated",
-                    true,
-                    "Every effect flows through the EveryAIOS executor: Guard-2 ticket, receipt on the audit trail.",
-                )
-            } else {
-                (
-                    "SelfContained",
-                    false,
-                    "Permission requests are mediated by Guard-2, but effects performed inside the agent's own process (shell, files, network) are outside the EveryAIOS audit trail.",
-                )
-            };
+            // ADR-0005: every registry row is an external ACP harness, so every
+            // row is `SelfContained` — nothing is claimed as fully governed
+            // (I14/I15: authority does not leak across the seam).
+            let (class, audited_effects, note) = (
+                "SelfContained",
+                false,
+                "Permission requests are mediated by Guard-2, but effects performed inside the agent's own process (shell, files, network) are outside the EveryAIOS audit trail.",
+            );
             let mut v = serde_json::to_value(m).unwrap_or(serde_json::Value::Null);
             if let Some(obj) = v.as_object_mut() {
                 obj.insert(
@@ -605,16 +722,13 @@ pub(crate) fn runtime_location_json(
 
 /// P65.2 — the one occupancy-provenance builder for Settings: install record
 /// or PATH/App-Paths/WSL probe for one agent id, mapped to the location JSON.
-/// Inbuilt has no executable and reports `unavailable` here (its occupancy is
-/// "ships with the app", carried by `agent_installed`, not by a path).
+/// A row whose distribution has no executable reports `unavailable` here; no
+/// agent ships with the app in v1 (ADR-0005).
 pub(crate) fn runtime_location_for(agent_id: &str) -> serde_json::Value {
     let registry = launch_registry();
     let Some(manifest) = registry.get(agent_id) else {
         return serde_json::json!({ "kind": "unavailable", "reason": "unknown agent id" });
     };
-    if manifest.protocol == everyaios_acp::HarnessProtocol::Inbuilt {
-        return serde_json::json!({ "kind": "unavailable", "reason": "inbuilt engine ships with the app" });
-    }
     let installed = installer()
         .installed(agent_id)
         .filter(install_outcome_usable);
@@ -626,14 +740,11 @@ pub(crate) fn runtime_location_for(agent_id: &str) -> serde_json::Value {
 /// npx/uvx readiness are distinct. WSL is reported as a separate discovery
 /// location and is never treated as a native Windows executable.
 #[tauri::command]
-pub fn acp_install_status() -> Result<serde_json::Value, String> {
+pub fn acp_install_status(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
     let registry = launch_registry();
     let inst = installer();
     let mut out = serde_json::Map::new();
     for m in &registry.agents {
-        if m.protocol == everyaios_acp::HarnessProtocol::Inbuilt {
-            continue;
-        }
         let mut installed = inst.installed(&m.id).filter(install_outcome_usable);
         if installed.is_none() {
             if let Distribution::Binary { command, .. } = &m.distribution {
@@ -654,14 +765,42 @@ pub fn acp_install_status() -> Result<serde_json::Value, String> {
             .unwrap_or("unavailable");
         let package_manager_ready = matches!(location_kind, "package_manager");
         let discovered = location_kind != "unavailable";
+        // P71.3f — one readiness state; the three booleans below are its
+        // projections (kept because older surfaces read them), not parallel
+        // truths. A live handle outranks install facts.
+        let readiness = {
+            use everyaios_types::AgentReadiness;
+            let live = state
+                .acp_sessions
+                .lock()
+                .ok()
+                .and_then(|sessions| {
+                    sessions
+                        .values()
+                        .find(|h| h.agent_id == m.id)
+                        .map(live_facts)
+                });
+            match live {
+                Some((true, _)) => AgentReadiness::AuthRequired,
+                Some((false, true)) => AgentReadiness::Ready,
+                Some((false, false)) => AgentReadiness::ProtocolCompatible,
+                None if installed.is_some() => AgentReadiness::Installed,
+                None
+                    if package_manager_ready
+                        || matches!(location_kind, "path" | "windows_path" | "wsl") =>
+                {
+                    AgentReadiness::Launchable
+                }
+                None => AgentReadiness::Discovered,
+            }
+        };
         // App Paths, PATH, and WSL (via dedicated WSL spawn adapter) are launchable.
-        let launchable = installed.is_some()
-            || package_manager_ready
-            || matches!(location_kind, "path" | "windows_path" | "wsl");
+        let launchable = readiness.is_launchable();
         out.insert(
             m.id.clone(),
             serde_json::json!({
-                "installed": installed.is_some() || package_manager_ready,
+                "readiness": readiness.as_str(),
+                "installed": readiness.is_installed(),
                 "discovered": discovered,
                 "launchable": launchable,
                 "version": installed.as_ref().and_then(|o| if o.version == "path" { None } else { Some(o.version.clone()) }),
@@ -1075,9 +1214,9 @@ pub fn acp_agent_verify(agent_id: String) -> Result<serde_json::Value, String> {
 /// Launch an agent by id: resolve its spawn plan, spawn the process, run the
 /// ACP handshake (`initialize` → `session/new`), and keep the session alive.
 ///
-/// The inbuilt engine (`everyaios`) has no subprocess — it routes through the
-/// existing `chat_stream` path, so `acp_launch("everyaios", …)` is a no-op
-/// sentinel that returns its manifest without spawning.
+/// Every launchable agent is an external subprocess (ADR-0005); an id no
+/// registry knows fails closed with `unknown agent id` rather than resolving
+/// to a built-in engine that no longer exists.
 ///
 /// **Auth surfacing:** when `session/new` answers `auth_required`, the launch
 /// still succeeds and reports `authRequired: true` with the agent's
@@ -1094,24 +1233,8 @@ pub fn acp_launch(
         .cloned()
         .ok_or_else(|| format!("unknown agent id: {agent_id}"))?;
 
-    if manifest.protocol == everyaios_acp::HarnessProtocol::Inbuilt {
-        // The inbuilt engine isn't an external process; it is the default
-        // chat_stream path. Report it so the UI can route accordingly.
-        return Ok(AcpHandleInfo {
-            handle: "inbuilt".to_string(),
-            agent_id: agent_id.clone(),
-            agent_name: manifest.name,
-            session_id: "inbuilt".to_string(),
-            protocol: "inbuilt".to_string(),
-            auth_required: false,
-            auth_methods: vec![],
-            embedded_context: false,
-            config_options: vec![],
-        });
-    }
-
     let plan = registry
-        .launch_plan(&agent_id, None)
+        .launch_plan(&agent_id)
         .ok_or_else(|| format!("no launch plan for {agent_id}"))?;
 
     // F8: if a binary agent is installed, launch the extracted binary path
@@ -1283,22 +1406,13 @@ pub fn acp_authenticate(
 /// memory passport (C10) + governance block injected, mirroring the inbuilt
 /// path's `<memory_warm_set>` injection. Best-effort: a missing/unavailable
 /// memory handler never blocks the turn (same contract as `memory/plan`).
-fn build_acp_prompt_with_passport(
-    state: &State<'_, AppState>,
-    text: &str,
-    agent_id: &str,
-) -> String {
-    // External ACP agents are Self-contained: permission requests are
-    // mediated by Guard-2 at the ACP boundary, but effects performed inside
-    // the agent's own process are outside the EveryAIOS audit trail.
-    let governance = if agent_id == "everyaios" {
-        everyaios_acp::GovernedSession::Mediated {
-            fs: true,
-            terminal: true,
-        }
-    } else {
-        everyaios_acp::GovernedSession::SelfContained { channel_b: true }
-    };
+fn build_acp_prompt_with_passport(state: &State<'_, AppState>, text: &str) -> String {
+    // Every agent we launch is external and self-contained: permission
+    // requests are mediated by Guard-2 at the ACP boundary, but effects
+    // performed inside the agent's own process are outside the EveryAIOS audit
+    // trail. No id gets a fully-mediated session any more — that was the
+    // retired built-in engine's privilege (ADR-0005 §3).
+    let governance = everyaios_acp::GovernedSession::SelfContained { channel_b: true };
     let core_facts = {
         let relay = state.chat_relay.lock().ok();
         relay
@@ -1319,7 +1433,6 @@ fn build_acp_prompt_with_passport(
         let mix: Vec<String> = launch_registry()
             .agents
             .iter()
-            .filter(|m| m.protocol != everyaios_acp::HarnessProtocol::Inbuilt)
             .filter(|m| agent_installed(&m.id))
             .filter(|m| cfg.subagent_enabled.get(&m.id).copied().unwrap_or(true))
             .map(|m| {
@@ -1425,19 +1538,18 @@ pub fn chief_subagents() -> Result<Vec<serde_json::Value>, String> {
     let registry = launch_registry();
     let mut rows = Vec::new();
     for m in &registry.agents {
-        // P60 — EveryAIOS Native is always a delegation candidate (it ships
-        // inside the app and needs no install record). External CLIs appear
-        // only when `agent_installed` verifies them, so the Subagents surface
-        // is occupancy, never the raw catalog.
-        let inbuilt = m.protocol == everyaios_acp::HarnessProtocol::Inbuilt;
-        if !inbuilt && !agent_installed(&m.id) {
+        // External CLIs appear only when `agent_installed` verifies them, so
+        // the Subagents surface is occupancy, never the raw catalog. There is
+        // no built-in delegation candidate (ADR-0005 §D1) — delegation goes
+        // through the `delegate.*` façade on the shared plane (P71.1).
+        if !agent_installed(&m.id) {
             continue;
         }
         let note = cfg.subagent_notes.get(&m.id).cloned().unwrap_or_default();
         let enabled = cfg.subagent_enabled.get(&m.id).copied().unwrap_or(true);
         rows.push(serde_json::json!({
             "agentId": m.id,
-            "name": if inbuilt { "EveryAIOS Native" } else { m.name.as_str() },
+            "name": m.name.as_str(),
             "defaultWhenToUse": m.description,
             "whenToUse": if note.is_empty() { m.description.clone() } else { note.clone() },
             "customized": !note.is_empty(),
@@ -1642,7 +1754,7 @@ pub fn acp_prompt(
     // It rides ahead of the memory passport (newest context first) and is
     // bounded (the builder caps it) so a huge transcript never floods the
     // agent's context. Absent = a same-Chief follow-up turn.
-    let mut prompt_text = build_acp_prompt_with_passport(&state, &text, &agent_id);
+    let mut prompt_text = build_acp_prompt_with_passport(&state, &text);
     if let Some(bundle) = handoff.as_ref().map(|h| h.trim()).filter(|h| !h.is_empty()) {
         let capped: String = bundle.chars().take(6000).collect();
         prompt_text = format!("<chief_handoff>\n{capped}\n</chief_handoff>\n\n{prompt_text}");
@@ -1993,9 +2105,10 @@ mod tests {
     }
 
     #[test]
-    fn registry_has_inbuilt_default_and_launch_list() {
+    fn registry_has_no_builtin_and_lists_launch_agents() {
         let reg = LaunchRegistry::builtin();
-        assert_eq!(reg.default_agent, "everyaios");
+        // ADR-0005 §D1: no built-in/default identity ships in the catalog.
+        assert!(reg.get("everyaios").is_none());
         assert!(reg.get("claude").is_some());
         assert!(reg.get("codex").is_some());
     }
@@ -2145,8 +2258,8 @@ mod tests {
             seed.agents.len()
         );
         assert!(
-            merged.get("everyaios").is_some(),
-            "the inbuilt row must survive the registry merge"
+            merged.get("everyaios").is_none(),
+            "no built-in agent identity exists (ADR-0005)"
         );
         assert!(
             !added.is_empty(),

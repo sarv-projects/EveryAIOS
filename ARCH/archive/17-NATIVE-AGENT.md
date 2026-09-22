@@ -1,13 +1,17 @@
-# ARCH/17 — The EveryAIOS Native Agent (frozen status lifted by ADR/0003)
+# ARCH/17 — The EveryAIOS Native Agent (frozen status lifted by ADR/0003) — ARCHIVED
 
 > ⛔ **ARCHIVED — historical context, not current architecture.** Superseded by
-> [`ADR/0005`](ADR/0005-external-agents-are-the-v1-engines.md): the built-in engine is **deferred to post-v1**,
+> [`ADR/0005`](../ADR/0005-external-agents-are-the-v1-engines.md): the built-in engine is **deferred to post-v1**,
 > so this document no longer describes a v1 binding. Live content already lives in
-> [`AGENT.md`](AGENT.md) §2/§5, [`EXTERNAL-AGENTS.md`](EXTERNAL-AGENTS.md) §1–§4 and [`CONTEXT.md`](CONTEXT.md)
+> [`AGENT.md`](../AGENT.md) §2/§5, [`EXTERNAL-AGENTS.md`](../EXTERNAL-AGENTS.md) §1–§4 and [`CONTEXT.md`](../CONTEXT.md)
 > (the `P69.A26` split). Its native-plane capability rows **B10 · B11 · C14 · C15 · F16 · I14–I17** remain
-> capability *identity* and are unaffected. Physical move to `ARCH/archive/` is tracked as `P71.5a`.
+> capability *identity* and are unaffected.
+>
+> **Moved here from `ARCH/17-NATIVE-AGENT.md` on 2026-09-22 (`P71.5a`).** Relative links below are rewritten
+> for this directory. Nothing in the live tree cites this file as a contract; `ARCH/00-INDEX.md` lists it under
+> Archive. It is retained for the post-v1 governed-baseline return (`P71.7`), not as current architecture.
 
-> **PARTLY SUPERSEDED — read [`CORE.md`](CORE.md), [`AGENT.md`](AGENT.md) and [`EXTERNAL-AGENTS.md`](EXTERNAL-AGENTS.md) first.**
+> **PARTLY SUPERSEDED — read [`CORE.md`](../CORE.md), [`AGENT.md`](../AGENT.md) and [`EXTERNAL-AGENTS.md`](../EXTERNAL-AGENTS.md) first (this file is archived).**
 > The **frozen** status of this document is lifted by `ADR/0003`. Specifically superseded: §17.0 item 1
 > (“EveryAIOS Native as Universal Chief & Swarm Harness — an orchestrator **owned by us** that handles
 > … **reasoning**”) and every use of “Chief” as a *reasoning entity*. The correct model: an agent is a
@@ -20,19 +24,19 @@
 ---
 
 
-> **Status:** Architecture contract, **frozen 2026-09-15 — status lifted by [`ADR/0003`](ADR/0003-architecture-thaw-core-authority.md)** (two-plane contract v3.75; native-plane rows **B10/B11/C14/C15/F16/I14–I17** in v3.76; Settings Control Center v3.77; Windows-first runtime/picker/cowork evidence contract v3.78). This file defines the **Native agent plane**, the **shared cowork plane**, the **capability-resolution policy**, and the **schema contract** for every native tool, shared façade, and agent type.
+> **Status:** Architecture contract, **frozen 2026-09-15 — status lifted by [`ADR/0003`](../ADR/0003-architecture-thaw-core-authority.md)** (two-plane contract v3.75; native-plane rows **B10/B11/C14/C15/F16/I14–I17** in v3.76; Settings Control Center v3.77; Windows-first runtime/picker/cowork evidence contract v3.78). This file defines the **Native agent plane**, the **shared cowork plane**, the **capability-resolution policy**, and the **schema contract** for every native tool, shared façade, and agent type.
 > **Ownership:** This is architecture, not delivery. Delivery status for every row lives in `../TODO.md` (phase **P64**). Capability *identity* stays in `../capabilities.yaml` + `09-FEATURE-MATRIX.md` + `../DESKTOP-APP-SPEC.md` §0. This file **adds no ids of its own** — but the native-plane capabilities it freezes are now first-class rows in those three surfaces (v3.76: **B10** · **B11** · **C14** · **C15** · **F16** · **I14** · **I15** · **I16** · **I17**), so the contract and this document cannot be read two ways. Everything else derives behavior, boundaries, and schemas for existing rows (B1–B9, C*, D*, E9, F*, G*, H*, I*, J*).
 > **Non-negotiables carried from `00-INDEX.md`:** one effect-authorization model · one append-only event log · one Progress timeline · Work is the durable unit. ARCH/17 must not weaken any of them.
 
 ## Where this content moved (`P69.A26` — split landed)
 
-- **Agent model** (binding, adapter, behavior profile, switching, control layers): [`AGENT.md`](AGENT.md).
+- **Agent model** (binding, adapter, behavior profile, switching, control layers): [`AGENT.md`](../AGENT.md).
 - **Protocols and shared plane** (ACP lifecycle, MCP capability surface, `AgentBridge`, task-shaped façades,
-  governance modes): [`EXTERNAL-AGENTS.md`](EXTERNAL-AGENTS.md).
+  governance modes): [`EXTERNAL-AGENTS.md`](../EXTERNAL-AGENTS.md).
 - **Preserved here as archive reference** (live content already lives in the docs named above; physical move is
   `P71.5a`): the tool/agent schema catalog (§§17.4–17.6), the shared-plane
   façade list (§17.5), the prompt/context/routing schemas as implementation detail (§17.7 — policy in
-  [`CONTEXT.md`](CONTEXT.md)), edge cases (§17.8), peer-schema provenance (§17.9), gap register (§17.10),
+  [`CONTEXT.md`](../CONTEXT.md)), edge cases (§17.8), peer-schema provenance (§17.9), gap register (§17.10),
   and the Settings read models (§17.12).
 - **Retired:** the "EveryAIOS-owned reasoning orchestrator" (§17.0 item 1, §17.3 closing line) — the built-in
   runtime is one unprivileged binding; turn coordination without reasoning is EveryAIOS's job (AGENT.md §2).
@@ -102,7 +106,7 @@ need function X
 **Plane membership is fixed.** A capability is native if it defines what the agent *is*; it is shared if it is workplace infrastructure the agent *uses*.
 
 > **Superseded in part (`P69.A26`):** the `✅ exclusive` rows below describe the pre-thaw model in which the
-> built-in runtime owned reasoning, routing, planning, and orchestration. Under [`AGENT.md`](AGENT.md) the
+> built-in runtime owned reasoning, routing, planning, and orchestration. Under [`AGENT.md`](../AGENT.md) the
 > loop belongs to the bound agent and the built-in runtime is one unprivileged binding. Preserved: the
 > plane-membership rule, the shared column, and the resolution policy.
 
@@ -185,7 +189,7 @@ understand → workspace preflight → plan → choose strategy
 | recover | crash/interrupt | resumed Work | resume from checkpoint; never replay a committed effect |
 | finish | verified steps | Work receipt | partial work is surfaced as partial |
 
-**⚠ SUPERSEDED (ADR/0003 / `P69.A26`):** under [`AGENT.md`](AGENT.md), reasoning, routing, planning,
+**⚠ SUPERSEDED (ADR/0003 / `P69.A26`):** under [`AGENT.md`](../AGENT.md), reasoning, routing, planning,
 and orchestration belong to the bound agent; EveryAIOS owns turn coordination (load state, project
 context/capabilities, emit events, drive recovery), not reasoning. The phase table above remains useful as
 the shape of a turn, not as an ownership claim.
@@ -421,7 +425,7 @@ Custom agents persist to the SQLite `agents` table (`id, name, icon, instruction
 
 ## 17.7 Prompt, context, and routing schemas
 
-> Policy lives in [`CONTEXT.md`](CONTEXT.md) and the agent model in [`AGENT.md`](AGENT.md); the
+> Policy lives in [`CONTEXT.md`](../CONTEXT.md) and the agent model in [`AGENT.md`](../AGENT.md); the
 > segment/routing facts below are preserved implementation detail (assembler serializes, selector decides).
 
 **12-segment assembler** (`packages/coordinator/src/prompt.ts`), hard `CACHE_BOUNDARY`:

@@ -48,7 +48,7 @@ import {
   type PlanExecutionParams,
   type PlanTask,
 } from "./plan";
-import { startScheduler } from "./scheduler";
+import { startWebhookIngress } from "./scheduler";
 import { envelopeEvent, type RunIdentity } from "./run-identity";
 import { hydrateObservations, type DurableUsageRow } from "./observations";
 import { connectorCatalog, queryConnectors } from "./connector-bridge";
@@ -512,32 +512,6 @@ export function handleRequest(req: Request): Response | null {
       break;
     }
 
-    case "scheduler/execute": {
-      // P6.4 (B7): run one due-check + execution pass synchronously. The
-      // reply carries the executed job ids (the UI's Run-now / test path).
-      const p = (req.params ?? {}) as { now?: number };
-      void schedulerRuntime.tickOnce(p.now).then(
-        (executed) => {
-          if (req.id !== undefined) {
-            process.stdout.write(
-              encodeJson(ok(req.id, { executed })),
-            );
-          }
-        },
-        (e: Error) => {
-          if (req.id !== undefined) {
-            process.stdout.write(
-              encodeJson(
-                err(id, ERROR_CODES.INTERNAL_ERROR, e.message ?? "scheduler failed"),
-              ),
-            );
-          }
-        },
-      );
-      response = null; // answered asynchronously via the write callback
-      break;
-    }
-
     case "session/shutdown": {
       // Graceful stop: flush the reply (if this was a request) through the
       // write callback, then exit — process.exit() alone would truncate
@@ -694,12 +668,14 @@ export function run(reader: NodeJS.ReadableStream = process.stdin): void {
   });
 }
 
-/** P6.4: the scheduled-task executor (started in main; tests use the handle). */
-export const schedulerRuntime = startScheduler(
-  sendRequest,
-  emitChatEvent,
-  frameBridge,
-);
+/**
+ * P6.4 / P71.2c: the trigger plane's loopback webhook ingress. The sidecar no
+ * longer ticks or executes firings — the host owns the due loop
+ * (`src-tauri/src/scheduler_fire.rs`) and runs each firing through the
+ * session's **bound agent**, because agent execution is never the scheduler's
+ * (`ARCH/AUTOMATION.md` §9).
+ */
+export const schedulerWebhooks = startWebhookIngress(sendRequest);
 
 // Only start the loop when run directly (not when imported by tests).
 if (import.meta.main) {
@@ -725,7 +701,8 @@ if (import.meta.main) {
   // Keeps the supervisor's idle watchdog (30s) from false-killing an idle
   // but healthy process.
   startHeartbeat();
-  // P6.4 (B7): tick due jobs + host the loopback webhook listener.
-  schedulerRuntime.start();
+  // P6.4 (B7): host the F11 loopback webhook listener (the due loop runs in
+  // the host — the sidecar executes no firings).
+  schedulerWebhooks.start();
   run();
 }

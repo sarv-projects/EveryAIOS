@@ -13,7 +13,6 @@
 
 use tauri::Manager;
 
-use crate::AppState;
 
 /// P2.11 (E16) — spawn the WebMCP HTTP server on a loopback port so browser
 /// sessions can serve MCP tools (`tools/list` + `tools/call`) to any local
@@ -117,16 +116,13 @@ pub fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
                 }
             }
             // H11: force a due-check + execution pass headless (no window).
-            // The tick is fire-and-forget — the coordinator acks its own
-            // executed-job list; failures surface in the sidecar log.
+            // P71.2c — the host fires: each due job becomes Work + Run and
+            // runs through its session's bound agent over ACP
+            // (`ARCH/AUTOMATION.md` §9 — agent execution is never the
+            // scheduler's). Fire-and-forget: failures are filed as run-level
+            // incidents by the firing path itself.
             "run-automations" => {
-                let state = app.state::<AppState>();
-                let Ok(guard) = state.chat_relay.lock() else {
-                    return;
-                };
-                if let Some(relay) = guard.as_ref() {
-                    let _ = relay.tick_scheduler();
-                }
+                let _ = crate::scheduler_fire::fire_due(app);
             }
             "quit" => app.exit(0),
             _ => {}

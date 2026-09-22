@@ -34,7 +34,7 @@ coverage claim — see [tests-and-verification.md](tests-and-verification.md)).
 ## L3 — Tauri shell (`src-tauri/`)
 
 - **Responsibility:** thin command layer. `src-tauri/src/lib.rs` holds the
-  `generate_handler!` registration (351 registered commands per `scripts/ipc-parity.mjs`)
+  `generate_handler!` registration (350 registered commands per `scripts/ipc-parity.mjs`; P71.3d removed `scheduler_runs` and renamed `scheduler_continuity` → `scheduler_notepad_get`)
   and is the only file with fan-out
   to both crates and commands (in-degree 35, out-degree 48).
 - **Modules:** 40 `*_cmds.rs` files (acp, agent, agent_backend, artifact, browser,
@@ -66,7 +66,7 @@ Responsibilities are each crate's own module doc (`crates/*/src/lib.rs`):
 | `everyaios-agents` | "P31 — custom agent bundles (B9)" — `bundle.rs`, `moa.rs` |
 | `everyaios-catalog` | "P14 — Model catalog (models.dev)" — `catalog.rs`, `discovery.rs`, `fetch.rs` |
 | `everyaios-codeintel` | "code intelligence (P7.1, I11)" — `docs_lookup.rs`, `edit.rs` |
-| `everyaios-engine` | "Rust port slice of the TS `ConversationEngine`" — `gate.rs`, `plan.rs`. *(Module doc verbatim; post-thaw status: `ARCH/16` is an ownership/migration note — the loop is owned by the selected agent binding, the coordinator does turn coordination, and this crate's target is pure policies/helpers (TODO P69.A25/P69.D8). **Amended 2026-09-21:** v1 ships no built-in engine ([`../ARCH/ADR/0005`](../../ARCH/ADR/0005-external-agents-are-the-v1-engines.md)), so there is no EveryAIOS turn loop to port at all.)* |
+| `everyaios-engine` | "Rust port slice of the TS `ConversationEngine`" — `gate.rs`, `plan.rs`. *(Module doc verbatim; post-thaw status: `ARCH/16` (**archived 2026-09-22** — [`ARCH/archive/16-CHAT-LOOP-RUST-PORT.md`](../../ARCH/archive/16-CHAT-LOOP-RUST-PORT.md), `P71.5a`) is an ownership/migration note — the loop is owned by the selected agent binding, the coordinator does turn coordination, and this crate's target is pure policies/helpers (TODO P69.A25/P69.D8). **Amended 2026-09-21:** v1 ships no built-in engine ([`../ARCH/ADR/0005`](../../ARCH/ADR/0005-external-agents-are-the-v1-engines.md)), so there is no EveryAIOS turn loop to port at all.)* |
 | `everyaios-eval` | "Verified-Completion Eval Subsystem (P8.0, EV1)" — `batch.rs`, `corpus.rs`, `evidence.rs` |
 | `everyaios-script` | "the `run`/`evaluate` sandbox (ARCH/08 §8.4, E4)" — `artifact.rs`, `sandbox.rs` |
 | `everyaios-search` | "search & research (P8.4)" — `searx_space.rs` |

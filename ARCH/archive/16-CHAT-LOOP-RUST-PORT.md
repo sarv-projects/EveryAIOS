@@ -1,7 +1,15 @@
-# ARCH/16 — Porting the async chat loop to Rust (ConversationEngine `run()` + `runChatStream`)
+# ARCH/16 — Porting the async chat loop to Rust (ConversationEngine `run()` + `runChatStream`) — ARCHIVED
 
-> **Derived from [`CORE.md`](CORE.md) — the root authority; this document specializes, never restates, it.**
-> **SUPERSEDED IN PART — see [`AGENT.md`](AGENT.md).** The premise of this document is that EveryAIOS owns the
+> ⛔ **ARCHIVED — no v1 scope, not current architecture.** [`ADR/0005`](../ADR/0005-external-agents-are-the-v1-engines.md)
+> defers the built-in engine to post-v1, so there is **no EveryAIOS turn loop to port**: the loop belongs to the
+> selected agent ([`AGENT.md`](../AGENT.md) §1). `P71.2c` removes the sidecar loop this document scoped; the
+> migration/parity content is retained for the post-v1 governed-baseline return (`P71.7`).
+>
+> **Moved here from `ARCH/16-CHAT-LOOP-RUST-PORT.md` on 2026-09-22 (`P71.5a`).** Relative links below are
+> rewritten for this directory.
+
+> **Derived from [`CORE.md`](../CORE.md) — the root authority; this document specializes, never restates, it.**
+> **SUPERSEDED IN PART — see [`AGENT.md`](../AGENT.md).** The premise of this document is that EveryAIOS owns the
 > chat loop. It does not: the loop belongs to the **selected agent** (`AgentBinding`). What remains as
 > EveryAIOS’s job is the environment — context projection, memory, capabilities, governance, durability.
 > Keep only the parity/migration content. **Replaced `P69.A25` (done 2026-09-20).**
@@ -9,7 +17,7 @@
 ---
 
 
-> **Status: SUPERSEDED IN PART — the 2026-09-17 architecture freeze is lifted by [`ADR/0003`](ADR/0003-architecture-thaw-core-authority.md).** The premise that EveryAIOS owns the chat loop is retired: the loop belongs to the selected agent ([`AGENT.md`](AGENT.md)). What survives is the parity/migration content. **Replaced `P69.A25` (done 2026-09-20).**
+> **Status: SUPERSEDED IN PART — the 2026-09-17 architecture freeze is lifted by [`ADR/0003`](../ADR/0003-architecture-thaw-core-authority.md).** The premise that EveryAIOS owns the chat loop is retired: the loop belongs to the selected agent ([`AGENT.md`](../AGENT.md)). What survives is the parity/migration content. **Replaced `P69.A25` (done 2026-09-20).**
 > Under the 8 Full-Stack Module architecture, EveryAIOS is finalized as the **Universal Agent Harness and Desktop Cowork OS**.
 > The async multi-turn streaming conversation loop in `packages/coordinator/src/chat.ts` is robust, battle-tested, and fully operational.
 > Heavy compute, cryptographic verification, security guardrails, SQLCipher persistence, and document calculations are already executed in pure Rust (`crates/everyaios-engine`, `crates/everyaios-guard`, `crates/everyaios-vault`, `crates/everyaios-office`).
@@ -18,13 +26,13 @@
 
 ## 0. Ownership / migration note (`P69.A25` — read this first)
 
-> The loop belongs to the selected agent ([`AGENT.md`](AGENT.md)): reasoning, planning, tool selection and
+> The loop belongs to the selected agent ([`AGENT.md`](../AGENT.md)): reasoning, planning, tool selection and
 > retry are the bound agent's job. EveryAIOS owns the environment — context projection, memory, capability
 > packs, governance, durability. There is **no planned Rust chat-loop crate**: the M0–M4 port plan in §6
 > below is **historical, not pursued**, and §§1/3/4 are the estimate record for that retired plan, not a
 > target. What survives from this document is the **parity contract in §5** (every model-visible block
 > reconstructable from the trace; byte-stable prefix above `CACHE_BOUNDARY`, now owned by the
-> `CacheBoundary` contract in [`CONTEXT.md`](CONTEXT.md)) and the call-path record in §2.
+> `CacheBoundary` contract in [`CONTEXT.md`](../CONTEXT.md)) and the call-path record in §2.
 
 ## 1. Why this is the last meaningful port slice
 
@@ -55,7 +63,7 @@ So the *state machine* is the small part; the coordinated orchestration and the
 ## 2. Verified call path today (why TS is a relay, not an owner)
 
 > **Record, not target.** The pre-thaw wiring described below is accurate as history; under
-> [`AGENT.md`](AGENT.md) the orchestration belongs to the bound agent and the sidecar proposes to Rust.
+> [`AGENT.md`](../AGENT.md) the orchestration belongs to the bound agent and the sidecar proposes to Rust.
 
 ```mermaid
 flowchart LR
@@ -179,11 +187,11 @@ win. The default is: port both.
 > end condition: the bound agent owns the turn; EveryAIOS owns context projection, governance, and
 > durability around it.
 >
-> **Fully superseded 2026-09-21 ([`ADR/0005`](ADR/0005-external-agents-are-the-v1-engines.md)).** v1 ships
+> **Fully superseded 2026-09-21 ([`ADR/0005`](../ADR/0005-external-agents-are-the-v1-engines.md)).** v1 ships
 > **no built-in engine**, so there is no EveryAIOS turn loop to port and this document has **no remaining
 > action**. What survives from its analysis is the *coordination* seam — the sidecar loads state, assembles
 > and projects context, relays the stream, dispatches tools, persists events and drives recovery — now stated
-> in [`ROUTING.md`](ROUTING.md) §1 and [`../DESKTOP-APP-SPEC.md`](../DESKTOP-APP-SPEC.md) §4.2.5 (Impl B).
+> in [`ROUTING.md`](../ROUTING.md) §1 and [`../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPEC.md) §4.2.5 (Impl B).
 > The ported slices that only ever served the built-in loop are removed under `P71.2c`.
 
 One turn becomes **one process, zero TS hops, zero IPC round-trips for provider,

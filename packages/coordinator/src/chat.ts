@@ -777,15 +777,24 @@ async function runInbuiltTurn(
         const spec = buildSubAgentSpec(
           subAgentSpecFromToolArgs(args, { parentId: "root", depth: 0 }),
         );
-        const models = Array.isArray(args.models)
-          ? args.models.filter((m): m is string => typeof m === "string")
+        // P71.3e — the fan-out is agent/run-centric: the same task attempted
+        // by ≤5 agent bindings, each Run in its own worktree. A model list is
+        // not admissible (ADR-0005 — an external agent owns its own model),
+        // and a strategy without the Work it groups Runs under fails closed.
+        const agents = Array.isArray(args.agents)
+          ? args.agents.filter((a): a is string => typeof a === "string")
           : [];
-        if (models.length > 1) {
+        if (agents.length > 1) {
+          if (params.workId === undefined) {
+            throw new Error(
+              "multirun requires workId — a strategy groups Runs of one Work (fail-closed)",
+            );
+          }
           const multi = await dispatchMultiRun(request, {
             id: streamId,
-            taskId: spec.spec.taskId,
-            modelIds: models,
-            worktreeIds: models.map((_, i) => `${spec.workspace}-${i}`),
+            workId: params.workId,
+            agentIds: agents,
+            worktreeIds: agents.map((_, i) => `${spec.workspace}-${i}`),
             mode: args.fuse === true || args.mode === "fuse" ? "fuse" : "keep_best",
             ...(typeof args.diff === "string" ? { diff: args.diff } : {}),
           });

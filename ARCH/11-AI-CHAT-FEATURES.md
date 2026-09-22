@@ -19,7 +19,7 @@
 
 ---
 
-> **Cross-reference (v3.75):** the *shipped* chat surface this doc derives is the **agent plane** as re-based by `ARCH/CORE.md` §7 + `ARCH/AGENT.md` (historical derivation: `17-NATIVE-AGENT.md`) — the agent loop (§17.3), the schema contract for the tool set the model actually calls (§17.4), the coordinator-side first-class tools `ask`/`plan`/`subagent`/`todo` (§17.4.3), and the two-plane boundary with external agents (§17.1). Where this doc says COPY/CONVERT/REJECT, ARCH/17 fixes *where the result runs* (native plane vs shared plane) and *what it may not do* (never remove an external agent's native tools; never claim a GUI-only capability).
+> **Cross-reference (v3.75):** the *shipped* chat surface this doc derives is the **agent plane** as re-based by `ARCH/CORE.md` §7 + `ARCH/AGENT.md` — the agent loop, the tool surface the agent actually calls, the coordinator-side first-class tools `ask`/`plan`/`subagent`/`todo`, and the two-plane boundary with external agents ([`EXTERNAL-AGENTS.md`](EXTERNAL-AGENTS.md) §1–§5). Where this doc says COPY/CONVERT/REJECT, that pair of contracts fixes *where the result runs* (agent plane vs shared plane) and *what it may not do* (never remove an external agent's native tools; never claim a GUI-only capability). The historical derivation was `17-NATIVE-AGENT.md`, **archived 2026-09-22 (`P71.5a`)** at [`archive/17-NATIVE-AGENT.md`](archive/17-NATIVE-AGENT.md) by [`ADR/0005`](ADR/0005-external-agents-are-the-v1-engines.md).
 
 ## 0. The two corpora, one rule
 

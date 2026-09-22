@@ -260,16 +260,25 @@ impl CompletionBackend for BrokerBackend {
 
 /// Model lister: advertise the `everyaios-auto` sentinel + configured aliases
 /// + any installed local models (ollama/llamafile). Never lists a raw key.
+///
+/// `owned_by` names the **real owner** of each row: the provider the request
+/// routes to, or `local` for an on-machine runtime. It is never `everyaios`
+/// — this server is transport, not a model owner, and attributing model rows
+/// to a built-in agent identity is what ADR-0005 retires (P71.2a).
 struct EngineModels {
-    aliases: Vec<String>,
+    /// `(alias, owner)` — the owner half is the alias's resolved provider.
+    aliases: Vec<(String, String)>,
+    /// Installed local models, already spelled `runtime/model`.
     local: Vec<String>,
+    /// The owner the `everyaios-auto` sentinel resolves to.
+    auto_owner: String,
 }
 
 impl ModelLister for EngineModels {
     fn models(&self) -> Vec<ModelRow> {
-        let mut rows = vec![ModelRow::new("everyaios-auto", "everyaios")];
-        for a in &self.aliases {
-            rows.push(ModelRow::new(a.clone(), "everyaios"));
+        let mut rows = vec![ModelRow::new("everyaios-auto", self.auto_owner.clone())];
+        for (alias, owner) in &self.aliases {
+            rows.push(ModelRow::new(alias.clone(), owner.clone()));
         }
         for m in &self.local {
             rows.push(ModelRow::new(m.clone(), "local"));
@@ -298,7 +307,6 @@ pub fn openai_server_start(
 
     let cfg = everyaios_core::Config::load().unwrap_or_default();
     let aliases = cfg.model_aliases.clone();
-    let alias_names: Vec<String> = aliases.keys().cloned().collect();
 
     // Default provider/model for the `everyaios-auto` sentinel: first alias
     // target, else a conservative OpenAI-compatible default.
@@ -320,15 +328,29 @@ pub fn openai_server_start(
             .collect::<Vec<_>>()
     };
 
+    // P71.2a — each listed row carries its real owner, resolved from the alias
+    // target's provider half (bare ids fall back to the default provider).
+    let alias_rows: Vec<(String, String)> = aliases
+        .iter()
+        .map(|(alias, target)| {
+            let owner = target
+                .split_once('/')
+                .map(|(p, _)| p.to_string())
+                .unwrap_or_else(|| default_provider.clone());
+            (alias.clone(), owner)
+        })
+        .collect();
+
     let backend: Arc<dyn CompletionBackend> = Arc::new(BrokerBackend {
         vault: Arc::clone(&state.vault),
         aliases,
-        default_provider,
+        default_provider: default_provider.clone(),
         default_model,
     });
     let lister: Arc<dyn ModelLister> = Arc::new(EngineModels {
-        aliases: alias_names,
+        aliases: alias_rows,
         local,
+        auto_owner: default_provider.clone(),
     });
 
     let bind = format!("127.0.0.1:{}", port.unwrap_or(0));

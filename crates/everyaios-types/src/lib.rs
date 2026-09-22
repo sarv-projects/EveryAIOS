@@ -116,6 +116,38 @@ id_newtype!(
     /// A distributed-trace correlation id.
     TraceId
 );
+id_newtype!(
+    /// P71.3g — a durable Work checkpoint (`ARCH/RECOVERY.md` §7). Identified so
+    /// a resume, a restore fence and a receipt can name the same snapshot
+    /// instead of re-deriving it from `(work, step)` string concatenation.
+    CheckpointId
+);
+
+impl CheckpointId {
+    /// The deterministic id for one step checkpoint: `ckpt:<work>/<step>`.
+    /// Deterministic on purpose — a re-derivation of the same
+    /// `(work, step)` names the same snapshot, no mapping table needed.
+    pub fn for_step(work_id: &str, step: u32) -> Self {
+        Self(format!("ckpt:{work_id}/{step}"))
+    }
+
+    /// No id assigned (a legacy snapshot written before ids existed, or a
+    /// fresh in-memory checkpoint not yet persisted).
+    pub fn unassigned() -> Self {
+        Self(String::new())
+    }
+
+    /// Whether an id is actually attached.
+    pub fn is_assigned(&self) -> bool {
+        !self.0.is_empty()
+    }
+}
+
+impl Default for CheckpointId {
+    fn default() -> Self {
+        Self::unassigned()
+    }
+}
 
 // ────────────────────────────────────────────────────────────────────────
 // Hash newtypes
@@ -134,16 +166,287 @@ id_newtype!(
 // Shared enum vocabulary
 // ────────────────────────────────────────────────────────────────────────
 
-/// The lifecycle of a durable unit of work.
+/// The lifecycle of a durable unit of work (`ARCH/WORK.md` §4).
+///
+/// Event-derived: the state is a projection of the Work's own timeline, never a
+/// mutable blob the system trusts. [`Self::Recoverable`] is a **first-class
+/// outcome, not a failure** — *the effect outcome is unknown* is a different fact
+/// from *the effect failed* (`ARCH/RECOVERY.md` §3), and collapsing the two is
+/// how a resumable Work gets reported as a lost one.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum WorkState {
-    Pending,
+    /// Minted; nothing has been planned yet.
+    Created,
+    /// A plan is being produced.
+    Planning,
+    /// Planned and admissible; no run has started.
+    Ready,
+    /// A run is actively progressing (no wait outstanding).
     Running,
-    Paused,
+    /// Running, blocked on a tool call in flight.
+    WaitingTool,
+    /// Running, blocked on an approval decision (Guard ticket / HITL).
+    WaitingApproval,
+    /// Running, blocked on the user (a question only they can answer).
+    WaitingUser,
+    /// Running, paused at a durable checkpoint. Resumable from the snapshot.
+    Checkpointed,
+    /// Execution finished; verification has not yet returned a verdict.
+    Verifying,
+    /// Verified success.
     Completed,
-    Cancelled,
+    /// Attempted and failed (the failure is known and is not an unknown effect).
     Failed,
+    /// Stopped by the user or by policy.
+    Cancelled,
+    /// Deliberately parked; resumable without a checkpoint verdict.
+    Paused,
+    /// Interrupted with an **unknown** in-flight effect: resumable, and the
+    /// resume must present what is known and what is unknown.
+    Recoverable,
+}
+
+/// The four `Running` sub-states of [`WorkState`] (`ARCH/WORK.md` §4).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkRunPhase {
+    /// Actively progressing.
+    Active,
+    /// Blocked on a tool call in flight.
+    WaitingTool,
+    /// Blocked on an approval decision.
+    WaitingApproval,
+    /// Blocked on the user.
+    WaitingUser,
+    /// Parked at a durable checkpoint.
+    Checkpointed,
+}
+
+impl WorkRunPhase {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Active => "active",
+            Self::WaitingTool => "waiting_tool",
+            Self::WaitingApproval => "waiting_approval",
+            Self::WaitingUser => "waiting_user",
+            Self::Checkpointed => "checkpointed",
+        }
+    }
+
+    /// The Work state for this phase (one vocabulary, one direction).
+    pub fn work_state(self) -> WorkState {
+        match self {
+            Self::Active => WorkState::Running,
+            Self::WaitingTool => WorkState::WaitingTool,
+            Self::WaitingApproval => WorkState::WaitingApproval,
+            Self::WaitingUser => WorkState::WaitingUser,
+            Self::Checkpointed => WorkState::Checkpointed,
+        }
+    }
+}
+
+impl WorkState {
+    /// Stable wire spelling (the UI projection reads this verbatim).
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Created => "created",
+            Self::Planning => "planning",
+            Self::Ready => "ready",
+            Self::Running => "running",
+            Self::WaitingTool => "waiting_tool",
+            Self::WaitingApproval => "waiting_approval",
+            Self::WaitingUser => "waiting_user",
+            Self::Checkpointed => "checkpointed",
+            Self::Verifying => "verifying",
+            Self::Completed => "completed",
+            Self::Failed => "failed",
+            Self::Cancelled => "cancelled",
+            Self::Paused => "paused",
+            Self::Recoverable => "recoverable",
+        }
+    }
+
+    /// Parse the canonical wire spelling, or `None` when it is not one. Every
+    /// wire boundary (the transition RPC, a replayed event) uses this and
+    /// refuses what it does not understand, so a state is never invented.
+    pub fn try_parse(s: &str) -> Option<Self> {
+        match s {
+            "created" => Some(Self::Created),
+            "planning" => Some(Self::Planning),
+            "ready" => Some(Self::Ready),
+            "running" => Some(Self::Running),
+            "waiting_tool" | "waiting-tool" => Some(Self::WaitingTool),
+            "waiting_approval" | "waiting-approval" => Some(Self::WaitingApproval),
+            "waiting_user" | "waiting-user" => Some(Self::WaitingUser),
+            "checkpointed" => Some(Self::Checkpointed),
+            "verifying" => Some(Self::Verifying),
+            "completed" => Some(Self::Completed),
+            "failed" => Some(Self::Failed),
+            "cancelled" | "canceled" => Some(Self::Cancelled),
+            "paused" => Some(Self::Paused),
+            "recoverable" => Some(Self::Recoverable),
+            _ => None,
+        }
+    }
+
+    /// Parse the canonical wire spelling. Unknown spellings read as
+    /// [`Self::Created`] — "not started" is the only safe default, and it is
+    /// never reported as success.
+    pub fn parse(s: &str) -> Self {
+        Self::try_parse(s).unwrap_or(Self::Created)
+    }
+
+    /// The Work is progressing, including its `Running` sub-states.
+    pub fn is_running(self) -> bool {
+        matches!(
+            self,
+            Self::Running
+                | Self::WaitingTool
+                | Self::WaitingApproval
+                | Self::WaitingUser
+                | Self::Checkpointed
+        )
+    }
+
+    /// The `Running` sub-state, when this is one.
+    pub fn run_phase(self) -> Option<WorkRunPhase> {
+        match self {
+            Self::Running => Some(WorkRunPhase::Active),
+            Self::WaitingTool => Some(WorkRunPhase::WaitingTool),
+            Self::WaitingApproval => Some(WorkRunPhase::WaitingApproval),
+            Self::WaitingUser => Some(WorkRunPhase::WaitingUser),
+            Self::Checkpointed => Some(WorkRunPhase::Checkpointed),
+            _ => None,
+        }
+    }
+
+    /// A state from which the Work can be resumed.
+    pub fn is_resumable(self) -> bool {
+        matches!(
+            self,
+            Self::Paused | Self::Checkpointed | Self::Recoverable | Self::WaitingUser
+        )
+    }
+
+    /// The Work will not progress further on its own.
+    pub fn is_terminal(self) -> bool {
+        matches!(self, Self::Completed | Self::Failed | Self::Cancelled)
+    }
+}
+
+/// Why a Work is not progressing (`ARCH/AUTOMATION.md` §8).
+///
+/// Durable: a wait survives a restart with the reason intact, so a resumed Work
+/// presents *what it waited for* instead of a confident summary. The four
+/// `WorkState::Waiting*` states cover tool/approval/user/checkpoint; the
+/// remaining reasons are waits with no `Waiting*` state of their own and park
+/// the Work as [`WorkState::Paused`] until their condition is met.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WaitReason {
+    /// A Guard ticket / HITL approval is pending.
+    Approval,
+    /// The user must answer a question.
+    UserInput,
+    /// A deadline (`deadline_ms`) or a scheduled re-attempt.
+    Timer,
+    /// An external event (webhook, connector push, file watch).
+    ExternalEvent,
+    /// A resource is unavailable or rate-limited (disk, quota, lock).
+    Resource,
+    /// Another agent's turn or delegated child must finish.
+    Agent,
+    /// A retry backoff is in progress (`ARCH/RECOVERY.md`).
+    Retry,
+}
+
+impl WaitReason {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Approval => "approval",
+            Self::UserInput => "user_input",
+            Self::Timer => "timer",
+            Self::ExternalEvent => "external_event",
+            Self::Resource => "resource",
+            Self::Agent => "agent",
+            Self::Retry => "retry",
+        }
+    }
+
+    pub fn parse(s: &str) -> Option<Self> {
+        match s {
+            "approval" => Some(Self::Approval),
+            "user_input" | "user-input" => Some(Self::UserInput),
+            "timer" => Some(Self::Timer),
+            "external_event" | "external-event" => Some(Self::ExternalEvent),
+            "resource" => Some(Self::Resource),
+            "agent" => Some(Self::Agent),
+            "retry" => Some(Self::Retry),
+            _ => None,
+        }
+    }
+
+    /// The Work state this reason parks the Work in. Approval and user input
+    /// have named `Waiting*` states; the rest park as `Paused` (a durable wait
+    /// with no dedicated state — never a silent `Running`).
+    pub fn work_state(self) -> WorkState {
+        match self {
+            Self::Approval => WorkState::WaitingApproval,
+            Self::UserInput => WorkState::WaitingUser,
+            Self::Timer | Self::ExternalEvent | Self::Resource | Self::Agent | Self::Retry => {
+                WorkState::Paused
+            }
+        }
+    }
+}
+
+/// One durable wait: the reason plus what would resume it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WaitCondition {
+    pub reason: WaitReason,
+    /// Free-text detail for the UI (never a secret; never a substitute for the
+    /// reason).
+    #[serde(default)]
+    pub detail: Option<String>,
+    /// Wall-clock ms after which the wait is reconsidered (`Timer`). `None` ⇒
+    /// no deadline. Integer ms — a wire boundary never carries floats.
+    #[serde(default)]
+    pub deadline_ms: Option<u64>,
+    /// What resumes it: an event kind, a ticket id, an agent id, a resource id.
+    #[serde(default)]
+    pub resume_on: Option<String>,
+}
+
+impl WaitCondition {
+    pub fn new(reason: WaitReason) -> Self {
+        Self {
+            reason,
+            detail: None,
+            deadline_ms: None,
+            resume_on: None,
+        }
+    }
+
+    pub fn with_detail(mut self, detail: impl Into<String>) -> Self {
+        self.detail = Some(detail.into());
+        self
+    }
+
+    pub fn with_deadline_ms(mut self, at_ms: u64) -> Self {
+        self.deadline_ms = Some(at_ms);
+        self
+    }
+
+    pub fn with_resume_on(mut self, what: impl Into<String>) -> Self {
+        self.resume_on = Some(what.into());
+        self
+    }
+
+    /// The Work state this condition parks the Work in.
+    pub fn work_state(&self) -> WorkState {
+        self.reason.work_state()
+    }
 }
 
 /// The phase of an execution step.
@@ -315,6 +618,12 @@ pub enum AuthMode {
     Unknown,
 }
 
+impl std::fmt::Display for AgentReadiness {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
 impl AuthMode {
     pub fn as_str(self) -> &'static str {
         match self {
@@ -339,18 +648,251 @@ impl AuthMode {
     }
 }
 
+/// The one readiness state of an agent (P71.3f).
+///
+/// Before this type the same question — *"can I use this agent right now?"* —
+/// was answered by scattered booleans (`installed`, `has_api_key`, a Chief
+/// default flag), each of which was true for agents that could not actually
+/// run. The distinction this type exists to enforce is stated once, here:
+/// **installed ≠ launchable ≠ protocol-compatible ≠ authenticated ≠ ready**,
+/// and *allowed as a subagent* is a further, separate policy step
+/// ([`Self::can_delegate`] is the readiness half of it; budget and workspace
+/// policy belong to the delegation policy).
+///
+/// It is a **runtime fact**, never user policy (disabled/paused) and never
+/// install activity (installing/updating): those are projections on top.
+/// Every reader — the picker, the resolver, the trigger plane, the delegation
+/// gate — reads this one value, and an unprobed agent is [`Self::Unknown`]
+/// rather than a guess.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AgentReadiness {
+    /// Nothing has probed this agent yet. Must render as unknown, never as
+    /// available.
+    Unknown,
+    /// The catalog/registry knows the agent exists; no runtime is present.
+    Discovered,
+    /// A runtime is present on this machine (managed install or PATH/App-Paths
+    /// discovery). It has not been proven launchable here.
+    Installed,
+    /// The runtime can be started on this platform (its package manager or
+    /// executable resolves; WSL is a distinct launch path and counts).
+    Launchable,
+    /// A launched process negotiated a compatible protocol version
+    /// (`initialize` succeeded).
+    ProtocolCompatible,
+    /// The agent requires authentication in **its own** store before it can
+    /// serve (`authMethods` advertised and no credential evidence yet).
+    AuthRequired,
+    /// An authentication flow is in progress. Not usable yet.
+    Authenticating,
+    /// Launchable, protocol-compatible and authenticated: the only state in
+    /// which an agent may serve a turn or receive a delegated Work.
+    Ready,
+    /// Usable with a stated reduction (a capability or provider is unavailable,
+    /// a partial negotiation). The reduction must be shown, not hidden.
+    Degraded,
+    /// Present but not usable in this environment (platform unsupported,
+    /// missing dependency). Distinct from [`Self::Discovered`]: something was
+    /// found and cannot run.
+    Unavailable,
+    /// The last launch/negotiation/auth attempt failed. Terminal for this
+    /// attempt; a retry is a new attempt, never a silent state reset.
+    Failed,
+}
+
+impl AgentReadiness {
+    /// Stable wire spelling (the UI reads this verbatim; TS is a projection).
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Unknown => "unknown",
+            Self::Discovered => "discovered",
+            Self::Installed => "installed",
+            Self::Launchable => "launchable",
+            Self::ProtocolCompatible => "protocol_compatible",
+            Self::AuthRequired => "auth_required",
+            Self::Authenticating => "authenticating",
+            Self::Ready => "ready",
+            Self::Degraded => "degraded",
+            Self::Unavailable => "unavailable",
+            Self::Failed => "failed",
+        }
+    }
+
+    /// Parse the canonical wire spelling. Unknown spellings fail closed to
+    /// [`Self::Unknown`] — a wire value we do not understand is not "ready".
+    pub fn parse(s: &str) -> Self {
+        match s {
+            "unknown" => Self::Unknown,
+            "discovered" => Self::Discovered,
+            "installed" => Self::Installed,
+            "launchable" => Self::Launchable,
+            "protocol_compatible" | "protocol-compatible" => Self::ProtocolCompatible,
+            "auth_required" | "auth-required" => Self::AuthRequired,
+            "authenticating" => Self::Authenticating,
+            "ready" => Self::Ready,
+            "degraded" => Self::Degraded,
+            "unavailable" => Self::Unavailable,
+            "failed" => Self::Failed,
+            _ => Self::Unknown,
+        }
+    }
+
+    /// A runtime is present (managed install or discovery).
+    pub fn is_installed(self) -> bool {
+        matches!(
+            self,
+            Self::Installed
+                | Self::Launchable
+                | Self::ProtocolCompatible
+                | Self::AuthRequired
+                | Self::Authenticating
+                | Self::Ready
+                | Self::Degraded
+        )
+    }
+
+    /// The runtime can be started here.
+    pub fn is_launchable(self) -> bool {
+        matches!(
+            self,
+            Self::Launchable
+                | Self::ProtocolCompatible
+                | Self::AuthRequired
+                | Self::Authenticating
+                | Self::Ready
+                | Self::Degraded
+        )
+    }
+
+    /// A launched process proved protocol compatibility.
+    pub fn is_negotiated(self) -> bool {
+        matches!(
+            self,
+            Self::ProtocolCompatible | Self::AuthRequired | Self::Authenticating | Self::Ready | Self::Degraded
+        )
+    }
+
+    /// The agent may serve a turn (the top rung, or the top rung with a stated
+    /// reduction).
+    pub fn is_ready(self) -> bool {
+        matches!(self, Self::Ready | Self::Degraded)
+    }
+
+    /// The agent still needs the user (or itself) to authenticate.
+    pub fn needs_auth(self) -> bool {
+        matches!(self, Self::AuthRequired | Self::Authenticating)
+    }
+
+    /// The readiness half of "allowed as a subagent": only a ready agent may
+    /// receive a delegated child Work. `installed` is **not** enough, which is
+    /// exactly the conflation this type removes.
+    pub fn can_delegate(self) -> bool {
+        matches!(self, Self::Ready)
+    }
+
+    /// A terminal failure state (as opposed to not-yet-probed).
+    pub fn is_failure(self) -> bool {
+        matches!(self, Self::Unavailable | Self::Failed)
+    }
+
+    /// The wire spelling is also the display spelling: one vocabulary, no
+    /// second human-facing name to drift from it.
+    pub fn display(self) -> &'static str {
+        self.as_str()
+    }
+
+    /// Short human phrase for a refusal message ("why can't I run this?").
+    pub fn summary(self) -> &'static str {
+        match self {
+            Self::Unknown => "readiness unknown — not probed",
+            Self::Discovered => "known agent, no runtime present",
+            Self::Installed => "runtime present but not proven launchable here",
+            Self::Launchable => "launchable, protocol not negotiated yet",
+            Self::ProtocolCompatible => "protocol negotiated, authentication not confirmed",
+            Self::AuthRequired => "authentication required (the agent's own store)",
+            Self::Authenticating => "authentication in progress",
+            Self::Ready => "ready",
+            Self::Degraded => "ready with a stated reduction",
+            Self::Unavailable => "present but not usable in this environment",
+            Self::Failed => "the last attempt failed",
+        }
+    }
+}
+
 /// How our app drives an agent (canonical home; `everyaios-acp`'s
 /// `HarnessProtocol` folds into this in P69.D1).
+///
+/// ADR-0005: v1 engines are external agents, so `Acp` and the model-only
+/// binding are the whole vocabulary. The retired built-in identities —
+/// `Inbuilt` (our native engine) and `ModelBackend` (configuring a CLI's
+/// model endpoint through us) — are gone; they return post-v1 with the
+/// governed baseline binding and must then obey I23/I24 like any agent.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AgentProtocol {
-    /// Our native engine — not an external subprocess.
-    Inbuilt,
     /// Driven via ACP stdio.
     Acp,
-    /// Configured + spawned against our model backend (the `ollama launch`
-    /// "point this CLI at my models" path).
-    ModelBackend,
+    /// No subprocess and no loop of ours: the binding is a model-only brain
+    /// (a v1 bundle with a model pin, chat-only, no tools). The inference
+    /// path is deferred with the built-in engine, so a row with this protocol
+    /// must never render as runnable while that is true.
+    ModelOnly,
+}
+
+/// The kind of a Session (`ARCH/ADR/0006`).
+///
+/// A **property of the Session record**, never inferred from whether a Chat
+/// happens to exist. `Interactive` keeps the Chat↔Session 1:1 rule;
+/// `Automation` is a trigger-created Session with **no Chat** (the same way
+/// `project_id = null` is normal — not a degraded state); `Delegated` is
+/// reserved for an out-of-session delegation the user explicitly starts, not
+/// for ordinary child Work (**I8** — a child lives in its parent's Session).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SessionKind {
+    /// A user's chat Session (the existing rows; the default).
+    #[default]
+    Interactive,
+    /// Created by a trigger (scheduler / workflow); owns headless Work.
+    Automation,
+    /// An out-of-session delegation the user explicitly started.
+    Delegated,
+}
+
+impl SessionKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Interactive => "interactive",
+            Self::Automation => "automation",
+            Self::Delegated => "delegated",
+        }
+    }
+
+    /// Parse the canonical wire spelling; unknown spellings read as
+    /// `Interactive` — existing rows predate the field and are interactive.
+    pub fn parse(s: &str) -> Self {
+        match s {
+            "automation" => Self::Automation,
+            "delegated" => Self::Delegated,
+            _ => Self::Interactive,
+        }
+    }
+
+    /// Whether a Chat may exist for this Session. Non-interactive Sessions
+    /// normally have none; a Chat **may be created from** one later (ADR-0006
+    /// §7 — the user opens a run to inspect or continue it), after which the
+    /// 1:1 rule holds again. This predicate is about *creation*, not existence:
+    /// nothing may **infer** the kind from a Chat's presence.
+    pub fn chat_is_normal(self) -> bool {
+        matches!(self, Self::Interactive)
+    }
+}
+
+impl std::fmt::Display for SessionKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
 }
 
 /// The audit/governance mode of an external agent connection (`ARCH/
@@ -409,9 +951,6 @@ pub struct AgentDefinition {
     pub description: String,
     pub protocol: AgentProtocol,
     pub auth_mode: AuthMode,
-    /// The registry/picker default (our inbuilt engine).
-    #[serde(default)]
-    pub is_default: bool,
     #[serde(default)]
     pub capabilities: Vec<CapabilityId>,
     /// Extension mechanisms the adapter negotiated (hook names etc.) — data,
@@ -751,6 +1290,155 @@ mod tests {
         };
         assert_ne!(binding.session_id.as_str(), binding.provider_session_id.clone().unwrap());
         let _ = serde_json::to_string(&binding).unwrap();
+    }
+
+    #[test]
+    fn readiness_wire_spelling_is_total_and_fails_closed() {
+        let all = [
+            AgentReadiness::Unknown,
+            AgentReadiness::Discovered,
+            AgentReadiness::Installed,
+            AgentReadiness::Launchable,
+            AgentReadiness::ProtocolCompatible,
+            AgentReadiness::AuthRequired,
+            AgentReadiness::Authenticating,
+            AgentReadiness::Ready,
+            AgentReadiness::Degraded,
+            AgentReadiness::Unavailable,
+            AgentReadiness::Failed,
+        ];
+        for state in all {
+            assert_eq!(AgentReadiness::parse(state.as_str()), state);
+            let wire = serde_json::to_string(&state).unwrap();
+            assert_eq!(wire, format!("\"{}\"", state.as_str()));
+            assert_eq!(serde_json::from_str::<AgentReadiness>(&wire).unwrap(), state);
+        }
+        // A spelling we do not understand is unknown — never ready.
+        assert_eq!(AgentReadiness::parse("probably_fine"), AgentReadiness::Unknown);
+    }
+
+    #[test]
+    fn readiness_distinguishes_installed_from_ready_and_delegable() {
+        assert!(AgentReadiness::Installed.is_installed());
+        assert!(!AgentReadiness::Installed.is_launchable());
+        assert!(!AgentReadiness::Installed.is_ready());
+        assert!(!AgentReadiness::Installed.can_delegate());
+
+        assert!(AgentReadiness::Launchable.is_launchable());
+        assert!(!AgentReadiness::Launchable.is_negotiated());
+
+        assert!(AgentReadiness::AuthRequired.is_negotiated());
+        assert!(AgentReadiness::AuthRequired.needs_auth());
+        assert!(!AgentReadiness::AuthRequired.can_delegate());
+
+        // Degraded serves a turn but is not admissible as a subagent.
+        assert!(AgentReadiness::Degraded.is_ready());
+        assert!(!AgentReadiness::Degraded.can_delegate());
+        assert!(AgentReadiness::Ready.can_delegate());
+
+        assert!(AgentReadiness::Failed.is_failure());
+        assert!(AgentReadiness::Unavailable.is_failure());
+        assert!(!AgentReadiness::Discovered.is_failure());
+        assert!(!AgentReadiness::Unknown.is_installed());
+    }
+
+    #[test]
+    fn work_state_covers_the_work_contract_and_keeps_recoverable_distinct() {
+        // WORK.md §4 — the full set, with the Running sub-states grouped.
+        let all = [
+            WorkState::Created,
+            WorkState::Planning,
+            WorkState::Ready,
+            WorkState::Running,
+            WorkState::WaitingTool,
+            WorkState::WaitingApproval,
+            WorkState::WaitingUser,
+            WorkState::Checkpointed,
+            WorkState::Verifying,
+            WorkState::Completed,
+            WorkState::Failed,
+            WorkState::Cancelled,
+            WorkState::Paused,
+            WorkState::Recoverable,
+        ];
+        for state in all {
+            assert_eq!(WorkState::parse(state.as_str()), state);
+            let wire = serde_json::to_string(&state).unwrap();
+            assert_eq!(wire, format!("\"{}\"", state.as_str()));
+        }
+        // A spelling we do not understand is never reported as success.
+        assert_eq!(WorkState::parse("done_maybe"), WorkState::Created);
+
+        assert!(WorkState::Running.is_running());
+        assert!(WorkState::WaitingApproval.is_running());
+        assert!(WorkState::Checkpointed.is_running());
+        assert!(!WorkState::Paused.is_running());
+        assert_eq!(WorkState::Running.run_phase(), Some(WorkRunPhase::Active));
+        assert_eq!(
+            WorkState::WaitingUser.run_phase(),
+            Some(WorkRunPhase::WaitingUser)
+        );
+        assert_eq!(WorkState::Verifying.run_phase(), None);
+        assert_eq!(WorkRunPhase::WaitingTool.work_state(), WorkState::WaitingTool);
+
+        // The distinction the contract exists to keep.
+        assert!(WorkState::Completed.is_terminal());
+        assert!(WorkState::Failed.is_terminal());
+        assert!(WorkState::Cancelled.is_terminal());
+        assert!(!WorkState::Recoverable.is_terminal());
+        assert!(WorkState::Recoverable.is_resumable());
+        assert!(!WorkState::Failed.is_resumable());
+    }
+
+    #[test]
+    fn wait_conditions_name_their_state_and_survive_the_wire() {
+        assert_eq!(WaitReason::Approval.work_state(), WorkState::WaitingApproval);
+        assert_eq!(WaitReason::UserInput.work_state(), WorkState::WaitingUser);
+        // The reasons with no dedicated `Waiting*` state park as Paused.
+        for reason in [
+            WaitReason::Timer,
+            WaitReason::ExternalEvent,
+            WaitReason::Resource,
+            WaitReason::Agent,
+            WaitReason::Retry,
+        ] {
+            assert_eq!(reason.work_state(), WorkState::Paused);
+            assert_eq!(WaitReason::parse(reason.as_str()), Some(reason));
+        }
+        assert_eq!(WaitReason::parse("whenever"), None);
+
+        let wait = WaitCondition::new(WaitReason::Approval)
+            .with_detail("ticket tkt:42 pending")
+            .with_resume_on("tkt:42");
+        assert_eq!(wait.work_state(), WorkState::WaitingApproval);
+        let round: WaitCondition =
+            serde_json::from_str(&serde_json::to_string(&wait).unwrap()).unwrap();
+        assert_eq!(round, wait);
+    }
+
+    #[test]
+    fn checkpoint_ids_are_deterministic_and_optional_on_legacy_rows() {
+        let id = CheckpointId::for_step("w-1", 3);
+        assert_eq!(id.as_str(), "ckpt:w-1/3");
+        assert_eq!(CheckpointId::for_step("w-1", 3), id);
+        assert!(id.is_assigned());
+        assert!(!CheckpointId::unassigned().is_assigned());
+        assert!(!CheckpointId::default().is_assigned());
+    }
+
+    #[test]
+    fn session_kind_is_a_record_property_not_a_chat_inference() {
+        // Wire round-trip + the default for existing rows.
+        for kind in [SessionKind::Interactive, SessionKind::Automation, SessionKind::Delegated] {
+            let wire = serde_json::to_string(&kind).unwrap();
+            assert_eq!(wire, format!("\"{}\"", kind.as_str()));
+            assert_eq!(serde_json::from_str::<SessionKind>(&wire).unwrap(), kind);
+            assert_eq!(SessionKind::parse(kind.as_str()), kind);
+        }
+        // Unknown spellings are existing rows → interactive, never automation.
+        assert_eq!(SessionKind::parse("whatever"), SessionKind::Interactive);
+        assert_eq!(SessionKind::default(), SessionKind::Interactive);
+        assert!(SessionKind::Interactive.chat_is_normal());
     }
 
     #[test]

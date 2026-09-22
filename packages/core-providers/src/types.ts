@@ -52,16 +52,7 @@ export interface ConnectedProvider {
   isActive: boolean;
   connectedAt: string;
 }
-
-/** Runtime config for OpenAI-compatible clients. */
-export interface OpenAiProviderConfig {
-  baseUrl: string;
-  apiKey: string;
-  model: string;
-  fetchImpl?: typeof fetch;
-}
-
-export interface ValidationResult {
-  ok: boolean;
-  error?: string;
-}
+// P71.2d (ADR-0005) — `OpenAiProviderConfig` and `ValidationResult` described
+// the deleted inference clients' runtime config and key-probe result. Nothing
+// in v1 calls a provider from TypeScript, so the shapes are gone rather than
+// left as a standing invitation to re-add the path.

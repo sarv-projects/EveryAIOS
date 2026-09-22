@@ -1,9 +1,10 @@
-//! P6.4 (B7) — scheduled-task commands. Thin wrappers over the shared
-//! `everyaios-core::SchedulerService` (job registry, cron/interval/event/
-//! webhook triggers, leases, retry, battery policy, nudge sentinels). The
-//! shell exposes the job list, create/delete/enable/pause/resume/run-now,
-//! battery state, event fires and nudge suggestions to the UI; the durable
-//! state machine is tested in the crates.
+//! P6.4 (B7) / P71.3d — scheduled-task commands over the **trigger plane**.
+//! Thin wrappers over the shared `everyaios-core::SchedulerService` (job
+//! registry, cron/interval/event/webhook/window triggers, battery/misfire/
+//! admission policy, nudge sentinels). The shell exposes the job list,
+//! create/delete/enable/pause/resume/run-now, battery state, event fires and
+//! nudge suggestions to the UI; execution is the Work kernel's business
+//! (`ARCH/AUTOMATION.md` §9) — no leases, retries or run ledger live here.
 
 use everyaios_core::SchedulerService;
 use serde_json::Value;
@@ -114,16 +115,15 @@ pub fn scheduler_pause_session(
     Ok(svc.pause_session(&session_id) as u32)
 }
 
-/// HITL pause (first-class state with an optional resume deadline).
+/// HITL pause (trigger-plane flag: stop firing; Work owns execution waits).
 #[tauri::command]
 pub fn scheduler_pause(
     state: State<'_, AppState>,
     id: String,
-    resume_deadline: Option<u64>,
 ) -> Result<bool, String> {
     let handle = svc(&state)?;
     let mut svc = handle.lock().map_err(|e| e.to_string())?;
-    svc.pause(&id, resume_deadline).map_err(|e| e.to_string())?;
+    svc.pause(&id).map_err(|e| e.to_string())?;
     Ok(true)
 }
 
@@ -213,21 +213,18 @@ pub fn scheduler_nudge(
     Ok(true)
 }
 
-fn now_ms() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis() as u64)
-        .unwrap_or(0)
-}
-
-/// P51.32a — a job's continuity bundle (last output + notepad) for the next run.
+/// P51.32a — a job's durable notepad (the only continuity the trigger plane
+/// keeps; run results live in the Event Log, `I3`).
 #[tauri::command]
-pub fn scheduler_continuity(state: State<'_, AppState>, id: String) -> Result<Value, String> {
+pub fn scheduler_notepad_get(
+    state: State<'_, AppState>,
+    id: String,
+) -> Result<Value, String> {
     let handle = svc(&state)?;
     let svc = handle.lock().map_err(|e| e.to_string())?;
     Ok(svc
-        .continuity(&id)
-        .map(|c| serde_json::to_value(c).unwrap_or(Value::Null))
+        .notepad(&id)
+        .map(|n| serde_json::json!({ "notepad": n }))
         .unwrap_or(Value::Null))
 }
 
@@ -259,18 +256,22 @@ pub fn scheduler_incident_ack(state: State<'_, AppState>, id: String) -> Result<
     Ok(svc.ack_incident(&id))
 }
 
-/// P51.32f — read-only cron health (missed runs, dead leases, queue depth).
+/// P51.32f — read-only trigger-plane health (missed schedule fires, registry
+/// depth). Run-level health belongs to the Work kernel / Event Log.
+///
+/// P71.3f — the doctor also reads **agent readiness** (`ARCH/AUTOMATION.md` §9:
+/// a run-level failure is readiness + binding policy, never a global "the
+/// model"): a firing whose engine is not ready is the first thing a support
+/// pass needs to see, so it is a check like any other, with the states counted
+/// rather than guessed.
 #[tauri::command]
 pub fn scheduler_doctor(state: State<'_, AppState>) -> Result<Value, String> {
     let handle = svc(&state)?;
     let svc = handle.lock().map_err(|e| e.to_string())?;
-    Ok(serde_json::to_value(svc.cron_doctor(now_ms())).unwrap_or(Value::Null))
-}
-
-/// P51.32g — the claimed→running→completed/failed runs ledger (bounded).
-#[tauri::command]
-pub fn scheduler_runs(state: State<'_, AppState>) -> Result<Value, String> {
-    let handle = svc(&state)?;
-    let svc = handle.lock().map_err(|e| e.to_string())?;
-    Ok(serde_json::to_value(svc.list_runs()).unwrap_or(Value::Null))
+    let mut checks = svc.cron_doctor(now_secs());
+    drop(svc);
+    checks.push(crate::acp_cmds::agents_doctor_check(
+        Arc::clone(&state.acp_sessions),
+    ));
+    Ok(serde_json::to_value(checks).unwrap_or(Value::Null))
 }

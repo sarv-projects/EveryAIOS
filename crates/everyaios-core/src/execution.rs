@@ -1077,40 +1077,37 @@ impl ExecutionKernel {
                 crate::persist_dag(dir, &dag)?;
                 Ok(json!({ "ok": true, "nodeId": node_id, "briefComplete": true, "dag": dag }))
             }
-            // P51.10 — admit a ≤5-model fan-out and optionally reduce
-            // outcomes / parse a walkthrough. Construction is the live
-            // consumer of `MultiRun::new` (budget) + `collect` + `walkthrough`.
+            // P51.10 — admit a fan-out of ≤5 Runs of one Work and optionally
+            // reduce their outcomes / parse a walkthrough. Construction is the
+            // live consumer of `MultiRun::new` (budget) + `collect` +
+            // `walkthrough`. Agent/run-centric (P71.3e): a member is an agent
+            // binding + Run; there is no model list — under ADR-0005 an
+            // external agent owns its own model.
             "execution/multirun" => {
                 let id = params
                     .get("id")
                     .and_then(Value::as_str)
                     .unwrap_or("multirun")
                     .to_string();
-                let task_id = params
-                    .get("taskId")
+                let work_id = params
+                    .get("workId")
                     .and_then(Value::as_str)
                     .unwrap_or("")
                     .to_string();
-                let model_ids: Vec<String> = params
-                    .get("modelIds")
-                    .and_then(Value::as_array)
-                    .map(|a| {
-                        a.iter()
-                            .filter_map(Value::as_str)
-                            .map(str::to_string)
-                            .collect()
-                    })
-                    .unwrap_or_default();
-                let worktree_ids: Vec<String> = params
-                    .get("worktreeIds")
-                    .and_then(Value::as_array)
-                    .map(|a| {
-                        a.iter()
-                            .filter_map(Value::as_str)
-                            .map(str::to_string)
-                            .collect()
-                    })
-                    .unwrap_or_default();
+                let string_list = |key: &str| -> Vec<String> {
+                    params
+                        .get(key)
+                        .and_then(Value::as_array)
+                        .map(|a| {
+                            a.iter()
+                                .filter_map(Value::as_str)
+                                .map(str::to_string)
+                                .collect()
+                        })
+                        .unwrap_or_default()
+                };
+                let agent_ids = string_list("agentIds");
+                let worktree_ids = string_list("worktreeIds");
                 let mode = match params
                     .get("mode")
                     .and_then(Value::as_str)
@@ -1119,35 +1116,72 @@ impl ExecutionKernel {
                     "fuse" | "Fuse" => crate::multirun::FuseMode::Fuse,
                     _ => crate::multirun::FuseMode::KeepBest,
                 };
-                let run =
-                    crate::multirun::MultiRun::new(id, task_id, model_ids, worktree_ids, mode)?;
+                let run = crate::multirun::MultiRun::new(id, work_id, agent_ids, worktree_ids, mode)?;
                 let collected = params.get("outcomes").and_then(Value::as_array).map(|arr| {
-                    let outcomes: Vec<crate::multirun::RunOutcome> = arr
-                        .iter()
-                        .filter_map(|v| {
-                            Some(crate::multirun::RunOutcome {
-                                model_id: v.get("modelId")?.as_str()?.to_string(),
-                                output: v.get("output")?.as_str()?.to_string(),
-                                score: v.get("score")?.as_f64().unwrap_or(0.0),
+                    arr.iter()
+                        .enumerate()
+                        .map(|(i, v)| {
+                            let agent_id = v
+                                .get("agentId")
+                                .and_then(Value::as_str)
+                                .ok_or("multirun outcome requires agentId")?;
+                            if !run.agent_ids.iter().any(|a| a == agent_id) {
+                                return Err(format!(
+                                    "multirun outcome names agent {agent_id} outside this fan-out \
+                                     — fail-closed"
+                                ));
+                            }
+                            // A reported Run id must name one of the member
+                            // Runs; otherwise the outcome binds positionally.
+                            let run_id = match v.get("runId").and_then(Value::as_str) {
+                                Some(explicit) => {
+                                    if !run.run_ids.iter().any(|r| r == explicit) {
+                                        return Err(format!(
+                                            "multirun outcome names Run {explicit} outside this \
+                                             fan-out — fail-closed"
+                                        ));
+                                    }
+                                    explicit.to_string()
+                                }
+                                None => run
+                                    .run_ids
+                                    .get(i)
+                                    .cloned()
+                                    .ok_or("multirun has more outcomes than member Runs")?,
+                            };
+                            Ok(crate::multirun::RunOutcome {
+                                run_id,
+                                agent_id: agent_id.to_string(),
+                                output: v
+                                    .get("output")
+                                    .and_then(Value::as_str)
+                                    .unwrap_or("")
+                                    .to_string(),
+                                score: v.get("score").and_then(Value::as_f64).unwrap_or(0.0),
                             })
                         })
-                        .collect();
-                    crate::multirun::collect(outcomes, mode)
+                        .collect::<Result<Vec<_>, String>>()
+                        .map(|outcomes| crate::multirun::collect(outcomes, mode))
                 });
+                let collected = match collected {
+                    Some(inner) => Some(inner?),
+                    None => None,
+                };
                 let steps = params
                     .get("diff")
                     .and_then(Value::as_str)
                     .map(crate::multirun::walkthrough);
                 Ok(json!({
                     "id": run.id,
-                    "taskId": run.task_id,
-                    "modelIds": run.model_ids,
+                    "workId": run.work_id,
+                    "agentIds": run.agent_ids,
+                    "runIds": run.run_ids,
                     "worktreeIds": run.worktree_ids,
                     "mode": match run.mode {
                         crate::multirun::FuseMode::Fuse => "fuse",
                         crate::multirun::FuseMode::KeepBest => "keep_best",
                     },
-                    "modelCount": run.model_ids.len(),
+                    "runCount": run.run_ids.len(),
                     "collected": collected,
                     "walkthrough": steps,
                 }))
@@ -2750,32 +2784,61 @@ mod tests {
             "execution/multirun",
             &json!({
                 "id": "mr-bad",
-                "taskId": "t",
-                "modelIds": ["a","b","c","d","e","f"],
+                "workId": "w",
+                "agentIds": ["a","b","c","d","e","f"],
             }),
         );
-        assert!(six.is_err(), "six models must fail closed");
+        assert!(six.is_err(), "six runs must fail closed");
         let v = k
             .handle(
                 "execution/multirun",
                 &json!({
                     "id": "mr-1",
-                    "taskId": "t",
-                    "modelIds": ["a", "b"],
+                    "workId": "w/subagent/t",
+                    "agentIds": ["a", "b"],
                     "worktreeIds": ["wt-a", "wt-b"],
                     "mode": "keep_best",
                     "outcomes": [
-                        {"modelId": "a", "output": "meh", "score": 0.1},
-                        {"modelId": "b", "output": "best", "score": 0.9}
+                        {"agentId": "a", "output": "meh", "score": 0.1},
+                        {"runId": "w/subagent/t/run-1", "agentId": "b", "output": "best", "score": 0.9}
                     ],
                     "diff": "diff --git a/x.rs b/x.rs\n@@ -1 +1 @@\n-old\n+new\n"
                 }),
             )
             .unwrap();
-        assert_eq!(v["modelCount"], 2);
+        assert_eq!(v["runCount"], 2);
+        assert_eq!(v["runIds"][0], "w/subagent/t/run-0");
         assert_eq!(v["collected"]["output"], "best");
-        assert_eq!(v["collected"]["best_model_id"], "b");
+        assert_eq!(v["collected"]["best_agent_id"], "b");
+        assert_eq!(v["collected"]["best_run_id"], "w/subagent/t/run-1");
         assert!(!v["walkthrough"].as_array().unwrap().is_empty());
+
+        // Fail-closed: an outcome naming an agent or Run outside the fan-out
+        // is refused rather than silently attributed.
+        assert!(k
+            .handle(
+                "execution/multirun",
+                &json!({
+                    "id": "mr-2",
+                    "workId": "w/subagent/t",
+                    "agentIds": ["a"],
+                    "outcomes": [{"agentId": "stranger", "output": "x", "score": 1.0}]
+                }),
+            )
+            .is_err());
+        assert!(k
+            .handle(
+                "execution/multirun",
+                &json!({
+                    "id": "mr-3",
+                    "workId": "w/subagent/t",
+                    "agentIds": ["a"],
+                    "outcomes": [
+                        {"runId": "other/run-0", "agentId": "a", "output": "x", "score": 1.0}
+                    ]
+                }),
+            )
+            .is_err());
     }
 
     #[test]

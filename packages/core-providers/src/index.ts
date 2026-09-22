@@ -8,13 +8,16 @@ export {
   isAiProviderGroup,
   groupProvidersByLabel,
 } from './registry.js';
-export { validateApiKey, streamCompletion, fetchAvailableModels } from './openai-client.js';
+// ADR-0005 (P71.2d) — the inference clients (`openai-client`, `anthropic-client`)
+// are deleted: v1 has no EveryAIOS-owned model call, because the bound external
+// agent owns its own model. What remains here is the **observability** half —
+// provider catalogue, model capabilities, live pricing and the credential
+// façade — which the coordinator still reads to report cost/usage.
 export {
   fetchProviderPricing,
   formatPricingLine,
   type ProviderPricing,
 } from './pricing/live-pricing.js';
-export { streamAnthropicCompletion, validateAnthropicApiKey, ANTHROPIC_KNOWN_MODELS } from './anthropic-client.js';
 export { ProviderVault } from './vault.js';
 export {
   getModelCatalog,
@@ -32,10 +35,8 @@ export {
 export type {
   ConnectedProvider,
   KeyValueStore,
-  OpenAiProviderConfig,
   ProviderCatalogEntry,
   StoredProviderRecord,
-  ValidationResult,
 } from './types.js';
 export type {
   ModelAdapter,

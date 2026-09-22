@@ -60,17 +60,16 @@ pub enum Distribution {
 }
 
 /// How our app drives the agent.
+///
+/// ADR-0005: external agents are the only v1 engines, so `Acp` is the whole
+/// vocabulary. The built-in engine's `Inbuilt` and `ModelBackend` ("point
+/// this CLI at my models") paths are **deferred to post-v1** and are
+/// deliberately absent — nothing may depend on them (P71.2a/b).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum HarnessProtocol {
-    /// Our native engine — all inbuilt capabilities (office, browser, memory,
-    /// guard, eval). Not an external subprocess; the default picker entry.
-    Inbuilt,
     /// Drive via ACP stdio (the agent speaks ACP; spawn its ACP entrypoint).
     Acp,
-    /// Configure the agent's model backend via env overrides, then spawn it
-    /// (the `ollama launch` "point this CLI at my models" path).
-    ModelBackend,
 }
 
 /// One agent in the launch registry (serializable → the agent picker).
@@ -87,13 +86,6 @@ pub struct HarnessManifest {
     /// into the spawn env by [`LaunchRegistry::launch_plan`].
     #[serde(default)]
     pub env: Vec<(String, String)>,
-    /// Env keys the agent reads for its model backend (ModelBackend agents),
-    /// so `launch_plan` knows what to point at our broker/local endpoint.
-    #[serde(default)]
-    pub backend_env_keys: Vec<String>,
-    /// Whether this agent is our own inbuilt engine.
-    #[serde(default)]
-    pub is_default: bool,
 }
 
 /// The concrete spawn spec `ollama launch <agent> --model X` would produce.
@@ -107,13 +99,12 @@ pub struct LaunchPlan {
     pub protocol: HarnessProtocol,
 }
 
-/// The catalog of launchable agents + the default (inbuilt) selection.
+/// The catalog of launchable agents (ADR-0005 §D1: external agents are the
+/// only first-class v1 engines — there is no default/built-in selection).
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LaunchRegistry {
     pub agents: Vec<HarnessManifest>,
-    /// The id of the default (inbuilt) agent.
-    pub default_agent: String,
 }
 
 impl LaunchRegistry {
@@ -134,8 +125,6 @@ impl LaunchRegistry {
                 distribution: dist,
                 protocol: HarnessProtocol::Acp,
                 env: vec![],
-                backend_env_keys: vec![],
-                is_default: false,
             }
         }
         fn npx(pkg: &str, args: &[&str]) -> Distribution {
@@ -158,20 +147,7 @@ impl LaunchRegistry {
         }
 
         Self {
-            default_agent: "everyaios".to_string(),
             agents: vec![
-                HarnessManifest {
-                    id: "everyaios".into(),
-                    name: "EveryAIOS".into(),
-                    description: "Inbuilt agent — office, browser, memory, guard, eval, all models.".into(),
-                    // Local inference through our own broker on this machine.
-                    auth_mode: AuthMode::Local,
-                    distribution: Distribution::Binary { command: String::new(), args: vec![] },
-                    protocol: HarnessProtocol::Inbuilt,
-                    env: vec![],
-                    backend_env_keys: vec![],
-                    is_default: true,
-                },
                 // ---- Frontier labs (subscription-backed official wrappers) ----
                 acp("claude", "Claude Code", "Anthropic's coding tool with subagents (official ACP wrapper).", AuthMode::Subscription, npx("@agentclientprotocol/claude-agent-acp", &[])),
                 acp("codex", "Codex", "OpenAI's coding agent (stdio ACP adapter for the Codex app server).", AuthMode::Subscription, npx("@agentclientprotocol/codex-acp", &[])),
@@ -243,10 +219,6 @@ impl LaunchRegistry {
         self.agents.iter().find(|a| a.id == id)
     }
 
-    pub fn default_manifest(&self) -> Option<&HarnessManifest> {
-        self.get(&self.default_agent)
-    }
-
     /// Insert or replace an agent by id (the registry-fed merge seam — a
     /// registry entry supersedes the seed's command/version for the same id).
     pub fn upsert(&mut self, manifest: HarnessManifest) {
@@ -256,12 +228,12 @@ impl LaunchRegistry {
         }
     }
 
-    /// Resolve the spawn spec for an agent on a model backend (the
-    /// `ollama launch <agent>` equivalent). `backend_url` is the OpenAI-
-    /// compatible endpoint our broker/local runtime serves; when `None`, env
-    /// overrides are omitted (the agent uses its own default backend). Fixed
-    /// `env` from the manifest is always merged.
-    pub fn launch_plan(&self, id: &str, backend_url: Option<&str>) -> Option<LaunchPlan> {
+    /// Resolve the spawn spec for an agent: the command + args its
+    /// distribution resolves to, merged with the manifest's fixed `env`.
+    /// There is no backend injection — an external agent owns its own
+    /// auth/model/routing (`ARCH/CORE.md` §11, ADR-0005 §5), so we never
+    /// rewrite its model endpoint through the environment.
+    pub fn launch_plan(&self, id: &str) -> Option<LaunchPlan> {
         let m = self.get(id)?;
         let (command, args) = match &m.distribution {
             Distribution::Binary { command, args } => (command.clone(), args.clone()),
@@ -276,14 +248,7 @@ impl LaunchRegistry {
                 ("uvx".into(), a)
             }
         };
-        let mut env = m.env.clone();
-        if m.protocol == HarnessProtocol::ModelBackend {
-            if let Some(url) = backend_url {
-                for key in &m.backend_env_keys {
-                    env.push((key.clone(), url.to_string()));
-                }
-            }
-        }
+        let env = m.env.clone();
         Some(LaunchPlan {
             agent_id: m.id.clone(),
             command,
@@ -299,20 +264,18 @@ mod tests {
     use super::*;
 
     #[test]
-    fn default_is_inbuilt_everyaios() {
+    fn no_default_agent_exists() {
+        // ADR-0005 §D1: external agents are the only first-class v1 engines.
+        // There is no built-in/default identity in the launch catalog.
         let reg = LaunchRegistry::builtin();
-        assert_eq!(reg.default_agent, "everyaios");
-        let d = reg.default_manifest().unwrap();
-        assert!(d.is_default);
-        assert_eq!(d.protocol, HarnessProtocol::Inbuilt);
-        assert_eq!(d.auth_mode, AuthMode::Local);
+        assert!(reg.get("everyaios").is_none());
+        assert!(reg.get("inbuilt").is_none());
     }
 
     #[test]
     fn catalog_has_the_full_ecosystem() {
         let reg = LaunchRegistry::builtin();
         for id in [
-            "everyaios",
             "claude",
             "codex",
             "gemini",
@@ -374,7 +337,7 @@ mod tests {
     #[test]
     fn launch_plan_resolves_npx_binary_and_uvx_with_args() {
         let reg = LaunchRegistry::builtin();
-        let claude = reg.launch_plan("claude", None).unwrap();
+        let claude = reg.launch_plan("claude").unwrap();
         assert_eq!(claude.command, "npx");
         assert_eq!(
             claude.args,
@@ -383,75 +346,63 @@ mod tests {
 
         // Codex goes through the stdio ACP adapter.
         assert_eq!(
-            reg.launch_plan("codex", None).unwrap().args,
+            reg.launch_plan("codex").unwrap().args,
             vec!["-y", "@agentclientprotocol/codex-acp"]
         );
 
         // Npx + args: `npx cline --acp`.
         assert_eq!(
-            reg.launch_plan("cline", None).unwrap().args,
+            reg.launch_plan("cline").unwrap().args,
             vec!["-y", "cline", "--acp"]
         );
 
         // Binary + args: opencode/hermes/devin/kiro use subcommand/flag.
-        assert_eq!(reg.launch_plan("opencode", None).unwrap().args, vec!["acp"]);
-        assert_eq!(reg.launch_plan("hermes", None).unwrap().args, vec!["acp"]);
-        assert_eq!(reg.launch_plan("devin", None).unwrap().args, vec!["acp"]);
-        assert_eq!(reg.launch_plan("kiro", None).unwrap().args, vec!["acp"]);
+        assert_eq!(reg.launch_plan("opencode").unwrap().args, vec!["acp"]);
+        assert_eq!(reg.launch_plan("hermes").unwrap().args, vec!["acp"]);
+        assert_eq!(reg.launch_plan("devin").unwrap().args, vec!["acp"]);
+        assert_eq!(reg.launch_plan("kiro").unwrap().args, vec!["acp"]);
         assert_eq!(
-            reg.launch_plan("copilot", None).unwrap().args,
+            reg.launch_plan("copilot").unwrap().args,
             vec!["-y", "@github/copilot", "--acp"]
         );
         assert_eq!(
-            reg.launch_plan("grok", None).unwrap().args,
+            reg.launch_plan("grok").unwrap().args,
             vec!["-y", "@xai-official/grok", "agent", "stdio"]
         );
 
         // Uvx + args: `uvx minion-code acp`.
         assert_eq!(
-            reg.launch_plan("minion-code", None).unwrap().args,
+            reg.launch_plan("minion-code").unwrap().args,
             vec!["minion-code", "acp"]
         );
         // Uvx plain: `uvx aider-chat`.
         assert_eq!(
-            reg.launch_plan("aider", None).unwrap().args,
+            reg.launch_plan("aider").unwrap().args,
             vec!["aider-chat"]
         );
 
-        assert!(reg.launch_plan("nope", None).is_none());
+        assert!(reg.launch_plan("nope").is_none());
     }
 
     #[test]
-    fn model_backend_agents_get_env_override() {
+    fn launch_plan_never_injects_a_model_backend() {
+        // ADR-0005 §5: provider transport is not ours. A manifest's fixed env
+        // is merged; nothing is added to point the agent at a model endpoint.
         let reg = LaunchRegistry {
-            default_agent: "everyaios".into(),
             agents: vec![HarnessManifest {
-                id: "local-claude".into(),
-                name: "Local Claude".into(),
+                id: "fixed-env-agent".into(),
+                name: "Fixed Env".into(),
                 description: "test".into(),
                 auth_mode: AuthMode::Local,
                 distribution: Distribution::Binary {
                     command: "claude".into(),
                     args: vec![],
                 },
-                protocol: HarnessProtocol::ModelBackend,
-                env: vec![],
-                backend_env_keys: vec!["ANTHROPIC_BASE_URL".into()],
-                is_default: false,
+                protocol: HarnessProtocol::Acp,
+                env: vec![("AGENT_FLAG".into(), "1".into())],
             }],
         };
-        let plan = reg
-            .launch_plan("local-claude", Some("http://127.0.0.1:11434"))
-            .unwrap();
-        assert_eq!(
-            plan.env,
-            vec![(
-                "ANTHROPIC_BASE_URL".to_string(),
-                "http://127.0.0.1:11434".to_string()
-            )]
-        );
-        // No backend → no override (agent uses its default).
-        let plan = reg.launch_plan("local-claude", None).unwrap();
-        assert!(plan.env.is_empty());
+        let plan = reg.launch_plan("fixed-env-agent").unwrap();
+        assert_eq!(plan.env, vec![("AGENT_FLAG".to_string(), "1".to_string())]);
     }
 }

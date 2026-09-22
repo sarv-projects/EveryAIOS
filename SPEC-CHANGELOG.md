@@ -17,6 +17,129 @@ Each entry records the date or release marker, change category, affected section
 - A citation or implementation detail may remain in the spec only when it is itself a current behavioral constraint; its historical or evidentiary explanation belongs here.
 
 ---
+## 2026-09-21 — P71 implementation wave: swarm strategy, Work factory, and the scheduler trigger plane
+
+**Category:** implementation (the `ADR-0005`/`ADR-0006` programme's second installment; `P71.1` + `P71.3a`
+were the first, recorded in `CURRENT_RUN.md`).
+**Flipped:** no capability checkbox changes; three `P71` rows moved from `NOT DONE` to
+`IMPLEMENTED — unverified` and stay `[ ]` in the live count so the count keeps meaning *verified*.
+
+**Decision.** Execute `ADR-0005` code-first under the standing “implement, do not test yet” instruction:
+each `P71.3x` row **re-homes or deletes** a piece of the built-in-era runtime so external agents can be the
+v1 engines without silently deleting a feature (`I8`/`I9`/**I26**).
+
+**Implementation.**
+- **`P71.3b` — `SwarmSession` → the swarm strategy.** The accumulating driver (`report`/`abort`/
+  `try_verdict`, `MemberOutcome`) is deleted from `everyaios-blueprint::swarm`; `SwarmSpec`/`SwarmMode`
+  remain as the strategy plus a **pure** `reduce(spec, results)` whose inputs are child-Work results from
+  the delegation plane (`I9`: a strategy, not a second runtime).
+- **`P71.3c` — `AutomationRuntime` → the **Work factory**.** `everyaios-core::automation_runtime` no
+  longer executes (`run`/`run_step` sequencing `run_code`/`online_search`/`email`/`calendar` through
+  injected engines is deleted). It compiles: `compile_work(&automation, revision_id, occurrence_id) →
+  WorkSpec { provenance (automation_id · revision_id · trigger_occurrence_id), objective, steps,
+  capability_requests, agent_required }` — validate-before-run, capability requests as data, refusal over
+  guessing (`AUTOMATION.md` §5). No effects, no retries, no execution state.
+- **`P71.3d` — `scheduler_service.rs` → the trigger plane.** The second state machine is deleted:
+  `RunState` (leases, fences, checkpoints, `Paused`, `Failed`+retry), `current_run`/`RunSnapshot`, the
+  runs ledger, drift pins and the model assumptions (`active_model`/`active_effort`,
+  `has_api_key`/`dispatch_preflight`). What remains is exactly `AUTOMATION.md` §9's ownership: triggers
+  (cron · interval · event · webhook · window), next-due computation, **occurrence records** via
+  `mark_fired` (dedupe + rolling-hour admission + schedule advance; misfire recovery is
+  `run_once_on_resume` by construction), battery policy, monitor delta accounting, nudge sentinels, the
+  incident ack-store, the read-only doctor and persistence. Pause becomes `Job.paused` — a trigger-plane
+  flag; execution waits are Work's `WaitCondition`. Wire changes: `scheduler/lease_*` gone,
+  `scheduler/mark_fired` added, `scheduler_runs` deleted, `scheduler_continuity` →
+  `scheduler_notepad_get`; the coordinator's `scheduler.ts` is a trigger-plane client (tick due → run
+  through the chat engine → record the firing) and the UI job shape carries `paused` · `lastFiredAt` ·
+  `recentFires` with run status pointed at the Event Log (**I3**).
+- **`P71.3e` — `MultiRun` stops being model-centric.** `everyaios-core::multirun` now groups **Runs of
+  one Work**, each bound to an agent binding: `MultiRun { id, work_id, agent_ids, run_ids,
+  worktree_ids, mode }` with the member Run ids **derived in Rust** (`<work_id>/run-<i>`) so the sidecar
+  never fabricates a kernel id, the Work required and the budget 1..=5 Runs with a 1:1 worktree when
+  supplied. `RunOutcome { run_id, agent_id, output, score }`; `FuseMode::Fuse` attributes
+  `## <agent_id> (run <run_id>, score …)`. The `execution/multirun` RPC takes `workId`/`agentIds`/
+  `worktreeIds` and **refuses** an outcome naming an agent or Run outside the fan-out. Coordinator:
+  `dispatchMultiRun(workId, agentIds)`, the subagent tool arg `models` → `agents`, and the chat fan-out
+  fails closed without `params.workId` (a strategy groups Runs of one Work — no inferred ids, **I4**).
+  `ADR-0005`: an external agent owns its own model, so no model list is admissible.
+- **`P71.3f` — one canonical agent readiness state.** `everyaios_types::AgentReadiness`
+  (`Unknown · Discovered · Installed · Launchable · ProtocolCompatible · AuthRequired ·
+  Authenticating · Ready · Degraded · Unavailable · Failed`) replaces the scattered booleans; the
+  contract lives in `ARCH/AGENT.md` §3.1, the resolution input in `ARCH/ROUTING.md` §2, the
+  scheduler's read in `ARCH/AUTOMATION.md` §9. Read by four surfaces from **one** source: the
+  delegation policy (readiness judged first, `NotReady` names the state; `Degraded` is not
+  delegable), the picker (`AgentDirectoryEntry.readiness`, UI projections `isAgentReady` /
+  `readinessToInstallStatus`), the trigger plane (doctor `agents` check + the firing turn's
+  `AgentNotReady` gate) and the sidecar (`agent/readiness`). The shell mounts
+  `ShellAgentReadiness` (install/discovery + live ACP handshake) via
+  `ChatRelay::mount_readiness`; `agent_installed` is now a projection of the state, never a
+  second truth.
+- **`P71.3g` — the Work-state contract in code.** `everyaios_types::WorkState` now matches `WORK.md` §4
+  (four `Waiting*` sub-states, `Verifying`, and **`Recoverable` as a first-class outcome** — an unknown
+  effect outcome is not a failure, `RECOVERY.md` §3); `WaitReason`/`WaitCondition` (§8's seven durable
+  waits, each mapping to the state it parks the Work in) and `CheckpointId`
+  (`ckpt:<work>/<step>`, stamped on `Checkpoint`/`StepCheckpoint`, legacy rows re-derived on read) exist.
+  The Work Gateway gained one typed transition door (`record_execution_transition(WorkState)`,
+  `record_wait(&WaitCondition)`, `finish_child_work(WorkState)` that **refuses** non-terminal outcomes
+  where the old string door defaulted them to `completed`), presence carries `work_state` + `wait`, the
+  `RunInterrupted` event keeps recovery honest, and the `execution/transition` RPC parses with
+  `try_parse` and refuses unknown spellings. UI labels and renders the new states
+  (`workStateLabel`, `waitReasonLabel`, interruptions shown as resumable).
+- **`P71.8` — session kinds.** `SessionKind { Interactive · Automation · Delegated }` declared in
+  `everyaios-types` (`ADR-0006`), carried as a record property on `WorkAddress.session_kind`, settable
+  only explicitly and **never inferred from whether a Chat exists**. The kernel refuses an automation
+  Work without its owning Session (§4 — the scope chain always has its second rung, **I4**); child Work
+  inherits the parent's Session/kind (§5, **I8**); the coordinator's trigger client creates the firing
+  Work as `automation` with **no Chat** (§2 — no hidden Chat per run); the UI gained
+  `sessionOwnerSurface` and an honest History note (`AUTOMATION.md` §11's owner-surface rule).
+- **`P71.2a`/`P71.2b` — the built-in agent identity is retired.** `HarnessProtocol` is `Acp` alone
+  (the `Inbuilt` and `ModelBackend` variants are deleted, and with them
+  `HarnessManifest.backend_env_keys` and the backend-URL parameter of `LaunchRegistry::launch_plan`,
+  which now **never** injects a model endpoint — an external agent owns its own auth/model/routing,
+  `CORE.md` §11); `is_default` is gone from `HarnessManifest` and `AgentDefinition`; `AgentSource::Inbuilt`
+  is gone and `AgentDirectory::default_entry` returns the first *ready* row (no assumed default);
+  `EngineBinding::Inbuilt` is gone and `AgentBundle.engine` is `Option<EngineBinding>` — `None` is a
+  **draft**: `definition()` returns `None`, `upsert_bundle` refuses it, and a bundle with no brain can
+  never render as a runnable agent. `AgentProtocol` is now `Acp` · `ModelOnly` (the latter names a v1
+  model-only *bundle*, not an engine). `acp_agents` reports `SelfContained` for every row and no id gets a
+  mediated ACP session; `openai_cmds` model rows name the provider they route to instead of the host;
+  the picker's force-install and `ACP_TO_CATALOG["everyaios"]` are gone; the mention seed drops
+  `@everyaios` (fail-closed test added); the templates pre-fill **no** brain and the wizard refuses to save
+  an unbound bundle; `chief_default_get/set` and `settings_default_model_set` no longer special-case the
+  retired spellings. Guard principals named `everyaios` are untouched (ADR-0005 §7 — host actor identity).
+- **`P71.2d`/`P71.2e` — native inference and the native loop are gone.** The two TypeScript
+  inference clients (`core-providers/openai-client.ts`, `anthropic-client.ts`) and their tests are
+  deleted along with every value they carried; the package's remaining surface is exactly the
+  **observability** half — provider catalogue/groups, the generated model catalogue + capability
+  helpers, live pricing, and the credential façade whose custody stays in the Rust vault. No consumer
+  existed outside the deleted tests. `crates/everyaios-core/src/native_loop.rs` moved to
+  `ARCH/archive/native_loop.rs` with an archive banner (post-v1 return note; `DirectGuard` may be
+  re-homed to `everyaios-guard` and must never carry an agent identity), and the migration ledger's
+  tiers 1a/1b now report `TierStatus::Archived` instead of `SeamLanded`.
+- **Side-findings fixed while landing** (each latent, none introduced by this wave):
+  `WorkGateway::delegation_gauge` counted every delegated Work in the graph instead of the queried
+  parent's own children (now per-parent, `WORK.md` §8); the façade test rejected kernel-routed façades'
+  empty `targets` (`P71.1` `delegate.*`); the ACP lifecycle test predated `P69.C1`'s fail-closed
+  `DenyAllGate` and now attaches an allow gate through the host seam it exists to exercise.
+- **Documentation.** `ARCH/AUTOMATION.md` §9 carries the dated repair note; `ARCH/09-FEATURE-MATRIX.md`
+  B7 is re-stated; `TODO.md` annotates the superseded rows (`P50.3.3`, fencing tokens, per-run snapshot,
+  `P51.32`'s preflight/drift half) and every landed row keeps its own remainder.
+
+**Verification.** Scoped and explicit: `P71.1`/`P71.3a`/`P71.3b`/`P71.3c`/`P71.3f` were **not** suite-run
+(compile-level + gate-level only, per the standing "implement, do not test yet" instruction);
+`P71.3g` carries targeted contract tests (39/39 gateway suite incl. presence-carries-canonical-state,
+wait replay, and non-terminal child outcome refusal; 10/10 `everyaios-types` incl. the full lifecycle
+wire round-trip and the `Recoverable` ≠ `Failed` distinction; 6/6 checkpoint suite with id stamping);
+`P71.3d` carries targeted evidence (`cargo test -p everyaios-core` 744/744 with all integration suites;
+30/30 scheduler trigger-plane unit tests; coordinator scheduler 8/8; `tsc --noEmit` clean for UI +
+coordinator; `ipc-parity` 350 registered, 0 broken; `cargo check --workspace --all-targets` +
+`src-tauri` clean) and `P71.3e` carries its own unit scope (`cargo test -p everyaios-core --lib multirun`
+7/7 including the fail-closed admission cases; `bun test src/tools.test.ts` 18/18; `tsc --noEmit` clean;
+`cargo check --workspace --all-targets` + `src-tauri` clean) while the wave as a whole remains
+**unverified end-to-end**. One load-sensitive RSS test (`rss_measure`) flakes under the parallel
+workspace run and passes in isolation.
+
+---
 ## 2026-09-21 — P69 consolidation wave 1: defect repairs, ownership landings, `AgentBinding`, invariant gates
 
 **Category:** implementation/consolidation (the thaw programme of the 2026-09-20 entry, executed as code).

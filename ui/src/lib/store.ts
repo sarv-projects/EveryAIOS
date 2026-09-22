@@ -2164,10 +2164,15 @@ export const useAppStore = create<AppState>((set, get) => ({
     const s = get()
     const pausing = !s.agentPaused
     if (pausing && inTauri()) {
-      const streamId = s.liveStreamId[s.activeSessionId]
-      if (streamId) {
-        void import('./tauri').then(({ chatCancel }) => {
-          void chatCancel(streamId).catch(() => {})
+      // P71.2c — the turn runs inside the bound agent's own process, so a
+      // pause has to reach *that* agent: cancel its live ACP session. The
+      // native provider stream (and its `chat_cancel` handle) is gone with the
+      // built-in engine, so there is no stream id to cancel.
+      const bound = s.sessionChiefs[s.activeSessionId] ?? s.userDefaultChief ?? ''
+      const handle = bound ? s.acpHandles[bound] : undefined
+      if (handle) {
+        void import('./acp').then(({ acpCancel }) => {
+          void acpCancel(handle).catch(() => {})
         })
       }
     }

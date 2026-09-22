@@ -12,15 +12,32 @@ pub const BUNDLE_SCHEMA_VERSION: u32 = 1;
 
 /// The engine the bundle binds to (P31.8): the brain, swappable without
 /// touching persona or scopes.
+///
+/// ADR-0005: in v1 the executable brain is an **external ACP agent**. The
+/// built-in `Inbuilt` variant is deferred to post-v1 and is deliberately
+/// absent — a bundle can never bind an engine the app does not have. A bundle
+/// with **no** binding (`None`) is a draft: it is stored, it is not an agent,
+/// and it must not appear in the runnable directory.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum EngineBinding {
-    /// The inbuilt EveryAIOS engine.
-    Inbuilt,
     /// An ACP-installed CLI agent (Claude Code / Codex / …).
     Acp(String),
     /// Model-only: no tools, no engine — chat-only brain.
     ModelOnly,
+}
+
+impl EngineBinding {
+    /// Stable wire/label spelling: `acp:<agent-id>`, `model-only`, or
+    /// `unbound` for the draft state. Never a debug string — the Settings/
+    /// registry rows read this verbatim.
+    pub fn label(binding: Option<&EngineBinding>) -> String {
+        match binding {
+            Some(EngineBinding::Acp(id)) => format!("acp:{id}"),
+            Some(EngineBinding::ModelOnly) => "model-only".to_string(),
+            None => "unbound".to_string(),
+        }
+    }
 }
 
 /// The model pin: `None` = inherit from the chat bar at send time.
@@ -82,7 +99,10 @@ pub struct AgentBundle {
     pub persona: Option<String>,
     #[serde(default)]
     pub system_prompt: Option<String>,
-    pub engine: EngineBinding,
+    /// The bound brain. `None` = not chosen yet; an unbound bundle is a draft
+    /// and cannot act as an agent (`definition()` returns `None`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub engine: Option<EngineBinding>,
     pub model: ModelPin,
     /// Capabilities (step 3) — exact subsets, never "all".
     #[serde(default)]
@@ -109,7 +129,7 @@ impl AgentBundle {
             description: String::new(),
             persona: None,
             system_prompt: None,
-            engine: EngineBinding::Inbuilt,
+            engine: None,
             model: ModelPin::inherited(),
             mcp_servers: Vec::new(),
             connectors: Vec::new(),
@@ -143,27 +163,32 @@ impl AgentBundle {
     /// directory has exactly one record shape (P69.D1). The id is the same
     /// slug the bundle store uses, so bundle ⇄ definition ids cannot drift.
     ///
+    /// `None` when no engine is bound: a draft bundle is not an agent, and the
+    /// directory must not carry a brain that cannot run (ADR-0005 — nothing
+    /// depends on a built-in binding being present, and no unbound row may
+    /// render as available).
+    ///
     /// Auth mode is `Unknown` on purpose: a bundle declares *which engine* it
     /// binds to, not how that engine authenticates — the ACP handshake is the
     /// authoritative source (`ARCH/03-BYOK-KEYRINGS.md` §3.0).
-    pub fn definition(&self) -> AgentDefinition {
-        AgentDefinition {
+    pub fn definition(&self) -> Option<AgentDefinition> {
+        let protocol = match self.engine.as_ref()? {
+            EngineBinding::Acp(_) => AgentProtocol::Acp,
+            EngineBinding::ModelOnly => AgentProtocol::ModelOnly,
+        };
+        Some(AgentDefinition {
             id: AgentId::new(slug(&self.name)),
             name: self.name.clone(),
             description: self.description.clone(),
-            protocol: match &self.engine {
-                EngineBinding::Inbuilt | EngineBinding::ModelOnly => AgentProtocol::Inbuilt,
-                EngineBinding::Acp(_) => AgentProtocol::Acp,
-            },
+            protocol,
             auth_mode: AuthMode::Unknown,
-            is_default: false,
             capabilities: self
                 .skills
                 .iter()
                 .map(|s| CapabilityId::from(s.as_str()))
                 .collect(),
             extension_mechanisms: Vec::new(),
-        }
+        })
     }
 
     pub fn from_toml(src: &str) -> Result<Self, String> {
@@ -182,13 +207,33 @@ mod tests {
     #[test]
     fn round_trip_toml() {
         let mut b = AgentBundle::new("Grace");
-        b.engine = EngineBinding::Acp("claude-code".into());
+        b.engine = Some(EngineBinding::Acp("claude-code".into()));
         b.model = ModelPin::pinned("anthropic", "claude-sonnet-4");
         let toml = b.to_toml().unwrap();
         let back = AgentBundle::from_toml(&toml).unwrap();
         assert_eq!(back.name, "Grace");
-        assert_eq!(back.engine, EngineBinding::Acp("claude-code".into()));
+        assert_eq!(back.engine, Some(EngineBinding::Acp("claude-code".into())));
         assert_eq!(back.model.model.as_deref(), Some("claude-sonnet-4"));
+    }
+
+    #[test]
+    fn unbound_bundle_is_a_draft_not_an_agent() {
+        // ADR-0005: nothing may present an engine that is not bound. A fresh
+        // bundle has no brain; it projects to no `AgentDefinition` at all.
+        let b = AgentBundle::new("Draft");
+        assert!(b.engine.is_none());
+        assert!(b.definition().is_none());
+        // An ACP binding projects as an ACP agent.
+        let mut bound = b.clone();
+        bound.engine = Some(EngineBinding::Acp("claude-code".into()));
+        assert_eq!(
+            bound.definition().unwrap().protocol,
+            AgentProtocol::Acp
+        );
+        // Model-only is not ACP and must never claim to be.
+        let mut mo = b;
+        mo.engine = Some(EngineBinding::ModelOnly);
+        assert_eq!(mo.definition().unwrap().protocol, AgentProtocol::ModelOnly);
     }
 
     #[test]

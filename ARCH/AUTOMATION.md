@@ -164,9 +164,15 @@ Long Work pauses. A pause is a **state**, never a spinning process:
 failed* (`RECOVERY.md` §3). Long Work checkpoints `current step · progress · agent binding · context
 reference · artifacts · unresolved effects` — not every model turn.
 
-> **Code gap (`P71`):** `everyaios-types` `WorkState` has six variants and lacks `Waiting*`, `Verifying` and
-> `Recoverable`; there is no `WaitCondition`/`WaitReason` type and no `CheckpointId`. `WORK.md` §4 already
-> specifies the full set, so this is code catching up to the contract, not new architecture.
+> **Code gap (`P71`) — closed (`P71.3g`, implemented 2026-09-21 — not yet verified):** `everyaios-types`
+> now carries the full §4 lifecycle (`Created · Planning · Ready · Running · WaitingTool ·
+> WaitingApproval · WaitingUser · Checkpointed · Verifying · Completed · Failed · Cancelled · Paused ·
+> Recoverable`), with `Recoverable` a first-class outcome; `WaitReason`/`WaitCondition` (approval ·
+> user input · timer · external event · resource · agent · retry, each mapping to the state it parks
+> the Work in) and `CheckpointId` (`ckpt:<work>/<step>`, deterministic) exist. The Work Gateway's
+> transition door is typed (`record_execution_transition(WorkState)`, `record_wait(condition)`), the
+> terminal outcome door refuses non-terminal states, and the `execution/transition` RPC parses with
+> `try_parse` and refuses unknown spellings instead of coercing them.
 
 ## 9. Ownership — the scheduler's exact boundary
 
@@ -178,11 +184,26 @@ reference · artifacts · unresolved effects` — not every model turn.
 | battery/wake policy · misfire policy | execution history (the Event Log owns it — **I3**) |
 | concurrency admission · trigger dedupe | agent execution of any kind |
 
-> **Current-code note (`P71.3d`):** `everyaios-core/src/scheduler_service.rs` currently holds a second state
-> machine — `RunState` (`:239`), `current_run` (`:373`), retry, a run ledger — plus model assumptions that no
-> longer have an owner: `active_model`/`active_effort` (`:645-646`) and `has_api_key` (`:915`). Those must
-> become **agent readiness** (`installed · launchable · protocol-compatible · authenticated ·
-> capabilities-negotiated · ready`) and an **agent binding policy**, never a global "the model".
+> **Repair note (`P71.3d`, implemented 2026-09-21 — not yet verified):** `everyaios-core/src/
+> scheduler_service.rs` no longer holds a second state machine. `RunState` (leases, fences, checkpoints,
+> retry, `Failed`), `current_run`/`RunSnapshot`, the runs ledger and the model assumptions
+> (`active_model`/`active_effort`, drift pins, `has_api_key`/`dispatch_preflight`) are **deleted**.
+> What remains is the trigger plane this section specifies: definitions + triggers (cron · interval ·
+> event · webhook · window), next-due computation, occurrence records (`mark_fired` — trigger dedupe +
+> misfire accounting), battery/misfire/frequency admission, monitor observation accounting, nudge
+> sentinels, the incident ack-store and the read-only doctor. Pause is a trigger-plane flag
+> (`Job.paused`), never an execution wait — those are `WaitCondition` (§8). Run history is the Event
+> Log's (**I3**); a run-level failure record is **agent readiness** + binding policy, never a global
+> "the model".
+>
+> **`P71.3f` (implemented 2026-09-21 — not yet verified):** that readiness half now exists — one state
+> ([`everyaios_types::AgentReadiness`](../crates/everyaios-types/src/lib.rs), [`AGENT.md`](AGENT.md)
+> §3.1) replacing the scattered booleans. The scheduler's connection to it is the trigger-plane doctor,
+> which reads it as an ordinary check (`agents`: ready · launchable · auth-required · discovered), and
+> the firing turn's gate: a turn that names an agent fails with the readiness state as the reason
+> (`agent_not_ready`) rather than a generic engine error. Which agent a *session's* firing resolves to
+> is the session binding's question (P71.5b retires the Chief vocabulary) — the firing turn passes no
+> agent id today, so the gate is exact where an agent is named and silent where it is not.
 
 ---
 

@@ -1,3 +1,17 @@
+//! # ARCHIVED — `native_loop.rs` (`NativeLoop` · `DirectGuard`)
+//!
+//! **Status:** archived 2026-09-21 with the built-in engine. It was moved here from
+//! `crates/everyaios-core/src/native_loop.rs` by `P71.2e` under [`ARCH/ADR/0005`](../ADR/0005-external-agents-are-the-v1-engines.md)
+//! §4 — external agents are the v1 engines, so there is no in-process built-in loop left to collapse the
+//! stdio framing for. It is **not compiled** (it lives outside the crate tree) and nothing may depend on it.
+//!
+//! **Post-v1 return note:** when the governed baseline binding returns, `DirectGuard` may be re-homed to
+//! `everyaios-guard` — it is a Guard mechanism, not an agent mechanism, and per ADR-0005 §4 it must never
+//! carry an agent identity. `NativeLoop` itself only matters if the built-in engine again runs in-process
+//! rather than over the sidecar seam.
+//!
+//! ---
+//!
 //! P29 Tier 1a + 1b — collapse IPC (native sidecar migration, spec §9.1 R6):
 //!
 //! **Tier 1a** — [`NativeLoop`]: an in-process actor loop over

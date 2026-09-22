@@ -35,12 +35,17 @@ describe("bundleToToml — Rust AgentBundle schema layout", () => {
     expect(modelIdx).toBeLessThan(toolsIdx);
   });
 
-  test("engine unit variants serialize as plain strings", () => {
-    const inbuilt = bundleFromTemplate("writer", "Writer", "✍️");
-    expect(bundleToToml(inbuilt)).toContain('engine = "inbuilt"');
+  test("model-only serializes as a plain string; a draft emits no engine key", () => {
     const mo = bundleFromTemplate("general", "Chatter", "💬");
     mo.engine = { kind: "model-only" };
     expect(bundleToToml(mo)).toContain('engine = "model-only"');
+    // ADR-0005: an unbound bundle is a draft — the key is omitted entirely so
+    // the Rust schema reads `None`, never a built-in default.
+    const draft = bundleFromTemplate("writer", "Writer", "✍️");
+    expect(draft.engine).toBeUndefined();
+    const toml = bundleToToml(draft);
+    expect(toml).not.toContain("engine");
+    expect(toml).not.toContain('"inbuilt"');
   });
 
   test("engine.acp serializes to an [engine] table with the cli", () => {

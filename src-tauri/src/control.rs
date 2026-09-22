@@ -64,13 +64,37 @@ pub fn dispatch(app: &AppHandle, method: &str, params: &Value) -> Value {
     }
 }
 
+/// P71.2c — stop cancels the **bound agent's** live turns, not a sidecar stream.
+///
+/// The old body asked the coordinator to cancel every `chat/stream` bound to the
+/// session; those streams died with the built-in engine (ADR-0005 §2), and the
+/// live turn is now an ACP session. Cancellation is therefore issued over the ACP
+/// channel (`session/cancel`, the same call the UI's Stop makes) for every live
+/// handle, and the cancelled handle ids are returned — a session id has no ACP
+/// counterpart because the UI keys one handle per bound agent.
+///
+/// `session_id` is kept in the signature: it is the control channel's identity
+/// for the request and is what the caller reports back.
 pub fn stop_session(app: &AppHandle, session_id: &str) -> Result<Vec<String>, String> {
     let state = app.state::<AppState>();
-    let relay = state.chat_relay.lock().map_err(|e| e.to_string())?;
-    let Some(relay) = relay.as_ref() else {
-        return Ok(Vec::new());
+    let handles: Vec<String> = {
+        let sessions = state.acp_sessions.lock().map_err(|e| e.to_string())?;
+        sessions.keys().cloned().collect()
     };
-    relay.cancel_session(session_id).map_err(|e| e.to_string())
+    let mut cancelled = Vec::new();
+    for handle in handles {
+        let mut sessions = state.acp_sessions.lock().map_err(|e| e.to_string())?;
+        let Some(entry) = sessions.get_mut(&handle) else {
+            continue;
+        };
+        // A cancel on an already-idle agent is not an error worth failing the
+        // stop for; the intent ("nothing from this session is running") holds.
+        if entry.session.cancel().is_ok() {
+            cancelled.push(handle);
+        }
+    }
+    let _ = session_id;
+    Ok(cancelled)
 }
 
 pub fn undo_session(app: &AppHandle, session_id: &str) -> Result<(), String> {
@@ -155,18 +179,17 @@ pub fn snapshot_file(state: &AppState, session_id: &str, path: &str) {
     }
 }
 
+/// P71.2c — resolve a cockpit interrupt card.
+///
+/// This used to also forward the choice to the coordinator's plan executor
+/// (`plan/respond`), which existed only on the built-in engine's path; that
+/// executor is deleted with the engine (ADR-0005 §2), so the cockpit record is
+/// the whole resolution. A plan runs as Work whose steps are driven by the bound
+/// agent, so there is no in-process waiter left to wake.
 pub fn interrupt_response(app: &AppHandle, break_id: &str, choice: &str) -> Result<(), String> {
     let state = app.state::<AppState>();
-    {
-        let mut cockpit = state.cockpit.lock().map_err(|e| e.to_string())?;
-        let _ = cockpit.respond_interrupt(break_id, choice.parse().unwrap_or(0));
-    }
-    let relay = state.chat_relay.lock().map_err(|e| e.to_string())?;
-    if let Some(relay) = relay.as_ref() {
-        relay
-            .respond_plan(break_id, choice)
-            .map_err(|e| e.to_string())?;
-    }
+    let mut cockpit = state.cockpit.lock().map_err(|e| e.to_string())?;
+    let _ = cockpit.respond_interrupt(break_id, choice.parse().unwrap_or(0));
     Ok(())
 }
 

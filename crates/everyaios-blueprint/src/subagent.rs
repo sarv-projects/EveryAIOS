@@ -247,6 +247,16 @@ pub enum SubAgentError {
     UnknownTask { task_id: String },
     #[error("message references unknown agent {agent_id:?}")]
     UnknownAgent { agent_id: String },
+    #[error(
+        "agent {agent_id} is not admissible as a subagent: {readiness} ({reason}) — \
+         installed is not ready"
+    )]
+    NotReady {
+        task_id: String,
+        agent_id: String,
+        readiness: everyaios_types::AgentReadiness,
+        reason: &'static str,
+    },
 }
 
 /// Inter-agent message kinds (P6.2 — peer-review, cross-check, request
@@ -315,10 +325,30 @@ impl DelegationPolicy {
         self.limits
     }
 
-    /// The spawn admission, in one fixed order: depth (recursion) → concurrent
-    /// → total. Every arm carries the numbers it judged, so a refusal is
-    /// auditable without reading any state back.
-    pub fn admit(&self, task_id: &str, gauge: DelegationGauge) -> Result<(), SubAgentError> {
+    /// The spawn admission, in one fixed order: **readiness** → depth
+    /// (recursion) → concurrent → total. Every arm carries what it judged, so a
+    /// refusal is auditable without reading any state back.
+    ///
+    /// Readiness is judged first and takes a [`everyaios_types::AgentReadiness`]
+    /// value the caller read from the one source (`P71.3f`) — never a boolean
+    /// the caller derived. Only [`everyaios_types::AgentReadiness::Ready`] is
+    /// admissible: an installed-but-unauthenticated agent, a degraded agent and
+    /// an unprobed agent are all refused, each naming its own state.
+    pub fn admit(
+        &self,
+        task_id: &str,
+        gauge: DelegationGauge,
+        member_agent_id: &str,
+        readiness: everyaios_types::AgentReadiness,
+    ) -> Result<(), SubAgentError> {
+        if !readiness.can_delegate() {
+            return Err(SubAgentError::NotReady {
+                task_id: task_id.to_string(),
+                agent_id: member_agent_id.to_string(),
+                readiness,
+                reason: readiness.summary(),
+            });
+        }
         if gauge.child_depth > self.limits.max_depth {
             return Err(SubAgentError::DepthExceeded {
                 task_id: task_id.to_string(),
@@ -432,15 +462,63 @@ mod tests {
         }
     }
 
+    /// The only admissible state (P71.3f).
+    fn readiness() -> everyaios_types::AgentReadiness {
+        everyaios_types::AgentReadiness::Ready
+    }
+
+    #[test]
+    fn readiness_is_judged_first_and_installed_is_not_ready() {
+        use everyaios_types::AgentReadiness;
+        let policy = DelegationPolicy::new(SubAgentLimits::default());
+        // Every limit is fine, but the agent is not deployable: the readiness
+        // arm answers — installed is not ready, and degraded is not delegable.
+        for state in [
+            AgentReadiness::Unknown,
+            AgentReadiness::Discovered,
+            AgentReadiness::Installed,
+            AgentReadiness::Launchable,
+            AgentReadiness::ProtocolCompatible,
+            AgentReadiness::AuthRequired,
+            AgentReadiness::Authenticating,
+            AgentReadiness::Degraded,
+            AgentReadiness::Unavailable,
+            AgentReadiness::Failed,
+        ] {
+            match policy.admit("t", gauge(1, 0, 0), "coder", state) {
+                Err(SubAgentError::NotReady {
+                    agent_id,
+                    readiness,
+                    reason,
+                    ..
+                }) => {
+                    assert_eq!(agent_id, "coder");
+                    assert_eq!(readiness, state);
+                    assert!(!reason.is_empty());
+                }
+                other => panic!("{state:?} must not be admissible as a subagent: {other:?}"),
+            }
+        }
+        // The readiness arm precedes depth: an unready agent is refused for
+        // readiness even when every limit is also exceeded.
+        assert!(matches!(
+            policy.admit("t", gauge(9, 9, 9), "coder", AgentReadiness::Installed),
+            Err(SubAgentError::NotReady { .. })
+        ));
+        assert!(policy
+            .admit("t", gauge(1, 0, 0), "coder", AgentReadiness::Ready)
+            .is_ok());
+    }
+
     #[test]
     fn admission_judges_the_depth_the_graph_reports() {
         let policy = DelegationPolicy::new(SubAgentLimits::default());
         // A root Work's child is depth 1; its grandchild is depth 2 (== max).
-        assert!(policy.admit("child", gauge(1, 0, 0)).is_ok());
-        assert!(policy.admit("grandchild", gauge(2, 1, 1)).is_ok());
+        assert!(policy.admit("child", gauge(1, 0, 0), "member", readiness()).is_ok());
+        assert!(policy.admit("grandchild", gauge(2, 1, 1), "member", readiness()).is_ok());
         // Depth 3 would be recursion — refused with the numbers it judged.
         assert!(matches!(
-            policy.admit("great-grandchild", gauge(3, 0, 0)),
+            policy.admit("great-grandchild", gauge(3, 0, 0), "member", readiness()),
             Err(SubAgentError::DepthExceeded {
                 depth: 3,
                 max_depth: 2,
@@ -483,9 +561,9 @@ mod tests {
             max_concurrent: 4,
             max_total: 10,
         });
-        assert!(policy.admit("child", gauge(1, 0, 0)).is_ok());
+        assert!(policy.admit("child", gauge(1, 0, 0), "member", readiness()).is_ok());
         assert!(matches!(
-            policy.admit("grandchild", gauge(2, 1, 1)),
+            policy.admit("grandchild", gauge(2, 1, 1), "member", readiness()),
             Err(SubAgentError::DepthExceeded {
                 depth: 2,
                 max_depth: 1,
@@ -503,7 +581,7 @@ mod tests {
         });
         // Two children running → the concurrent cap is what binds.
         assert!(matches!(
-            policy.admit("c", gauge(1, 2, 2)),
+            policy.admit("c", gauge(1, 2, 2), "member", readiness()),
             Err(SubAgentError::ConcurrentLimitExceeded {
                 active: 2,
                 max_concurrent: 2,
@@ -513,7 +591,7 @@ mod tests {
         // A finished child frees concurrency, so the *total* cap binds next
         // (three ever-created children, one of them terminal).
         assert!(matches!(
-            policy.admit("d", gauge(1, 1, 3)),
+            policy.admit("d", gauge(1, 1, 3), "member", readiness()),
             Err(SubAgentError::TotalLimitExceeded {
                 total: 3,
                 max_total: 3,
@@ -531,21 +609,21 @@ mod tests {
         });
         // All three would be exceeded → the depth arm answers.
         assert!(matches!(
-            policy.admit("t", gauge(2, 5, 9)),
+            policy.admit("t", gauge(2, 5, 9), "member", readiness()),
             Err(SubAgentError::DepthExceeded { .. })
         ));
         // Depth fine → the concurrent arm answers.
         assert!(matches!(
-            policy.admit("t", gauge(1, 1, 9)),
+            policy.admit("t", gauge(1, 1, 9), "member", readiness()),
             Err(SubAgentError::ConcurrentLimitExceeded { .. })
         ));
         // Depth and concurrency fine → the total arm answers.
         assert!(matches!(
-            policy.admit("t", gauge(1, 0, 1)),
+            policy.admit("t", gauge(1, 0, 1), "member", readiness()),
             Err(SubAgentError::TotalLimitExceeded { .. })
         ));
         // Nothing exceeded → admitted.
-        assert!(policy.admit("t", gauge(1, 0, 0)).is_ok());
+        assert!(policy.admit("t", gauge(1, 0, 0), "member", readiness()).is_ok());
     }
 
     #[test]
@@ -604,7 +682,7 @@ mod tests {
         let mut active = 0u32;
         let mut spawned = Vec::new();
         for id in ["a", "b", "c"] {
-            match policy.admit(id, gauge(1, active, active)) {
+            match policy.admit(id, gauge(1, active, active), "member", readiness()) {
                 Ok(()) => {
                     spawned.push(id.to_string());
                     active += 1;
@@ -630,8 +708,12 @@ mod tests {
         let planner = spec("planner", "claude-sonnet");
         let coder = spec("coder", "gpt-5-codex").with_parent("planner");
         // The planner is a root Work's child (depth 1); the coder is depth 2.
-        assert!(policy.admit(&planner.spec.id, gauge(1, 0, 0)).is_ok());
-        assert!(policy.admit(&coder.spec.id, gauge(2, 1, 1)).is_ok());
+        assert!(policy
+            .admit(&planner.spec.id, gauge(1, 0, 0), "planner", readiness())
+            .is_ok());
+        assert!(policy
+            .admit(&coder.spec.id, gauge(2, 1, 1), "coder", readiness())
+            .is_ok());
 
         // Per-agent models are a property of the spec, not of any runtime.
         assert_eq!(planner.model, "claude-sonnet");

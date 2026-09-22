@@ -7,7 +7,6 @@
 import { useAppStore, sanitizeSessionRows, mergeHydratedSessions, type LiveBudget } from "./store";
 import {
   inTauri,
-  chatStream,
   onChatEvent,
   planExecute,
   type ChatWireEvent,
@@ -25,8 +24,7 @@ import {
 } from "./acp";
 import { limitationFor } from "./plain-language";
 import { usageSnapshot } from "./spend";
-import { AGENTS, type AgentRuntime } from "./agents";
-import { resolveProviderModel } from "./model-routing";
+import { AGENTS, readinessToInstallStatus, type AgentRuntime } from "./agents";
 import { workList, workSnapshot } from "./work";
 import {
   markRuntimeBooting,
@@ -58,7 +56,6 @@ function pushLive(n: LiveNotification, category: NotifyCategory = "chat"): void 
 
 /** ACP registry id → the v2 catalog's agent id (same brain, curated skin). */
 const ACP_TO_CATALOG: Record<string, string> = {
-  everyaios: "everyaios-native",
   claude: "claude-code",
   codex: "codex-cli",
   grok: "grok-build",
@@ -83,12 +80,13 @@ function mergeAgentCatalog(
   for (const m of manifests) {
     const catalogId = ACP_TO_CATALOG[m.id] ?? m.id;
     const state = installs[m.id];
-    const status =
-      state?.installed || m.id === "everyaios"
-        ? "installed"
-        : state?.discovered
-          ? "discovered"
-          : "available";
+    // ADR-0005 (P71.2a): install truth is the shell's — there is no built-in
+    // agent that is force-shown as installed.
+    const status = state?.installed
+      ? "installed"
+      : state?.discovered
+        ? "discovered"
+        : "available";
     const existing = merged.find((a) => a.id === catalogId);
     if (existing) {
       existing.status = status;
@@ -167,7 +165,8 @@ function mergeDirectoryAgents(
     const existing = merged.find((a) => a.id === entry.id);
     if (existing) {
       // Stale catalog rows must still learn what the directory knows.
-      existing.status = entry.installed ? 'installed' : existing.status;
+      existing.readiness = entry.readiness;
+      existing.status = readinessToInstallStatus(entry.readiness, existing.status);
       existing.note = entry.description || existing.note;
       continue;
     }
@@ -186,8 +185,9 @@ function mergeDirectoryAgents(
                 ? 'local inference'
                 : 'unknown',
       tagline: entry.description,
-      status: entry.installed ? 'installed' : 'available',
-      discovered: entry.source === 'discovered',
+      readiness: entry.readiness,
+      status: readinessToInstallStatus(entry.readiness, 'available'),
+      discovered: entry.source === 'discovered' || !entry.installed,
       path: entry.locator ?? undefined,
       mark: entry.name.replace(/[^A-Za-z0-9]/g, '').slice(0, 2).toUpperCase() || 'A',
       accent:
@@ -810,30 +810,13 @@ async function startBridge(): Promise<BridgeDisposer> {
 
 // Single source of truth for catalog→registry id translation lives in
 // `./acp` (`acpIdFor`); do not re-introduce a second map here.
-function isInbuilt(agentId: string): boolean {
-  return agentId === "everyaios-native" || agentId === "everyaios" || agentId === "";
-}
-
 /**
- * P50.3.6 — resolve the provider/model a turn should run on.
- * - An explicit local runtime selection always wins (the user picked it).
- * - When auto-route is on, return undefined/undefined so the coordinator's
- *   live task→model router (health/cost/latency observations, `router.ts`
- *   `selectModelForTask`) decides per turn; the Rust `chat_stream` boundary
- *   accepts `None` for both and routes accordingly.
- * - Otherwise fall back to the static catalog mapping for the picked model.
+ * P71.2c — the retired built-in binding spellings (ADR-0005 §1). They are not
+ * agents: resolving them to something else would substitute an engine the user
+ * never chose, so they resolve to *nothing* and the turn refuses by name.
  */
-function selectedProviderModel(modelId: string): { provider?: string; model?: string } {
-  // P50.3.6 — pure decision (tested in model-routing.test.ts).
-  const st = useAppStore.getState();
-  return resolveProviderModel({
-    modelId,
-    // P58.7 — a live models.dev pick carries its own provider, so the send path
-    // hands the broker the real catalog id instead of a curated guess.
-    modelProvider: st.selectedModelProvider,
-    localRuntime: st.localRuntime,
-    autoRoute: st.autoRoute,
-  });
+function isRetiredBinding(agentId: string): boolean {
+  return agentId === "everyaios-native" || agentId === "everyaios" || agentId === "inbuilt";
 }
 
 /**
@@ -876,26 +859,23 @@ export async function sendUserMessage(
     return;
   }
 
+  // P71.2c — there is no built-in engine to fall back to (ADR-0005 §1/§2), so
+  // a turn runs under the session's **bound agent**: the session pin → the user
+  // default → the selected agent. The retired built-in spellings resolve to
+  // nothing rather than to a substitute engine, so an unbound session refuses
+  // instead of silently running a second owner of model selection.
   const catalogId = st.selectedAgentId;
-  const selectedInbuilt = isInbuilt(catalogId);
-  // P38 — the session's effective Chief: session pin → user default →
-  // inbuilt. The pin is store-owned (set via the picker's per-session pin);
-  // the user default is read live so an out-of-date cached default never
-  // misroutes. When the Chief is an external ACP agent, the session's turns
-  // route through the ACP channel under that Chief (spec F12: an external
-  // Chief is the session's top brain, EveryAIOS is the governed shell); the
-  // coordinator additionally refuses any inbuilt dispatch that carries an
-  // external `primaryChief` (fail-closed, never silent fallback).
+  const isAgentBinding = (id?: string): id is string =>
+    typeof id === "string" && id.trim() !== "" && !isRetiredBinding(id.trim());
   const pin = st.sessionChiefs[sessionId];
   const userDefault = useAppStore.getState().userDefaultChief;
-  const sessionChief = pin ?? userDefault ?? "inbuilt";
-  const chiefInbuilt = isInbuilt(sessionChief);
-  // A session governed by an external Chief runs on the ACP channel no matter
-  // which chat agent the user has selected — the pinned Chief outranks the
-  // selected agent for that session's turns.
-  const inbuilt = selectedInbuilt && chiefInbuilt;
-  const agentId = inbuilt ? undefined : sessionChief;
-  const { provider, model } = selectedProviderModel(st.selectedModelId);
+  const boundAgent = isAgentBinding(pin)
+    ? pin
+    : isAgentBinding(userDefault)
+      ? userDefault
+      : isAgentBinding(catalogId)
+        ? catalogId
+        : undefined;
   // P33 scoped-PDF fix — when the study-mode chip is set (chat scoped to an
   // open document) and no explicit context was passed, attach the open
   // document's extracted text so answers are grounded in it.
@@ -914,13 +894,15 @@ export async function sendUserMessage(
     return;
   }
 
-  // P50.4.1/4.9 — no provider configured: open the setup gate instead of
-  // dispatching a turn that dies with a generic "agent error". The vault
-  // fact is `false` (probed), not `null` (unknown — let the wire decide and
-  // surface its error honestly). A picked local runtime always counts.
-  if (st.providerKeysConfigured === false && !st.localRuntime) {
-    st.openSetup();
-    st.notify("No model provider configured — add a BYOK key or use a local model first.");
+  // P71.2c / P71.6a — no agent bound: lead with discovery and binding instead
+  // of dispatching a turn that dies with a generic "agent error". EveryAIOS has
+  // no built-in engine to substitute, and substituting one would be the second
+  // owner of model selection that ADR-0005 removes.
+  if (!boundAgent) {
+    st.setCenterScreen("agents");
+    st.notify(
+      "No agent bound — install or pick an agent; EveryAIOS ships no built-in engine in v1.",
+    );
     return;
   }
 
@@ -949,17 +931,16 @@ export async function sendUserMessage(
       });
       return;
     }
-    if (!inbuilt) {
-      // P38 — the session runs under its Chief. When the Chief is external
-      // (pinned or defaulted), launch THAT agent on the ACP channel; when
-      // only the selected agent is external, that agent is the Chief.
-      // P53.4 — the FIRST ACP turn after inbuilt work carries the
+    {
+      // P71.2c — the session runs under its bound agent; launch THAT agent on
+      // the ACP channel. This is the only v1 turn path (ADR-0005 §1).
+      // P53.4 — the FIRST ACP turn after other work carries the
       // compact-before-swap handoff bundle (compacted transcript + goal +
       // taste + file refs; tool blobs stripped). Follow-up turns on the same
       // handle send no bundle (the agent already holds the context).
-      const chiefId = !chiefInbuilt ? sessionChief : catalogId;
+      const chiefId = boundAgent;
       const acpId = acpIdFor(chiefId);
-      const handleKey = !chiefInbuilt ? chiefId : catalogId;
+      const handleKey = boundAgent;
       let handle = st.acpHandles[handleKey];
       let firstTurn = false;
       if (!handle) {
@@ -975,15 +956,21 @@ export async function sendUserMessage(
         firstTurn = true;
       }
       let handoff: string | undefined;
-      if (firstTurn && !chiefInbuilt) {
+      if (firstTurn) {
         const { buildChiefHandoff } = await import("./chief-handoff");
         handoff = buildChiefHandoff(sessionId) ?? undefined;
       }
       // P53.8 — refs are sent separately so an ACP agent with
-      // `embeddedContext` receives resource blocks; the native bridge keeps
-      // the text suffix as the fallback for agents that do not advertise it.
+      // `embeddedContext` receives resource blocks. P33 — a chat scoped to an
+      // open document travels as labelled prompt text, because the native
+      // prompt compiler that used to wrap it (J6 `<user_document>`) went with
+      // the built-in engine; the proper attachment surface for a bound agent
+      // is `P71.9`, and dropping the document silently would be worse.
       const refPaths = [...trimmed.matchAll(/(?:^|\s)@([A-Za-z0-9_.\-][\w\-./]*)/g)].map((m) => m[1]).filter(Boolean);
-      const result = await acpPrompt(handle, trimmed, handoff, refPaths);
+      const promptText = effectiveContext
+        ? `${trimmed}\n\nDocument in scope — ${effectiveContext.title}:\n${effectiveContext.content}`
+        : trimmed;
+      const result = await acpPrompt(handle, promptText, handoff, refPaths);
       // P53.5 — visible assistant text folds into the compacted session;
       // tool history stays in the per-session observability file (never
       // imported into chat context). Refresh the cached live slash vocab
@@ -1025,27 +1012,6 @@ export async function sendUserMessage(
       st.streamAppend(finalText, true, sessionId);
       return;
     }
-    const { SOUL_PRESETS } = await import("./personas");
-    const streamId = await chatStream({
-      sessionId,
-      workId: sessionId,
-      projectId: st.sessions.find((s) => s.id === sessionId)?.folder,
-      text: trimmed,
-      agentId,
-      provider,
-      model,
-      personaId: st.personaId,
-      soulMd: SOUL_PRESETS[st.soulId] || undefined,
-      ...(effectiveContext ? { userDocuments: [effectiveContext] } : {}),
-      // P38 — always assert the session's Chief at the wire boundary (inbuilt
-      // here, since the external-Chief case took the ACP branch above). The
-      // coordinator guard refuses if it ever sees a non-inbuilt value on the
-      // inbuilt engine path.
-      primaryChief: sessionChief,
-    });
-    // Bugfix — remember the live stream id so Pause/Stop can `chat_cancel`
-    // the real Rust stream instead of only flipping local state.
-    if (streamId) useAppStore.getState().setLiveStreamId(sessionId, streamId);
   } catch (err) {
     // P11.5.12 — a dropped IPC mid-stream surfaces the reconnect chip instead
     // of a hard failure; the coordinator's StreamRegistry holds the last-token

@@ -764,7 +764,9 @@ mod tests {
     impl ModelLister for StaticModels {
         fn models(&self) -> Vec<ModelRow> {
             vec![
-                ModelRow::new("everyaios-auto", "everyaios"),
+                // P71.2a — `owned_by` names the provider a request routes to;
+                // never the host's own name (it is transport, not an owner).
+                ModelRow::new("everyaios-auto", "openai"),
                 ModelRow::new("ollama/llama3", "local"),
             ]
         }

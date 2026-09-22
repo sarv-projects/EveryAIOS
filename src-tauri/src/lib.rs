@@ -41,6 +41,7 @@ mod openai_cmds;
 mod replay_cmds;
 // P55.8 — the SearXNG endpoint config + searx.space instance feed surface.
 mod scheduler_cmds;
+mod scheduler_fire;
 mod search_cmds;
 // P65 — Settings Control Center read-models + the one mutation funnel
 // (ARCH/17 §17.12). Declared here like every other command family; the
@@ -71,7 +72,8 @@ pub mod xlsx_cmds;
 use tauri::{AppHandle, Emitter, Manager, State};
 
 /// Monotonic stream-id source for `chat_stream` calls.
-static STREAM_COUNTER: AtomicU64 = AtomicU64::new(1);
+// P71.2c — the stream-id counter that `chat_stream`/`plan_execute` minted is
+// gone with them; the ACP channel owns its own turn identity.
 
 /// Event name the UI listens to for chat stream updates.
 pub const CHAT_EVENT: &str = "chat-event";
@@ -149,6 +151,13 @@ fn connect_chat_relay(
             let _ = handle.emit(CHAT_EVENT, ev);
         },
     );
+    // P71.3f — mount the one readiness source: install/discovery facts plus the
+    // live ACP handshake state. The picker façade, the delegation gate and the
+    // turn gate all read this; mounted before the relay is published so no
+    // turn can race boot and see an unprobed (fail-closed) state.
+    relay.mount_readiness(Arc::new(acp_cmds::ShellAgentReadiness {
+        sessions: Arc::clone(&state.acp_sessions),
+    }));
     // P11.5.11 — AG-UI live transport: `agui/event` notifications from the
     // coordinator reach the UI as `agui-event` emits (raw encoded line).
     {
@@ -187,44 +196,19 @@ fn connect_chat_relay(
     let policy_path = everyaios_core::default_data_dir().join("permissions.toml");
     relay.with_policy(&policy_path);
     eprintln!("everyaios-desktop: relay stage policy ok");
-    // P55.6 — the durable provider-profile store (custom endpoints + the
-    // OpenCode/NIM overlays). A base URL entered in Settings now reaches the
-    // broker instead of being discarded.
-    relay.with_profiles(everyaios_catalog::ProfileStore::in_dir(
-        everyaios_core::default_data_dir(),
-    ));
-    // P55.5 — resolve the endpoints the relay actually needs: the **connected**
-    // set (vault-keyed providers + keyless locals + the user's own profiles),
-    // from the live catalog + profiles. The rest of the ~250-row catalog is
-    // display-only — resolving it would invent a dial plan for a provider the
-    // user never connected (and cost a full snapshot parse each). A provider
-    // connected or disconnected mid-session is reconciled on the live relay by
-    // its own command (`catalog_cmds::refresh_endpoint_live`).
-    for (provider, endpoint) in catalog_cmds::resolve_endpoints(&state) {
-        relay.with_endpoint(&provider, endpoint);
-    }
-    eprintln!("everyaios-desktop: relay stage endpoints ok");
+    // P71.2c — the relay no longer carries a provider dial plan (profiles,
+    // resolved endpoints, keyless local endpoints): the broker that consumed it
+    // is deleted with the built-in engine (ADR-0005 §2), and an external agent
+    // resolves its own transport. What remains below is the **observation**
+    // half — the capability probe sweep whose results every registry replays
+    // (A11, `ARCH/ROUTING.md` §6).
+    //
     // P44.4 — observe the connected set once, off this thread: a probe is
     // network I/O (bounded per provider) and must never delay the relay coming
     // up. Unlocking the vault sweeps again, because that is when the keyed
     // providers join the connected set.
     catalog_cmds::spawn_boot_observation_sweep(app.clone());
-    // P1.8 (A5): register keyless local endpoints so a sidecar
-    // `provider/stream` for ollama/llamafile routes to the local runtime
-    // (GBNF grammar constraint included — B5). Ollama always registers;
-    // llamafile only when a binary is discoverable (config, env, or
-    // `<data_dir>/bin/*.llamafile`).
-    let cfg = everyaios_core::Config::load().unwrap_or_default();
-    let mgr = everyaios_core::LocalManager::from_config(&cfg);
-    if let Some(ep) = mgr.endpoint_for("ollama") {
-        relay.with_local("ollama", ep);
-    }
-    if mgr.find_llamafile(&cfg.data_dir).is_some() || std::env::var("EVERYAIOS_LLAMAFILE").is_ok() {
-        if let Some(ep) = mgr.endpoint_for("llamafile") {
-            relay.with_local("llamafile", ep);
-        }
-    }
-    eprintln!("everyaios-desktop: relay stage locals ok");
+    eprintln!("everyaios-desktop: relay stage observation sweep ok");
     // P43 (B7 v3.53) — push completion: every terminal transition of the
     // task ledger wakes the UI via a `task-update` event (never polling).
     {
@@ -329,118 +313,6 @@ fn scan_text(state: State<'_, AppState>, text: String) -> Result<bool, String> {
 }
 
 #[tauri::command]
-// `chat_stream` is the IPC boundary: Tauri matches each argument BY NAME against
-// the renderer's invoke (see ui/src/lib/tauri.ts). Folding the ten optionals into
-// a single struct would flatten the contract and force a rename. The wide
-// signature is intrinsic to a Tauri command, so suppress the lint deliberately.
-#[allow(clippy::too_many_arguments)]
-fn chat_stream(
-    state: State<'_, AppState>,
-    session_id: String,
-    text: String,
-    provider: Option<String>,
-    model: Option<String>,
-    surface: Option<String>,
-    agent_id: Option<String>,
-    persona_id: Option<String>,
-    soul_md: Option<String>,
-    user_documents: Option<Vec<everyaios_core::UserDocument>>,
-    primary_chief: Option<String>,
-    work_id: Option<String>,
-    project_id: Option<String>,
-) -> Result<String, String> {
-    // P1.4: dispatch one turn through the coordinator's ConversationEngine.
-    // The reply is the streamId; all output arrives as `chat-event` emits
-    // (ttft/batch/done/error/cancelled/budgetExceeded). J11 budget refusals
-    // surface as the error string "stopped: $X limit".
-    // P50.3.6 — gate the *taken* route on the shell's live vault key set
-    // (same source as routing_feed_decide's display gate, read before the
-    // relay lock so the two mutexes never nest). Locked/empty vault ⇒ empty
-    // set ⇒ the coordinator excludes every keyed provider for this turn.
-    let credentialed_providers: Option<Vec<String>> = state
-        .vault
-        .lock()
-        .ok()
-        .and_then(|vault| KeyRing::new(&vault).providers_with_keys().ok());
-    let relay = state.chat_relay.lock().map_err(|e| e.to_string())?;
-    let relay = relay
-        .as_ref()
-        .ok_or_else(|| "sidecar not connected — coordinator link not established".to_string())?;
-    let stream_id = format!("st{}", STREAM_COUNTER.fetch_add(1, Ordering::Relaxed));
-    relay
-        .start_stream(everyaios_core::ChatStreamParams {
-            session_id,
-            stream_id: stream_id.clone(),
-            text,
-            surface,
-            // F12/J17: `None` ⇒ the inbuilt engine (default). A non-None id
-            // tags the turn with the selected agent for per-agent model
-            // surface + prompt persona (coordinator threads it into opts).
-            agent_id,
-            // P1.9: `None` lets the coordinator's task→model router pick.
-            provider,
-            model,
-            persona_id,
-            soul_md,
-            user_documents,
-            project_id,
-            primary_chief,
-            credentialed_providers,
-            work_id,
-        })
-        .map_err(|e| e.to_string())?;
-    Ok(stream_id)
-}
-
-/// Stage-0 (P6.3): dispatch a blueprint plan to the coordinator's plan
-/// executor. The reply is the streamId; all progress arrives as `chat-event`
-/// emits (plan_start/step/interrupt/plan_done + the turn's ttft/batch/done).
-#[tauri::command]
-fn plan_execute(
-    state: State<'_, AppState>,
-    session_id: String,
-    plan_id: String,
-    tasks: serde_json::Value,
-    provider: Option<String>,
-    model: Option<String>,
-    work_id: Option<String>,
-) -> Result<String, String> {
-    let relay = state.chat_relay.lock().map_err(|e| e.to_string())?;
-    let relay = relay
-        .as_ref()
-        .ok_or_else(|| "sidecar not connected — coordinator link not established".to_string())?;
-    let stream_id = format!("pl{}", STREAM_COUNTER.fetch_add(1, Ordering::Relaxed));
-    relay
-        .start_plan(
-            &session_id,
-            &plan_id,
-            &stream_id,
-            tasks,
-            provider.as_deref(),
-            model.as_deref(),
-            work_id.as_deref(),
-        )
-        .map_err(|e| e.to_string())?;
-    Ok(stream_id)
-}
-
-/// Stage-0 (P6.3): forward the user's MCQ card choice back to the coordinator's
-/// plan executor (which is waiting on that circuit-break interrupt).
-#[tauri::command]
-fn plan_respond(
-    state: State<'_, AppState>,
-    break_id: String,
-    choice: String,
-) -> Result<(), String> {
-    let relay = state.chat_relay.lock().map_err(|e| e.to_string())?;
-    let relay = relay
-        .as_ref()
-        .ok_or_else(|| "sidecar not connected".to_string())?;
-    relay
-        .respond_plan(&break_id, &choice)
-        .map_err(|e| e.to_string())
-}
-
 #[tauri::command]
 fn usage_snapshot(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
     // P5.9: the token/cost dashboard data source — per-key/per-session usage,
@@ -463,43 +335,6 @@ fn session_totals(
 ) -> Result<Vec<everyaios_vault::SessionTotal>, String> {
     let vault = state.vault.lock().map_err(|e| e.to_string())?;
     vault.session_totals().map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-fn chat_cancel(state: State<'_, AppState>, stream_id: String) -> Result<(), String> {
-    // Abort signal: UI → Rust → sidecar (chat/cancel) → engine/provider.
-    let relay = state.chat_relay.lock().map_err(|e| e.to_string())?;
-    let relay = relay
-        .as_ref()
-        .ok_or_else(|| "sidecar not connected".to_string())?;
-    relay.cancel(&stream_id).map_err(|e| e.to_string())
-}
-
-/// S0.5: re-run a failed tool through Guard-2 exec→commit (same ticket path).
-#[tauri::command]
-fn chat_tool_retry(
-    state: State<'_, AppState>,
-    session_id: String,
-    stream_id: String,
-    tool_id: String,
-    args: serde_json::Value,
-    agent_id: Option<String>,
-    work_id: Option<String>,
-) -> Result<(), String> {
-    let relay = state.chat_relay.lock().map_err(|e| e.to_string())?;
-    let relay = relay
-        .as_ref()
-        .ok_or_else(|| "sidecar not connected".to_string())?;
-    relay
-        .retry_tool(
-            &session_id,
-            &stream_id,
-            &tool_id,
-            args,
-            agent_id.as_deref(),
-            work_id.as_deref(),
-        )
-        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -791,7 +626,7 @@ pub fn run() {
             replay_dir: everyaios_core::default_data_dir(),
             cockpit: Arc::new(Mutex::new(Default::default())),
             guard_service: Arc::new(Mutex::new(GuardService::new())),
-            acp_sessions: Mutex::new(std::collections::HashMap::new()),
+            acp_sessions: Arc::new(Mutex::new(std::collections::HashMap::new())),
             audit: Mutex::new(everyaios_audit::merkle::MerkleChain::new()),
             audit_log: Mutex::new(audit_log),
             file_undos: Mutex::new(Vec::new()),
@@ -872,6 +707,10 @@ pub fn run() {
             if let Err(e) = boot::setup_tray(app.handle()) {
                 eprintln!("everyaios-desktop: tray setup failed (continuing): {e}");
             }
+            // P71.2c — the trigger plane's firing loop. The host owns a
+            // firing (Work + Run + the bound agent's ACP turn); the sidecar
+            // no longer executes one (ARCH/AUTOMATION.md §9).
+            scheduler_fire::spawn_loop(app.handle());
             // J16: pre-spawn the coordinator + bind the unix control socket.
             pre_spawn_coordinator(app.handle().clone());
             #[cfg(unix)]

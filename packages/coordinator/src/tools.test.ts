@@ -315,22 +315,37 @@ describe("ToolExecutor", () => {
   });
 });
 
-describe("dispatchMultiRun (P51.10)", () => {
-  test("calls execution/multirun and refuses more than 5 models", async () => {
+describe("dispatchMultiRun (P51.10, agent/run-centric P71.3e)", () => {
+  test("calls execution/multirun and refuses more than 5 Runs", async () => {
     const calls: Array<{ method: string; params: unknown }> = [];
     const request: ToolRequest = async (method, params) => {
       calls.push({ method, params });
-      return { id: "mr-1", modelCount: 2, mode: "keep_best" };
+      return { id: "mr-1", runCount: 2, mode: "keep_best" };
     };
     const out = await dispatchMultiRun(request, {
       id: "mr-1",
-      taskId: "t",
-      modelIds: ["a", "b"],
+      workId: "w/subagent/t",
+      agentIds: ["a", "b"],
     });
     expect(calls[0]?.method).toBe("execution/multirun");
-    expect(out.modelCount).toBe(2);
+    expect(calls[0]?.params).toMatchObject({ workId: "w/subagent/t", agentIds: ["a", "b"] });
+    expect(out.runCount).toBe(2);
     await expect(
-      dispatchMultiRun(request, { id: "x", taskId: "t", modelIds: ["1", "2", "3", "4", "5", "6"] }),
+      dispatchMultiRun(request, {
+        id: "x",
+        workId: "w/subagent/t",
+        agentIds: ["1", "2", "3", "4", "5", "6"],
+      }),
     ).rejects.toThrow(/at most 5/);
+  });
+
+  test("refuses a strategy without its Work and with no members", async () => {
+    const request: ToolRequest = async () => ({});
+    await expect(
+      dispatchMultiRun(request, { id: "x", workId: "", agentIds: ["a", "b"] }),
+    ).rejects.toThrow(/workId/);
+    await expect(
+      dispatchMultiRun(request, { id: "x", workId: "w/subagent/t", agentIds: [] }),
+    ).rejects.toThrow(/at least one agent binding/);
   });
 });

@@ -1,49 +1,90 @@
-//! P51.10 — multi-model runs: fan out to ≤5 models, fuse or keep-best,
-//! and render ordered diff walkthroughs.
+//! P51.10 — multi-run fan-out: launch several **Runs of the same Work**
+//! (each bound to an agent binding in its own worktree), reduce their
+//! outcomes, and render ordered diff walkthroughs.
 //!
-//! Pure and deterministic: construction validates the model budget, [`collect`]
-//! reduces per-model outcomes, and [`walkthrough`] parses a unified diff into
+//! I9 — this is a strategy over Runs, never an execution kernel. There is no
+//! model list here: under ADR-0005 an external agent owns its own model, so a
+//! member's identity is the **agent binding + Run**, not a model id.
+//!
+//! Pure and deterministic: construction validates the fan-out budget, [`collect`]
+//! reduces per-run outcomes, and [`walkthrough`] parses a unified diff into
 //! ordered narrative steps. No execution happens here.
 
 use serde::{Deserialize, Serialize};
 
-/// How a [`MultiRun`]'s outcomes are reduced.
+/// How a [`MultiRun`]'s run outcomes are reduced.
+///
+/// The strategy vocabulary is unchanged (`keep_best` / `fuse`), but its basis
+/// is agent/run-centric: attribution names the agent binding and Run, never a
+/// model.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum FuseMode {
+    /// Take the single highest-scoring Run's output.
     KeepBest,
+    /// Concatenate every Run's output with per-agent attribution, best first.
     Fuse,
 }
 
-/// One fan-out run: the same task attempted by several models, each in its
-/// own worktree.
+/// One fan-out: the same Work attempted by several Runs, each bound to an
+/// agent binding in its own worktree.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MultiRun {
     pub id: String,
-    pub task_id: String,
-    pub model_ids: Vec<String>,
+    pub work_id: String,
+    /// Agent bindings — one per Run. Never a model list.
+    pub agent_ids: Vec<String>,
+    /// The member Runs of `work_id`, 1:1 with `agent_ids`. **Derived here, one
+    /// owner (I4)** — callers never supply Run ids, so no sidecar invents a
+    /// kernel id.
+    pub run_ids: Vec<String>,
+    /// Isolated worktree per Run (1:1 with `agent_ids` when supplied).
     pub worktree_ids: Vec<String>,
     pub mode: FuseMode,
 }
 
 impl MultiRun {
-    /// Construct a run, validating the model budget (≤5 models).
+    /// Construct a fan-out over one Work, validating the member budget
+    /// (1..=5 Runs, each in its own worktree when supplied) and deriving the
+    /// member Run ids.
     pub fn new(
         id: impl Into<String>,
-        task_id: impl Into<String>,
-        model_ids: Vec<String>,
+        work_id: impl Into<String>,
+        agent_ids: Vec<String>,
         worktree_ids: Vec<String>,
         mode: FuseMode,
     ) -> Result<Self, String> {
-        if model_ids.len() > 5 {
+        if agent_ids.is_empty() {
+            return Err("multirun requires at least one Run member — fail-closed".to_string());
+        }
+        if agent_ids.len() > 5 {
             return Err(format!(
-                "multirun supports at most 5 models, got {}",
-                model_ids.len()
+                "multirun supports at most 5 Runs, got {}",
+                agent_ids.len()
             ));
         }
+        if !worktree_ids.is_empty() && worktree_ids.len() != agent_ids.len() {
+            return Err(format!(
+                "multirun requires one worktree per member (agents {}, worktrees {})",
+                agent_ids.len(),
+                worktree_ids.len()
+            ));
+        }
+        let work_id = work_id.into();
+        if work_id.is_empty() {
+            return Err(
+                "multirun requires the Work it fans out — a strategy groups Runs of one Work \
+                 (fail-closed)"
+                    .to_string(),
+            );
+        }
+        let run_ids = (0..agent_ids.len())
+            .map(|i| format!("{work_id}/run-{i}"))
+            .collect();
         Ok(Self {
             id: id.into(),
-            task_id: task_id.into(),
-            model_ids,
+            work_id,
+            agent_ids,
+            run_ids,
             worktree_ids,
             mode,
         })
@@ -52,19 +93,20 @@ impl MultiRun {
     /// Alias for [`MultiRun::new`].
     pub fn try_new(
         id: impl Into<String>,
-        task_id: impl Into<String>,
-        model_ids: Vec<String>,
+        work_id: impl Into<String>,
+        agent_ids: Vec<String>,
         worktree_ids: Vec<String>,
         mode: FuseMode,
     ) -> Result<Self, String> {
-        Self::new(id, task_id, model_ids, worktree_ids, mode)
+        Self::new(id, work_id, agent_ids, worktree_ids, mode)
     }
 }
 
-/// One model's attempt.
+/// One Run's attempt: which agent binding produced it, and how it scored.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RunOutcome {
-    pub model_id: String,
+    pub run_id: String,
+    pub agent_id: String,
     pub output: String,
     pub score: f64,
 }
@@ -73,20 +115,22 @@ pub struct RunOutcome {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CollectedRun {
     pub output: String,
-    pub best_model_id: Option<String>,
+    pub best_run_id: Option<String>,
+    pub best_agent_id: Option<String>,
     pub score: f64,
     pub mode: FuseMode,
 }
 
 /// Reduce `outcomes` per `mode`:
-/// - [`FuseMode::KeepBest`] → the highest-score output.
-/// - [`FuseMode::Fuse`] → every part concatenated with per-model attribution
-///   headers (`## <model_id> (score …)`), best score first.
+/// - [`FuseMode::KeepBest`] → the highest-score Run's output.
+/// - [`FuseMode::Fuse`] → every Run concatenated with per-agent attribution
+///   headers (`## <agent_id> (run <run_id>, score …)`), best score first.
 pub fn collect(outcomes: Vec<RunOutcome>, mode: FuseMode) -> CollectedRun {
     if outcomes.is_empty() {
         return CollectedRun {
             output: String::new(),
-            best_model_id: None,
+            best_run_id: None,
+            best_agent_id: None,
             score: 0.0,
             mode,
         };
@@ -101,18 +145,25 @@ pub fn collect(outcomes: Vec<RunOutcome>, mode: FuseMode) -> CollectedRun {
     match mode {
         FuseMode::KeepBest => CollectedRun {
             output: best.output.clone(),
-            best_model_id: Some(best.model_id.clone()),
+            best_run_id: Some(best.run_id.clone()),
+            best_agent_id: Some(best.agent_id.clone()),
             score: best.score,
             mode,
         },
         FuseMode::Fuse => {
             let parts: Vec<String> = ranked
                 .iter()
-                .map(|o| format!("## {} (score {:.2})\n{}", o.model_id, o.score, o.output))
+                .map(|o| {
+                    format!(
+                        "## {} (run {}, score {:.2})\n{}",
+                        o.agent_id, o.run_id, o.score, o.output
+                    )
+                })
                 .collect();
             CollectedRun {
                 output: parts.join("\n\n"),
-                best_model_id: Some(best.model_id.clone()),
+                best_run_id: Some(best.run_id.clone()),
+                best_agent_id: Some(best.agent_id.clone()),
                 score: best.score,
                 mode,
             }
@@ -177,74 +228,113 @@ pub fn walkthrough(diff_unified: &str) -> Vec<OrderedDiffStep> {
 mod tests {
     use super::*;
 
-    fn models(n: usize) -> Vec<String> {
-        (0..n).map(|i| format!("model-{i}")).collect()
+    fn agents(n: usize) -> Vec<String> {
+        (0..n).map(|i| format!("agent-{i}")).collect()
+    }
+
+    fn run(agent: &str, run_id: &str, output: &str, score: f64) -> RunOutcome {
+        RunOutcome {
+            run_id: run_id.into(),
+            agent_id: agent.into(),
+            output: output.into(),
+            score,
+        }
     }
 
     #[test]
-    fn multirun_rejects_six_models() {
+    fn multirun_rejects_six_runs() {
         let err = MultiRun::new(
             "run-1",
-            "task-1",
-            models(6),
+            "work-1",
+            agents(6),
             vec!["wt-1".to_string()],
             FuseMode::KeepBest,
         )
-        .expect_err("six models must be rejected");
+        .expect_err("six runs must be rejected");
         assert!(err.contains('6') || err.contains('5'), "got: {err}");
         // Five is the budget edge and still fits.
         assert!(MultiRun::new(
             "run-1",
-            "task-1",
-            models(5),
-            vec!["wt-1".to_string()],
+            "work-1",
+            agents(5),
+            vec!["wt-1".to_string(); 5],
             FuseMode::KeepBest,
         )
         .is_ok());
     }
 
     #[test]
+    fn multirun_rejects_empty_and_mismatched_members() {
+        let empty = MultiRun::new(
+            "run-1",
+            "work-1",
+            vec![],
+            vec![],
+            FuseMode::KeepBest,
+        )
+        .expect_err("no members must fail closed");
+        assert!(empty.contains("at least one"), "got: {empty}");
+
+        let no_work = MultiRun::new(
+            "run-1",
+            "",
+            agents(2),
+            vec![],
+            FuseMode::KeepBest,
+        )
+        .expect_err("the Work is required — Runs belong to it");
+        assert!(no_work.contains("requires the Work"), "got: {no_work}");
+
+        let mismatched = MultiRun::new(
+            "run-1",
+            "work-1",
+            agents(2),
+            vec!["wt-1".to_string()],
+            FuseMode::KeepBest,
+        )
+        .expect_err("one worktree per member is required");
+        assert!(mismatched.contains("one worktree per member"), "got: {mismatched}");
+    }
+
+    #[test]
+    fn multirun_derives_member_runs_from_the_work() {
+        let run = MultiRun::new(
+            "mr-1",
+            "w/subagent/t",
+            vec!["a".into(), "b".into()],
+            vec!["wt-a".into(), "wt-b".into()],
+            FuseMode::Fuse,
+        )
+        .expect("fan-out of two fits the budget");
+        assert_eq!(run.run_ids, vec!["w/subagent/t/run-0", "w/subagent/t/run-1"]);
+        assert_eq!(run.work_id, "w/subagent/t");
+    }
+
+    #[test]
     fn keep_best_picks_highest() {
         let outcomes = vec![
-            RunOutcome {
-                model_id: "a".into(),
-                output: "meh".into(),
-                score: 0.2,
-            },
-            RunOutcome {
-                model_id: "b".into(),
-                output: "best".into(),
-                score: 0.9,
-            },
-            RunOutcome {
-                model_id: "c".into(),
-                output: "mid".into(),
-                score: 0.5,
-            },
+            run("a", "r-a", "meh", 0.2),
+            run("b", "r-b", "best", 0.9),
+            run("c", "r-c", "mid", 0.5),
         ];
         let got = collect(outcomes, FuseMode::KeepBest);
         assert_eq!(got.output, "best");
-        assert_eq!(got.best_model_id.as_deref(), Some("b"));
+        assert_eq!(got.best_agent_id.as_deref(), Some("b"));
+        assert_eq!(got.best_run_id.as_deref(), Some("r-b"));
         assert!((got.score - 0.9).abs() < f64::EPSILON);
     }
 
     #[test]
-    fn fuse_attributes_parts() {
+    fn fuse_attributes_agent_and_run() {
         let outcomes = vec![
-            RunOutcome {
-                model_id: "a".into(),
-                output: "alpha".into(),
-                score: 0.7,
-            },
-            RunOutcome {
-                model_id: "b".into(),
-                output: "beta".into(),
-                score: 0.4,
-            },
+            run("a", "r-a", "alpha", 0.7),
+            run("b", "r-b", "beta", 0.4),
         ];
         let got = collect(outcomes, FuseMode::Fuse);
         assert!(got.output.contains("## a"), "missing attribution for a");
         assert!(got.output.contains("## b"), "missing attribution for b");
+        assert!(got.output.contains("run r-a"));
+        assert!(got.output.contains("run r-b"));
         assert!(got.output.contains("alpha"));
         assert!(got.output.contains("beta"));
         // Best-first: `a` (0.7) precedes `b` (0.4).
@@ -253,16 +343,7 @@ mod tests {
 
     #[test]
     fn walkthrough_orders_hunks() {
-        let diff = "\
-diff --git a/src/a.rs b/src/a.rs
-@@ -1,2 +1,3 @@
- ctx
-+one
-diff --git a/src/b.rs b/src/b.rs
-@@ -10,2 +10,3 @@ fn b()
- ctx
-+two
-";
+        let diff = "\ndiff --git a/src/a.rs b/src/a.rs\n@@ -1,2 +1,3 @@\n ctx\n+one\ndiff --git a/src/b.rs b/src/b.rs\n@@ -10,2 +10,3 @@ fn b()\n ctx\n+two\n";
         let steps = walkthrough(diff);
         assert_eq!(steps.len(), 2);
         assert_eq!(steps[0].seq, 0);

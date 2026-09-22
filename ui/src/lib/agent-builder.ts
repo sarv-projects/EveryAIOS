@@ -4,8 +4,13 @@
 // The Rust registry (AgentRegistry) is the durable store; this module is the
 // browser-side builder state + template catalog + TOML export.
 
+/**
+ * The bundle's brain (P31.8) — mirrors `everyaios_agents::bundle::EngineBinding`.
+ * ADR-0005: v1 binds an external ACP agent; the built-in engine is post-v1 and
+ * is deliberately not a choice here. A bundle with no binding is a draft: it
+ * saves, but it is not an agent and never joins the runnable directory.
+ */
 export type EngineBinding =
-  | { kind: 'inbuilt' }
   | { kind: 'acp'; cli: string }
   | { kind: 'model-only' }
 
@@ -26,7 +31,8 @@ export interface AgentBundle {
   description: string
   persona?: string
   systemPrompt?: string
-  engine: EngineBinding
+  /** Unset = no engine bound yet (a draft — ADR-0005). */
+  engine?: EngineBinding
   model: ModelPin
   mcpServers: string[]
   connectors: string[]
@@ -65,7 +71,6 @@ export const AGENT_TEMPLATES: AgentTemplate[] = [
     description: 'A helpful general-purpose assistant.',
     preset: {
       description: 'A helpful general-purpose assistant.',
-      engine: { kind: 'inbuilt' },
       model: {},
       mcpServers: [],
       connectors: [],
@@ -82,7 +87,6 @@ export const AGENT_TEMPLATES: AgentTemplate[] = [
     description: 'Writes and fixes code with editor + terminal access.',
     preset: {
       description: 'Writes and fixes code with editor + terminal access.',
-      engine: { kind: 'inbuilt' },
       model: {},
       mcpServers: ['filesystem'],
       connectors: [],
@@ -99,7 +103,6 @@ export const AGENT_TEMPLATES: AgentTemplate[] = [
     description: 'Deep web + document research with citation cards.',
     preset: {
       description: 'Deep web + document research with citation cards.',
-      engine: { kind: 'inbuilt' },
       model: {},
       mcpServers: [],
       connectors: [],
@@ -116,7 +119,6 @@ export const AGENT_TEMPLATES: AgentTemplate[] = [
     description: 'Triage your inbox: summarize, draft, never send without approval.',
     preset: {
       description: 'Triage your inbox: summarize, draft, never send without approval.',
-      engine: { kind: 'inbuilt' },
       model: {},
       mcpServers: [],
       connectors: ['gmail'],
@@ -133,7 +135,6 @@ export const AGENT_TEMPLATES: AgentTemplate[] = [
     description: 'Sum, pivot, and chart spreadsheets; never invents numbers.',
     preset: {
       description: 'Sum, pivot, and chart spreadsheets; never invents numbers.',
-      engine: { kind: 'inbuilt' },
       model: {},
       mcpServers: [],
       connectors: [],
@@ -150,7 +151,6 @@ export const AGENT_TEMPLATES: AgentTemplate[] = [
     description: 'Long-form writing and rewriting with your style memory.',
     preset: {
       description: 'Long-form writing and rewriting with your style memory.',
-      engine: { kind: 'inbuilt' },
       model: {},
       mcpServers: [],
       connectors: [],
@@ -167,7 +167,6 @@ export const AGENT_TEMPLATES: AgentTemplate[] = [
     description: 'Turns transcripts into structured notes + action items.',
     preset: {
       description: 'Turns transcripts into structured notes + action items.',
-      engine: { kind: 'inbuilt' },
       model: {},
       mcpServers: [],
       connectors: [],
@@ -184,7 +183,6 @@ export const AGENT_TEMPLATES: AgentTemplate[] = [
     description: 'Drives the browser: navigate, snapshot, act, verify.',
     preset: {
       description: 'Drives the browser: navigate, snapshot, act, verify.',
-      engine: { kind: 'inbuilt' },
       model: {},
       mcpServers: [],
       connectors: [],
@@ -205,7 +203,6 @@ export const AGENT_TEMPLATES: AgentTemplate[] = [
     description: 'Explains topics in plain words and quizzes you — read-only, nothing on your machine changes.',
     preset: {
       description: 'Explains topics in plain words and quizzes you — read-only, nothing on your machine changes.',
-      engine: { kind: 'inbuilt' },
       model: {},
       mcpServers: [],
       connectors: [],
@@ -271,12 +268,14 @@ export function bundleToToml(b: AgentBundle): string {
   L.push(`blueprints = ${arr(b.blueprints)}`)
   L.push(`automations = ${arr(b.automations)}`)
   // Tables last (Rust serializer order) — see the doc comment above.
-  if (b.engine.kind === 'acp') {
+  if (b.engine?.kind === 'acp') {
     L.push(`[engine]`)
     L.push(`acp = ${q(b.engine.cli)}`)
-  } else {
-    L.push(`engine = ${q(b.engine.kind === 'inbuilt' ? 'inbuilt' : 'model-only')}`)
+  } else if (b.engine) {
+    L.push(`engine = ${q(b.engine.kind)}`)
   }
+  // No binding → no `engine` key at all: an unbound bundle is a draft, and the
+  // Rust schema reads the absence as `None` (never as a default engine).
   if (b.model.provider || b.model.model) {
     L.push(`[model]`)
     if (b.model.provider) L.push(`provider = ${q(b.model.provider)}`)

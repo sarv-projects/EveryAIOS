@@ -25,6 +25,10 @@ pub enum TierStatus {
     KeepsTs,
     /// Not started.
     Open,
+    /// The replacement was built and then archived with its consumer
+    /// (`ADR-0005`): it is not live in v1, and the tier keeps its history
+    /// instead of pretending the collapse is still on the roadmap.
+    Archived,
 }
 
 /// One ledger row.
@@ -54,17 +58,17 @@ impl MigrationLedger {
                     id: "1a".into(),
                     name: "collapse IPC".into(),
                     ts_home: "frame.ts/message.ts/index.ts (99+76+364)".into(),
-                    rust_home: "everyaios-core::native_loop (NativeLoop, mpsc in-process)".into(),
-                    status: TierStatus::SeamLanded,
-                    note: "in-process dispatch replaces stdio JSON-RPC framing; tokio-util LengthDelimitedCodec only if any IPC remains".into(),
+                    rust_home: "ARCH/archive/native_loop.rs (`NativeLoop`, mpsc in-process)".into(),
+                    status: TierStatus::Archived,
+                    note: "landed 2026-08-24 as the built-in engine's in-process loop, then archived 2026-09-21 with the engine it existed to serve (P71.2e, ADR-0005 §4); not compiled, nothing may depend on it".into(),
                 },
                 MigrationTier {
                     id: "1b".into(),
                     name: "guard.ts → native".into(),
                     ts_home: "guard.ts (108)".into(),
-                    rust_home: "everyaios-core::native_loop::DirectGuard (everyaios-guard TicketStore in-process)".into(),
-                    status: TierStatus::SeamLanded,
-                    note: "tickets minted+consumed in-process, zero IPC hop; enforcement never lives in a JS/V8 memory surface".into(),
+                    rust_home: "ARCH/archive/native_loop.rs (`DirectGuard`, everyaios-guard TicketStore in-process)".into(),
+                    status: TierStatus::Archived,
+                    note: "tickets minted+consumed in-process with zero IPC hop; archived with the built-in engine, and `DirectGuard` may be re-homed to everyaios-guard when the governed binding returns — it must never carry an agent identity".into(),
                 },
                 MigrationTier {
                     id: "1c".into(),

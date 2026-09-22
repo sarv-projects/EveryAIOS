@@ -495,81 +495,14 @@ pub fn resolve_endpoint(state: &AppState, provider: &str) -> Option<ProviderEndp
     ResolveCtx::load(state).endpoint(provider)
 }
 
-/// Hand an already-resolved endpoint to the live relay (no catalog read).
-/// Called by the boot pass, by `probe_provider` (which already holds the
-/// endpoint it just probed), and through [`refresh_endpoint_live`].
-fn register_endpoint(state: &AppState, provider: &str, endpoint: ProviderEndpoint) {
-    if let Ok(relay) = state.chat_relay.lock() {
-        if let Some(relay) = relay.as_ref() {
-            relay.with_endpoint(provider, endpoint);
-        }
-    }
-}
-
-/// P63 — reconcile one provider's *live* endpoint with its current connected
-/// state. Adding a key or saving a profile connects a provider; removing the
-/// last key or deleting the profile disconnects it. Before this, only the
-/// connect direction existed, so the relay's resolved-endpoint map was
-/// append-only for the process lifetime and the next turn could still dial a
-/// provider the user had just disconnected. This is the one seam both
-/// directions go through — it resolves and registers while connected, and
-/// retires the endpoint once nothing connects it.
-///
-/// Must be called with no vault lock held: it re-reads the vault to recompute
-/// the connected set, and `std::sync::Mutex` is not reentrant.
-pub fn refresh_endpoint_live(state: &AppState, provider: &str) {
-    let ctx = ResolveCtx::load(state);
-    let connected = ctx.is_connected(state, provider);
-    let endpoint = ctx.endpoint(provider);
-    match endpoint_action(connected, endpoint.is_some()) {
-        EndpointAction::Register => {
-            if let Some(ep) = endpoint {
-                register_endpoint(state, provider, ep);
-            }
-        }
-        EndpointAction::Retire => {
-            if let Ok(relay) = state.chat_relay.lock() {
-                if let Some(relay) = relay.as_ref() {
-                    relay.remove_endpoint(provider);
-                }
-            }
-        }
-    }
-}
-
-/// P63 — the pure decision behind [`refresh_endpoint_live`]. Register only when
-/// the provider is connected **and** has a resolvable endpoint; every other case
-/// (disconnected, or connected but with a transport we cannot speak so no
-/// endpoint is built) retires it, so the live map can never keep an entry the
-/// connected-set rule would not produce.
-#[derive(Debug, PartialEq, Eq)]
-enum EndpointAction {
-    Register,
-    Retire,
-}
-
-fn endpoint_action(connected: bool, resolvable: bool) -> EndpointAction {
-    if connected && resolvable {
-        EndpointAction::Register
-    } else {
-        EndpointAction::Retire
-    }
-}
-
-/// Every endpoint the chat relay should know about: the **connected** set
-/// only. Providers whose transport we cannot speak are simply absent — the
-/// relay then behaves exactly as it did before instead of failing at a wrong
-/// URL.
-pub fn resolve_endpoints(state: &AppState) -> HashMap<String, ProviderEndpoint> {
-    let ctx = ResolveCtx::load(state);
-    let mut out = HashMap::new();
-    for id in ctx.connected_ids(state) {
-        if let Some(ep) = ctx.endpoint(&id) {
-            out.insert(id, ep);
-        }
-    }
-    out
-}
+// P71.2c — `register_endpoint`, `refresh_endpoint_live`, `EndpointAction` and
+// `resolve_endpoints` lived here to keep the **chat relay's** resolved-endpoint
+// map in step with the connected-provider set (P55.5/P63). That map existed only
+// to feed the provider broker, which is deleted with the built-in engine
+// (ADR-0005 §2): an external agent owns its own transport, so there is no relay
+// dial plan left to reconcile. Endpoint **resolution** below survives because
+// the capability probe and the A11 observation write-back still need it — it is
+// observability, not execution (`ARCH/ROUTING.md` §5–§6).
 
 // ---------------------------------------------------------------------------
 // Commands
@@ -743,14 +676,6 @@ pub fn probe_provider(state: &AppState, provider: &str, key: Option<&str>) -> Va
         .map(|e| e.headers.clone())
         .unwrap_or_default();
     let probe = everyaios_catalog::probe_models_endpoint(&base, is_anthropic, &headers, key);
-    // A successful probe is the moment this provider became reachable, so give
-    // the live relay its endpoint now instead of waiting for the next boot
-    // (the boot pass only resolves the connected set).
-    if probe.ok {
-        if let Some(ep) = endpoint {
-            register_endpoint(state, provider, ep.clone());
-        }
-    }
     // P44.4 write-back — this is the observation, and it used to be dropped
     // here. Recording it durably (keyed by canonical id) is what lets the
     // registry, the routing feed and the UI report *observed* truth instead of
@@ -1040,20 +965,12 @@ pub fn provider_profile_upsert(
             .and_then(|s| s.as_bool())
             .unwrap_or(false),
     })?;
-    // P63 — a saved profile is itself a connection (keyless custom endpoints /
-    // base-URL overrides). Register it on the live relay now, so the base URL
-    // entered in Settings is used by the next turn instead of the next boot.
-    refresh_endpoint_live(&state, &saved.id);
     Ok(json!({ "ok": true, "profile": saved }))
 }
 
 #[tauri::command]
 pub fn provider_profile_remove(state: State<'_, AppState>, id: String) -> Result<Value, String> {
     let removed = profile_store().remove(&id)?;
-    // P63 — deleting a profile can disconnect a provider (if it had no vault key
-    // and is not keyless). Reconcile its live endpoint so a deleted profile
-    // stops routing immediately.
-    refresh_endpoint_live(&state, &id);
     Ok(json!({ "ok": true, "removed": removed, "id": id }))
 }
 

@@ -30,11 +30,11 @@ docs, code, or Git history, that is stated explicitly.
 - **Decision:** the conversation engine's authority moves from the Bun sidecar
   into `crates/everyaios-engine` ("Rust port slice of the TS
   `ConversationEngine`").
-- **Provenance:** engine module doc; `ARCH/16-CHAT-LOOP-RUST-PORT.md`.
+- **Provenance:** engine module doc; `ARCH/16-CHAT-LOOP-RUST-PORT.md` (**archived 2026-09-22** — [`ARCH/archive/16-CHAT-LOOP-RUST-PORT.md`](../../ARCH/archive/16-CHAT-LOOP-RUST-PORT.md), `P71.5a`).
 - **Status (amended 2026-09-21 by [`ADR/0005`](../../ARCH/ADR/0005-external-agents-are-the-v1-engines.md)):**
   **superseded in purpose.** The loop belongs to the bound agent, and v1 ships no built-in engine, so there is
   no EveryAIOS turn loop to port. What remains ported-worthy is turn **coordination** — state, context
-  projection, tool dispatch, persistence, events (`ARCH/16-CHAT-LOOP-RUST-PORT.md`'s superseded banner;
+  projection, tool dispatch, persistence, events (`ARCH/archive/16-CHAT-LOOP-RUST-PORT.md`'s superseded banner;
   `D10`'s post-thaw deltas). Ported slices that only ever served the built-in loop are removed under `P71.2c`.
 
 ## D4 — Thin Tauri shell, fat kernel

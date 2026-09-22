@@ -1,5 +1,10 @@
 //! P31.3 — the 8 create-agent wizard templates. Each pre-fills a bundle:
-//! Identity → Brain → Capabilities → Workflows, one click per template.
+//! Identity → Capabilities → Workflows, one click per template.
+//!
+//! The **brain is deliberately not pre-filled** (ADR-0005): v1's engine is an
+//! external ACP agent the user installs, so a template carries no built-in
+//! binding and no default CLI — the wizard's Brain step binds one. A template
+//! bundle is therefore a draft (`engine: None`) until then.
 
 use crate::bundle::{AgentBundle, ToolScope};
 
@@ -139,15 +144,16 @@ impl AgentTemplate {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::bundle::EngineBinding;
 
     #[test]
-    fn eight_templates_prefill_bundles() {
+    fn eight_templates_prefill_bundles_without_a_brain() {
         for t in AgentTemplate::ALL {
             let b = t.bundle();
             assert!(!b.name.is_empty());
             assert!(!b.description.is_empty());
-            assert_eq!(b.engine, EngineBinding::Inbuilt);
+            // ADR-0005: no template ships a built-in engine binding.
+            assert!(b.engine.is_none());
+            assert!(b.definition().is_none());
         }
         assert_eq!(AgentTemplate::ALL.len(), 8);
     }

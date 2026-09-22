@@ -7,7 +7,10 @@
 
 pub use everyaios_types::AutonomyLevel;
 use everyaios_blueprint::DelegationGauge;
-use everyaios_types::{AgentBinding, BindingLifecycle, BindingUsage, RiskLevel, WorkId};
+use everyaios_types::{
+    AgentBinding, BindingLifecycle, BindingUsage, RiskLevel, SessionKind, WaitCondition, WorkId,
+    WorkState,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -65,6 +68,12 @@ pub struct WorkAddress {
     pub work_id: WorkId,
     pub project_id: Option<String>,
     pub session_id: Option<String>,
+    /// P71.8a — the owning Session's kind (`ADR-0006`). A **record property**
+    /// carried on the address so every surface can scope correctly without
+    /// inferring anything from whether a Chat exists. Defaults to `interactive`
+    /// for rows written before the field existed.
+    #[serde(default)]
+    pub session_kind: SessionKind,
     pub owner_id: Option<String>,
     pub node_id: Option<String>,
     pub current_run_id: Option<String>,
@@ -83,6 +92,7 @@ impl WorkAddress {
             work_id: WorkId::new(work_id),
             project_id: None,
             session_id: None,
+            session_kind: SessionKind::Interactive,
             owner_id: None,
             node_id: None,
             current_run_id: None,
@@ -146,6 +156,9 @@ pub enum WorkPresenceState {
     Blocked,
     Completed,
     Failed,
+    /// P71.3g — stopped by the user or by policy. Previously collapsed into
+    /// `Failed`/`Running`, which misreported a deliberate stop.
+    Cancelled,
     Offline,
     Reconnecting,
 }
@@ -158,7 +171,18 @@ pub struct WorkPresence {
     pub active_nodes: Vec<String>,
     pub active_run: Option<String>,
     pub current_surface: Option<String>,
+    /// The *client-presence* projection (`offline`/`reconnecting` are
+    /// presence-only facts). Never the Work's lifecycle authority.
     pub state: Option<WorkPresenceState>,
+    /// P71.3g — the canonical Work lifecycle state (`WORK.md` §4), projected
+    /// from the same events this presence is. This is what a surface that asks
+    /// "what is this Work doing?" must read.
+    #[serde(default)]
+    pub work_state: Option<everyaios_types::WorkState>,
+    /// P71.3g — the durable wait the Work is parked on, when it is parked
+    /// (`AUTOMATION.md` §8): reason + what resumes it.
+    #[serde(default)]
+    pub wait: Option<everyaios_types::WaitCondition>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -190,7 +214,23 @@ pub enum DomainEvent {
     },
     RunWaiting {
         run_id: String,
+        /// The `WorkState` spelling this wait parks the run in (`WORK.md` §4).
+        /// Kept as the state name for journal compatibility with rows written
+        /// before waits carried their own condition.
         reason: String,
+        /// P71.3g — the durable wait condition (`AUTOMATION.md` §8): *why* the
+        /// run is parked and what resumes it. Absent on rows written before the
+        /// condition existed; presence is rebuilt from this on replay.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        wait: Option<everyaios_types::WaitCondition>,
+    },
+    /// P71.3g — the run was interrupted with an **unknown** in-flight effect:
+    /// the `Recoverable` outcome (`RECOVERY.md` §3), deliberately not
+    /// `RunFailed` (*unknown* ≠ *failed*).
+    RunInterrupted {
+        run_id: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        reason: Option<String>,
     },
     ApprovalRequested {
         ticket_id: String,
@@ -231,6 +271,79 @@ pub enum DomainEvent {
     RunCancelled {
         run_id: String,
     },
+}
+
+/// P71.3g — the event one canonical [`WorkState`] transition appends. Kept
+/// beside the vocabulary it maps onto so the two cannot drift; `wait` is the
+/// condition a waiting state carries.
+fn transition_event(
+    execution_id: &str,
+    state: WorkState,
+    wait: Option<WaitCondition>,
+) -> WorkEvent {
+    match state {
+        WorkState::Created | WorkState::Planning | WorkState::Ready => {
+            WorkEvent::Domain(DomainEvent::RunQueued {
+                run_id: execution_id.into(),
+            })
+        }
+        WorkState::Running | WorkState::Verifying => WorkEvent::Domain(DomainEvent::RunStarted {
+            run_id: execution_id.into(),
+        }),
+        WorkState::WaitingTool | WorkState::WaitingApproval | WorkState::WaitingUser => {
+            WorkEvent::Domain(DomainEvent::RunWaiting {
+                run_id: execution_id.into(),
+                reason: state.as_str().to_string(),
+                wait,
+            })
+        }
+        WorkState::Checkpointed => WorkEvent::Domain(DomainEvent::RunCheckpointed {
+            run_id: execution_id.into(),
+            checkpoint: 0,
+        }),
+        WorkState::Paused => WorkEvent::Domain(DomainEvent::RunPaused {
+            run_id: execution_id.into(),
+        }),
+        WorkState::Recoverable => WorkEvent::Domain(DomainEvent::RunInterrupted {
+            run_id: execution_id.into(),
+            reason: Some("interrupted with an unknown in-flight effect".into()),
+        }),
+        WorkState::Completed => WorkEvent::Domain(DomainEvent::RunCompleted {
+            run_id: execution_id.into(),
+        }),
+        WorkState::Failed => WorkEvent::Domain(DomainEvent::RunFailed {
+            run_id: execution_id.into(),
+            reason: "execution transitioned to failed".into(),
+        }),
+        WorkState::Cancelled => WorkEvent::Domain(DomainEvent::RunCancelled {
+            run_id: execution_id.into(),
+        }),
+    }
+}
+
+/// P71.3g — the client-presence projection of the canonical Work state. This is
+/// the only place the two vocabularies meet: `work_state` is the lifecycle,
+/// [`WorkPresenceState`] answers whether clients see a live, blocked, offline or
+/// terminal run. A `Recoverable` Work projects as `Blocked` — parked on a human
+/// decision — never as `Failed` (I15).
+fn presence_projection(state: WorkState, wait: Option<&WaitCondition>) -> WorkPresenceState {
+    match state {
+        WorkState::WaitingApproval => WorkPresenceState::WaitingForApproval,
+        WorkState::WaitingUser => WorkPresenceState::WaitingForUser,
+        WorkState::Paused | WorkState::Recoverable => WorkPresenceState::Blocked,
+        WorkState::Completed => WorkPresenceState::Completed,
+        WorkState::Failed => WorkPresenceState::Failed,
+        WorkState::Cancelled => WorkPresenceState::Cancelled,
+        _ => match wait.map(|w| w.reason) {
+            // A wait with no dedicated state still parks the Work.
+            Some(everyaios_types::WaitReason::Timer)
+            | Some(everyaios_types::WaitReason::ExternalEvent)
+            | Some(everyaios_types::WaitReason::Resource)
+            | Some(everyaios_types::WaitReason::Agent)
+            | Some(everyaios_types::WaitReason::Retry) => WorkPresenceState::Blocked,
+            _ => WorkPresenceState::Running,
+        },
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -804,28 +917,33 @@ impl WorkGateway {
                 }
             }
             WorkEvent::Domain(DomainEvent::RunStarted { run_id }) => {
-                self.set_presence(&work_id, run_id, WorkPresenceState::Running)
+                self.set_work_state(&work_id, run_id, WorkState::Running, None)
             }
-            WorkEvent::Domain(DomainEvent::RunWaiting { run_id, reason }) => self.set_presence(
-                &work_id,
+            WorkEvent::Domain(DomainEvent::RunWaiting {
                 run_id,
-                if reason == "waiting_approval" {
-                    WorkPresenceState::WaitingForApproval
-                } else {
-                    WorkPresenceState::WaitingForUser
-                },
-            ),
+                reason,
+                wait,
+            }) => {
+                let state = WorkState::parse(reason);
+                self.set_work_state(&work_id, run_id, state, wait.clone())
+            }
+            WorkEvent::Domain(DomainEvent::RunCheckpointed { run_id, .. }) => {
+                self.set_work_state(&work_id, run_id, WorkState::Checkpointed, None)
+            }
             WorkEvent::Domain(DomainEvent::RunPaused { run_id }) => {
-                self.set_presence(&work_id, run_id, WorkPresenceState::Offline)
+                self.set_work_state(&work_id, run_id, WorkState::Paused, None)
+            }
+            WorkEvent::Domain(DomainEvent::RunInterrupted { run_id, .. }) => {
+                self.set_work_state(&work_id, run_id, WorkState::Recoverable, None)
             }
             WorkEvent::Domain(DomainEvent::RunCompleted { run_id }) => {
-                self.set_presence(&work_id, run_id, WorkPresenceState::Completed)
+                self.set_work_state(&work_id, run_id, WorkState::Completed, None)
             }
             WorkEvent::Domain(DomainEvent::RunFailed { run_id, .. }) => {
-                self.set_presence(&work_id, run_id, WorkPresenceState::Failed)
+                self.set_work_state(&work_id, run_id, WorkState::Failed, None)
             }
             WorkEvent::Domain(DomainEvent::RunCancelled { run_id }) => {
-                self.set_presence(&work_id, run_id, WorkPresenceState::Failed)
+                self.set_work_state(&work_id, run_id, WorkState::Cancelled, None)
             }
             WorkEvent::Domain(DomainEvent::ApprovalResolved {
                 ticket_id,
@@ -905,11 +1023,27 @@ impl WorkGateway {
         Ok(())
     }
 
-    fn set_presence(&mut self, work_id: &str, run_id: &str, state: WorkPresenceState) {
+    /// P71.3g — set both halves of a transition from the canonical state: the
+    /// Work's lifecycle state ([`WorkState`]) and its derived client-presence
+    /// projection. One call site per event, so the two can never be updated
+    /// apart; a wait is cleared unless this state *is* a wait.
+    fn set_work_state(
+        &mut self,
+        work_id: &str,
+        run_id: &str,
+        state: WorkState,
+        wait: Option<everyaios_types::WaitCondition>,
+    ) {
         let p = self.presence.entry(work_id.to_string()).or_default();
         p.work_id = work_id.to_string();
         p.active_run = Some(run_id.to_string());
-        p.state = Some(state);
+        p.work_state = Some(state);
+        p.state = Some(presence_projection(state, wait.as_ref()));
+        p.wait = if state.is_running() || matches!(state, WorkState::Paused) {
+            wait
+        } else {
+            None
+        };
     }
 
     pub fn create_work(
@@ -919,12 +1053,46 @@ impl WorkGateway {
         session_id: Option<String>,
         objective: impl Into<String>,
     ) -> WorkAddress {
+        self.create_work_in_session(
+            work_id,
+            project_id,
+            session_id,
+            SessionKind::Interactive,
+            objective,
+        )
+        .expect("interactive Work requires no owning Session")
+    }
+
+    /// P71.8a/b — create a Work in a Session of an explicit [`SessionKind`].
+    /// The kind is stated by the caller from the record it created, **never**
+    /// inferred from whether a Chat exists (`ADR-0006` §1).
+    ///
+    /// `ADR-0006` §4 — every Work has an owning Session: an `automation` Work
+    /// **requires** `session_id` (the trigger creates the Session, then its
+    /// Work), so the scope chain always has its second rung. A missing one is
+    /// an error, not a Work outside the chain (**I4**).
+    pub fn create_work_in_session(
+        &mut self,
+        work_id: impl Into<String>,
+        project_id: Option<String>,
+        session_id: Option<String>,
+        session_kind: SessionKind,
+        objective: impl Into<String>,
+    ) -> Result<WorkAddress, String> {
+        if matches!(session_kind, SessionKind::Automation) && session_id.is_none() {
+            return Err(
+                "an automation Work requires its owning Session (ADR-0006 §4) — the trigger \
+                 creates the Session, then its Work"
+                    .to_string(),
+            );
+        }
         let id = work_id.into();
         let mut address = WorkAddress::new(id.clone());
         address.project_id = project_id;
         address.session_id = session_id;
+        address.session_kind = session_kind;
         if let Some(existing) = self.works.get(&id) {
-            return existing.clone();
+            return Ok(existing.clone());
         }
         self.works.insert(id.clone(), address.clone());
         self.presence.insert(
@@ -945,7 +1113,7 @@ impl WorkGateway {
             }),
             None,
         );
-        address
+        Ok(address)
     }
 
     /// P69.D14 — register a **child Work** for a delegated task. A subagent is
@@ -954,6 +1122,11 @@ impl WorkGateway {
     /// event log, with no parallel subagent registry. Idempotent like
     /// [`Self::create_work`]; an unknown parent is refused (a delegation that
     /// names no real parent is a caller bug, not a new root).
+    ///
+    /// P71.8/ADR-0006 §5 — a child Work **does not create a Session**: it lives
+    /// in its parent's Session (I8), so the address inherits the parent's
+    /// `session_id` and `session_kind`. `SessionKind::Delegated` is reserved
+    /// for an out-of-session delegation the user explicitly starts.
     pub fn create_child_work(
         &mut self,
         parent_work_id: &str,
@@ -969,9 +1142,23 @@ impl WorkGateway {
         if let Some(existing) = self.works.get(&id) {
             return Ok(existing.clone());
         }
+        let parent_kind = self
+            .works
+            .get(parent_work_id)
+            .map(|p| p.session_kind)
+            .unwrap_or(SessionKind::Interactive);
         let mut address = WorkAddress::new(id.clone());
-        address.project_id = project_id;
-        address.session_id = session_id;
+        address.project_id = project_id.or_else(|| {
+            self.works
+                .get(parent_work_id)
+                .and_then(|p| p.project_id.clone())
+        });
+        address.session_id = session_id.or_else(|| {
+            self.works
+                .get(parent_work_id)
+                .and_then(|p| p.session_id.clone())
+        });
+        address.session_kind = parent_kind;
         address.parent_work_id = Some(parent_work_id.to_string());
         self.works.insert(id.clone(), address.clone());
         self.presence.insert(
@@ -1020,7 +1207,10 @@ impl WorkGateway {
         let mut active = 0u32;
         let mut total = 0u32;
         for address in self.works.values() {
-            if address.parent_work_id.is_none() {
+            // A parent's concurrency gauge counts **its own** children only —
+            // a sibling delegation elsewhere in the tree must not consume
+            // this parent's slots (per-parent policy, `WORK.md` §8).
+            if address.parent_work_id.as_deref() != Some(parent_work_id) {
                 continue;
             }
             total += 1;
@@ -1116,7 +1306,7 @@ impl WorkGateway {
             parent.session_id.clone(),
         )?;
         self.bind_execution(&child, &run)?;
-        self.record_execution_transition(&child, &run, "running")?;
+        self.record_execution_transition(&child, &run, WorkState::Running)?;
         self.spawn_subagent(
             &child,
             &run,
@@ -1138,33 +1328,43 @@ impl WorkGateway {
     /// the same triple [`Self::delegate_child_work`] minted so the caller can
     /// address what it is closing. Idempotent on an already-terminal child
     /// (the session terminate step is the one that already ran).
+    ///
+    /// P71.3g — the outcome is the canonical terminal [`WorkState`]
+    /// (`Completed · Failed · Cancelled`), and anything else is **refused**.
+    /// The old stringly-typed door defaulted every unrecognised outcome to
+    /// `completed`, so a typo reported a lost child as a successful one.
     pub fn finish_child_work(
         &mut self,
         parent_work_id: &str,
         task_id: &str,
-        outcome: &str,
+        outcome: WorkState,
         reason: Option<&str>,
     ) -> Result<ChildWorkRef, String> {
+        if !matches!(
+            outcome,
+            WorkState::Completed | WorkState::Failed | WorkState::Cancelled
+        ) {
+            return Err(format!(
+                "finish_child_work takes a terminal outcome (completed | failed | cancelled), got {}",
+                outcome.as_str()
+            ));
+        }
         let child = Self::child_work_id(parent_work_id, task_id);
         let run = Self::child_run_id(parent_work_id, task_id);
         let session = Self::child_agent_session_id(parent_work_id, task_id);
         let event = match outcome {
-            "failed" => WorkEvent::Domain(DomainEvent::RunFailed {
+            WorkState::Failed => WorkEvent::Domain(DomainEvent::RunFailed {
                 run_id: run.clone(),
                 reason: reason.unwrap_or("subagent failed").to_string(),
             }),
-            "cancelled" => WorkEvent::Domain(DomainEvent::RunCancelled { run_id: run.clone() }),
+            WorkState::Cancelled => {
+                WorkEvent::Domain(DomainEvent::RunCancelled { run_id: run.clone() })
+            }
             _ => WorkEvent::Domain(DomainEvent::RunCompleted { run_id: run.clone() }),
         };
         self.append(&child, event, None)
             .ok_or("append child run terminal event")?;
-        if let Some(p) = self.presence.get_mut(&child) {
-            p.active_run = Some(run.clone());
-            p.state = Some(match outcome {
-                "failed" => WorkPresenceState::Failed,
-                _ => WorkPresenceState::Completed,
-            });
-        }
+        self.set_work_state(&child, &run, outcome, None);
         let _ = self.terminate_agent_session(&child, &session);
         Ok(ChildWorkRef {
             work_id: child,
@@ -2340,59 +2540,53 @@ impl WorkGateway {
         Ok(())
     }
 
+    /// P71.3g — the typed transition door: callers speak the canonical
+    /// [`WorkState`] (`WORK.md` §4) instead of a stringly-typed subset, and both
+    /// the event and the presence projection are derived here in one place.
+    ///
+    /// The wire spelling still reaches this through `WorkState::parse` at the
+    /// RPC boundary, so the journal vocabulary is unchanged.
+    ///
+    /// The event mapping: states that mean "a run is in flight" append
+    /// `RunStarted`; the waiting states append `RunWaiting` carrying the state
+    /// spelling (plus the wait condition when the caller used
+    /// [`Self::record_wait`]); `Paused` appends `RunPaused`; `Recoverable`
+    /// appends `RunInterrupted` — deliberately **not** `RunFailed`, because an
+    /// unknown effect outcome is not a failure (`RECOVERY.md` §3).
     pub fn record_execution_transition(
         &mut self,
         work_id: &str,
         execution_id: &str,
-        state: &str,
+        state: WorkState,
     ) -> Result<(), String> {
         if self.execution_id(work_id) != Some(execution_id) {
             return Err("execution/work binding mismatch".into());
         }
-        let event = match state {
-            "running" => WorkEvent::Domain(DomainEvent::RunStarted {
-                run_id: execution_id.into(),
-            }),
-            "checkpointed" => WorkEvent::Domain(DomainEvent::RunCheckpointed {
-                run_id: execution_id.into(),
-                checkpoint: 0,
-            }),
-            "waiting_approval" | "waiting_user" | "waiting_tool" => {
-                WorkEvent::Domain(DomainEvent::RunWaiting {
-                    run_id: execution_id.into(),
-                    reason: state.into(),
-                })
-            }
-            "paused" => WorkEvent::Domain(DomainEvent::RunPaused {
-                run_id: execution_id.into(),
-            }),
-            "completed" => WorkEvent::Domain(DomainEvent::RunCompleted {
-                run_id: execution_id.into(),
-            }),
-            "failed" => WorkEvent::Domain(DomainEvent::RunFailed {
-                run_id: execution_id.into(),
-                reason: "execution transitioned to failed".into(),
-            }),
-            "cancelled" => WorkEvent::Domain(DomainEvent::RunCancelled {
-                run_id: execution_id.into(),
-            }),
-            _ => WorkEvent::Operational(OperationalEvent::ToolCompleted {
-                tool_id: format!("execution:{state}"),
-            }),
-        };
+        let event = transition_event(execution_id, state, None);
         self.append(work_id, event, None)
             .ok_or("failed to append execution transition")?;
-        if let Some(p) = self.presence.get_mut(work_id) {
-            p.active_run = Some(execution_id.into());
-            p.state = match state {
-                "completed" => Some(WorkPresenceState::Completed),
-                "failed" => Some(WorkPresenceState::Failed),
-                "paused" => Some(WorkPresenceState::Offline),
-                "waiting_approval" => Some(WorkPresenceState::WaitingForApproval),
-                "waiting_user" => Some(WorkPresenceState::WaitingForUser),
-                _ => Some(WorkPresenceState::Running),
-            };
+        self.set_work_state(work_id, execution_id, state, None);
+        Ok(())
+    }
+
+    /// P71.3g — enter a **durable wait**: the run parks in the state the reason
+    /// implies and the condition (reason · detail · deadline · resume-on) is
+    /// carried on the event, so presence replays with *what it waited for*
+    /// rather than a confident summary (`RECOVERY.md` §7, `AUTOMATION.md` §8).
+    pub fn record_wait(
+        &mut self,
+        work_id: &str,
+        execution_id: &str,
+        wait: &everyaios_types::WaitCondition,
+    ) -> Result<(), String> {
+        if self.execution_id(work_id) != Some(execution_id) {
+            return Err("execution/work binding mismatch".into());
         }
+        let state = wait.work_state();
+        let event = transition_event(execution_id, state, Some(wait.clone()));
+        self.append(work_id, event, None)
+            .ok_or("failed to append wait transition")?;
+        self.set_work_state(work_id, execution_id, state, Some(wait.clone()));
         Ok(())
     }
     pub fn presence(&self, work_id: &str) -> Option<&WorkPresence> {
@@ -3317,7 +3511,7 @@ mod tests {
         first.create_work("w-proj", None, None, "project");
         first.bind_execution("w-proj", "run-1").unwrap();
         first
-            .record_execution_transition("w-proj", "run-1", "waiting_approval")
+            .record_execution_transition("w-proj", "run-1", WorkState::WaitingApproval)
             .unwrap();
         first
             .request_review(ReviewItem {
@@ -3405,19 +3599,135 @@ mod tests {
         let mut g = gateway();
         g.bind_execution("w1", "ex:1").unwrap();
         assert_eq!(g.execution_id("w1"), Some("ex:1"));
-        g.record_execution_transition("w1", "ex:1", "running")
+        g.record_execution_transition("w1", "ex:1", WorkState::Running)
             .unwrap();
-        g.record_execution_transition("w1", "ex:1", "waiting_approval")
+        g.record_execution_transition("w1", "ex:1", WorkState::WaitingApproval)
             .unwrap();
-        g.record_execution_transition("w1", "ex:1", "completed")
+        g.record_execution_transition("w1", "ex:1", WorkState::Completed)
             .unwrap();
         assert_eq!(
             g.presence("w1").unwrap().state,
             Some(WorkPresenceState::Completed)
         );
         assert!(g
-            .record_execution_transition("w1", "other", "running")
+            .record_execution_transition("w1", "other", WorkState::Running)
             .is_err());
+    }
+
+    #[test]
+    fn p71_work_state_is_canonical_on_presence_and_unknown_wire_states_are_refused() {
+        // The contract: presence carries the lifecycle state itself, not only
+        // the client-presence projection; an unreadable wire spelling is not a
+        // state (the relay parses with `try_parse` and refuses).
+        let mut g = gateway();
+        g.bind_execution("w1", "ex:1").unwrap();
+        g.record_execution_transition("w1", "ex:1", WorkState::WaitingTool)
+            .unwrap();
+        let presence = g.presence("w1").unwrap();
+        assert_eq!(presence.work_state, Some(WorkState::WaitingTool));
+        assert_eq!(presence.state, Some(WorkPresenceState::Running));
+        assert_eq!(presence.wait, None);
+
+        assert_eq!(WorkState::try_parse("waiting_tool"), Some(WorkState::WaitingTool));
+        assert_eq!(WorkState::try_parse("some_day"), None);
+    }
+
+    #[test]
+    fn p71_durable_wait_carries_its_condition_and_projects_honestly() {
+        use everyaios_types::{WaitCondition, WaitReason};
+        let mut g = gateway();
+        g.bind_execution("w1", "ex:1").unwrap();
+        let wait = WaitCondition::new(WaitReason::Timer)
+            .with_detail("retry backoff")
+            .with_deadline_ms(1_700_000_000_000)
+            .with_resume_on("timer");
+        g.record_wait("w1", "ex:1", &wait).unwrap();
+        let presence = g.presence("w1").unwrap();
+        // A reason with no dedicated Waiting* state parks the Work as Paused.
+        assert_eq!(presence.work_state, Some(WorkState::Paused));
+        assert_eq!(presence.state, Some(WorkPresenceState::Blocked));
+        assert_eq!(presence.wait, Some(wait));
+
+        // Approval has a named state and its own presence projection.
+        let approval = WaitCondition::new(WaitReason::Approval).with_resume_on("tkt:42");
+        g.record_wait("w1", "ex:1", &approval).unwrap();
+        let presence = g.presence("w1").unwrap();
+        assert_eq!(presence.work_state, Some(WorkState::WaitingApproval));
+        assert_eq!(presence.state, Some(WorkPresenceState::WaitingForApproval));
+        assert_eq!(presence.wait, Some(approval));
+
+        // Recovering is not failing: the state is Recoverable, presence Blocked.
+        g.record_execution_transition("w1", "ex:1", WorkState::Recoverable)
+            .unwrap();
+        let presence = g.presence("w1").unwrap();
+        assert_eq!(presence.work_state, Some(WorkState::Recoverable));
+        assert_eq!(presence.state, Some(WorkPresenceState::Blocked));
+        assert_eq!(presence.wait, None);
+    }
+
+    #[test]
+    fn p71_automation_work_requires_its_owning_session_and_children_inherit_it() {
+        use everyaios_types::SessionKind;
+        let mut g = gateway();
+        // ADR-0006 §4 — no Work outside the scope chain (**I4**): a trigger
+        // that has not created its Session cannot mint its Work.
+        assert!(g
+            .create_work_in_session(
+                "w-auto",
+                None,
+                None,
+                SessionKind::Automation,
+                "no session yet"
+            )
+            .is_err());
+        // The trigger creates the Session (its id), then the Work — kind is a
+        // record property carried on the address, never inferred.
+        let address = g
+            .create_work_in_session(
+                "w-auto",
+                None,
+                Some("auto-s-1".into()),
+                SessionKind::Automation,
+                "trigger work",
+            )
+            .unwrap();
+        assert_eq!(address.session_kind, SessionKind::Automation);
+        assert_eq!(address.session_id.as_deref(), Some("auto-s-1"));
+        // Idempotent re-create keeps the kind.
+        let again = g.create_work("w-auto", None, Some("auto-s-1".into()), "again");
+        assert_eq!(again.session_kind, SessionKind::Automation);
+
+        // Interactive roots are unchanged.
+        let interactive = g.create_work("w-chat", None, Some("s-9".into()), "chat work");
+        assert_eq!(interactive.session_kind, SessionKind::Interactive);
+
+        // A child Work lives in its parent's Session (ADR-0006 §5, I8): kind
+        // and session are inherited, not re-minted as `delegated`.
+        let child = g
+            .create_child_work("w-auto", "w-auto/subagent/t", "child", None, None)
+            .unwrap();
+        assert_eq!(child.session_kind, SessionKind::Automation);
+        assert_eq!(child.session_id.as_deref(), Some("auto-s-1"));
+    }
+
+    #[test]
+    fn p71_child_work_outcome_must_be_terminal() {
+        let mut g = gateway();
+        g.create_work("w-parent", None, None, "parent");
+        g.delegate_child_work("w-parent", "t1", "goal", "agent-a", None)
+            .unwrap();
+        // A non-terminal outcome is refused — the old door defaulted it to
+        // `completed`, reporting a lost child as a successful one.
+        let err = g
+            .finish_child_work("w-parent", "t1", WorkState::Running, None)
+            .expect_err("a running state is not a terminal outcome");
+        assert!(err.contains("terminal outcome"), "got: {err}");
+        let child = g
+            .finish_child_work("w-parent", "t1", WorkState::Cancelled, Some("user stopped it"))
+            .unwrap();
+        let presence = g.presence(&child.work_id).unwrap();
+        assert_eq!(presence.work_state, Some(WorkState::Cancelled));
+        assert_eq!(presence.state, Some(WorkPresenceState::Cancelled));
     }
 
     #[test]

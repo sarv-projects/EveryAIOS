@@ -1,8 +1,14 @@
 /**
  * P1.2 — smoke-import of `@everyaios/core-providers` into the coordinator
- * sidecar. Proves the workspace dep resolves, its public surface is intact,
- * and its synchronous catalog functions behave — without any network call
- * (validateApiKey/streamCompletion stay uncalled on purpose).
+ * sidecar. Proves the workspace dep resolves, its **observability** surface is
+ * intact, and its synchronous catalog functions behave — without any network
+ * call.
+ *
+ * P71.2d (ADR-0005): the inference clients (`streamCompletion`,
+ * `streamAnthropicCompletion`, the key probes) are **deleted** — v1 has no
+ * EveryAIOS-owned model call, because the bound external agent owns its own
+ * model. The catalogue, pricing, capability and credential-façade surface is
+ * what remains, and the test now asserts the removal too.
  *
  * The dep is a pnpm workspace link to the vendored `packages/core-providers`
  * (copied in from the reference APP repo — this repo is self-contained).
@@ -10,10 +16,8 @@
 import { describe, expect, test } from "bun:test";
 import {
   AI_PROVIDER_GROUPS,
-  ANTHROPIC_KNOWN_MODELS,
   PROVIDER_CATALOG,
   ProviderVault,
-  fetchAvailableModels,
   fetchProviderPricing,
   filterProvidersBySection,
   formatPricingLine,
@@ -22,10 +26,6 @@ import {
   getRecommendedProviders,
   modelSupportsReasoning,
   modelSupportsVision,
-  streamAnthropicCompletion,
-  streamCompletion,
-  validateAnthropicApiKey,
-  validateApiKey,
 } from "@everyaios/core-providers";
 
 describe("core-providers smoke-import (APP workspace dep)", () => {
@@ -74,20 +74,27 @@ describe("core-providers smoke-import (APP workspace dep)", () => {
     expect(Array.isArray(models)).toBe(true);
   });
 
-  test("every documented value export is present and correctly typed", () => {
+  test("the observability surface is present and correctly typed", () => {
     // Functions exist (and are not called — no network).
-    expect(typeof streamCompletion).toBe("function");
-    expect(typeof fetchAvailableModels).toBe("function");
-    expect(typeof validateApiKey).toBe("function");
-    expect(typeof streamAnthropicCompletion).toBe("function");
-    expect(typeof validateAnthropicApiKey).toBe("function");
     expect(typeof fetchProviderPricing).toBe("function");
     expect(typeof formatPricingLine).toBe("function");
     expect(typeof modelSupportsVision).toBe("function");
     expect(typeof modelSupportsReasoning).toBe("function");
-    // Class export.
+    // Class export — the credential façade (custody stays in the Rust vault).
     expect(typeof ProviderVault).toBe("function");
-    // Constants.
-    expect(ANTHROPIC_KNOWN_MODELS.length).toBeGreaterThan(0);
+  });
+
+  test("no EveryAIOS-owned inference path is exported (P71.2d, ADR-0005)", async () => {
+    const mod = (await import("@everyaios/core-providers")) as Record<string, unknown>;
+    for (const gone of [
+      "streamCompletion",
+      "fetchAvailableModels",
+      "validateApiKey",
+      "streamAnthropicCompletion",
+      "validateAnthropicApiKey",
+      "ANTHROPIC_KNOWN_MODELS",
+    ]) {
+      expect(mod[gone], `${gone} must not be exported`).toBeUndefined();
+    }
   });
 });

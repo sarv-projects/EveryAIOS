@@ -220,7 +220,7 @@ The architecture is documented in detail starting from [`ARCH/CORE.md`](ARCH/COR
 - [`ARCH/MEMORY.md`](ARCH/MEMORY.md) — four memory classes (Context · Episodic · Knowledge · Procedural), with ACT-R as a strategy
 - [`ARCH/EXTERNAL-AGENTS.md`](ARCH/EXTERNAL-AGENTS.md) — ACP/MCP surfaces, the agent bridge, and what governance can honestly be claimed
 - [`ARCH/09-FEATURE-MATRIX.md`](ARCH/09-FEATURE-MATRIX.md) — the 166-row capability matrix
-- [`ARCH/17-NATIVE-AGENT.md`](ARCH/17-NATIVE-AGENT.md) — the two-plane model: what belongs to the agent vs. what belongs to EveryAIOS *(**archived** — historical context; superseded by [`ARCH/ADR/0005`](ARCH/ADR/0005-external-agents-are-the-v1-engines.md); its original "frozen" status was lifted by [`ARCH/ADR/0003`](ARCH/ADR/0003-architecture-thaw-core-authority.md))*
+- [`ARCH/AGENT.md`](ARCH/AGENT.md) + [`ARCH/EXTERNAL-AGENTS.md`](ARCH/EXTERNAL-AGENTS.md) — the two-plane model: what belongs to the agent vs. what belongs to EveryAIOS, and how an external agent reaches both. *(The historical two-plane text — `ARCH/17-NATIVE-AGENT.md` — was **archived** on 2026-09-22 under [`ARCH/archive/`](ARCH/archive/) by [`ARCH/ADR/0005`](ARCH/ADR/0005-external-agents-are-the-v1-engines.md); it is not a contract.)*
 - [`DESKTOP-APP-SPEC.md`](DESKTOP-APP-SPEC.md) — the normative product contract
 - [`TODO.md`](TODO.md) — the delivery ledger: what is built, what is open, and what is next
 

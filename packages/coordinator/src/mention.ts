@@ -95,10 +95,15 @@ export class MentionRegistry {
   }
 }
 
-/** The builtin handle seed (default agent + ACP harnesses). */
+/**
+ * The builtin handle seed — the ACP harness shortcuts.
+ *
+ * ADR-0005: there is no built-in agent handle. `@everyaios` is not seeded and
+ * never routes: mentions resolve to an installed external agent or to a
+ * user-registered handle, and an unknown handle opens no session.
+ */
 export function builtinMentionSeed(): Record<string, string> {
   return {
-    everyaios: "everyaios-native",
     claude: "claude-code",
     codex: "codex-cli",
     grok: "grok-build",

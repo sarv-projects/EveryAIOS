@@ -65,6 +65,34 @@ change identity when the user switches agent.
 **Lifecycle events:** `AgentBindingCreated` · `Activated` · `Suspended` · `Resumed` (plus death and
 unavailability as state transitions on the same record).
 
+### 3.1 Readiness — one state, not booleans
+
+*Can this agent be used right now?* has exactly one answer,
+[`everyaios_types::AgentReadiness`](../crates/everyaios-types/src/lib.rs), declared once and read by every
+surface (picker · resolver · trigger plane · delegation gate):
+
+```
+Unknown → Discovered → Installed → Launchable → ProtocolCompatible → {AuthRequired → Authenticating} → Ready
+                                                                        ↘ Degraded   ↘ Unavailable · Failed
+```
+
+The state exists to keep four different facts apart:
+
+| Fact | State | Why it is not `Ready` |
+|---|---|---|
+| known in the catalog | `Discovered` | nothing runs |
+| runtime present | `Installed` | not proven launchable here |
+| can start here | `Launchable` | no negotiated protocol |
+| negotiated, unauthenticated | `ProtocolCompatible` · `AuthRequired` · `Authenticating` | cannot serve a turn |
+| serves a turn | `Ready` (or `Degraded`, with the reduction stated) | — |
+
+**Rules.** `Unknown` is never rendered as available. `installed` on the wire is a projection of this state,
+not a parallel field. Only `Ready` is admissible as a **subagent** (`DelegationPolicy::admit` judges it
+first) — `Degraded` serves turns but is not delegable. The state is a runtime fact: user policy (disabled)
+and install activity (updating) are UI projections layered on top, never readiness values. EveryAIOS may
+**facilitate** an agent's authentication but never reads or copies its credential store
+([`ROUTING.md`](ROUTING.md) §4, **I10**).
+
 ---
 
 ## 4. Shared vs private
