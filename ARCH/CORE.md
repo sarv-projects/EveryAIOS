@@ -233,7 +233,7 @@ enforced by tests). I10–I27 are established by this document (I27 added via AD
 
 | # | Invariant | Tier |
 |---|---|---|
-| **I16** | **Provider-visible prefixes are append-stable.** Any prefix-changing operation (tool/schema change, system reorder, history rewrite) is intentional, observable, and treated as a cache-boundary event. | doc (new) |
+| **I16** | **Provider-visible prefixes are append-stable.** Any prefix-changing operation (tool/schema change, system reorder, history rewrite) is intentional, observable, and treated as a cache-boundary event. | tested + doc |
 | **I17** | **Raw tool/resource output is not automatically model context.** The provider receives a bounded representation. | doc (new) |
 | **I18** | **Full content stays retrievable** through Resource/Artifact references. | doc (new) |
 | **I19** | **Cheap deterministic reduction precedes model-backed summarization** (prune → re-measure → compact). | doc (new) |

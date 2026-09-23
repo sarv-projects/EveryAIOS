@@ -763,7 +763,7 @@ complete function accounting for the file. `refs` is the cross-file `stem::` ref
 
 | Location | Files | Lines | Functions | `#[test]` fns |
 | --- | ---: | ---: | ---: | ---: |
-| `crates/everyaios-acp/` | 23 | 8,920 | 360 | 114 |
+| `crates/everyaios-acp/` | 24 | 9,163 | 374 | 122 |
 | `crates/everyaios-agents/` | 8 | 1,447 | 96 | 26 |
 | `crates/everyaios-audit/` | 8 | 4,303 | 188 | 56 |
 | `crates/everyaios-blueprint/` | 36 | 12,670 | 634 | 201 |
@@ -784,8 +784,8 @@ complete function accounting for the file. `refs` is the cross-file `stem::` ref
 | `crates/everyaios-storage/` | 19 | 4,149 | 208 | 54 |
 | `crates/everyaios-types/` | 1 | 1,453 | 58 | 11 |
 | `crates/everyaios-vault/` | 17 | 11,670 | 447 | 160 |
-| `src-tauri/` | 51 | 20,132 | 719 | 77 |
-| **TOTAL** | **506** | **205,419** | **8971** | **2786** |
+| `src-tauri/` | 52 | 20,441 | 729 | 80 |
+| **TOTAL** | **508** | **205,971** | **8995** | **2797** |
 
 ### 9.1 `crates/everyaios-acp/`
 
@@ -827,7 +827,7 @@ complete function accounting for the file. `refs` is the cross-file `stem::` ref
 
 - `fns` (1): main:20
 
-#### `crates/everyaios-acp/src/chief.rs` — 1,113 lines · 14 tests · refs 1
+#### `crates/everyaios-acp/src/chief.rs` — 1,113 lines · 14 tests · refs 2
 
 > P38 — Dynamic Chief (spec §4.2.5a): the top brain is a configurable slot.
 
@@ -873,6 +873,13 @@ complete function accounting for the file. `refs` is the cross-file `stem::` ref
 
 **`const`** (1): `PROTOCOL_VERSION`:13 · **`enum`** (7): `PromptContent`:324, `StopReason`:421, `ToolKind`:455, `ToolStatus`:495, `PermissionOptionKind`:645, `AuthMethodType`:682, `PermissionDecision`:723 · **`fn`** (15): `config_options_with_boolean`:45, `supports_logout`:109, `text`:347, `resource`:351, `reported`:399, `as_str`:436, `as_str`:469, `is_mutation`:485, `is_tool_call`:610, `is_tool_call_update`:614, `is_available_commands_update`:619, `is_config_option_update`:623, `as_str`:692, `allow`:729, `deny`:733 · **`struct`** (37): `ClientCapabilities`:21, `SessionCapabilities`:33, `ConfigOptionCapabilities`:39, `FsCapabilities`:56, `AgentCapabilities`:63, `PromptCapabilities`:72, `McpCapabilities`:80, `AuthCapabilities`:90, `ClientInfo`:120, `AgentInfo`:128, `AuthMethod`:136, `InitializeParams`:184, `InitializeResult`:192, `McpServer`:254, `SessionNewParams`:263, `SessionNewResult`:270, `ConfigOption`:286, `ConfigOptionValue`:298, `SetConfigOptionParams`:306, `SetConfigOptionResult`:314, `EmbeddedResource`:340, `SessionPromptParams`:368, `PromptUsage`:382, `SessionPromptResult`:410, `ContentBlock`:511, `Location`:518, `TextRange`:527, `Position`:534, `SessionUpdate`:544, `AvailableCommand`:601, `ToolCall`:634, `PermissionOption`:656, `PermissionRequestParams`:664, `AuthenticateParams`:705, `AuthenticateResult`:714, `PermissionOutcome`:740, `PermissionResult`:746
 - `fns` (31): config_options_with_boolean:45, deser_marker:96, supports_logout:109, deserialize_env_pairs:160, deserialize_auth_methods:210, text:347, resource:351, reported:399, as_str:436, as_str:469, is_mutation:485, content_blocks:578, is_tool_call:610, is_tool_call_update:614, is_available_commands_update:619, is_config_option_update:623, as_str:692, allow:729, deny:733, initialize_result_roundtrips_camelcase:755, auth_methods_accept_the_array_shape:779, auth_methods_accept_the_map_shape_pi_acp_sends:796, terminal_auth_method_env_parses_as_an_object_or_a_pair_list:819, auth_methods_tolerate_being_absent_or_empty:870, tool_kind_and_stop_reason_use_snake_case:882, session_update_parses_tool_call_discriminator:897, permission_request_roundtrips:914, prompt_content_text:936, prompt_content_resource_uses_acp_embedded_shape:944, available_commands_update_parses_live_slash_vocab:954, chunk_content_may_be_a_single_object:993
+
+#### `crates/everyaios-acp/src/prefix_guard.rs` — 243 lines · 8 tests · refs 1
+
+> P69.E9 — prefix-stability guard [I16] (`ARCH/CONTEXT.md` §4).
+
+**`enum`** (1): `PrefixEvent`:94 · **`fn`** (5): `fingerprint_stable_prefix`:68, `as_str`:109, `new`:129, `turns`:137, `observe`:144 · **`struct`** (1): `PrefixGuard`:122
+- `fns` (14): fnv1a:42, fingerprint_stable_prefix:68, as_str:109, new:129, turns:137, observe:144, first_turn_is_first_turn:162, identical_prefix_is_stable:168, undeclared_change_is_the_violation:176, declared_change_is_permitted_and_observable:183, fingerprint_is_deterministic_and_order_sensitive:190, absent_and_empty_blocks_hash_as_absent:209, tag_body_boundaries_cannot_collide_by_concatenation:222, event_strings_are_stable_wire_vocabulary:231
 
 #### `crates/everyaios-acp/src/registry.rs` — 409 lines · 4 tests · refs 13
 
@@ -1614,7 +1621,7 @@ complete function accounting for the file. `refs` is the cross-file `stem::` ref
 **`const`** (3): `SNAPSHOT_FILE`:28, `META_FILE`:30, `SETTINGS_FILE`:32 · **`fn`** (15): `from_snapshot`:61, `if_none_match`:74, `new`:91, `dir`:95, `snapshot_path`:99, `meta_path`:103, `settings_path`:107, `load_settings`:112, `refresh_interval_secs`:120, `save_settings`:124, `load`:133, `load_meta`:139, `save`:146, `save_meta`:161, `clear`:169 · **`struct`** (3): `CatalogSettings`:37, `CatalogMeta`:45, `CatalogStore`:86
 - `fns` (26): from_snapshot:61, if_none_match:74, new:91, dir:95, snapshot_path:99, meta_path:103, settings_path:107, load_settings:112, refresh_interval_secs:120, save_settings:124, load:133, load_meta:139, save:146, save_meta:161, clear:169, write_atomic:183, dir:200, snapshot:209, save_then_load_round_trips_snapshot_and_meta:215, missing_files_are_none_not_an_error:238, corrupt_snapshot_reads_as_absent:248, meta_records_failed_attempts_honestly:258, clear_removes_both_files_and_is_idempotent:274, settings_default_to_four_hours_and_clamp:292, clear_keeps_settings:313, atomic_write_leaves_no_tmp_behind:334
 
-#### `crates/everyaios-catalog/src/sync.rs` — 393 lines · 7 tests · refs 281
+#### `crates/everyaios-catalog/src/sync.rs` — 393 lines · 7 tests · refs 282
 
 > P14-5 — Sync automation (doc 66 §1.4 — deferred maintenance loop): the vendored `models.json` baseline ships **static**; a refresh path exists for when we need it.
 
@@ -1992,7 +1999,7 @@ complete function accounting for the file. `refs` is the cross-file `stem::` ref
 **`const`** (1): `CHARS_PER_TOKEN`:19 · **`fn`** (3): `enabled`:42, `should_distill`:50, `distill_context`:106 · **`struct`** (4): `DistillConfig`:24, `ContextBlock`:57, `DistilledBlock`:65, `DistilledContext`:82
 - `fns` (13): default:33, enabled:42, should_distill:50, sha256_hex:92, approx_tokens:99, distill_context:106, block:180, disabled_config_is_a_zero_loss_pass_through:188, ratio_one_is_a_pass_through_even_when_enabled:200, enabled_prunes_long_blocks_and_flags_the_gap:208, pruned_content_is_digested_not_dropped:225, token_estimates_are_reported_for_the_profiling_gate:244, empty_input_is_an_empty_zero_gap_result:254
 
-#### `crates/everyaios-core/src/doctor.rs` — 723 lines · 8 tests · refs 1
+#### `crates/everyaios-core/src/doctor.rs` — 723 lines · 8 tests · refs 3
 
 > P46.2 — `everyaios doctor`: per-subsystem readiness report (spec H35).
 
@@ -2345,7 +2352,7 @@ complete function accounting for the file. `refs` is the cross-file `stem::` ref
 **`enum`** (2): `Inbound`:42, `LinkError`:312 · **`fn`** (12): `notify`:72, `reply`:88, `reply_error`:94, `new`:129, `new_with_activity`:137, `writer`:216, `receiver`:223, `request`:228, `reply`:254, `reply_error`:260, `next_inbound`:270, `try_inbound`:278 · **`struct`** (2): `WriterHandle`:58, `SidecarLink`:119
 - `fns` (24): clone:63, notify:72, reply:88, reply_error:94, write_frame:103, new:129, new_with_activity:137, writer:216, receiver:223, request:228, reply:254, reply_error:260, next_inbound:270, try_inbound:278, write_frame:285, now_ms:295, next_request_id:304, fake_sidecar:338, pair:390, request_response_roundtrip:396, eof_fails_pending_requests:413, chat_stream_relay_forwards_events:430, coordinator_request_is_dispatched_and_replied:465, writer_handle_pushes_notifications:497
 
-#### `crates/everyaios-core/src/store_schema.rs` — 528 lines · 6 tests · refs 16
+#### `crates/everyaios-core/src/store_schema.rs` — 528 lines · 6 tests · refs 17
 
 > P70.A8 — durable-store schema stamps + a forward-only migration path.
 
@@ -3022,7 +3029,7 @@ complete function accounting for the file. `refs` is the cross-file `stem::` ref
 
 ### 9.14 `crates/everyaios-mcp/`
 
-#### `crates/everyaios-mcp/src/attach.rs` — 619 lines · 8 tests · refs 11
+#### `crates/everyaios-mcp/src/attach.rs` — 619 lines · 8 tests · refs 14
 
 > MCP server attach (P6.6 #3/#5 — user-supplied stdio/npx or user-hosted HTTP).
 
@@ -3374,7 +3381,7 @@ complete function accounting for the file. `refs` is the cross-file `stem::` ref
 
 ### 9.16 `crates/everyaios-office/`
 
-#### `crates/everyaios-office/src/atomic.rs` — 101 lines · 3 tests · refs 74
+#### `crates/everyaios-office/src/atomic.rs` — 101 lines · 3 tests · refs 75
 
 > D7 — atomic writes (ARCH/04 §4.4): write a sibling temp file, fsync it, then rename over the target.
 
@@ -4045,6 +4052,13 @@ complete function accounting for the file. `refs` is the cross-file `stem::` ref
 
 **`fn`** (19): `policy_path`:62, `load_policy`:66, `desktop_status`:322, `desktop_attach`:377, `desktop_windows`:391, `desktop_read`:413, `desktop_see`:433, `desktop_act`:498, `desktop_escalation`:538, `desktop_act_escalating`:562, `desktop_stop`:611, `desktop_policy_get`:623, `desktop_apps`:649, `desktop_policy_allow_path`:697, `desktop_policy_remove_path`:724, `desktop_policy_set_interaction`:752, `publish_desktop_backend`:879, `cua_dag_get`:910, `cua_dag_edit_remaining`:921 · **`struct`** (1): `DesktopSlot`:42
 - `fns` (44): policy_path:62, load_policy:66, save_policy:73, policy_json:84, commit_policy:98, request:121, auth_kind_for:135, default:159, write:167, get_or_attach:188, resolve_window:239, window_by_id_only:250, windows_json:265, snapshot_json:277, render_tree:303, desktop_status:322, desktop_attach:377, desktop_windows:391, desktop_read:413, desktop_see:433, parse_act:451, desktop_act:498, desktop_escalation:538, desktop_act_escalating:562, desktop_stop:611, desktop_policy_get:623, desktop_apps:649, desktop_policy_allow_path:697, desktop_policy_remove_path:724, desktop_policy_set_interaction:752, agent_act_kind:801, list_windows:822, read:827, act:833, publish_desktop_backend:879, cua_dir:893, cua_dag_get:910, cua_dag_edit_remaining:921, policy_json_exposes_the_contract_fields:943, provenance_maps_to_the_right_authority_class:964, agent_act_refuses_coordinate_acts_it_cannot_express:989, window_json_carries_the_contract_fields:1012, missing_window_falls_back_to_id_only_never_a_borrowed_app:1033, a_malformed_policy_file_is_never_a_partial_allow_list:1041
+
+#### `src-tauri/src/diagnostics_cmds.rs` — 309 lines · 3 tests · refs 3
+
+> P70.D4 · D7 · D8 — diagnostics, sandbox honesty and the data-removal path.
+
+**`fn`** (3): `diagnostics_sandbox_posture`:36, `diagnostics_support_bundle`:140, `data_remove_all`:207
+- `fns` (10): diagnostics_sandbox_posture:36, secret_shaped:76, scrub:92, audit_summary:113, diagnostics_support_bundle:140, data_remove_all:207, measure:216, secret_shaped_catches_the_obvious:258, scrub_drops_secret_members_and_truncates_strings:271, audit_summary_reports_shape_without_values:287
 
 #### `src-tauri/src/discovery_cmds.rs` — 332 lines · 0 tests · refs 3
 
@@ -6960,7 +6974,7 @@ population. `wiring:` is the §11 verdict.
 
 ### 11.2 Rust files with zero cross-file references
 
-128 of 506 files have no `stem::` reference anywhere else.
+128 of 508 files have no `stem::` reference anywhere else.
 **85 are non-test source files** (the real candidates); the other 43 are
 integration tests, fixtures, and mock servers, which are never referenced by name.
 
@@ -7031,9 +7045,9 @@ The tail of this list is where "referenced once, by its own re-export" hides.
 | --- | ---: |
 | `crates/everyaios-acp/src/a2a.rs` | 1 |
 | `crates/everyaios-acp/src/agent_backend.rs` | 1 |
-| `crates/everyaios-acp/src/chief.rs` | 1 |
 | `crates/everyaios-acp/src/harness_config.rs` | 1 |
 | `crates/everyaios-acp/src/installer.rs` | 1 |
+| `crates/everyaios-acp/src/prefix_guard.rs` | 1 |
 | `crates/everyaios-acp/src/registry_client.rs` | 1 |
 | `crates/everyaios-agents/src/directory.rs` | 1 |
 | `crates/everyaios-agents/src/moa.rs` | 1 |
@@ -7074,11 +7088,11 @@ The tail of this list is where "referenced once, by its own re-export" hides.
 | `crates/everyaios-core/src/connectors/native.rs` | 1 |
 | `crates/everyaios-core/src/connectors/scopes.rs` | 1 |
 | `crates/everyaios-core/src/connectors/workspace.rs` | 1 |
-| `crates/everyaios-core/src/doctor.rs` | 1 |
 | `crates/everyaios-core/src/export.rs` | 1 |
 | `crates/everyaios-core/src/file_undo.rs` | 1 |
 | `crates/everyaios-core/src/forge.rs` | 1 |
 | `crates/everyaios-core/src/models/local_url.rs` | 1 |
+| `crates/everyaios-core/src/provider_ref.rs` | 1 |
 
 ### 11.4 TS/TSX files never imported by anything
 
@@ -7399,7 +7413,7 @@ matches unrelated identifiers. Counts above 50 are flagged `(noisy)` and carry n
 | `file_outline` | `codeintel_cmds` | 0 | 2 |
 | `repomap_build` | `codeintel_cmds` | 0 | 4 |
 | `agui_send` | `crate` | 0 | 6 |
-| `version` | `crate` | 1 | 744 (noisy) |
+| `version` | `crate` | 1 | 747 (noisy) |
 
 
 ---
@@ -7602,7 +7616,7 @@ matches unrelated identifiers. Counts above 50 are flagged `(noisy)` and carry n
 
 ## 13. Non-source inventory — every remaining tracked file
 
-The 152 tracked files that are not Rust, TypeScript, or an npm manifest. Every one has a `####`
+The 164 tracked files that are not Rust, TypeScript, or an npm manifest. Every one has a `####`
 entry below — nothing is summarised away at this level. Line counts are omitted for binaries.
 The `wired:` verdicts in §13.7 are name searches over CI YAML, `package.json` scripts, and sibling scripts — the
 same heuristic class as §11, so a script invoked through a variable or a wrapper reads as unwired.
@@ -7615,9 +7629,9 @@ same heuristic class as §11, so a script invoked through a variable or a wrappe
 | §13.4 | 26 |
 | §13.5 | 7 |
 | §13.6 | 35 |
-| §13.7 | 32 |
-| §13.8 | 18 |
-| **TOTAL** | **152** |
+| §13.7 | 39 |
+| §13.8 | 23 |
+| **TOTAL** | **164** |
 
 ### 13.1 Rust manifests
 
@@ -8043,9 +8057,17 @@ same heuristic class as §11, so a script invoked through a variable or a wrappe
 - purpose: P70.B7 — secret-leak gate on PRODUCED artifacts.
 - wired: CI ×1
 
+#### `scripts/check-diagnostics-surface.mjs` — 5.3 KB · 87 lines
+- purpose: P70.D gate — the user-facing surfaces that describe and repair the install.
+- wired: CI ×1 · package.json ×1
+
+#### `scripts/check-doc-refs.mjs` — 15.3 KB · 348 lines
+- purpose: P69.E11 — cross-document reference validator.
+- wired: CI ×1 · package.json ×1 · other scripts ×1
+
 #### `scripts/check-doc-sync.mjs` — 8.4 KB · 211 lines
 - purpose: EveryAIOS doc-sync check (Fix 2) — run in CI and pre-commit.
-- wired: CI ×3 · other scripts ×4
+- wired: CI ×3 · other scripts ×5
 
 #### `scripts/check-licences.mjs` — 20.2 KB · 446 lines
 - purpose: P70.B6 — third-party licence compliance.
@@ -8055,13 +8077,21 @@ same heuristic class as §11, so a script invoked through a variable or a wrappe
 - purpose: P70.A3 — the per-platform native dependency audit, as a gate.
 - wired: CI ×1 · package.json ×1 · other scripts ×1
 
+#### `scripts/check-prompt-steering.mjs` — 3.8 KB · 85 lines
+- purpose: P71.9i — prompt-steering agreement gate.
+- wired: CI ×1 · package.json ×1
+
+#### `scripts/check-public-surface.mjs` — 6.1 KB · 110 lines
+- purpose: P70.F5 · F6 · F8 (+ G) — the public surface and the release process.
+- wired: CI ×2
+
 #### `scripts/check-release-matrix.mjs` — 9.8 KB · 215 lines
 - purpose: P70.A1 — the published bundle target matrix.
 - wired: CI ×1 · package.json ×1 · other scripts ×1
 
 #### `scripts/check-size-budget.mjs` — 11.0 KB · 298 lines
 - purpose: P70.A5 — size + footprint budgets.
-- wired: CI ×2 · package.json ×1 · other scripts ×1
+- wired: CI ×2 · package.json ×1 · other scripts ×3
 
 #### `scripts/check-store-schemas.mjs` — 10.4 KB · 245 lines
 - purpose: P70.A8 — durable-store schema stamps, statically enforced.
@@ -8079,9 +8109,13 @@ same heuristic class as §11, so a script invoked through a variable or a wrappe
 - purpose: EveryAIOS version-lockstep gate (P70.A7) — run in CI and pre-commit.
 - wired: CI ×1 · package.json ×1 · other scripts ×1
 
+#### `scripts/check-vocabulary.mjs` — 7.5 KB · 179 lines
+- purpose: P69.E10 — user-facing vocabulary drift gate (ARCH/SESSION.md §2).
+- wired: CI ×1 · package.json ×1
+
 #### `scripts/clean-profile-boot-check.mjs` — 7.2 KB · 168 lines
 - purpose: P50.1.7 — clean-profile boot verification (setup/offline states, no seeds).
-- wired: CI ×2 · package.json ×1
+- wired: CI ×2 · package.json ×1 · other scripts ×2
 
 #### `scripts/e2e/debug-cancel.mjs` — 1.5 KB · 36 lines
 - purpose: wait for first batch
@@ -8093,7 +8127,7 @@ same heuristic class as §11, so a script invoked through a variable or a wrappe
 
 #### `scripts/e2e/failure-injection.mjs` — 13.4 KB · 306 lines
 - purpose: P50.5.5 — Failure-injection suite (real binary, headless).
-- wired: CI ×2 · other scripts ×1
+- wired: CI ×2 · other scripts ×2
 
 #### `scripts/e2e/lib/protocol.mjs` — 9.2 KB · 266 lines
 - purpose: P50.5 E2E — the everyaios-ipc wire protocol for driving the REAL
@@ -8108,7 +8142,7 @@ same heuristic class as §11, so a script invoked through a variable or a wrappe
 
 #### `scripts/e2e/security-gate.mjs` — 7.1 KB · 170 lines
 - purpose: P50.5.7 — Security release gate (crate suites + shell-integration proofs).
-- wired: CI ×3
+- wired: CI ×3 · other scripts ×2
 
 #### `scripts/e2e/vertical-chat.mjs` — 9.5 KB · 217 lines
 - purpose: P50.5.1 — Real vertical chat E2E.
@@ -8116,11 +8150,15 @@ same heuristic class as §11, so a script invoked through a variable or a wrappe
 
 #### `scripts/gen-codebase-map.mjs` — 66.5 KB · 1,582 lines
 - purpose: EveryAIOS — CODEBASE-MAP.md generator.
-- wired: CI ×1
+- wired: CI ×1 · other scripts ×1
 
 #### `scripts/gen-icons.py` — 2.5 KB · 69 lines
 - purpose: Vertical purple->blue gradient inside a rounded square
 - **no reference found** — not named by any workflow, package script, or sibling script
+
+#### `scripts/gen-release-surface.mjs` — 9.2 KB · 232 lines
+- purpose: P70.F1 · F2 · F4 — release surface generation.
+- wired: CI ×3 · package.json ×2
 
 #### `scripts/gen-sbom.mjs` — 10.6 KB · 270 lines
 - purpose: P70.B5 — SBOM + build-provenance generation.
@@ -8128,14 +8166,18 @@ same heuristic class as §11, so a script invoked through a variable or a wrappe
 
 #### `scripts/ipc-parity.mjs` — 11.0 KB · 275 lines
 - purpose: P50.3.1 — IPC parity inventory (checked, not hand-maintained).
-- wired: CI ×1 · package.json ×1 · other scripts ×4
+- wired: CI ×1 · package.json ×1 · other scripts ×6
 
 #### `scripts/measure-perf-p45.mjs` — 5.0 KB · 148 lines
 - purpose: (measure-perf-p45.mjs)
-- **no reference found** — not named by any workflow, package script, or sibling script
+- wired: other scripts ×2
 
 #### `scripts/p45-live-measurements.json` — 1.2 KB · 50 lines
 - data file — 3 top-level keys
+
+#### `scripts/release-qualify.mjs` — 15.1 KB · 341 lines
+- purpose: P70.E — release qualification harness (E1–E12).
+- wired: CI ×1 · package.json ×2 · other scripts ×2
 
 #### `scripts/verify-packaged-e2e.mjs` — 4.7 KB · 133 lines
 - purpose: A missing file is a FAILED check, not a stack trace: a path that moved (or
@@ -8155,6 +8197,12 @@ same heuristic class as §11, so a script invoked through a variable or a wrappe
 
 #### `.agents/skills/codebase-intelligence/requirements.txt` — 247 B · 8 lines
 - `requirements.txt` — 247 B, 8 lines
+
+#### `.github/ISSUE_TEMPLATE/bug_report.yml` — 1.7 KB · 62 lines
+- `bug_report.yml` — 1.7 KB, 62 lines
+
+#### `.github/ISSUE_TEMPLATE/feature_request.yml` — 1.4 KB · 45 lines
+- `feature_request.yml` — 1.4 KB, 45 lines
 
 #### `.gitignore` — 1.3 KB · 63 lines
 - ignore rules: 33 · negations: 4
@@ -8189,6 +8237,15 @@ same heuristic class as §11, so a script invoked through a variable or a wrappe
 #### `packages/core-search/src/data/searx-pool.json` — 2.3 KB · 92 lines
 - data file — 4 top-level keys
 
+#### `packaging/winget/EveryAIOS.EveryAIOS.installer.yaml` — 601 B · 13 lines
+- `EveryAIOS.EveryAIOS.installer.yaml` — 601 B, 13 lines
+
+#### `packaging/winget/EveryAIOS.EveryAIOS.locale.en-US.yaml` — 337 B · 10 lines
+- `EveryAIOS.EveryAIOS.locale.en-US.yaml` — 337 B, 10 lines
+
+#### `packaging/winget/EveryAIOS.EveryAIOS.yaml` — 199 B · 7 lines
+- `EveryAIOS.EveryAIOS.yaml` — 199 B, 7 lines
+
 #### `pnpm-workspace.yaml` — 882 B · 24 lines
 - `pnpm-workspace.yaml` — 882 B, 24 lines
 
@@ -8218,7 +8275,7 @@ _None._
 
 ## 14. Documentation index — every tracked `.md`
 
-**All 189 Markdown files** carry an entry: title, size, and opening sentence. This closes the gap where the
+**All 198 Markdown files** carry an entry: title, size, and opening sentence. This closes the gap where the
 first draft said the corpus was "listed with their headings" but was in fact only listed by name. These are the repo's
 claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in them, not capability drift — tag them [C] per §0.
 
@@ -8232,15 +8289,16 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 | .agents/skills/codebase-intelligence/references/ | 7 | 466 |
 | .agents/skills/skill-creator/ | 1 | 85 |
 | .agents/templates/ | 1 | 169 |
-| ARCH — the design set (+ DIAGRAMS & ADR) | 40 | 10,004 |
+| ARCH — the design set (+ DIAGRAMS & ADR) | 40 | 10,011 |
 | RESEARCH/2026-ai-landscape — other research | 11 | 970 |
 | RESEARCH/desktop_app — the prior-art & competitor corpus | 93 | 12,987 |
 | deploy/ — deployment docs | 1 | 105 |
-| docs/ | 2 | 235 |
+| docs/ | 4 | 376 |
 | docs/codebase/ | 10 | 977 |
-| root — specs, handover, and this map | 14 | 13,607 |
+| docs/release/ | 4 | 208 |
+| root — specs, handover, and this map | 17 | 13,841 |
 | ui/ — UI design docs | 1 | 83 |
-| **TOTAL** | **189** | **40,614** |
+| **TOTAL** | **198** | **41,204** |
 
 ### 14.1 .agents/
 
@@ -8346,7 +8404,7 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 
 - opening: **DERIVED DOCUMENT — see [`CORE.md`](ARCH/CORE.md) first.** This file is a *derived overview* of the module story.
 
-#### `ARCH/02-MODULE-LAYOUT.md` — 177 lines · 42.8 KB
+#### `ARCH/02-MODULE-LAYOUT.md` — 177 lines · 42.9 KB
 > 02 — Module Layout (derived from CORE §4 and §13)
 
 - opening: **DERIVED DOCUMENT — see [`CORE.md`](ARCH/CORE.md) §4 first.** Ownership is defined by CORE's 9-question matrix (one owner per question).
@@ -8456,7 +8514,7 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 
 - opening: **Status:** Subsystem contract, derived from [`CORE.md`](ARCH/CORE.md) §9.
 
-#### `ARCH/CONTEXT.md` — 358 lines · 19.6 KB
+#### `ARCH/CONTEXT.md` — 365 lines · 20.2 KB
 > ARCH/CONTEXT — context engineering: history, surface, prompt
 
 - opening: **Status:** Subsystem contract, derived from [`CORE.md`](ARCH/CORE.md) §8.
@@ -9069,6 +9127,16 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 
 ### 14.11 docs/
 
+#### `docs/download.md` — 77 lines · 3.4 KB
+> Download and verify (P70.F3 — current release v0.1.0)
+
+- opening: This page is the download contract. It names the current release, the files that ship, how to verify them, and what the build does **not** yet claim.
+
+#### `docs/install-layout.md` — 64 lines · 4.4 KB
+> Install layout and recovery (P70.D1 · D9)
+
+- opening: This document is the published statement of **what gets written where** on install and first run, and **how a user recovers** from the five named failure classes.
+
 #### `docs/signing.md` — 82 lines · 5.2 KB
 > Signing and key custody
 
@@ -9131,9 +9199,31 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 
 - opening: **Post-thaw authority: [`../../ARCH/CORE.md`](docs/codebase/../../ARCH/CORE.md)** (27 invariants I1–I27) **+ the subsystem contracts** (`WORK` · `SESSION` · `AGENT` · `EXTERNAL-AGENTS` · `CONTEXT` · `CAPABILITIES`
 
-### 14.13 root — specs, handover, and this map
+### 14.13 docs/release/
 
-#### `AGENTS.md` — 293 lines · 13.0 KB
+#### `docs/release/launch-checklist.md` — 44 lines · 3.0 KB
+> v1 launch checklist (P70.F8)
+
+- opening: Two lists. The first is enforced by gates — if an item here is wrong, a build is red.
+
+#### `docs/release/post-v1.md` — 49 lines · 2.5 KB
+> Post-v1 backlog (P70.G4)
+
+- opening: Everything deferred from v1, collected in one labelled place so it cannot leak back in as an implicit promise.
+
+#### `docs/release/retrospective-pack.md` — 49 lines · 2.5 KB
+> v1 retrospective evidence pack (P70.G5)
+
+- opening: The record of what v1 actually was — kept so a later claim can be checked against evidence rather than memory.
+
+#### `docs/release/rollout-and-hotfix.md` — 66 lines · 3.7 KB
+> Rollout, hotfix and patch policy (P70.G1 · G2 · G3)
+
+- opening: **Signals (all local-first, none is telemetry):**
+
+### 14.14 root — specs, handover, and this map
+
+#### `AGENTS.md` — 309 lines · 14.3 KB
 > Repository Agent Instructions
 
 - opening: This file is intentionally **agent-agnostic**.
@@ -9146,10 +9236,15 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 
 - opening: **Status:** research verdicts folded from doc 68 §2/§3 into the P12.1 GTM competitive analysis (P12 queue).
 
-#### `CURRENT_RUN.md` — 2,337 lines · 274.1 KB
+#### `CONTRIBUTING.md` — 59 lines · 2.5 KB
+> Contributing (P70.F5)
+
+- opening: Read [`ARCH/CORE.md`](ARCH/CORE.md) — the root architecture authority — and [`AGENTS.md`](AGENTS.md), which is the durable contract for any agent or human working here.
+
+#### `CURRENT_RUN.md` — 2,369 lines · 279.5 KB
 > CURRENT RUN STATE — Task Handover & Checkpoint
 
-- opening: Deeply review the complete `ARCH/` contract set, reconcile it with the live implementation and release surfaces, research current primary-source guidance, and produce a dependency-ordered remediation
+- opening: Implement the remaining v1 delivery work: the P70 release programme end to end, then the mechanically-enforceable P69/P71 invariant rows — verifying each against the tree before flipping, and recordin
 
 #### `DESKTOP-APP-SPEC.md` — 1,571 lines · 334.4 KB
 > DESKTOP-APP-SPEC.md — Complete Product Specification
@@ -9161,10 +9256,20 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 
 - opening: **What this file is.** The P70.A3 audit: what the shipped bundle contains, what it needs on the user's machine, and — for every program the runtime can execute — who provides it and what happens when it is absent.
 
-#### `README.md` — 340 lines · 27.5 KB
+#### `PRIVACY.md` — 52 lines · 3.0 KB
+> Privacy statement (P70.F5 · F6)
+
+- opening: **Your data stays on your machine. There is no telemetry sender in this build.**
+
+#### `README.md` — 347 lines · 28.0 KB
 > <p align="center">
 
 - opening: <p align="center"> <img src="src-tauri/icons/128x128.png" width="88" alt="EveryAIOS" /> </p>
+
+#### `SECURITY.md` — 68 lines · 3.6 KB
+> Security policy (P70.F5)
+
+- opening: EveryAIOS runs AI agents with real authority over the user's machine, so the security contract is the product.
 
 #### `SPEC-CHANGELOG.md` — 2,769 lines · 577.8 KB
 > DESKTOP-APP-SPEC.md — Specification Changelog
@@ -9206,7 +9311,7 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 
 - opening: **Date**: September 16, 2026 **Target**: EveryAIOS Desktop Cowork Runtime & Multi-Agent Swarm Subsystems **Scope**: Two-Plane Native Architecture, External Agent Swapping (OpenCode, Grok Build, Codex)
 
-### 14.14 ui/ — UI design docs
+### 14.15 ui/ — UI design docs
 
 #### `ui/DESIGN-SYSTEM.md` — 83 lines · 7.0 KB
 > EveryAIOS Design System (P11.1)
@@ -9226,7 +9331,7 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 | ---: | --- | --- | ---: | ---: | ---: |
 | 1 | `runtime_status` | `crate` | 1 | 1 | 0 |
 | 2 | `sidecar_probe` | `crate` | 1 | 1 | 0 |
-| 3 | `version` | `crate` | 0 | 1 | 744 (noisy) |
+| 3 | `version` | `crate` | 0 | 1 | 747 (noisy) |
 | 4 | `catalog_sync_plan` | `catalog_cmds` | 0 | 0 | 0 |
 | 5 | `catalog_sync_refresh` | `catalog_cmds` | 0 | 0 | 0 |
 | 6 | `catalog_status` | `catalog_cmds` | 0 | 0 | 2 |
@@ -9600,7 +9705,7 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 
 ### 15.3 Full file index (every git-tracked path, grouped by directory)
 
-- `./` — .gitignore, .pre-commit-config.yaml, 8cfdc45d-f91f-4857-8ca5-9777c8ae4822.png, AGENTS.md, CODEBASE-MAP.md, COMPETITIVE-POSITIONING.md, CURRENT_RUN.md, DESKTOP-APP-SPEC.md, LICENSE, LICENSE-APACHE, LICENSE-MIT, PACKAGING.md, README.md, SPEC-CHANGELOG.md, SUPPORT-MATRIX.md, TEST-CASES.md, THIRD-PARTY-NOTICES.md, TODO.md, UI-DESIGN-PROMPT.md, UX-TESTING-PLAN.md, bun.lock, capabilities.yaml, package-lock.json, package.json, pnpm-lock.yaml, pnpm-workspace.yaml, testcases.md, tsconfig.json
+- `./` — .gitignore, .pre-commit-config.yaml, 8cfdc45d-f91f-4857-8ca5-9777c8ae4822.png, AGENTS.md, CODEBASE-MAP.md, COMPETITIVE-POSITIONING.md, CONTRIBUTING.md, CURRENT_RUN.md, DESKTOP-APP-SPEC.md, LICENSE, LICENSE-APACHE, LICENSE-MIT, PACKAGING.md, PRIVACY.md, README.md, SECURITY.md, SPEC-CHANGELOG.md, SUPPORT-MATRIX.md, TEST-CASES.md, THIRD-PARTY-NOTICES.md, TODO.md, UI-DESIGN-PROMPT.md, UX-TESTING-PLAN.md, bun.lock, capabilities.yaml, package-lock.json, package.json, pnpm-lock.yaml, pnpm-workspace.yaml, testcases.md, tsconfig.json
 - `.agents/` — README.md
 - `.agents/docs/` — README.md, agent-agnostic-compatibility.md, architecture-and-protocol.md, installation.md, research.md
 - `.agents/skills/codebase-intelligence/` — SKILL.md, requirements.txt
@@ -9608,6 +9713,7 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 - `.agents/skills/codebase-intelligence/scripts/` — codegraph.py
 - `.agents/skills/skill-creator/` — SKILL.md
 - `.agents/templates/` — AGENTS.template.md
+- `.github/ISSUE_TEMPLATE/` — bug_report.yml, feature_request.yml
 - `.github/workflows/` — ci.yml, nightly-e2e.yml, p50-gates.yml, perf-regression.yml, release.yml
 - `ARCH/` — 00-INDEX.md, 01-SYSTEM-ARCHITECTURE.md, 02-MODULE-LAYOUT.md, 03-BYOK-KEYRINGS.md, 04-OFFICE-ENGINE.md, 05-TOKEN-ECONOMY.md, 06-SECURITY-GUARDRAILS.md, 07-MEMORY-CONTEXT.md, 08-BROWSER-LAYER.md, 09-FEATURE-MATRIX.md, 10-BUILD-PLAN.md, 11-AI-CHAT-FEATURES.md, 12-UI-SPEC.md, 13-PROMPT-ANATOMY.md, 15-CONNECT-STORE.md, AGENT.md, AUTOMATION.md, CAPABILITIES.md, CONTEXT.md, CORE.md, DESKTOP.md, DIAGRAMS.md, EXTERNAL-AGENTS.md, MEMORY.md, RECOVERY.md, ROUTING.md, SECURITY.md, SESSION.md, UI.md, WORK.md
 - `ARCH/ADR/` — 0001-connector-platform-mcp-first.md, 0002-ui-v2-cockpit-replaces-v1-router-pages.md, 0003-architecture-thaw-core-authority.md, 0004-behaviour-profile-invariant.md, 0005-external-agents-are-the-v1-engines.md, 0006-session-kinds.md
@@ -9624,7 +9730,7 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 - `RESEARCH/desktop_app/` — 00-INDEX.md, 01-anythingllm-feature-blueprint.md, 02-hermes-agent-feature-blueprint.md, 03-ultra-agentic-evolvable-orchestration.md, 04-reality-check-pasted-blueprint.md, 05-coding-agents-comparison.md, 06-browser-automation-and-scraping.md, 07-deep-research-and-data-analysis.md, 08-desktop-ai-app-competitor-landscape.md, 09-agentic-os-and-computer-use.md, 10-business-automation-tool-kit.md, 11-rest-of-the-chat-mentions-ledger.md, 12-composio-vs-nango-connector-infrastructure.md, 13-connector-hub-design.md, 14-repo-implementation-ledger-1-agents-coding.md, 15-repo-implementation-ledger-2-apps-tools-connectors.md, 16-feature-implementation-tier1-agents.md, 17-feature-implementation-tier1-web-connectors.md, 18-feature-implementation-tier2-medium.md, 19-byok-provider-implementation-reference.md, 20-infra-libs-new-ledger.md, 21-agents-search-scraping-new-ledger.md, 22-skills-specials-and-v2-bucket.md, 23-deep-dive-partial-and-not-done-repos.md, 24-completion-pass-resolutions.md, 25-deep-code-gap-resolutions.md, 26-tier2-code-level-upgrade.md, 27-master-repo-ledger.md, 28-genoffice-deep-dive.md, 29-libreoffice-core-deep-dive.md, 30-agent-os-family-deep-dive.md, 31-context-compression-family-deep-dive.md, 32-context-mode-and-tokenmining.md, 33-browseros-deep-dive.md, 34-final-pass-and-sota-2026.md, 35-openwebui-vane-computer-deep-dive.md, 36-composio-community-batch.md, 37-command-code-taste-deep-dive.md, 38-opencode-hermes-code-re-read.md, 39-nooa-deep-dive.md, 40-new-repos-and-platform-notes.md, 41-steal-vs-reference-master-index.md, 42-ipc-architecture-validation.md, 43-landmines-reinforcement-landscape.md, 44-modularity-deep-dive-vscode-zed-hermes.md, 45-acp-agent-client-protocol-deep-dive.md, 46-aider-devin-deep-dive.md, 47-terminal-agents-ide-extensions-deep-dive.md, 48-computer-use-agents-deep-dive.md, 49-storage-intelligence-deep-dive.md, 50-generative-ui-image-voice-gaps.md, 51-aider-recheck-2026-08.md, 52-gap-pass-2-analysis.md, 53-formalization-gaps.md, 54-third-party-dep-audit.md, 55-agent-browser-obscura-steel-deep-dive.md, 56-warp-cowork-cronflow-copilot-devin.md, 57-acp-registry-subscription-auth.md, 58-repo-batch-2-omniroute-forge-office.md, 59-omniroute-deep-dive.md, 60-tencentdb-agent-memory-deep-dive.md, 61-desktop-agent-land-grab-2026.md, 62-cost-optimization-event-driven-eval.md, 63-thirty-seven-repo-steal-ledger.md, 64-giants-code-level-deep-dive.md, 65-batch-3-agents-scraping-search-ui-deep-dive.md, 66-anomalyco-org-deep-dive.md, 67-capability-deltas-sites-heartbeat-ui-final.md, 68-final-all-rounder-market-research.md, 69-acp-agent-ecosystem-harness-deep-dive.md, 70-mcp-directory-inbuilt-analysis.md, 71-batch-4-coding-agents-skills-harnesses.md, 72-batch-5-codeintel-parallel-search.md, 73-batch-6-computer-use-full-control.md, 74-mcp-server-manager-builtin.md, 75-anthropic-skills-plugins-cowork.md, 76-batch-7-design-browser-selfheal.md, 77-batch-8-workflows-graphify-browser.md, 78-batch-9-marketplace-gws-jobs.md, 79-local-model-fetch-download-core.md, 80-competitive-positioning-review.md, 81-non-model-moat-roadmap.md, 82-innovation-priority-decisions.md, 83-competitor-batch-openworker-ccswitch-skales-dsh.md, 84-casual-vs-power-user-ux.md, 85-work-gateway-durable-session-cowork-openclaw-podium-codex.md, 86-competitor-desktop-deep-dive-2026-09.md, 87-local-models-composer-chat-ui-2026-09.md, 88-first-five-minutes-casual-surface-audit-2026-09.md, 89-guard-network-and-config-floor-audit-2026-09.md, 90-native-agent-peer-schemas-2026-09.md, 91-windows-agent-cowork-ui-2026-09.md, DESKTOP-APP-SPEC.md
 - `crates/` — .gitignore, Cargo.lock, Cargo.toml
 - `crates/everyaios-acp/` — Cargo.toml
-- `crates/everyaios-acp/src/` — a2a.rs, agent_backend.rs, chief.rs, client.rs, frame.rs, harness_config.rs, installer.rs, lib.rs, messages.rs, registry.rs, registry_client.rs, registry_index.rs
+- `crates/everyaios-acp/src/` — a2a.rs, agent_backend.rs, chief.rs, client.rs, frame.rs, harness_config.rs, installer.rs, lib.rs, messages.rs, prefix_guard.rs, registry.rs, registry_client.rs, registry_index.rs
 - `crates/everyaios-acp/src/bin/` — acpx.rs, mock-agent-permission.rs, mock-agent.rs, mock_acp_agent.rs
 - `crates/everyaios-acp/tests/` — acceptance_acp_handshake.rs, acceptance_engine_optional.rs, live_registry.rs, live_spawn.rs, p10_harness_drive.rs, p63_backend_env.rs, side_by_side.rs
 - `crates/everyaios-agents/` — Cargo.toml
@@ -9693,9 +9799,10 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 - `crates/everyaios-vault/src/` — auth_bridge.rs, broker.rs, credential_broker.rs, egress.rs, keyring.rs, ledger.rs, lib.rs, local.rs, local_tests.rs, oauth.rs, oauth_tests.rs, session.rs, session_budget.rs, session_tests.rs, tier.rs
 - `crates/everyaios-vault/tests/` — acceptance_vault_hydration.rs
 - `deploy/` — BYO-HOST.md, Dockerfile, com.everyaios.node.plist, docker-compose.yml, everyaios-node.service, fly.toml
-- `docs/` — signing.md, updating.md
+- `docs/` — download.md, install-layout.md, signing.md, updating.md
 - `docs/codebase/` — README.md, architecture.md, components.md, data-and-state.md, decisions.md, external-systems.md, flows.md, freshness.json, hotspots.md, invariants.md, tests-and-verification.md
 - `docs/packaging/` — budgets.json
+- `docs/release/` — launch-checklist.md, post-v1.md, retrospective-pack.md, rollout-and-hotfix.md
 - `packages/coordinator/` — package.json, tsconfig.json
 - `packages/coordinator/src/` — agent-builder.test.ts, agui.ts, budget.test.ts, budget.ts, capability-seams.test.ts, capability-seams.ts, catalog.test.ts, catalog.ts, channel-a.test.ts, channel-a.ts, combo-pick.test.ts, combo-pick.ts, companion.ts, connector-bridge.ts, context-trace.test.ts, context-trace.ts, core-providers.smoke.test.ts, cua-brief.test.ts, cua-brief.ts, cua-perceive.test.ts, cua-perceive.ts, cua-replan.test.ts, cua-replan.ts, cua-route.test.ts, cua-route.ts, cua-skill.test.ts, cua-skill.ts, cua-stop.test.ts, cua-stop.ts, cua-verify.test.ts, cua-verify.ts, dream-diary.test.ts, dream-diary.ts, external-inbox.test.ts, external-inbox.ts, fabric.test.ts, fabric.ts, fleet.test.ts, fleet.ts, frame.ts, goal.test.ts, goal.ts, guard.test.ts, guard.ts, h32.test.ts, h32.ts, heap.test.ts, heap.ts, index.test.ts, index.ts, live-agent-harness.test.ts, mcp-bridge.test.ts, mcp-bridge.ts, mcp-catalog.test.ts, mcp-catalog.ts, mcp-install.test.ts, mcp-install.ts, mcp-manager.test.ts, mcp-manager.ts, message.ts, migration-import.test.ts, migration-import.ts, observations.test.ts, observations.ts, orphan.ts, patch-overlay.test.ts, patch-overlay.ts, persona-registry.test.ts, persona-registry.ts, primary-agent.test.ts, primary-agent.ts, reflection-agui.test.ts, reflection.ts, resumable.test.ts, resumable.ts, router-scorer.test.ts, router.ts, run-identity.ts, runtime-bind.test.ts, runtime-bind.ts, scheduler.test.ts, scheduler.ts, scorer.test.ts, scorer.ts, skill-warm.test.ts, skill-warm.ts, spend-split.test.ts, spend-split.ts, stream-session.test.ts, stream-session.ts, surfaces.test.ts, surfaces.ts, waterfall.test.ts, waterfall.ts, work-events.ts
 - `packages/core-agents/` — package.json, tsconfig.json
@@ -9750,14 +9857,15 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 - `packages/core-tools/.turbo/` — turbo-build.log, turbo-test.log, turbo-type-check.log
 - `packages/core-tools/src/` — image-generation.ts, index.ts, tool-function-calling.ts, tool-runtime.ts, types.ts
 - `packages/core-tools/src/__tests__/` — tool-runtime.test.ts
-- `scripts/` — check-app-metadata.mjs, check-arch-invariants.mjs, check-artifact-hygiene.mjs, check-doc-sync.mjs, check-licences.mjs, check-native-deps.mjs, check-release-matrix.mjs, check-size-budget.mjs, check-store-schemas.mjs, check-update-pipeline.mjs, check-updater-keys.mjs, check-versions.mjs, clean-profile-boot-check.mjs, gen-codebase-map.mjs, gen-icons.py, gen-sbom.mjs, ipc-parity.mjs, measure-perf-p45.mjs, p45-live-measurements.json, verify-packaged-e2e.mjs, zen-free-probe.mjs
+- `packaging/winget/` — EveryAIOS.EveryAIOS.installer.yaml, EveryAIOS.EveryAIOS.locale.en-US.yaml, EveryAIOS.EveryAIOS.yaml
+- `scripts/` — check-app-metadata.mjs, check-arch-invariants.mjs, check-artifact-hygiene.mjs, check-diagnostics-surface.mjs, check-doc-refs.mjs, check-doc-sync.mjs, check-licences.mjs, check-native-deps.mjs, check-prompt-steering.mjs, check-public-surface.mjs, check-release-matrix.mjs, check-size-budget.mjs, check-store-schemas.mjs, check-update-pipeline.mjs, check-updater-keys.mjs, check-versions.mjs, check-vocabulary.mjs, clean-profile-boot-check.mjs, gen-codebase-map.mjs, gen-icons.py, gen-release-surface.mjs, gen-sbom.mjs, ipc-parity.mjs, measure-perf-p45.mjs, p45-live-measurements.json, release-qualify.mjs, verify-packaged-e2e.mjs, zen-free-probe.mjs
 - `scripts/e2e/` — debug-cancel.mjs, debug-probe.mjs, failure-injection.mjs, searxng-settings.yml, security-gate.mjs, vertical-chat.mjs
 - `scripts/e2e/lib/` — protocol.mjs, provider.mjs
 - `src-tauri/` — Cargo.lock, Cargo.toml, build.rs, tauri.conf.json
 - `src-tauri/capabilities/` — default.json, guard.json
 - `src-tauri/gen/schemas/` — acl-manifests.json, capabilities.json, desktop-schema.json, linux-schema.json, windows-schema.json
 - `src-tauri/icons/` — 128x128.png, 128x128@2x.png, 32x32.png, icon.ico, icon.png
-- `src-tauri/src/` — acp_cmds.rs, agent_backend_cmds.rs, agent_cmds.rs, artifact_cmds.rs, boot.rs, browser_cmds.rs, calendar_cmds.rs, catalog_cmds.rs, cockpit_cmds.rs, codeintel_cmds.rs, commands.rs, control.rs, desktop_cmds.rs, discovery_cmds.rs, doctor_cmds.rs, feedback_cmds.rs, fs_cmds.rs, git_cmds.rs, guard_cmds.rs, guard_window.rs, lib.rs, local_cmds.rs, lsp_cmds.rs, main.rs, maintenance_cmds.rs, mcp_cmds.rs, memory_cmds.rs, model_cmds.rs, oauth_cmds.rs, office_cmds.rs, openai_cmds.rs, replay_cmds.rs, scheduler_cmds.rs, scheduler_fire.rs, search_cmds.rs, settings_cmds.rs, skills_cmds.rs, state.rs, storage_cmds.rs, sync_cmds.rs, tasks_cmds.rs, terminal_cmds.rs, trajectory_cmds.rs, updater_cmds.rs, vault_cmds.rs, voice_cmds.rs, work_cmds.rs, xlsx_cmds.rs
+- `src-tauri/src/` — acp_cmds.rs, agent_backend_cmds.rs, agent_cmds.rs, artifact_cmds.rs, boot.rs, browser_cmds.rs, calendar_cmds.rs, catalog_cmds.rs, cockpit_cmds.rs, codeintel_cmds.rs, commands.rs, control.rs, desktop_cmds.rs, diagnostics_cmds.rs, discovery_cmds.rs, doctor_cmds.rs, feedback_cmds.rs, fs_cmds.rs, git_cmds.rs, guard_cmds.rs, guard_window.rs, lib.rs, local_cmds.rs, lsp_cmds.rs, main.rs, maintenance_cmds.rs, mcp_cmds.rs, memory_cmds.rs, model_cmds.rs, oauth_cmds.rs, office_cmds.rs, openai_cmds.rs, replay_cmds.rs, scheduler_cmds.rs, scheduler_fire.rs, search_cmds.rs, settings_cmds.rs, skills_cmds.rs, state.rs, storage_cmds.rs, sync_cmds.rs, tasks_cmds.rs, terminal_cmds.rs, trajectory_cmds.rs, updater_cmds.rs, vault_cmds.rs, voice_cmds.rs, work_cmds.rs, xlsx_cmds.rs
 - `src-tauri/tests/` — registration_sync.rs
 - `ui/` — DESIGN-SYSTEM.md, bun.lock, guard.html, index.html, package-lock.json, package.json, postcss.config.js, tsconfig.json, vite.config.ts
 - `ui/scripts/` — build.mjs
@@ -9778,18 +9886,18 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 
 | Extension | Files |
 | --- | ---: |
-| `.rs` | 506 |
+| `.rs` | 508 |
 | `.ts` | 475 |
-| `.md` | 189 |
+| `.md` | 198 |
 | `.tsx` | 146 |
 | `.json` | 43 |
 | `.log` | 34 |
-| `.mjs` | 27 |
+| `.mjs` | 34 |
 | `.toml` | 24 |
-| `.yml` | 7 |
+| `.yml` | 9 |
+| `.yaml` | 7 |
 | `(no extension)` | 6 |
 | `.png` | 5 |
-| `.yaml` | 4 |
 | `.lock` | 4 |
 | `.py` | 3 |
 | `.html` | 2 |
@@ -9799,9 +9907,9 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 | `.ico` | 1 |
 | `.js` | 1 |
 | `.css` | 1 |
-| **TOTAL tracked** | **1481** |
+| **TOTAL tracked** | **1504** |
 
-Lines counted across the 1474 tracked text files at generation time: **416,982** (this map excluded — self-referential).
+Lines counted across the 1497 tracked text files at generation time: **419,643** (this map excluded — self-referential).
 
 ### 15.5 Coverage audit — is any tracked file unaccounted for?
 
@@ -9809,12 +9917,12 @@ Each section registers the files it gives an entry to; this table is a diff agai
 
 | Section | Files accounted for |
 | --- | ---: |
-| §9 Rust — per-file `####` | 506 |
+| §9 Rust — per-file `####` | 508 |
 | §10 TS/TSX — per-file `####` | 621 |
 | §12.2 npm manifests | 13 |
-| §13 non-source inventory | 152 |
-| §14 documentation index | 189 |
-| **TOTAL** | **1481 / 1481** |
+| §13 non-source inventory | 164 |
+| §14 documentation index | 198 |
+| **TOTAL** | **1504 / 1504** |
 
 **100% of tracked files have an entry, and that is mechanically enforced:** the generator exits non-zero if this
 list is ever non-empty. Note what this does *not* claim — an entry is accounting, not explanation. §9/§10

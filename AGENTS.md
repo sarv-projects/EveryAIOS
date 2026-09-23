@@ -151,7 +151,7 @@ the contract):
 ```
 L4  COCKPIT           ui/ — React 19 + Zustand 5 + Tailwind 4
         ↓ Tauri IPC: nativeCall("<cmd>", args)
-L3  Tauri Shell        src-tauri/ — thin Rust shell, 40 *_cmds.rs modules
+L3  Tauri Shell        src-tauri/ — thin Rust shell, 41 *_cmds.rs modules
         ↓ direct Rust calls
 L2  Rust Kernel        crates/everyaios-* — guard/vault/audit/office/browser
         ↓ stdio JSON-RPC 2.0, [u32 LE len][JSON] framing
@@ -217,29 +217,45 @@ skill's routing contract.
 ## 12. File Structure
 
 ```
-crates/                          # 21 workspace members (the kernel)
+crates/                          # 21 workspace members (the kernel; everyaios-engine
+                                  #   was deleted 2026-09-23 — TODO P72 — do not re-add)
   everyaios-core/                #   Orchestrator: supervisor, worktrees, CUA, tools
+  everyaios-ipc/                 #   stdio JSON-RPC 2.0 framing (transport only)
   everyaios-guard/               #   Guard-1/2: netfloor, pathfloor, tickets, sandboxes
+  everyaios-audit/               #   Append-only tamper-evident audit trail
+  everyaios-vault/               #   Encrypted key vault
   everyaios-memory/              #   RRF fusion, ACT-R, compaction, graph
   everyaios-blueprint/           #   Task DAG, checkpoints, skill store, subagents
+  everyaios-types/               #   Canonical schema + id newtypes (AuthMode, AgentBinding)
   everyaios-browser/             #   a11y snapshot, refs, actions, CDP
+  everyaios-cdp/                 #   CDP wire backend (under everyaios-browser)
   everyaios-catalog/             #   models.dev sync, provider seed, routing
   everyaios-storage/             #   Work-stealing walker, dedup, FTS5
   everyaios-codeintel/           #   LSP, SCIP, repo-map PageRank
   everyaios-office/              #   IronCalc XLSX, OOXML patchers
   everyaios-desktop/             #   Desktop automation (CUA)
-  everyaios-vault/               #   Encrypted key vault
-  everyaios-acp/                 #   Agent Communication Protocol
-  everyaios-mcp/                 #   MCP server/client
+  everyaios-acp/                 #   Agent Communication Protocol + prefix guard
+  everyaios-mcp/                 #   MCP server/client (19 shared façades over 52 native tools)
+  everyaios-agents/              #   Agent plane primitives
+  everyaios-search/              #   Kernel search (the one implementation)
+  everyaios-script/              #   Sandboxed script runner
+  everyaios-eval/                #   Eval harness (never a runtime dependency)
 
-packages/                        # 11 TypeScript packages (the sidecar)
-  coordinator/                   #   LLM turn loop, IPC handler
+packages/                        # 10 TypeScript packages (the sidecar)
+  coordinator/                   #   Shared plane services a turn calls into
+                                 #   (memory/guard/work/skills/MCP/connectors) — no turn
+                                 #   loop: the bound external agent owns the loop
+                                 #   (ADR-0005; the old loop is archived,
+                                 #   ARCH/archive/coordinator-loop/)
   core-ai/                       #   AI runtime, streaming, retrieval
-  core-providers/                #   Provider management, vault
+  core-providers/                #   Provider management (registry/routing; custody is the vault)
+  core-agents/                   #   Agent directory projections
+  core-domain/                   #   Shared domain projections
   core-tools/                    #   Tool definitions
   core-memory/                   #   Memory system
   core-connectors/               #   Connector framework
-  core-search/                   #   Search engine
+  core-search/                   #   Search projection (kernel owns search)
+  core-security/                 #   Security projections (no custody — CRED-2)
 
 ui/                              # React 19 SPA (the cockpit)
 src-tauri/                       # Tauri v2 shell (thin Rust layer)

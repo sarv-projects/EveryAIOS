@@ -1,6 +1,38 @@
 # CURRENT RUN STATE — Task Handover & Checkpoint
 
-## Latest Handover — 2026-09-23 Architecture Audit and External Research
+## Latest Handover — 2026-09-23 v1 Delivery Implementation Pass (P70 + P69 gates)
+
+### Active Goal
+Implement the remaining v1 delivery work: the P70 release programme end to end, then the mechanically-enforceable P69/P71 invariant rows — verifying each against the tree before flipping, and recording residuals honestly.
+
+### Where We Stopped
+- **P70 A–G closed** (all rows flipped with dated residuals): A (installer metadata/assets), B (SBOM + provenance, licence gate + notices, updater keypair custody, signing custody docs), C (channel-aware updater in `updater_cmds.rs` — stable/beta persistence, channel endpoints, pending-update slot, background download with progress events, boot + periodic auto-check; upgrade-evidence acceptance harness `acceptance_upgrade_evidence.rs`; `docs/updating.md`; update-pipeline gate), D (diagnostics module `diagnostics_cmds.rs` — data wipe, sandbox-honesty posture, support bundle; `docs/install-layout.md`; diagnostics-surface gate), E (release-qualification harness `release-qualify.mjs` with fail-loud named blockers), F/G (release-surface generator + winget manifests + `docs/download.md`; SECURITY/PRIVACY/CONTRIBUTING; launch checklist, rollout/hotfix, post-v1, retrospective docs; public-surface gate; issue templates). Fixed release.yml's doubled `desktop_app/` working-directory paths.
+- **P71.9i landed**: steering-aware chief prompt builder in `everyaios-acp` (passport → governance → tool-affinity → delegation mix → user turn, real newlines — the old block emitted literal `\\n`); prompt-steering drift gate.
+- **P69.E11 landed**: `check-doc-refs.mjs` (CI) — links + section references must resolve; caught 154 broken ARCH-relative links in the generated map (generator fixed) and one stale ghost-context citation (ARCH/02 → ARCH/05 §5.14).
+- **P69.E10 landed**: `check-vocabulary.mjs` (CI) — ARCH/SESSION §2's "nothing user-visible may say Session" is machine-enforced over ui/src strings/JSX/i18n; the calibration sweep fixed 12 classes of real drift (capability labels, error copy, shortcuts, vault-gate, status bar, CSV export, timeline "Agent run …", etc.).
+- **P69.E9 landed**: `everyaios-acp/src/prefix_guard.rs` — I16 enforcement. `fingerprint_stable_prefix` (hand-rolled FNV-1a; absent ≡ empty) over governance + steering + delegation mix only (warm memory is dynamic-tail per CONTEXT §4); `PrefixGuard` per handle, wired into the ACP turn path; `prefixEvent` in the per-session `tool_log.jsonl`; handoff bundle = declared cache-boundary event. Residuals stated in the row: tool-schema churn not observable on the ACP path (external agents own their tool surface); stderr visibility is launch-dependent.
+- **P69.E3/E4/E5 recon recorded** in TODO.md markers: connectors gate writes behind single-use Guard-2 tickets; MCP server's auth seam is loopback+token with effects in the ticketed executor; UI kernel writes flow through `work_cmds.rs`; the one event journal is `work/events.jsonl` (durable-before-subscribers); scheduler/blueprint spawn nothing. The remaining work is the CI assertions themselves.
+- Earlier in the run: the P50 verification flips (2.1/2.2/2.5/4.10), the P72 gate repair context, and the doc-sync/version-lockstep chain now at **v4.06** (`SPEC-CHANGELOG.md` v4.00–v4.06 record each block).
+- **Validation state at handover**: 13 gates PASS (doc-sync, arch-invariants, versions, store-schemas, licences, updater-keys, update-pipeline, diagnostics-surface, release-matrix, doc-refs, prompt-steering, public-surface, vocabulary); ipc-parity 358 registered / 0 broken; everyaios-acp lib 105/0; src-tauri clippy 0 warnings; ui tsc clean; ui bun test 383/0; crates workspace check clean; codebase map fresh. Committed and pushed as `530d561`.
+
+### Next Exact Steps
+1. Land the P69.E3/E4/E5 CI assertions — the recon in their TODO markers names exactly what each binds (one-journal + spawn-free scheduler/blueprint for E4; four-path guard coverage in `check-arch-invariants.mjs` for E3; a write-verb class in `ipc-parity.mjs` + work_cmds routing check for E5).
+2. Verify E1/E2/E6/E7's remaining halves against the tree and flip or implement.
+3. P69.A28 (spec deltas) and A30 (Chief-identifier migration plan) are the A-block remainders; A30 needs a rename inventory (`primary_chief`, `AcpChief`, `ChiefAdapter`, `chief.ts`, UI strings) before any code move.
+4. P69.B (Space/Project/Workspace identity + migration, 16 rows) and P69.F (migration phases, 9 rows) are the large programmes; both are post-recon design work, not quick flips.
+5. Sweep P50–P68 open rows: several are verification rows whose criteria are already met (flip after checking), others are host-blocked (Windows evidence per SUPPORT-MATRIX) and stay open honestly.
+6. Re-run `node scripts/gen-codebase-map.mjs` after any structural change; keep the 13-gate sweep green.
+
+### Decisions & Gotchas
+- Verify-then-flip: a row is only checked when its own criteria are demonstrably met in the tree; residuals stay in the marker text.
+- Gates enforce zero-states, not baselines (doc-refs, vocabulary): every allowlist entry carries a stated reason, so an editor can challenge it.
+- The prefix guard scopes to the shell-owned stable prefix; do not "fix" it by fingerprinting warm memory — that fires on every legitimate memory write.
+- `core_facts()` order is deterministic but mutable; it is tail content, never prefix.
+- Keep the changelog entry per block and the TODO/version lockstep; `check-versions` + `check-doc-sync` fail the tree otherwise.
+
+---
+
+## Previous Handover — 2026-09-23 Architecture Audit and External Research
 
 ### Active Goal
 Deeply review the complete `ARCH/` contract set, reconcile it with the live implementation and release surfaces, research current primary-source guidance, and produce a dependency-ordered remediation plan.

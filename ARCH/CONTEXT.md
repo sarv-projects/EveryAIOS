@@ -116,6 +116,13 @@ These six are architecture. Everything else is a replaceable strategy.
 | `CacheBoundary` | where stability ends and churn begins |
 | `CostLedger` | what was actually spent, per route and per turn |
 
+**CacheBoundary enforcement (2026-09-23, TODO P69.E9):** the shell-owned stable prefix is fingerprinted
+every ACP turn (`everyaios-acp::prefix_guard`); each turn's `PrefixEvent` (stable / declared /
+undeclared mutation) lands in the per-session tool log and an undeclared mutation prints loudly.
+The warm-memory set is dynamic-tail content and is deliberately **not** fingerprinted — the memory
+system legitimately learns between turns. Tool-schema churn on the ACP path is not yet observable
+here because external agents own their tool surface; `EXTERNAL-AGENTS.md` §3 covers it contractually.
+
 **Strategies** (plug in behind the above, never become architecture): BM25 · RRF · reranking · snippets ·
 AST/structural pruning · output shrinking · compaction · prefix cache · pass-by-reference · progressive
 disclosure · tool-output persistence · cache affinity.

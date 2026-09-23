@@ -146,6 +146,13 @@ Every one of these is a row in the [capability matrix](ARCH/09-FEATURE-MATRIX.md
 | **Windows 11 / 10 22H2** | `.msi` / `.exe` (x64 & ARM64) | 🔜 in progress — **v1 ships Windows-first** |
 | **macOS / native Linux desktop** | — | ❌ out of v1 scope ([`SUPPORT-MATRIX.md`](SUPPORT-MATRIX.md)); WSL2 is supported as an **agent host** |
 
+The release plumbing is landed and gated in CI: install layout + first-run
+behavior ([`docs/install-layout.md`](docs/install-layout.md)), the auto-updater
+with stable/beta channels and rollout/kill-switch policy
+([`docs/updating.md`](docs/updating.md)), signing custody
+([`docs/signing.md`](docs/signing.md)), and the download page
+([`docs/download.md`](docs/download.md)).
+
 > Windows builds run **without a signed-certificate guarantee in CI until the
 > Authenticode certificate is procured** (`docs/signing.md`) and the Windows
 > acceptance pass (`P70.E8`) has not been executed yet — Windows is v1's
@@ -195,14 +202,14 @@ cd src-tauri && cargo tauri dev                 # launch
 
 ## What's inside
 
-EveryAIOS is built on 22 Rust core modules, 11 TypeScript coordination packages, and a React 19 desktop shell. Here's a plain-English summary of the major parts:
+EveryAIOS is built on 21 Rust core modules, 10 TypeScript coordination packages, and a React 19 desktop shell. Here's a plain-English summary of the major parts:
 
 | Area | What it does |
 | :--- | :--- |
 | **Agent Hosting** | Connects external AI coding agents via open protocols. They keep their own tools; you get a unified cockpit. |
 | **Agent Registry & Keys** | Agent discovery/install/binding plus an encrypted local vault for **EveryAIOS-owned** credentials (connectors, browser sessions, EveryAIOS-managed API keys). External agents keep their own provider and login. |
 | **Desktop Shell** | Fast, native cockpit with 12 center screens and 19 viewports. Built for real work, not demos. |
-| **MCP Tools** | 51 governed in-process tools covering browser, office, memory, search, and storage. |
+| **MCP Tools** | A governed 19-façade shared plane (over a 52-tool native catalog) covering browser, office, memory, search, and storage — external agents see façades, never the primitive dump. |
 | **Office & Browser** | Real spreadsheet engine, surgical document editing, and 3-tier browser automation — all local. |
 | **Memory & Work** | Four-class memory that persists across sessions. Learns your preferences and avoids past mistakes. |
 | **Automations** | Schedule recurring tasks. Background cron daemon runs even when the app is closed. |
@@ -219,7 +226,7 @@ The architecture is documented in detail starting from [`ARCH/CORE.md`](ARCH/COR
 - [`ARCH/00-INDEX.md`](ARCH/00-INDEX.md) — the index, plus a reading path through the whole set
 - [`ARCH/WORK.md`](ARCH/WORK.md) · [`ARCH/SESSION.md`](ARCH/SESSION.md) · [`ARCH/AGENT.md`](ARCH/AGENT.md) · [`ARCH/CONTEXT.md`](ARCH/CONTEXT.md) — the subsystem contracts (durable Work, Chats, agent hosting, context engineering)
 - [`ARCH/CAPABILITIES.md`](ARCH/CAPABILITIES.md) — capability packs, skills and the File Workbench viewers
-- [`ARCH/02-MODULE-LAYOUT.md`](ARCH/02-MODULE-LAYOUT.md) — ownership matrix for all 22 Rust crates and 11 TypeScript packages
+- [`ARCH/02-MODULE-LAYOUT.md`](ARCH/02-MODULE-LAYOUT.md) — ownership matrix for all 21 Rust crates and 10 TypeScript packages
 - [`ARCH/SECURITY.md`](ARCH/SECURITY.md) — the sole-authorization-gate design and the authorization-provenance rule
 - [`ARCH/MEMORY.md`](ARCH/MEMORY.md) — four memory classes (Context · Episodic · Knowledge · Procedural), with ACT-R as a strategy
 - [`ARCH/EXTERNAL-AGENTS.md`](ARCH/EXTERNAL-AGENTS.md) — ACP/MCP surfaces, the agent bridge, and what governance can honestly be claimed
