@@ -241,7 +241,143 @@ the user's own permission decisions inside the agent.)*
 
 ---
 
-## 10. Migration notes
+---
+
+## 10. Shared Plane Wire Lifecycle & MCP Server Binding (HLD & LLD)
+
+The interaction between an external ACP agent and the EveryAIOS Shared Plane operates over a two-protocol bridge:
+
+```
+External Agent (Subprocess)
+  │  1. Spawn with stdio transport + Context Passport
+  ▼
+ACP Host Seam (`src-tauri/src/acp_cmds.rs`)
+  │  2. Start Local In-Process MCP Loopback Server (`everyaios-mcp`)
+  │  3. `session/new` carrying `mcpServers: [{ name: "everyaios", url: "http://127.0.0.1:<port>" }]`
+  ▼
+Agent discovers `SHARED_FACADES` via MCP `tools/list`
+  │  4. Agent calls tool `office.calculate` or `browser.operate` via MCP `tools/call`
+  ▼
+`ToolService::dispatch_facade` (`crates/everyaios-core/src/tools.rs`)
+  │  5. Guard-1 (AST & rate limit check) + Guard-2 (Diff Card & Ticket approval)
+  ▼
+In-Process Rust Engine (IronCalc, OOXML Patcher, Lightpanda, Windows CUA Ladder)
+  │  6. Execute mutation / read in-process (Zero UI clicks for Office)
+  │  7. Spool large payload (>2k tokens) to `~/.everyaios/spool/{sha256}.blob` (MEM-15)
+  ▼
+Observation returned to Agent + Append receipt to Merkle Audit Log (`everyaios-audit`)
+```
+
+### 10.1 Wire Message Schemas (ACP + MCP JSON-RPC)
+
+1. **`session/new` Wire Payload:**
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "session/new",
+  "params": {
+    "cwd": "C:\\Users\\User\\Project",
+    "mcpServers": [
+      {
+        "name": "everyaios",
+        "url": "http://127.0.0.1:49152/mcp",
+        "headers": {
+          "Authorization": "Bearer <ephemeral-session-token>"
+        }
+      }
+    ]
+  }
+}
+```
+
+2. **`tools/list` Wire Response (19 `SHARED_FACADES` Advertised):**
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "result": {
+    "tools": [
+      {
+        "name": "office.calculate",
+        "description": "Recalculate a spreadsheet (.xlsx) through the embedded IronCalc formula engine.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "path": { "type": "string", "description": "Workspace-relative or absolute path to .xlsx workbook" }
+          },
+          "required": ["path"]
+        }
+      },
+      {
+        "name": "office.edit",
+        "description": "Surgically patch a document (.docx/.xlsx/.pptx) block preserving styles and macros.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "path": { "type": "string" },
+            "address": { "type": "string", "description": "Cell address (e.g. B2) or paragraph id" },
+            "text": { "type": "string" }
+          },
+          "required": ["path", "text"]
+        }
+      }
+    ]
+  }
+}
+```
+
+3. **Large Payload Spooling Schema (`CCR` / `MEM-15`):**
+If tool execution output exceeds 2,000 tokens:
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 3,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\n  \"summary\": \"Extracted 2,450 rows from Sheet 'Ledger'. First 5 rows: [...]\",\n  \"truncated\": true,\n  \"spool_token\": \"sha256-e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\",\n  \"total_tokens\": 24800\n}"
+      }
+    ]
+  }
+}
+```
+
+---
+
+## 11. Tool Affinity & Model Steering Injection
+
+External coding agents (Claude Code, OpenAI Codex, OpenCode, Aider) are trained with strong prior weights favoring native coding tools (`bash`, `python`, `file_edit`). Without explicit host steering, agents default to writing Python scripts or invoking shell utilities (e.g. `libreoffice`, `curl`, `openpyxl`) rather than calling EveryAIOS shared facades.
+
+To guarantee that external models naturally use the shared plane:
+
+### 11.1 Context Passport Cowork Steering Block
+Every prompt dispatched via `build_acp_prompt_with_passport` (`src-tauri/src/acp_cmds.rs`) injects the following high-priority steering block:
+
+```markdown
+## Shared Cowork Capabilities
+You have direct access to EveryAIOS native cowork tools via the connected MCP server:
+- **Spreadsheets (.xlsx) & Documents (.docx/.pptx):** ALWAYS use `office.*` tools (`office.open`, `office.inspect`, `office.edit`, `office.calculate`). Do NOT write custom Python scripts or execute CLI tools in bash to modify office files.
+- **Web Browsing & Research:** ALWAYS use `browser.*` tools (`browser.research`, `browser.operate`, `browser.extract`) rather than executing raw curl or headless scripts in bash.
+- **Desktop UI Automation:** Use `computer_use.*` tools (`computer_use.see`, `computer_use.act`).
+- **Subagent Delegation:** Use `delegate.spawn` to delegate subtasks to isolated child worktrees.
+```
+
+### 11.2 Guard-1 Deflection & Recovery Nudge
+If an external agent attempts a shell command to manipulate office files (e.g. `python -c "import openpyxl..."` or `soffice --headless`) or perform unisolated web crawling, Guard-1 detects the pattern via Tree-Sitter AST inspection (`SEC-4`) and blocks the shell command with an actionable deflection nudge:
+
+```json
+{
+  "ok": false,
+  "error": "Direct shell manipulation of office documents is blocked for integrity and audit safety. Use the 'office.edit' or 'office.calculate' facade instead."
+}
+```
+This forces the model's reasoning loop to gracefully pivot and invoke the shared plane tool.
+
+---
+
+## 12. Migration notes
 
 - V1 must be fixed before the permission path can be described as guarded; V2/V3 before mediated mode can be
 described as the primary path. **Status 2026-09-21:** V1–V3 are repaired in code (C1–C3 — implemented,

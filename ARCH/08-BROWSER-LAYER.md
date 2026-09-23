@@ -125,3 +125,25 @@ Tier 1: **Lightpanda** (Zig, AGPL, beta — ~123MB peak/100 pages, 9–11× fast
 - **06-cc-switch** · `add` — SOURCE: cc-switch (Tauri v2) · evidence: `cc-switch/src-tauri/src/proxy/circuit_breaker.rs`, `…/proxy/provider_router.rs`, `…/services/speedtest.rs` — LOGIC: a Closed/Open/HalfOpen breaker behind netfloor (half-open permit accounting, dual trip on count + error-rate, `app:provider` keying, hot config update preserving state) with official endpoints marked no-failover and warm-up+timed latency probes (2–30s clamp, never sending auth) supplies measured route evidence for Guard-mediated egress failures. → target §8.7 (structured failure handling beside the CDP disconnect ladder); route-selection half → ROUTING.md / everyaios-catalog cross-domain deferred; cc-switch's plaintext key storage is explicitly **not** adopted (I10, vault-only).
 - **10-14** · `add` — SOURCE: everything-whole-system-file-search-skill (MIT) · evidence: `everything-whole-system-file-search-skill/scripts/search.py`, `SKILL.md`, `README.md` — LOGIC: the Everything HTTP server (loopback `127.0.0.1:47512`, stdlib-only client, read-only) is a candidate Windows whole-volume file-discovery backend that must ship as a read-only façade with netfloor-safe loopback handling. → everyaios-storage (impl target; ARCH/00-INDEX research 49) + pack surface — cross-domain deferred (storage lane).
 - **10-15** · `improve` — SOURCE: everything-whole-system-file-search-skill (MIT) · evidence: same as 10-14 (`scripts/search.py` honest `offset + displayed >= total` pagination; `SKILL.md` literal-query + no-fallback-substitution discipline) — LOGIC: every search façade passes queries literally (no silent wildcard injection, no fallback-tool substitution after empty results) and always reports `total` vs displayed range so callers can detect incomplete pagination. → EXTERNAL-AGENTS.md §3 (search façades); everyaios-storage / core-search — cross-domain deferred.
+
+## 8.8 Tiered Browser Execution & Large Payload Spooling (HLD & LLD)
+
+```
+External Agent (MCP Client)
+  │  calls tool: "browser.research" { query: "..." } or "browser.operate" { url: "..." }
+  ▼
+`ToolService::dispatch_facade` (`crates/everyaios-core/src/tools.rs`)
+  │  Determines execution tier based on task intent
+  ▼
+Tiered Browser Engine (`crates/everyaios-browser/` & `crates/everyaios-cdp/`)
+  ├── Tier 1 (Lightpanda Headless): Ultra-low memory Zig/C++ engine for static scraping & text extraction
+  └── Tier 2 (Chrome CDP): Full interactive DOM, JavaScript execution, cookie vault, and WebMCP
+  ▼
+Readability Cleaning & Adaptive Element Relocation (Scrapling Pattern)
+  │  Converts complex DOM to compact Accessibility Tree references (`ref=e12`)
+  ▼
+Spooling & Receipt Generation
+  ├── If Output ≤ 2,000 tokens: returns clean markdown/JSON inline
+  └── If Output > 2,000 tokens: spools raw payload to `~/.everyaios/spool/{sha256}.blob` (MEM-15)
+      and returns compact summary + `retrieve_original(hash)` handle
+```

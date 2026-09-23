@@ -1,6 +1,6 @@
 # EveryAIOS — Architecture & Flow Diagrams (Mermaid)
 
-> **Generated:** 2026-09-21 · **Spec version:** v3.83 (current contract; the two-plane content in diagram 27 froze at v3.75 — see `SPEC-CHANGELOG.md`) · **Diagrams:** 28 (diagram 0 is the canonical backbone — `P69.A27`)
+> **Generated:** 2026-09-23 · **Spec version:** v3.96 (current contract; the two-plane content in diagram 27 froze at v3.75 — see `SPEC-CHANGELOG.md`) · **Diagrams:** 30 (diagram 0 is the canonical backbone — `P69.A27`)
 > **Purpose:** Every major system flow visualized. Render with any Mermaid-compatible viewer. **Reading order:** diagram 0 first — the single Work→Effect→Event backbone plus the projection split. Diagrams marked HISTORICAL describe a topology that no longer exists and are kept only so the decision stays legible; their replacements are named inline.
 > **Surgical hierarchy (doc 52 §1) + dynamic agent binding (formerly “Dynamic Chief”):** harness-driving diagrams compose external agent CLIs as **brain → core → surgeon** workers via ACP (J17/F12). The **brain tier is a swappable agent-binding slot** (**any installed** ACP loop — Claude Code, Codex, OpenCode, …; the built-in baseline binding is deferred to post-v1 per [`ADR/0005`](ADR/0005-external-agents-are-the-v1-engines.md)). An external agent runs that product's loop; omitted `fs`/`terminal` means Self-contained (not “UNSUPPORTED → MCP”). Slash = `available_commands_update`. Handoff = compacted live view. Storage-intelligence (D9–D12) and G8 cascade: docs 49/52.
 
@@ -1142,3 +1142,72 @@ flowchart LR
 ```
 
 Detected profiles (never a hardcoded two-shell list): PowerShell · cmd · Git Bash · each WSL distro · `$SHELL` / bash / zsh / fish. Cloud = Remote on the user's node, not a founder host.
+
+---
+
+## 28. External Agent Shared Cowork MCP Channel B Binding & Large Payload Spooling
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Host as Desktop Host (acp_cmds.rs)
+    participant McpSrv as In-Process Loopback MCP Server (everyaios-mcp)
+    participant ExtAgent as External ACP Agent (Child Process)
+    participant Guard as Guard-1/2 Engine (everyaios-guard)
+    participant Exec as Work-Native Core (Office / Browser / CUA)
+    participant Spool as Large Payload Spool (~/.everyaios/spool/)
+
+    Note over Host,McpSrv: Step 1: Bind Host Loopback MCP Server
+    Host->>McpSrv: McpServer::bind_loopback("127.0.0.1:0")
+    McpSrv-->>Host: Endpoint "http://127.0.0.1:54321/mcp" + Session Auth Token
+
+    Note over Host,ExtAgent: Step 2: ACP session/new with Channel B MCP Servers
+    Host->>ExtAgent: session/new(cwd, mcpServers: [{ name: "everyaios", uri: "http://127.0.0.1:54321/mcp" }])
+    ExtAgent-->>Host: session/new response (session_id: "s_123")
+
+    Note over ExtAgent,McpSrv: Step 3: Shared Facade Discovery via MCP
+    ExtAgent->>McpSrv: tools/list (HTTP JSON-RPC)
+    McpSrv-->>ExtAgent: 19 SHARED_FACADES (office.*, browser.*, computer_use.*, memory.*, delegate.*)
+
+    Note over ExtAgent,Exec: Step 4: Tool Invocation & Guard Evaluation
+    ExtAgent->>McpSrv: tools/call("office.xlsx_edit", { path: "sheet.xlsx", cell: "B4", value: 1200 })
+    McpSrv->>Guard: evaluate_tool_call(caller: ExtAgent, tool: "office.xlsx_edit")
+    Guard-->>McpSrv: Authorized(AuthorizationTicket #tok_89)
+
+    McpSrv->>Exec: execute_native(ticket: #tok_89, args)
+    Exec->>Exec: IronCalc 0.8.3 DAG recalc + OOXML surgical XML patch
+    Exec-->>McpSrv: ExecutionResult (Large XML/Table Diff: 8,400 tokens)
+
+    Note over McpSrv,Spool: Step 5: Payload Spooling (CCR / MEM-15 Rule)
+    McpSrv->>Spool: Spool if >2,000 tokens -> write ~/.everyaios/spool/{sha256}.blob
+    Spool-->>McpSrv: SpooledHandle { hash: "a3f8...", preview: "Modified sheet.xlsx: B4=1200 (+12 dependent cells recalculated)" }
+
+    McpSrv-->>ExtAgent: tools/call response { content: [{ type: "text", text: "preview..." }], metadata: { handle: "a3f8..." } }
+```
+
+---
+
+## 29. Guard-1 AST Tool Deflection & Recovery Nudge Loop
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Model as External Coding Model (Claude Code / Codex / OpenCode)
+    participant Guard as Guard-1 Security & AST Classifier (everyaios-guard)
+    participant Recovery as Recovery Engine (ARCH/RECOVERY.md §13)
+    participant MCP as Shared Plane MCP Facade (Channel B)
+
+    Note over Model: Coding Model exhibits Shell-Bias
+    Model->>Guard: Proposes native tool: bash.run("python -c 'import openpyxl; wb = openpyxl.load_workbook(...)")
+    
+    Note over Guard: AST & Heuristic Inspection (SEC-4)
+    Guard->>Guard: Tree-Sitter AST inspection detects forbidden python-docx / openpyxl / playwright
+    Guard-->>Recovery: Trigger Deflection (Reason: "Avoid shell dependency hell; use native shared facade")
+    
+    Recovery-->>Model: Tool Error with Deflection Nudge:<br/>"DEFLECT_RECOVER: Do not run python scripts to edit Excel files.<br/>Invoke the everyaios office.xlsx_edit tool via MCP instead.<br/>Schema: { path: string, cell: string, value: any }"
+
+    Note over Model: Model parses recovery nudge and pivots
+    Model->>MCP: tools/call("office.xlsx_edit", { path: "report.xlsx", cell: "A1", value: "Q3 Summary" })
+    MCP-->>Model: Tool Success: "Cell A1 updated; IronCalc DAG recalculated in 0.4ms"
+```
+

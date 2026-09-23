@@ -164,3 +164,23 @@ When falling back to vision-based VLM grounding:
 - **Patch Alignment (`IMAGE_FACTOR = 28`):** Screenshot dimensions and bounding boxes are quantized to multiples of 28 pixels, matching visual encoder patch tokens (UI-TARS / Qwen2-VL) to prevent visual aliasing and sub-pixel coordinate misalignments.
 - **Scale Factor Normalization:** High-DPI Windows displays (`scaleFactor = 1.25, 1.5, 2.0`) are normalized to physical pixel coordinates before `SendInput` execution.
 - **Bounding Box Budgets:** Screenshots are clamped to `<= 1280px` max dimension and `<= 900KB` payload size before entering context.
+
+---
+
+## 11. External Agent Execution Flow via Shared Facade (`computer_use.*`)
+
+External agents (running via ACP in child processes) discover and invoke desktop capabilities via the host-bound Channel B MCP server (`http://127.0.0.1:<port>/mcp`):
+
+1. **Discovery:** The agent calls `tools/list` on Channel B and receives `computer_use.snapshot`, `computer_use.interact`, `computer_use.launch_app`.
+2. **Observation (`computer_use.snapshot`):**
+   - Captures active window hierarchy and accessibility tree via UI Automation / AT-SPI.
+   - Elements are indexed with deterministic ref IDs (`e1`, `e2`, `e3`).
+   - If payload exceeds 2,000 tokens or 900 KB, the raw tree / screenshot is spooled to `~/.everyaios/spool/{sha256}.blob`, returning a compact text preview and disk handle.
+3. **Execution (`computer_use.interact`):**
+   - The agent supplies `ref: "e2"` and `action: "click" | "set_value"`.
+   - Dispatch flows through the 4-tier click ladder (§9).
+   - **Mandatory Invalidation Rule:** Execution immediately invalidates all prior element refs, forcing the agent to re-observe before issuing subsequent acts.
+4. **Guard-1/2 Interception:**
+   - Attempts by external agents to run raw OS automation scripts (e.g. `pyautogui`, `xdotool`, `powershell SendKeys`) in bash/python are intercepted by Guard-1 AST inspection and deflected to `computer_use.interact` (`ARCH/RECOVERY.md` §13).
+   - Sensitive window targets (credential vaults, system settings, payment gateways) trigger Guard-2 interactive approval cards.
+

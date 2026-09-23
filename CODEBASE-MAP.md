@@ -8214,14 +8214,14 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 | .agents/skills/codebase-intelligence/references/ | 7 | 466 |
 | .agents/skills/skill-creator/ | 1 | 85 |
 | .agents/templates/ | 1 | 169 |
-| ARCH — the design set (+ DIAGRAMS & ADR) | 40 | 9,689 |
+| ARCH — the design set (+ DIAGRAMS & ADR) | 40 | 10,004 |
 | RESEARCH/2026-ai-landscape — other research | 11 | 970 |
 | RESEARCH/desktop_app — the prior-art & competitor corpus | 93 | 12,987 |
 | deploy/ — deployment docs | 1 | 105 |
 | docs/codebase/ | 10 | 976 |
-| root — specs, handover, and this map | 12 | 11,616 |
+| root — specs, handover, and this map | 12 | 11,635 |
 | ui/ — UI design docs | 1 | 83 |
-| **TOTAL** | **185** | **38,072** |
+| **TOTAL** | **185** | **38,406** |
 
 ### 14.1 .agents/
 
@@ -8337,7 +8337,7 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 
 - opening: **Status:** Derived document, **re-scoped by [`ADR/0005`](ADR/0005-external-agents-are-the-v1-engines.md).** It owns **EveryAIOS-managed** credentials — connector tokens, browser sessions, EveryAIOS-m
 
-#### `ARCH/04-OFFICE-ENGINE.md` — 97 lines · 12.7 KB
+#### `ARCH/04-OFFICE-ENGINE.md` — 117 lines · 13.5 KB
 > 04 — Office Engine: Open + Edit Word / Excel / PPT / PDF
 
 - opening: **The user requirement, verbatim:** *"must have the capability to open excel, word, ppt, pdf, etc — all types of files, Microsoft files — edit."* Design rules: **surgical, byte-preserving** edits (nev
@@ -8357,7 +8357,7 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 
 - opening: **SUPERSEDED MODEL — see [`MEMORY.md`](MEMORY.md) first.** The five-tier model is replaced by **four classes** (Context · Episodic · Knowledge · Procedural), and episodic memory is now a *projection o
 
-#### `ARCH/08-BROWSER-LAYER.md` — 128 lines · 17.5 KB
+#### `ARCH/08-BROWSER-LAYER.md` — 150 lines · 18.5 KB
 > 08 — Browser Layer (the agent's real browser)
 
 - opening: **DERIVED DOCUMENT — see [`CORE.md`](CORE.md) §2 and [`CAPABILITIES.md`](CAPABILITIES.md) first.** Browser is one capability pack behind one `BrowserService` façade with replaceable strategies underne
@@ -8382,7 +8382,7 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 
 - opening: **Derived from [`CORE.md`](CORE.md) — the root authority; this document specializes, never restates, it.** **CONTRACT RE-SCOPED — see [`UI.md`](UI.md) first.** This document remains the authority for layout and interaction *detail*.
 
-#### `ARCH/13-PROMPT-ANATOMY.md` — 67 lines · 4.5 KB
+#### `ARCH/13-PROMPT-ANATOMY.md` — 84 lines · 5.3 KB
 > ARCH/13 — Prompt Anatomy
 
 - opening: **Derived from [`CORE.md`](CORE.md) — the root authority; this document specializes, never restates, it.** **ABSORBED — see [`CONTEXT.md`](CONTEXT.md).** The prompt assembler is the *serializer* of Co
@@ -8447,27 +8447,27 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 
 - opening: **Status:** Architecture authority. This file is the **root** of the `ARCH/` set: every other architecture document derives from it and none may weaken it.
 
-#### `ARCH/DESKTOP.md` — 167 lines · 13.2 KB
+#### `ARCH/DESKTOP.md` — 187 lines · 14.6 KB
 > ARCH/DESKTOP — computer use: driving the real OS
 
 - opening: **Status:** Subsystem contract, derived from [`CORE.md`](CORE.md).
 
-#### `ARCH/DIAGRAMS.md` — 1,145 lines · 46.0 KB
+#### `ARCH/DIAGRAMS.md` — 1,214 lines · 49.4 KB
 > EveryAIOS — Architecture & Flow Diagrams (Mermaid)
 
-- opening: **Generated:** 2026-09-21 · **Spec version:** v3.83 (current contract; the two-plane content in diagram 27 froze at v3.75 — see `SPEC-CHANGELOG.md`) · **Diagrams:** 28 (diagram 0 is the canonical back
+- opening: **Generated:** 2026-09-23 · **Spec version:** v3.96 (current contract; the two-plane content in diagram 27 froze at v3.75 — see `SPEC-CHANGELOG.md`) · **Diagrams:** 30 (diagram 0 is the canonical back
 
-#### `ARCH/EXTERNAL-AGENTS.md` — 313 lines · 20.1 KB
+#### `ARCH/EXTERNAL-AGENTS.md` — 449 lines · 25.2 KB
 > ARCH/EXTERNAL-AGENTS — protocol surfaces and the shared plane
 
 - opening: **Status:** Subsystem contract, derived from [`CORE.md`](CORE.md).
 
-#### `ARCH/MEMORY.md` — 238 lines · 11.2 KB
+#### `ARCH/MEMORY.md` — 253 lines · 12.1 KB
 > ARCH/MEMORY — four memory classes, progressive disclosure
 
 - opening: **Status:** Subsystem contract, derived from [`CORE.md`](CORE.md) §10.
 
-#### `ARCH/RECOVERY.md` — 173 lines · 10.6 KB
+#### `ARCH/RECOVERY.md` — 189 lines · 11.6 KB
 > ARCH/RECOVERY — durable Work, uncertain effects, safe resume
 
 - opening: **Status:** Subsystem contract, derived from [`CORE.md`](CORE.md) §5.2 and §6.
@@ -9115,7 +9115,7 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 
 - opening: **Status:** research verdicts folded from doc 68 §2/§3 into the P12.1 GTM competitive analysis (P12 queue).
 
-#### `CURRENT_RUN.md` — 2,289 lines · 267.8 KB
+#### `CURRENT_RUN.md` — 2,305 lines · 270.0 KB
 > CURRENT RUN STATE — Task Handover & Checkpoint
 
 - opening: **⚠ SESSION HANDOVER ONLY — this file carries no architecture and no scale claims.** Since the 2026-09-20 thaw (`ARCH/ADR/0003`), architecture belongs to [`ARCH/CORE.md`](ARCH/CORE.md) and its subsyst
@@ -9145,7 +9145,7 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 
 - opening: **Standard**: ISO/IEC/IEEE 29119 Software Testing Standard & IEEE 829 Test Documentation **Target System**: EveryAIOS — Universal Agentic OS & Desktop Harness **Release Target**: Windows 11 Desktop (P
 
-#### `TODO.md` — 2,803 lines · 869.7 KB
+#### `TODO.md` — 2,806 lines · 871.3 KB
 > EveryAIOS — Master Implementation TODO
 
 - opening: **Documentation ownership:** `DESKTOP-APP-SPEC.md` is the **product contract only** (behavior, schemas, UI layouts, invariants — not a build plan).
@@ -9743,7 +9743,7 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 | `.css` | 1 |
 | **TOTAL tracked** | **1469** |
 
-Lines counted across the 1462 tracked text files at generation time: **411,543** (this map excluded — self-referential).
+Lines counted across the 1462 tracked text files at generation time: **411,877** (this map excluded — self-referential).
 
 ### 15.5 Coverage audit — is any tracked file unaccounted for?
 

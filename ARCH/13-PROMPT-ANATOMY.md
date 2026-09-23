@@ -64,3 +64,20 @@ if any model-visible block is missing from the `ContextTrace`.
 3. **Data-only boundaries:** third-party retrieval stays inside `<untrusted>`;
 user documents are angle-sanitized (`<` → `‹`, `> ` → `›`) inside
 `<user_document>` so an attached file cannot forge a system tag.
+
+## Live Rust Context Passport & Tool Affinity Steering (`src-tauri/src/acp_cmds.rs`)
+
+In the live external-agent architecture, the prompt passed to an external agent is constructed by `build_acp_prompt_with_passport`:
+
+```
+1. <memory_passport>
+   - Core facts, user preferences, and workspace constraints from MemoryService.
+2. ## Governance
+   - Honest statement of session governance mode (Channel B / Governed-mediated / Self-contained).
+3. ## Shared Cowork Capabilities (Tool Affinity Steering)
+   - Explicit instructions guiding model attention to EveryAIOS native facades (preferring `office.*` over python scripts, `browser.*` over curl, and `delegate.spawn` over local fork bombs).
+4. ## Installed subagent delegation mix
+   - Advisory list of installed subagents available for `delegate.spawn` with B3 concurrency limits.
+5. User Turn Message
+```
+

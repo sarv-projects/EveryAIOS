@@ -170,3 +170,19 @@ To prevent process corruption, multiple sidecar instances, or signaling recycled
 When parent agents spawn child subagents:
 - **Parent-Child Cycle Detection:** The work scheduler constructs an in-memory directed acyclic graph (DAG) of active delegation leases. Any circular delegation request (A -> B -> A) is rejected immediately with `CyclicDelegationRefused`.
 - **Orphaned Lease Timeout:** If a child run fails to report heartbeat within `SUBAGENT_HEARTBEAT_TIMEOUT = 120s`, the lease is reclaimed, the child marked `InterruptedByTimeout`, and the parent receives a structured timeout receipt.
+
+## 13. Guard-1 Tool Deflection & Recovery Nudge Loop (Shell-Bias Recovery)
+
+When an external coding agent falls back to native shell bias and attempts direct script execution on office documents or unisolated web scraping:
+1. **Tree-Sitter AST Interception (`SEC-4`):** Guard-1 inspects the proposed command line (e.g. `python -c "import openpyxl..."`, `libreoffice --headless`, `curl https://...`).
+2. **Actionable Deflection Error:** Instead of a generic permission denial, Guard-1 returns a structured nudge:
+   ```json
+   {
+     "ok": false,
+     "error": "Direct shell execution on office documents is blocked for integrity. Use the 'office.calculate' or 'office.edit' facade.",
+     "suggested_tool": "office.calculate",
+     "suggested_args": { "path": "filename.xlsx" }
+   }
+   ```
+3. **Loop Recovery:** The external agent's reasoning loop catches the structured suggestion and redirects its next step into the shared plane, achieving self-healing without human intervention.
+

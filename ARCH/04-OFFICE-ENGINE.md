@@ -94,3 +94,23 @@ To guarantee 100% round-trip document validity without triggering Microsoft Offi
 To ensure maximum speed, precision, and auditability:
 - **Visual CUA Prohibition:** Computer Use Agents (mouse clicking, keyboard typing, OCR) are strictly forbidden from operating on Office files (Word, Excel, PowerPoint).
 - **Mandatory In-Process Mutation:** All document and spreadsheet edits must route through the `everyaios-office` native API (IronCalc 0.8.3 for calculations, OOXML patcher for text/layout). This guarantees atomic diff generation, deterministic recalculation, and instant undo/rollback receipts without UI latency.
+
+## 4.8 External Agent Execution Flow (HLD & LLD)
+
+```
+External Agent (MCP Client)
+  │  calls tool: "office.calculate" { path: "Q3_Model.xlsx" }
+  ▼
+`ToolService::dispatch_facade` (`crates/everyaios-core/src/tools.rs`)
+  │  Routes `.xlsx` path to `office.xlsx_edit` / `everyaios_office::xlsx::recalculate`
+  ▼
+IronCalc 0.8.3 Engine (`crates/everyaios-office/src/xlsx/`)
+  │  1. Ingest workbook cells and formulas into DAG dependency graph
+  │  2. Topologically sort and evaluate 300+ formula functions
+  │  3. Flag unsupported formulas with NOT_RECALCULATED (never hallucinate)
+  │  4. Surgically update `xl/worksheets/sheet1.xml` and `xl/calcChain.xml`
+  ▼
+Output formatting & Receipt
+  │  Returns structured summary + cell values diff
+  │  Appends immutable EffectReceipt to Merkle audit tree
+```

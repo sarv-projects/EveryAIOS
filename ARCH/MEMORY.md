@@ -235,3 +235,18 @@ Offline background maintenance runs in three non-blocking phases during idle hou
 ## 19. Memory Feedback Telemetry
 
 Every access or reference to a memory node records `lastUsedAt`, `useCount`, and `turnId`. This telemetry directly feeds the cognitive activation equations, ensuring that valuable project facts stay warm while transient trivia naturally fades.
+
+---
+
+## 20. External Agent Memory Access Flow via Shared Facades
+
+External agents interact with the durable memory layer through two complementary mechanisms:
+
+1. **Context Passport Pre-Turn Injection:**
+   - On each turn, the Rust desktop host (`build_acp_prompt_with_passport` in `acp_cmds.rs`) evaluates query relevance and injects top-3 warm facts into the prompt's `<memory_passport>` block.
+   - Injection is bounded by the 256-token ceiling (§3) and uses the Non-Touching Channel (§13) to avoid false cognitive reinforcement.
+2. **On-Demand Tool Retrieval via Channel B MCP (`memory.*`):**
+   - External agents discover `memory.recall`, `memory.remember`, and `memory.forget` over the loopback MCP server.
+   - If an agent requires deep historical knowledge, it calls `memory.recall(query: "...")`.
+   - Results exceeding 2,000 tokens are spooled to `~/.everyaios/spool/{sha256}.blob` with a disk handle returned (`CCR` rule), preserving the external agent's active context window.
+
