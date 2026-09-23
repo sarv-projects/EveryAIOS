@@ -1,5 +1,37 @@
 # CURRENT RUN STATE — Task Handover & Checkpoint
 
+## Latest Handover — 2026-09-23 Architecture Audit and External Research
+
+### Active Goal
+Deeply review the complete `ARCH/` contract set, reconcile it with the live implementation and release surfaces, research current primary-source guidance, and produce a dependency-ordered remediation plan.
+
+### Where We Stopped
+- Read all 43 Markdown files under `ARCH/`, including the root authority, subsystem contracts, ADRs, diagrams, and archived architecture history; cross-checked product, TODO, changelog, packaging, support-matrix, README, and codebase-map claims.
+- Reconciled six read-only repository review lanes, two external research lanes, and one independent architecture-priority review. No product source or architecture file was changed by this review.
+- The current worktree already had unrelated tracked and untracked changes before the review; they remain untouched.
+- Confirmed high-priority implementation gaps include fail-open Work journaling, a dead `work/*` dispatcher arm, ACP turns not attached to AgentBinding, provider/session identity shadowing, agent-keyed cancellation/handles, un-mounted Channel B, caller-controlled ticket consumption, direct renderer mutation paths, raw connector-token export, unconfined ACP/MCP child environments, non-durable tamper-evident audit claims, and release/Windows qualification overclaims.
+- External primary-source checks covered Tauri release workflows, GitHub immutable releases/attestations, Microsoft AppContainer and Job Objects, ACP v1 initialization, and MCP 2026-07-28. The safe conclusion is to preserve external-agent-only v1, repair existing owners, and narrow claims until evidence is real.
+
+### Next Exact Steps
+1. Freeze public v1 claims and release publication until the P0 security, identity, durability, and qualification gates pass.
+2. Establish one durable Work/Event/Receipt owner; remove the memory fallback, dead dispatcher arm, and disconnected execution persistence.
+3. Define and implement the canonical Session → Work → Run → AgentBinding → ACP provider-session lifecycle; isolate handles per Session and make cancellation non-blocking.
+4. Remove `ticketConsumed` caller bypasses, route privileged Tauri mutations through Work/Guard, and implement native-origin human-grant provenance.
+5. Remove TypeScript raw connector-token export, scrub child environments/logs, and either implement and test Windows confinement or report Ambient/unavailable honestly.
+6. Mount Channel B through the existing MCP façade owner or remove Channel B claims and steering.
+7. Make release qualification a mandatory all-PASS gate; fix x64/ARM64 vcpkg/OpenSSL triplets, pin toolchains/actions, publish draft-first, and verify final-byte signatures/SBOM/attestations.
+8. Add adversarial authorization, SSRF, credential-leak, crash/replay, cancellation, Windows acceptance, Office redaction, CUA verification, and release tests.
+9. Reconcile ADR-0005/0006 into CORE, SECURITY, SESSION, feature matrix, product spec, README, diagrams, and delivery-state accounting; archive legacy text rather than presenting it as live.
+10. Record the required ADRs for Agent/Work/ACP lifecycle, Channel B, native gesture provenance, durable receipt failure semantics, process confinement/credential custody, capability precedence, and Windows qualification.
+
+### Decisions & Gotchas
+- Do not revive a built-in engine or add a second orchestration, authorization, connector, or scheduler system.
+- Protocol permissions, capability advertisements, tool names, and UI labels are not authorization or proof of execution.
+- `Job Objects` are process/resource containment, not a complete filesystem/network sandbox; AppContainer/LPAC, explicit grants, and a broker are separate layers.
+- “Secret never leaves the vault” is only valid for durable host-owned secrets; delegated runtime tokens must be described as bearer credentials, and external-agent credentials remain agent-owned.
+- ACP v1 is the stable baseline; ACP v2 is draft. MCP 2026-07-28 is stateless/per-request, with legacy compatibility handled explicitly.
+- Windows, ARM64, ConPTY, WGC/UIA, installers, updates, and sandbox claims require real-host evidence; Linux checks and mocks do not qualify them.
+
 > **⚠ SESSION HANDOVER ONLY — this file carries no architecture and no scale claims.** Since the 2026-09-20
 > thaw (`ARCH/ADR/0003`), architecture belongs to [`ARCH/CORE.md`](ARCH/CORE.md) and its subsystem contracts, the
 > product contract to [`DESKTOP-APP-SPEC.md`](DESKTOP-APP-SPEC.md), and delivery/open work to [`TODO.md`](TODO.md).
