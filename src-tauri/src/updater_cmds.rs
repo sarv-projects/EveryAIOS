@@ -333,7 +333,7 @@ pub fn spawn_periodic_check(app: AppHandle) {
         // with an update check for the first seconds.
         tokio::time::sleep(Duration::from_secs(45)).await;
         loop {
-            if let Some(_) = app.get_webview_window("main") {
+            if app.get_webview_window("main").is_some() {
                 let channel = read_channel();
                 if let Ok(updater) = channel_updater(&app, &channel) {
                     if let Ok(Some(update)) = updater.check().await {

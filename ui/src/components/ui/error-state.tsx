@@ -32,7 +32,7 @@ const META: Record<ErrorKind, { icon: LucideIcon; title: string; hint: string }>
   budget: {
     icon: Coins,
     title: 'Budget exceeded',
-    hint: 'The session hit its spend cap. Raise the cap in Settings to continue.',
+    hint: 'The chat hit its spend cap. Raise the cap in Settings to continue.',
   },
   unknown: {
     icon: AlertTriangle,

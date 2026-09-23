@@ -689,7 +689,7 @@ export function RightViewport() {
               const tabTitle =
                 v === 'browse'
                   ? browserAttached
-                    ? 'Browser — CDP session attached'
+                    ? 'Browser — CDP attached'
                     : 'Browser — detached'
                   : v === 'desktop'
                     ? desktopAttached

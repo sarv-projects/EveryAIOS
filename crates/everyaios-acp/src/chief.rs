@@ -64,6 +64,38 @@ pub fn build_chief_prompt(
     core_facts: &[String],
     governance: &GovernedSession,
 ) -> String {
+    build_chief_prompt_with_steering(text, core_facts, governance, None, None)
+}
+
+/// P71.9i — the full passport assembly, in the documented order
+/// (`ARCH/13-PROMPT-ANATOMY.md` §"Live Rust Context Passport & Tool Affinity
+/// Steering", `ARCH/EXTERNAL-AGENTS.md` §11.1):
+///
+/// ```text
+/// 1. <memory_passport>
+/// 2. ## Governance
+/// 3. ## Shared Cowork Capabilities (tool affinity steering)
+/// 4. ## Installed subagent delegation mix
+/// 5. the user turn
+/// ```
+///
+/// The steering blocks exist because external agents are trained to reach for
+/// their own habits — a Python script or `curl` — before the host's shared
+/// facades, and a shell-biased model that never calls `office.*`/`browser.*`
+/// silently loses the audit trail. They are **advisory text**, not a policy
+/// boundary: Guard-1 is what refuses a shell route (SEC-4), and the harness
+/// limits still apply.
+///
+/// `affinity` and `delegation_mix` carry the block *contents*; the headings are
+/// added here so the order and the newlines cannot drift per call site.
+/// Passing `None` for both is exactly [`build_chief_prompt`].
+pub fn build_chief_prompt_with_steering(
+    text: &str,
+    core_facts: &[String],
+    governance: &GovernedSession,
+    affinity: Option<&str>,
+    delegation_mix: Option<&str>,
+) -> String {
     let mut parts: Vec<String> = Vec::new();
     if !core_facts.is_empty() {
         parts.push(format!(
@@ -75,9 +107,38 @@ pub fn build_chief_prompt(
         "## Governance\nThis session runs under {}.\n",
         governance.badge()
     ));
+    if let Some(body) = affinity {
+        if !body.trim().is_empty() {
+            parts.push(format!("## Shared Cowork Capabilities\n{body}"));
+        }
+    }
+    if let Some(body) = delegation_mix {
+        if !body.trim().is_empty() {
+            parts.push(format!("## Installed subagent delegation mix\n{body}"));
+        }
+    }
     parts.push(text.to_string());
     parts.join("\n\n")
 }
+
+/// P71.9i — the tool-affinity steering text (`ARCH/EXTERNAL-AGENTS.md` §11.1).
+/// Kept as a constant so the published contract and the shipped prompt are one
+/// string; `chief.rs` tests assert the facade names it instructs the model to
+/// prefer, and `scripts/check-prompt-steering.mjs` fails if this and the doc
+/// drift apart.
+pub const COWORK_AFFINITY_STEERING: &str = "\
+You have direct access to EveryAIOS native cowork tools via the connected MCP server:
+\
+- **Spreadsheets (.xlsx) & Documents (.docx/.pptx):** ALWAYS use `office.*` tools \
+(`office.open`, `office.inspect`, `office.edit`, `office.calculate`). Do NOT write custom \
+Python scripts or execute CLI tools in bash to modify office files.
+\
+- **Web Browsing & Research:** ALWAYS use `browser.*` tools (`browser.research`, \
+`browser.operate`, `browser.extract`) rather than executing raw curl or headless scripts in bash.
+\
+- **Desktop UI Automation:** Use `computer_use.*` tools (`computer_use.see`, `computer_use.act`).
+\
+- **Subagent Delegation:** Use `delegate.spawn` to delegate subtasks to isolated child worktrees.";
 
 /// A permission request surfaced for Guard-2 (the ticket seam).
 #[derive(Debug, Clone)]
@@ -755,6 +816,51 @@ mod tests {
         assert!(!prompt.contains("<memory_passport>"));
         assert!(prompt.contains("NotGoverned"));
         assert!(prompt.ends_with("hi"));
+    }
+
+    #[test]
+    fn p71_9i_steering_blocks_follow_the_documented_order_and_use_real_newlines() {
+        // ARCH/13-PROMPT-ANATOMY.md: passport → governance → affinity → mix →
+        // the user turn, in that order. The user turn is last, exactly once.
+        let facts = vec!["prefers pnpm".to_string()];
+        let prompt = build_chief_prompt_with_steering(
+            "THE USER TURN",
+            &facts,
+            &GovernedSession::SelfContained { channel_b: true },
+            Some(COWORK_AFFINITY_STEERING),
+            Some("- Codex: review passes"),
+        );
+        let pos = |needle: &str| prompt.find(needle).unwrap_or_else(|| panic!("missing {needle}"));
+        assert!(pos("<memory_passport>") < pos("## Governance"));
+        assert!(pos("## Governance") < pos("## Shared Cowork Capabilities"));
+        assert!(pos("## Shared Cowork Capabilities") < pos("## Installed subagent delegation mix"));
+        assert!(pos("## Installed subagent delegation mix") < pos("THE USER TURN"));
+        assert_eq!(prompt.matches("THE USER TURN").count(), 1);
+        assert!(prompt.ends_with("THE USER TURN"));
+        // The steering must be the published text, not a paraphrase.
+        assert!(prompt.contains("office.edit"));
+        assert!(prompt.contains("browser.research"));
+        assert!(prompt.contains("computer_use.act"));
+        assert!(prompt.contains("delegate.spawn"));
+        // Regression: the block was once injected with literal `\\n` escapes,
+        // which arrived in the model's context as backslash-n, not newlines.
+        assert!(!prompt.contains("\\n"), "literal backslash-n leaked into the prompt");
+    }
+
+    #[test]
+    fn p71_9i_steering_blocks_are_inert_when_absent_or_blank() {
+        let base = build_chief_prompt("turn", &[], &GovernedSession::NotGoverned);
+        assert!(!base.contains("## Shared Cowork Capabilities"));
+        assert!(!base.contains("## Installed subagent delegation mix"));
+        // Blank steering must not emit an empty heading.
+        let blank = build_chief_prompt_with_steering(
+            "turn",
+            &[],
+            &GovernedSession::NotGoverned,
+            Some("   \n"),
+            Some(""),
+        );
+        assert_eq!(blank, base);
     }
 
     #[test]

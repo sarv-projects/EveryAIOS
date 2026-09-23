@@ -312,6 +312,12 @@ pub(crate) struct AcpHandle {
     /// Complete agent-owned config option state. This is intentionally
     /// separate from EveryAIOS Native provider/model state.
     pub config_options: Vec<ConfigOption>,
+    /// P69.E9 — the I16 prefix-stability guard: fingerprints the shell-owned
+    /// stable prefix each turn and classifies turn-to-turn changes (stable /
+    /// declared / undeclared mutation) into the per-session observability log
+    /// (`ARCH/CONTEXT.md` §4: prefix mutations must be intentional AND
+    /// observable).
+    pub prefix_guard: everyaios_acp::PrefixGuard,
     pub session: AcpSession<ProcessTransport>,
 }
 
@@ -1344,6 +1350,7 @@ pub fn acp_launch(
                 embedded_context,
                 available_commands: Vec::new(),
                 config_options: config_options.clone(),
+                prefix_guard: everyaios_acp::PrefixGuard::new(),
                 session,
             },
         );
@@ -1406,7 +1413,7 @@ pub fn acp_authenticate(
 /// memory passport (C10) + governance block injected, mirroring the inbuilt
 /// path's `<memory_warm_set>` injection. Best-effort: a missing/unavailable
 /// memory handler never blocks the turn (same contract as `memory/plan`).
-fn build_acp_prompt_with_passport(state: &State<'_, AppState>, text: &str) -> String {
+fn build_acp_prompt_with_passport(state: &State<'_, AppState>, text: &str) -> (String, u64) {
     // Every agent we launch is external and self-contained: permission
     // requests are mediated by Guard-2 at the ACP boundary, but effects
     // performed inside the agent's own process are outside the EveryAIOS audit
@@ -1425,12 +1432,12 @@ fn build_acp_prompt_with_passport(state: &State<'_, AppState>, text: &str) -> St
             })
             .unwrap_or_default()
     };
-    let mut prompt = everyaios_acp::build_chief_prompt(text, &core_facts, &governance);
     // P53.6 — expose the persisted installed-CLI delegation mix at the
     // moment the Chief receives a turn. This is advisory context only; every
     // child launch remains subject to the B3 limits and Guard-2 policy.
+    let mut mix = String::new();
     if let Ok(cfg) = Config::load() {
-        let mix: Vec<String> = launch_registry()
+        let rows: Vec<String> = launch_registry()
             .agents
             .iter()
             .filter(|m| agent_installed(&m.id))
@@ -1448,13 +1455,32 @@ fn build_acp_prompt_with_passport(state: &State<'_, AppState>, text: &str) -> St
                 )
             })
             .collect();
-        if !mix.is_empty() {
-            prompt.push_str("\\n\\n## Installed subagent delegation mix\\n");
-            prompt.push_str(&mix.join("\\n"));
-            prompt.push_str("\\nUse only within the declared B3 depth/concurrency limits.");
+        if !rows.is_empty() {
+            mix.push_str(&rows.join("\n"));
+            mix.push_str("\nUse only within the declared B3 depth/concurrency limits.");
         }
     }
-    prompt
+    // P71.9i — the passport assembly itself lives in `everyaios-acp` so the
+    // documented block order (passport → governance → tool-affinity steering →
+    // delegation mix → user turn) is one implementation, not a call-site
+    // convention. (This block previously appended the mix *after* the user
+    // turn and emitted literal `\\n` escapes instead of newlines.)
+    let prompt = everyaios_acp::build_chief_prompt_with_steering(
+        text,
+        &core_facts,
+        &governance,
+        Some(everyaios_acp::COWORK_AFFINITY_STEERING),
+        if mix.is_empty() { None } else { Some(mix.as_str()) },
+    );
+    // P69.E9 — fingerprint the shell-owned stable prefix with the exact
+    // inputs this builder assembled (`ARCH/CONTEXT.md` §4: the warm-memory
+    // set is dynamic-tail content and is deliberately not fingerprinted).
+    let fingerprint = everyaios_acp::fingerprint_stable_prefix(
+        governance.badge(),
+        Some(everyaios_acp::COWORK_AFFINITY_STEERING),
+        if mix.is_empty() { None } else { Some(mix.as_str()) },
+    );
+    (prompt, fingerprint)
 }
 
 /// P53.5 — per-session tool observability file. Each ACP turn appends one
@@ -1469,6 +1495,7 @@ fn append_acp_tool_log(
     agent_id: &str,
     text: &str,
     outcome: &PromptOutcome,
+    prefix_event: everyaios_acp::PrefixEvent,
 ) {
     let safe: String = session_id
         .chars()
@@ -1512,6 +1539,10 @@ fn append_acp_tool_log(
         "agentId": agent_id,
         "promptPrefix": prompt_prefix,
         "stopReason": outcome.stop_reason.as_str(),
+        // P69.E9 — I16 observability: the guard's classification of this
+        // turn's stable-prefix state (first_turn / stable /
+        // declared_mutation / undeclared_mutation).
+        "prefixEvent": prefix_event.as_str(),
         "toolCalls": tools,
     });
     if let Ok(mut f) = std::fs::OpenOptions::new()
@@ -1602,7 +1633,10 @@ pub fn chief_subagent_set_enabled(agent_id: String, enabled: bool) -> Result<boo
 /// (Settings → Subagents). Refuses unknown/uninstalled ids; fields absent from
 /// the payload keep their spec defaults, and the gateway's live
 /// `delegation_gauge` remains the admission authority.
+/// (The nine optional fields are the profile's own shape; grouping them into
+/// a struct would ripple through the UI call site for no behavioral gain.)
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub fn chief_subagent_set_policy(
     agent_id: String,
     model_policy: Option<String>,
@@ -1845,7 +1879,29 @@ pub fn acp_prompt(
     // It rides ahead of the memory passport (newest context first) and is
     // bounded (the builder caps it) so a huge transcript never floods the
     // agent's context. Absent = a same-Chief follow-up turn.
-    let mut prompt_text = build_acp_prompt_with_passport(&state, &text);
+    // P69.E9 — the guard observes the shell-owned stable prefix every turn;
+    // a handoff bundle is the *declared* cache-boundary event (CONTEXT.md
+    // §4: compaction ⇒ fresh baseline, permitted but observable).
+    let (mut prompt_text, prefix_fingerprint) = build_acp_prompt_with_passport(&state, &text);
+    // P69.E9 — the guard observes the shell-owned stable prefix every turn;
+    // a handoff bundle is the *declared* cache-boundary event (CONTEXT.md
+    // §4: compaction ⇒ fresh baseline, permitted but observable).
+    let handoff_declared = handoff
+        .as_ref()
+        .map(|h| !h.trim().is_empty())
+        .unwrap_or(false);
+    let prefix_event = entry
+        .prefix_guard
+        .observe(prefix_fingerprint, handoff_declared);
+    if prefix_event == everyaios_acp::PrefixEvent::UndeclaredMutation {
+        // Loud, per the row: churn the caller did not declare. Never fatal —
+        // refusing an external agent's turn over a metrics problem would
+        // break the session; the observability log is the enforcement.
+        eprintln!(
+            "P69.E9 I16 violation: stable-prefix mutation without a declared \
+             cache-boundary event on ACP session {session_id} (handle {handle})"
+        );
+    }
     if let Some(bundle) = handoff.as_ref().map(|h| h.trim()).filter(|h| !h.is_empty()) {
         let capped: String = bundle.chars().take(6000).collect();
         prompt_text = format!("<chief_handoff>\n{capped}\n</chief_handoff>\n\n{prompt_text}");
@@ -1952,7 +2008,14 @@ pub fn acp_prompt(
                 }
             }
         }
-        append_acp_tool_log(&session_id, &handle, &agent_id, &text, &outcome);
+        append_acp_tool_log(
+            &session_id,
+            &handle,
+            &agent_id,
+            &text,
+            &outcome,
+            prefix_event,
+        );
     }
 
     // P71.4 — the turn's usage is an **observation**. The agent's own report is

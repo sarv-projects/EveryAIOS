@@ -1,0 +1,61 @@
+name: Bug report
+description: Something behaves incorrectly or untruthfully
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please do **not** paste API keys, tokens or vault contents. The support
+        bundle (Settings → Diagnostics → Export) is already scrubbed — attach
+        that instead of raw logs.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Shown in Settings → About, or `everyaios --version`
+      placeholder: 0.1.0
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: Platform
+      description: OS and build (e.g. Windows 11 23H2 x64, WSL2 Ubuntu 24.04 as an agent host)
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected, what occurred instead
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: Doctor output
+      description: Settings → Doctor (or `everyaios doctor`). This is the first diagnostic stop for every failure class in `docs/install-layout.md` §3.
+      render: text
+    validations:
+      required: false
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Agent turn / ACP
+        - Guard approval or a blocked action
+        - Vault / unlock
+        - Update / installer
+        - Office / browser / computer use
+        - Cockpit UI
+        - Other
+    validations:
+      required: true
+  - type: checkboxes
+    id: hygiene
+    attributes:
+      label: Before submitting
+      options:
+        - label: I have not included any credential or vault content in this report
+          required: true

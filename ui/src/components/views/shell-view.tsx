@@ -459,7 +459,7 @@ export default function ShellView() {
           replayed = await terminalReplay(ptyId, from)
         } catch {
           handle.term.write(
-            '\x1b[2m[reattached to a live session — its retained output could not be read]\x1b[0m\r\n',
+            '\x1b[2m[reattached to a live session — its retained output could not be read]\x1b[0m\r\n',  // "session" = the PTY stream, not a Chat (SESSION §2 allows)
           )
           return
         }

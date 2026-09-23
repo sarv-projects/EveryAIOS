@@ -88,7 +88,7 @@ const LABEL: Record<CapabilityId, string> = {
   'voice-output': 'Voice output (TTS read-aloud)',
   'image-generation': 'Image generation',
   'wasm-sandbox': 'WASM fuel-metered sandbox',
-  'remote-handoff': 'Remote session handoff',
+  'remote-handoff': 'Remote chat handoff',
   'browser-attach': 'Browser (CDP) attachment',
   'desktop-computer-use': 'Desktop computer use',
   'local-models': 'Local model runtimes',
@@ -127,18 +127,18 @@ export function capabilityFor(id: CapabilityId, ctx: CapabilityContext): Capabil
         : { id, status: 'partial', reason: 'Read-aloud needs a platform speech engine; no local TTS is installed.' }
     case 'browser-attach':
       if (!ctx.inTauri) {
-        return { id, status: 'partial', reason: 'Browser attachment needs the Tauri shell (preview has no CDP session).' }
+        return { id, status: 'partial', reason: 'Browser attachment needs the Tauri shell (preview has no live browser).' }
       }
       return ctx.browserAttached
-        ? { id, status: 'live', reason: 'CDP session attached.' }
-        : { id, status: 'partial', reason: 'Engine available — attach Chrome to make the session live.' }
+        ? { id, status: 'live', reason: 'Browser attached.' }
+        : { id, status: 'partial', reason: 'Engine available — attach Chrome to start browsing.' }
     case 'desktop-computer-use':
       if (!ctx.inTauri) {
         return { id, status: 'partial', reason: 'Desktop computer use needs the Tauri shell (preview has no driver).' }
       }
       return ctx.desktopAttached
         ? { id, status: 'live', reason: 'Desktop driver attached.' }
-        : { id, status: 'partial', reason: 'Engine available — attach a driver to make the session live.' }
+        : { id, status: 'partial', reason: 'Engine available — attach a driver to start desktop control.' }
     case 'local-models':
       return ctx.anyLocalModelConfigured
         ? { id, status: 'live', reason: 'Local model runtime configured.' }

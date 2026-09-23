@@ -272,8 +272,8 @@ export function StatusBar() {
       value: browserAttached ? 'attached' : 'not attached',
       color: browserAttached ? 'text-emerald-400' : 'text-muted-foreground',
       tooltip: browserAttached
-        ? 'CDP session attached — the browse view drives a real browser.'
-        : 'No CDP session attached — start the browser from the Browse surface.',
+        ? 'CDP attached — the browse view drives a real browser.'
+        : 'No CDP connection — start the browser from the Browse surface.',
       onClick: () => setActiveView('browse'),
     },
     {

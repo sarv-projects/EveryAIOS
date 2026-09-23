@@ -622,10 +622,10 @@ export default function AgentModelPicker({ compact }: Props) {
                 )}
               </div>
             </div>
-            {/* P38 — effective-binding readout: shows what THIS session actually
+            {/* P38 — effective-binding readout: shows what THIS chat actually
                 routes under (pin → default → **unbound**). Unbound is not a
                 silent substitution: the turn refuses and opens agent discovery
-                (`P71.6a`). An explicitly unpinned session shows "default applies
+                (`P71.6a`). An explicitly unpinned chat shows "default applies
                 — pin cleared" instead of silence, even after a restart (the
                 marker is vault-persisted). */}
             {sessionPin && (

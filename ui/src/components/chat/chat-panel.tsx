@@ -274,7 +274,7 @@ export default function ChatPanel() {
         const url = URL.createObjectURL(blob)
         const a = document.createElement('a')
         a.href = url
-        a.download = `${sess.title.replace(/[^\w\- ]+/g, '').trim() || 'session'}.md`
+        a.download = `${sess.title.replace(/[^\w\- ]+/g, '').trim() || 'chat'}.md`
         a.click()
         URL.revokeObjectURL(url)
         notify('Transcript exported as Markdown')

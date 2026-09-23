@@ -55,6 +55,7 @@ import {
   AboutSection,
   AdvancedSection,
   DoctorSection,
+  DiagnosticsSection,
   KeyboardSection,
   PrivacySection,
   SyncSection,
@@ -180,6 +181,7 @@ const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
       { id: 'beta', label: 'Beta', icon: Package, keywords: ['preview', 'experimental', 'flags'] },
       { id: 'advanced', label: 'Advanced', icon: SlidersHorizontal, keywords: ['debug', 'power', 'expert', 'internals'] },
       { id: 'doctor', label: 'Doctor', icon: Stethoscope, keywords: ['health', 'diagnostics', 'check', 'repair'] },
+      { id: 'diagnostics', label: 'Diagnostics', icon: Activity, keywords: ['support', 'bundle', 'sandbox', 'posture', 'wipe', 'remove', 'data', 'export', 'logs'] },
       { id: 'about', label: 'About', icon: Info, keywords: ['version', 'update', 'license', 'credits'] },
     ],
   },
@@ -270,6 +272,8 @@ function SectionBody({ section }: { section: SectionId }) {
       return <AdvancedSection />
     case 'doctor':
       return <DoctorSection />
+    case 'diagnostics':
+      return <DiagnosticsSection />
     case 'discover':
       return <DiscoverSection />
     case 'runtime':

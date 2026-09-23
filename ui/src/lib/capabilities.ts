@@ -43,7 +43,7 @@ export const STANDARD_SHARED_CAPABILITIES: SessionCapabilityItem[] = [
   {
     id: 'shared:browser',
     name: 'Browser Automation',
-    description: '37 CDP web automation tools, navigation, form fill, session vault reuse',
+    description: '37 CDP web automation tools, navigation, form fill, browser-profile reuse',
     category: 'browser',
     family: 'browser',
     nativeOrShared: 'shared',

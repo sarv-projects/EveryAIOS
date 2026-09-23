@@ -186,7 +186,7 @@ function LiveRuns() {
               size="sm"
               variant="outline"
               className="h-7 shrink-0 gap-1 text-[10px]"
-              title="Open this run as a chat — it continues the run's own session"
+              title="Open this run as a chat — it continues the run's own work"
               onClick={() => openRun(run)}
             >
               <Play className="h-3 w-3" />

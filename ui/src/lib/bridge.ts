@@ -295,7 +295,7 @@ export function handleChatEvent(e: ChatWireEvent): void {
       id: `live:protocol:${e.eventId ?? `${e.type}:${Date.now()}`}`,
       kind: 'error',
       title: 'Agent event was ignored',
-      detail: 'The runtime returned an event without a session or stream identity.',
+      detail: 'The runtime returned an event without a chat or stream identity.',
       ts: Date.now(),
       unread: true,
       source: 'Runtime',
@@ -675,7 +675,7 @@ async function startBridge(): Promise<BridgeDisposer> {
           });
         }
       } catch (error) {
-        recordFault('session store', error);
+        recordFault('chat store', error);
       }
 
       try {

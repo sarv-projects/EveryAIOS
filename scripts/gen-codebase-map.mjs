@@ -648,6 +648,22 @@ function mdTitle(rel) {
 }
 
 /** First sentence of body prose (skipping headings, quotes, tables, fences). */
+/**
+ * A relative link copied out of `dir/doc.md` and pasted into this map (which
+ * always lives at the repo root) would point at the wrong place —
+ * `[`CORE.md`](CORE.md)` inside `ARCH/01-SYSTEM-ARCHITECTURE.md` must resolve
+ * as `ARCH/CORE.md` where it is quoted. Rewriting here is what keeps the
+ * map's own links unbroken (`scripts/check-doc-refs.mjs` runs the check).
+ */
+function rootifyLinks(text, rel) {
+  const dir = rel.includes("/") ? rel.slice(0, rel.lastIndexOf("/")) : "";
+  if (!dir) return text;
+  return text.replace(/\]\(([^)\s]+)\)/g, (m, href) => {
+    if (/^(https?:|mailto:|#|\/|[A-Za-z]:)/.test(href)) return m;
+    return `](${dir}/${href})`;
+  });
+}
+
 function mdLead(rel) {
   const lines = read(rel).split("\n");
   let i = 0;
@@ -663,7 +679,7 @@ function mdLead(rel) {
   }
   const text = buf.join(" ").replace(/\s+/g, " ").trim();
   const cut = /^(.{40,240}?[.!?])\s/.exec(text);
-  return (cut ? cut[1] : text.slice(0, 200)).trim();
+  return rootifyLinks((cut ? cut[1] : text.slice(0, 200)).trim(), rel);
 }
 
 // ---------------------------------------------------------------------------

@@ -85,6 +85,10 @@ jobs:
             target: aarch64-pc-windows-msvc
             name: windows arm64
     runs-on: ${{ matrix.os }}
+    # N.B. the repo is checked out to `desktop_app/` and every `run:` step
+    # below starts there, so run-step paths are REPO-RELATIVE (`src-tauri/…`).
+    # Step inputs that resolve against $GITHUB_WORKSPACE instead (setup-node's
+    # `cache-dependency-path`) keep the `desktop_app/` prefix.
     defaults:
       run:
         working-directory: desktop_app
@@ -100,7 +104,9 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: desktop_app/crates, desktop_app/src-tauri
+          # rust-cache resolves these against the job's working directory
+          # (`desktop_app/` = the repo root), so they are repo-relative.
+          workspaces: crates, src-tauri
 
       - uses: actions/setup-node@v4
         with:
@@ -224,7 +230,7 @@ jobs:
       # budget fails here rather than shipping and being noticed later.
       - name: Size + footprint budget (P70.A5)
         shell: bash
-        run: node scripts/check-size-budget.mjs --bundle "desktop_app/src-tauri/target/${{ matrix.target }}/release/bundle" --target ${{ matrix.target }}
+        run: node scripts/check-size-budget.mjs --bundle "src-tauri/target/${{ matrix.target }}/release/bundle" --target ${{ matrix.target }}
 
       # P70.B7 — the artifact-leak gate runs on the PRODUCED bundle, not just
       # the source tree: no key material, .env, dev database, or signing key
@@ -232,7 +238,7 @@ jobs:
       # the tauri-action produced (installer + updater artifacts + manifest).
       - name: Secret-leak gate on produced artifacts (P70.B7)
         shell: bash
-        run: node scripts/check-artifact-hygiene.mjs --paths "desktop_app/src-tauri/target/*/release/bundle"
+        run: node scripts/check-artifact-hygiene.mjs --paths "src-tauri/target/*/release/bundle"
 
       # P70.B5 — a software bill of materials (CycloneDX) covering the Rust
       # workspace, the shell, the UI and the coordinator, plus a build-provenance
@@ -241,14 +247,49 @@ jobs:
       # (deterministic, offline); a missing SBOM fails the job.
       - name: Generate SBOM + provenance attestation (P70.B5)
         shell: bash
-        run: node scripts/gen-sbom.mjs --out desktop_app/dist-sbom --commit "$GITHUB_SHA" --run "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+        run: node scripts/gen-sbom.mjs --out dist-sbom --commit "$GITHUB_SHA" --run "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
 
       - name: Attach SBOM + provenance to the release (P70.B5)
         shell: bash
         run: |
-          cd desktop_app/dist-sbom
+          cd dist-sbom
           for f in *; do
             gh release upload "v$(node -p "require('../src-tauri/tauri.conf.json').version")" "$f" --clobber
           done
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # P70.F1/F2/F4 — the derived half of the release surface, generated from
+      # the artifacts this job just produced and the single version authority:
+      # SHA256SUMS over every artifact, machine-readable release notes assembled
+      # from the changelog entry, and the winget manifests for the package-
+      # manager route. All three are attached; a missing artifact fails the job
+      # because the generator refuses to hash an empty directory.
+      - name: Generate release surface — checksums, notes, winget (P70.F1/F2/F4)
+        shell: bash
+        run: |
+          node scripts/gen-release-surface.mjs \
+            --artifacts "src-tauri/target/${{ matrix.target }}/release/bundle" \
+            --out dist-release
+
+      - name: Attach checksums, release notes and winget manifests (P70.F1/F2/F4)
+        shell: bash
+        run: |
+          cd dist-release
+          TAG="v$(node -p "require('../src-tauri/tauri.conf.json').version")"
+          for f in *; do
+            gh release upload "$TAG" "$f" --clobber
+          done
+          cd ../packaging/winget
+          for f in *.yaml; do
+            gh release upload "$TAG" "$f" --clobber
+          done
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # P70.F3 — the public download page must name the version that shipped.
+      - name: Public surface agreement (P70.F2/F3/F5/F6/F8)
+        shell: bash
+        run: |
+          node scripts/gen-release-surface.mjs --check
+          node scripts/check-public-surface.mjs

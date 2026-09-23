@@ -14,7 +14,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/license-MIT%2FApache--2.0-lightgrey?style=flat-square" alt="License" />
-  <img src="https://img.shields.io/badge/platforms-Windows%2011%20%7C%20macOS%20%7C%20Linux-blue?style=flat-square" alt="Platforms" />
+  <img src="https://img.shields.io/badge/platforms-Windows%2010%2F11%20(x64%20%7C%20ARM64)-blue?style=flat-square" alt="Windows 10/11, x64 and ARM64" />
   <img src="https://img.shields.io/badge/privacy-100%25%20Local--First-success?style=flat-square" alt="Privacy" />
   <img src="https://img.shields.io/badge/your%20data-never%20leaves%20your%20machine-orange?style=flat-square" alt="Your data stays local" />
 </p>
@@ -143,10 +143,14 @@ Every one of these is a row in the [capability matrix](ARCH/09-FEATURE-MATRIX.md
 
 | Platform | Format | Status |
 | :--- | :--- | :---: |
-| **Windows 11 / 10** | `.msi` / `.exe` (x64 & ARM64) | 🔜 in progress |
-| **macOS (Apple Silicon)** | `.dmg` (M1 – M4, Universal) | 🔜 in progress |
-| **macOS (Intel)** | `.dmg` (x86_64) | 🔜 in progress |
-| **Linux (Ubuntu / Debian)** | `.deb` / `.AppImage` | 🔜 in progress |
+| **Windows 11 / 10 22H2** | `.msi` / `.exe` (x64 & ARM64) | 🔜 in progress — **v1 ships Windows-first** |
+| **macOS / native Linux desktop** | — | ❌ out of v1 scope ([`SUPPORT-MATRIX.md`](SUPPORT-MATRIX.md)); WSL2 is supported as an **agent host** |
+
+> Windows builds run **without a signed-certificate guarantee in CI until the
+> Authenticode certificate is procured** (`docs/signing.md`) and the Windows
+> acceptance pass (`P70.E8`) has not been executed yet — Windows is v1's
+> *primary but not yet qualified* platform, and this paragraph is the honest
+> statement of that (`P70.D6`).
 
 Until then you can be running the real thing in about ten minutes — see below.
 

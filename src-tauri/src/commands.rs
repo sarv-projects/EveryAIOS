@@ -22,6 +22,7 @@ use crate::catalog_cmds;
 use crate::cockpit_cmds;
 use crate::codeintel_cmds;
 use crate::desktop_cmds;
+use crate::diagnostics_cmds;
 use crate::discovery_cmds;
 use crate::doctor_cmds;
 use crate::feedback_cmds;
@@ -419,6 +420,11 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Syn
         artifact_cmds::artifact_stop,
         // P46.2: everyaios doctor — per-subsystem readiness report.
         doctor_cmds::doctor_report,
+        // P70.D4/D7/D8 — diagnostics: sandbox honesty, support bundle,
+        // remove-all-data (typed-confirmed in the UI).
+        diagnostics_cmds::diagnostics_sandbox_posture,
+        diagnostics_cmds::diagnostics_support_bundle,
+        diagnostics_cmds::data_remove_all,
         // P9.5: local OpenAI-compatible server (loopback + bearer token).
         openai_cmds::openai_server_start,
         openai_cmds::openai_server_stop,

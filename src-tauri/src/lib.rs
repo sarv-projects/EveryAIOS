@@ -22,6 +22,7 @@ mod codeintel_cmds;
 mod commands;
 mod control;
 mod desktop_cmds;
+mod diagnostics_cmds;
 mod discovery_cmds;
 mod doctor_cmds;
 mod feedback_cmds;
@@ -70,7 +71,6 @@ use everyaios_vault::Vault;
 pub mod xlsx_cmds;
 use tauri::{AppHandle, Emitter, Manager, State};
 
-/// Monotonic stream-id source for `chat_stream` calls.
 // P71.2c — the stream-id counter that `chat_stream`/`plan_execute` minted is
 // gone with them; the ACP channel owns its own turn identity.
 

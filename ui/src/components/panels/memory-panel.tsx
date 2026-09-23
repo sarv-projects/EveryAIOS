@@ -87,7 +87,7 @@ const GRAPH_EDGES = [
 const SKILLS = [
   { id: 'sk1', name: 'excel-recalc', desc: 'Deterministic formula recalc + chart regen', status: 'installed' as const, version: 'v1.2.0' },
   { id: 'sk2', name: 'pdf-fill-sign', desc: 'Form fill + signature application', status: 'installed' as const, version: 'v2.0.1' },
-  { id: 'sk3', name: 'competitor-crawl', desc: 'CDP page scraping with vault session', status: 'installed' as const, version: 'v0.9.4' },
+  { id: 'sk3', name: 'competitor-crawl', desc: 'CDP page scraping with the vault browser profile', status: 'installed' as const, version: 'v0.9.4' },
   { id: 'sk4', name: 'deploy-checklist', desc: 'Prod deploy runbook w/ guard gates', status: 'installed' as const, version: 'v1.1.0' },
   { id: 'sk5', name: 'email-triage', desc: 'Inbox triage + draft replies', status: 'suggested' as const, version: '—' },
   { id: 'sk6', name: 'meeting-notes', desc: 'Transcript → structured notes', status: 'suggested' as const, version: '—' },
@@ -512,7 +512,7 @@ function EpisodicTab({
               minute: '2-digit',
             }),
             title: f.text,
-            detail: `source: ${f.source} · session ${f.sessionId}`,
+            detail: `          source: ${f.source} · chat ${f.sessionId}`,
           }))
         : inTauri()
           ? []
@@ -526,9 +526,9 @@ function EpisodicTab({
         </div>
         <span className="font-mono text-[10px] text-muted-foreground">
           {episodes && episodes.length > 0
-            ? `${episodes.length} live sessions`
+            ? `${episodes.length} live chats`
             : facts && facts.length > 0
-              ? `${facts.length} live facts`            : inTauri()
+              ? `${facts.length} live facts` : inTauri()
               ? 'no episodes'
               : `${EPISODES.length} episodes · last 7d`}</span>
       </div>

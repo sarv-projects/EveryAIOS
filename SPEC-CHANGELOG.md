@@ -17,6 +17,155 @@ Each entry records the date or release marker, change category, affected section
 - A citation or implementation detail may remain in the spec only when it is itself a current behavioral constraint; its historical or evidentiary explanation belongs here.
 
 ---
+## v4.06 — 2026-09-23 — P69.E9: the prefix-stability guard (I16 gets enforcement)
+
+**Change category:** invariant enforcement (gate) + turn-path instrumentation.
+
+**Decision:** I16 — *prefixes are append-stable; mutations are permitted but must be intentional and observable* (`ARCH/CONTEXT.md` §4) — is now mechanically enforced on the live turn path. `crates/everyaios-acp/src/prefix_guard.rs` fingerprints the shell-owned stable prefix (governance badge, tool-affinity steering, delegation mix — assembly order, restart-stable FNV-1a, absent ≡ empty) each ACP turn and classifies turn-to-turn changes via a per-handle `PrefixGuard` state machine. The scope follows §4's own diagram: the warm-memory set stays **excluded** (relevant memory is dynamic-tail content; the memory system legitimately learns between turns). The P53.4 compact-before-swap handoff bundle is the *declared* cache-boundary event.
+
+**Implementation impact:** `build_acp_prompt_with_passport` now returns `(prompt, fingerprint)`; the turn path observes it before the handoff prepend, writes `prefixEvent` into the per-session `tool_log.jsonl`, and prints a loud stderr line on `undeclared_mutation`. The guard warns, never fails the turn. Two pre-existing clippy warnings repaired in passing (`lib.rs:74` doc-comment orphan from the P71.2c archive edit; `chief_subagent_set_policy` argument count, now with a stated `#[allow]`).
+
+**Verification:** `everyaios-acp` lib tests 105/0 (8 new guard tests: state machine ×4, fingerprint determinism/order-sensitivity/absence-boundaries ×3, stable wire vocabulary ×1); `src-tauri` clippy 0 warnings; `cargo check --tests` clean; doc-sync/doc-refs/vocabulary gates green.
+
+---
+## v4.05 — 2026-09-23 — P69.E10: the user-facing vocabulary drift gate (and the drift it caught)
+
+**Change category:** vocabulary enforcement (gate) + UI copy repairs.
+
+**Decision:** `ARCH/SESSION.md` §2's one-sentence contract — *"Nothing user-visible may say 'Session'."* — is now machine-enforced by `scripts/check-vocabulary.mjs` (P69.E10, wired into CI alongside the P69.E11 reference validator). The gate scans every string/template literal, static JSX text and i18n catalog value under `ui/src` (tests excluded) and fails on the word `Session` outside an enumerated, reasoned allowlist (IPC/bridge operation labels, dotted event namespaces, protocol-qualified terms, agent-facing prompt bundles, identifier-shaped tokens — each stated in the script).
+
+**Implementation impact:** the calibration sweep found **12 classes of real user-visible drift, all fixed**: capability names and browser/desktop attach reasons (`capability-status.ts`), the `tool_not_attached` error explain/hint, keyboard-shortcut labels, the vault-gate passphrase sentence, the spend-cap error state, status-bar CDP tooltips, the memory panel's episode counter and skill description, the data-wipe confirmation row, the automations open-run tooltip, the studio live-apply toast, the transcript export fallback filename and CSV export header/filename, the bridge agent-event detail and `chat store` fault label, the degraded-mode `chat persistence` message, and the Work timeline's "Agent session …" cards reworded to "Agent run …" (`ARCH/UI.md` §5's cockpit vocabulary). Scanner honesty is part of the contract: block comments are stripped source-wide before matching, and `${…}` template expressions are stripped per line, with both rules stated in the script.
+
+**Verification:** `check:vocabulary` PASS (exit 0, zero findings — no baseline); mutation-verified by planting a `"Switch to session 3"` literal (gate fails, then restored); `bun test` ui 383/0; `tsc --noEmit` (ui) clean; no test pinned any reworded string.
+
+---
+## v4.04 — 2026-09-23 — P69.E11: the cross-document reference validator (and a real map defect)
+
+**Category:** tooling — the mechanical signal that a heading or a claim was silently removed. No capability change.
+**Flipped:** one row, P69.E11 (**1645 = 1351 + 294**).
+
+**1. `scripts/check-doc-refs.mjs` — three checks.** (A) every `<Doc>.md §n` names a document that exists and defines that
+section; (B) every `CORE §n` / `SPEC §n` / `ARCH/nn §n` short-name citation resolves, bound only when the name is adjacent
+to the §; (C) every relative link target and `#anchor` resolves. Sub-section rule: a `§9.5` where the cited doc defines
+9.1–9.3 fails; `§9.4` in a doc that defines §9 but numbers no subsections passes. Fenced code is blanked (a fence *shows* a
+reference rather than making one); inline backticks are not, because the repo writes real cites in backticks.
+
+**2. Two real defects found on landing.** (1) `ARCH/02-MODULE-LAYOUT.md` cited `ARCH/07 §7.5.1` for the ghost-context
+index — `ARCH/07` was rewritten to the four-class contract at `P69.A15` and no longer has a §7.5; the pointer now names
+`ARCH/05 §5.14` where the tombstone truncation lives. This is the row's own example class, caught mechanically on the first
+run. (2) `gen-codebase-map.mjs` quoted ARCH docs' opening sentences **with relative links intact**, so 154 links in the
+root-level map pointed at files that do not exist; the generator now rewrites link targets root-relative. Findings went
+174 → 0, so the rule is enforced in full — **no baseline file, no recorded backlog**.
+
+**3. Scoping, with reasons in the script.** Check B binds only unambiguous, adjacent short names (`ARCH/03 + doc 19 §7`
+belongs to doc 19; a research-transfer row's README-§4 pointer names a *cloned external repository's* README — binding
+those produced 17 false positives from 20). Archive/generated surfaces (`SPEC-CHANGELOG.md`, `DESKTOP-APP-SPEC.md`'s
+archived-§17 pointers, `CODEBASE-MAP.md`, `CURRENT_RUN.md`, `TODO.md`'s citation-shape examples) are exempt from check B
+only, each with its reason; checks A and C still run against them. The `CURRENT_RUN.md` historical-ledger exception the
+row names is enumerated in `ACCEPTED` with its reason, and the accepted set is reported on every run.
+
+**Verification:** `check-doc-refs` green (0 findings); `check-doc-sync` green; `gen-codebase-map --check` current.
+
+---
+## v4.03 — 2026-09-23 — P71.9i: the live context passport's tool-affinity steering, and the P50 verification pass
+
+**Category:** correctness + delivery — the documented passport assembly is now the shipped one, and seven stale P50 markers
+were verified against the tree rather than assumed. No capability change. **Flipped:** 8 rows (**1645 = 1350 + 295**).
+
+**1. P71.9i — the steering block, and two real defects on the way.** `build_chief_prompt` assembled
+passport → governance → **user turn**, and the shell appended the delegation mix *after* the turn — not the order
+`ARCH/13-PROMPT-ANATOMY.md` publishes — and it did so with `"\\n"` in the Rust source, so the model received literal
+backslash-n characters instead of newlines. The assembly now lives in `everyaios-acp`
+(`build_chief_prompt_with_steering`: passport → governance → `## Shared Cowork Capabilities` →
+`## Installed subagent delegation mix` → user turn), `COWORK_AFFINITY_STEERING` carries the §11.1 text verbatim with its
+ranking order pinned by tests, and `build_chief_prompt` delegates with no steering so existing callers are unchanged.
+New `scripts/check-prompt-steering.mjs` fails on text drift, order drift, a call site bypassing the builder, or the
+escape bug returning. Two new unit tests; **14/14** in the crate's chief module.
+
+**2. P50 verification pass — seven rows closed or reclassified against the tree.** P50.2.1 (sessions) is pinned by the
+existing 8-test `session-truth.test.ts` plus the preview-only gate (`inTauri() ? [] : mockSessions`); P50.4.5 (image
+generation), P50.4.6 (WASM sandbox) and P50.4.7 (remote session handoff) are `post_v1` capability rows whose *audit* was
+the actual deliverable and is complete; P50.4.10 (privacy/cost honesty) holds — there is no "100% Private" claim in the
+UI at all, the privacy line is conditioned on live runtime state, and the cost/token pills render nothing rather than a
+zero or a seed when no live data exists.
+
+**Verification:** the new gate + all 14 existing gates green, `check-doc-sync` green, `codebase-map --check` current,
+`cargo check` clean for the workspace and the shell, and `cargo test -p everyaios-acp --lib chief` → 14 passed.
+
+---
+## v4.02 — 2026-09-23 — The E/F/G blocks: qualification harness, release surface, public docs
+
+**Category:** release engineering — the qualification pass, the public surface and the post-release process. No capability
+change. **Capability rows:** none added, none removed — census stays **166**. **Flipped:** 13 rows (**1645 = 1344 + 301**),
+with E2/E4/E7/E10 marked `RUNNABLE` (wired, executable, not run in this pass) and E5/E6/E8/E9 marked `BLOCKED` with the
+blocker named — never `PASS`. F7 stays deferred, by instruction.
+
+**1. `scripts/release-qualify.mjs` — the P70.E pass (E1–E12).** One entry point that reports `PASS` / `FAIL` / `RUNNABLE` /
+`BLOCKED` per item and never upgrades one into another. E1 re-derives the kernel-gate state from `TODO.md`; E3 runs the doc
+gates; E11 is a real honest-capability audit (seed-shaped identifiers in shipping paths — currently zero — plus the census
+of explicit honest-negative annotations); E4/E7/E10 run the existing security/crash/perf harnesses with `--execute`; E5/E6/
+E8/E9 name what they need (a host, live credentials, sequential Windows builds). `--record <version>` writes the sign-off
+file **only** when every item is `PASS` — today it correctly refuses (3 PASS / 4 RUNNABLE / 5 BLOCKED).
+
+**2. `scripts/gen-release-surface.mjs` — the P70.F1/F2/F4 derivation.** `SHA256SUMS` over produced artifacts (refusing an
+empty directory), machine-readable release notes assembled from the newest changelog entry, and the winget manifests — all
+from the single version authority. `--check` fails when the committed winget manifest or `docs/download.md` stops naming
+the shipping version.
+
+**3. The public surface.** New `SECURITY.md` (threat model, enforced floors, and an explicit *what is not contained*
+section), `PRIVACY.md` (what leaves the machine / what never does / the telemetry posture), `CONTRIBUTING.md`,
+`docs/download.md` (the F3 page, with a "Not yet" section), issue templates, and the release-process set:
+`docs/release/{launch-checklist,rollout-and-hotfix,post-v1,retrospective-pack}.md`. New `scripts/check-public-surface.mjs`
+enforces the documents **and the honesty property itself** — the "no telemetry sender" claim is checked against
+`pnpm-lock.yaml` and both Rust lockfiles. That check found the one real edge: `opentelemetry` is in the tree, and the gate
+now pins *why* it is not a sender (bare W3C wire-format types only; `tracing.rs` reports to console + a local log file;
+OTLP is post-v1), so adding an exporter later fails the build.
+
+**4. Two real defects fixed in `release.yml`.** The release job checks out to `desktop_app/` and runs with that as its
+working directory, so every run-step path written as `desktop_app/src-tauri/...` resolved to a directory that cannot exist —
+the size-budget step, the artifact-leak gate, the SBOM generation and both attach steps would all have failed on a real
+release. They are now repo-relative, with the distinction documented in the workflow (step inputs that resolve against
+`$GITHUB_WORKSPACE`, like setup-node's `cache-dependency-path`, keep the prefix). The SBOM/release-surface/checksum
+artifacts are generated and attached from the produced bundle, and the winget manifests ride along with them.
+
+**Verification:** 15 gates green (`check-*` × 13 + `gen-release-surface --check` + `release-qualify`), `codebase-map
+--check` current, `cargo check` clean, `ui tsc --noEmit` clean. Nothing was test-run beyond the harness smoke runs and the
+new unit tests (standing instruction).
+
+---
+## v4.01 — 2026-09-23 — The D block: install layout, first run, diagnostics, sandbox honesty (P70.D1–D9)
+
+**Category:** release engineering — the install and support surface, implemented and machine-checked. No capability
+change. **Capability rows:** none added, none removed — census stays **166**. **Flipped:** nine rows move to
+`[IMPLEMENTED — unverified]` / the D6 decision marker (**1645 = 1320 + 325**); each names its own residual, and the
+dominant one is again "no Windows host has executed this".
+
+**1. New module `src-tauri/src/diagnostics_cmds.rs` (D4 · D7 · D8).**
+- `diagnostics_sandbox_posture` (D7) returns the backend's own `SandboxPosture::preferred()` verdict with its text;
+  Ambient's detail states plainly that third-party MCP children are **NOT filesystem-confined** on this platform, while
+  still being ticket-gated, audited and net-floored. Settings → Diagnostics renders it verbatim.
+- `diagnostics_support_bundle` (D8) assembles versions, platform, the full doctor report, the sandbox verdict, the
+  store manifest, an allow-listed file set and a last-40 audit summary, all through a **structural** scrubber
+  (secret-shaped keys dropped, long strings collapsed). The vault/key rings are unreachable by construction — a field
+  can only ship by being added to `BUNDLE_ALLOWED` in review. Three unit tests cover the scrubber and the summary.
+- `data_remove_all` (D4) is the explicit remove-all-data path: quiesce the audit writer, delete the data directory,
+  recreate it and re-open a fresh ledger, with a typed `DELETE` confirmation enforced in the UI.
+
+**2. Docs the rows ask for.** New `docs/install-layout.md`: the per-user install model (NSIS `currentUser`, MSI
+per-user, no elevation), the full **what-is-written-where** table and the no-services/no-tasks/no-autostart/no-PATH
+statement (D1), the uninstall/remove-all contract (D4), and the **five-row recovery playbook** (D9) — including the
+honest dead end that a lost vault passphrase is unreadable by design. The README's platform badge and installer table
+no longer claim macOS/Linux installers (D6: both declared out of v1 scope, Windows-first stated as not-yet-qualified).
+
+**3. Gate.** New `scripts/check-diagnostics-surface.mjs` keeps the commands, registration, UI section, docs, README and
+SUPPORT-MATRIX in agreement — including the honesty properties themselves (typed confirmation present; no doc claims
+an out-of-scope platform ships).
+
+**Verification:** `cargo check` (shell + `everyaios-core --all-targets`) clean; `cargo clippy --all-targets` — the one
+warning this block introduced was fixed (the other two are pre-existing in the un-gated shell crate);
+`cargo test --lib diagnostics` → **3 passed**; `ui tsc --noEmit` clean; `check-doc-sync` green; the new gate green.
+
+---
 ## v4.00 — 2026-09-23 — The C block: update pipeline, channels, rollout, upgrade evidence (P70.C1–C7)
 
 **Category:** release engineering — the auto-update pipeline end to end, implemented and machine-checked. No capability

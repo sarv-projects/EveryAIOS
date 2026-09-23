@@ -21,6 +21,14 @@
     "check:licences": "node scripts/check-licences.mjs",
     "check:updater-keys": "node scripts/check-updater-keys.mjs",
     "check:update-pipeline": "node scripts/check-update-pipeline.mjs",
+    "check:diagnostics-surface": "node scripts/check-diagnostics-surface.mjs",
+    "check:release-surface": "node scripts/gen-release-surface.mjs --check",
+    "check:prompt-steering": "node scripts/check-prompt-steering.mjs",
+    "check:doc-refs": "node scripts/check-doc-refs.mjs",
+    "check:vocabulary": "node scripts/check-vocabulary.mjs",
+    "gen:release-surface": "node scripts/gen-release-surface.mjs",
+    "release:qualify": "node scripts/release-qualify.mjs",
+    "release:qualify:execute": "node scripts/release-qualify.mjs --execute",
     "gen:sbom": "node scripts/gen-sbom.mjs"
   },
   "devDependencies": {

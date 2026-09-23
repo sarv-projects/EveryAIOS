@@ -23,8 +23,8 @@ export const SHORTCUTS: ShortcutGroup[] = [
     { keys: '⌘ .', action: 'Casual ⇄ power mode' },
     { keys: '⌘ \\', action: 'Toggle viewport' },
     { keys: '⌘ N', action: 'New work' },
-    { keys: '⌘ 1–5', action: 'Switch to session 1–5' },
-    { keys: 'Ctrl Tab', action: 'Cycle session (Shift reverses)' },
+    { keys: '⌘ 1–5', action: 'Switch to chat 1–5' },
+    { keys: 'Ctrl Tab', action: 'Cycle chat (Shift reverses)' },
     { keys: '⌘⇧ Q', action: 'Cycle model variant (⇧ reverses)' },
   ]},
   { group: 'Views', items: [

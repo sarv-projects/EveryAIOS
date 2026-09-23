@@ -32,7 +32,7 @@ const CODEBOOK: Record<string, Explanation> = {
 
   // Tool layer.
   'tool_failed': { explain: 'A tool call failed mid-task.', hint: 'Retry — the task resumes from the same history.' },
-  'tool_not_attached': { explain: 'The tool needs a session that is not attached (e.g. a browser or device).', hint: 'Start the missing session from its surface (Browse / Computer use), then retry.' },
+  'tool_not_attached': { explain: 'The tool needs a live connection that is not attached (e.g. a browser or device).', hint: 'Start the missing connection from its surface (Browse / Computer use), then retry.' },
   'tool_timeout': { explain: 'A tool call ran too long and was cut off.', hint: 'Retry with a narrower ask, or split the work into smaller steps.' },
 
   // Agent layer — coordinator/engine failures.

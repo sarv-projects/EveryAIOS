@@ -763,7 +763,7 @@ complete function accounting for the file. `refs` is the cross-file `stem::` ref
 
 | Location | Files | Lines | Functions | `#[test]` fns |
 | --- | ---: | ---: | ---: | ---: |
-| `crates/everyaios-acp/` | 23 | 8,809 | 357 | 112 |
+| `crates/everyaios-acp/` | 23 | 8,920 | 360 | 114 |
 | `crates/everyaios-agents/` | 8 | 1,447 | 96 | 26 |
 | `crates/everyaios-audit/` | 8 | 4,303 | 188 | 56 |
 | `crates/everyaios-blueprint/` | 36 | 12,670 | 634 | 201 |
@@ -771,7 +771,7 @@ complete function accounting for the file. `refs` is the cross-file `stem::` ref
 | `crates/everyaios-catalog/` | 20 | 9,021 | 344 | 116 |
 | `crates/everyaios-cdp/` | 6 | 3,038 | 120 | 49 |
 | `crates/everyaios-codeintel/` | 17 | 4,139 | 200 | 63 |
-| `crates/everyaios-core/` | 106 | 59,759 | 2488 | 803 |
+| `crates/everyaios-core/` | 108 | 60,543 | 2519 | 814 |
 | `crates/everyaios-desktop/` | 15 | 6,921 | 279 | 65 |
 | `crates/everyaios-eval/` | 11 | 2,885 | 133 | 47 |
 | `crates/everyaios-guard/` | 36 | 10,156 | 526 | 190 |
@@ -784,8 +784,8 @@ complete function accounting for the file. `refs` is the cross-file `stem::` ref
 | `crates/everyaios-storage/` | 19 | 4,149 | 208 | 54 |
 | `crates/everyaios-types/` | 1 | 1,453 | 58 | 11 |
 | `crates/everyaios-vault/` | 17 | 11,670 | 447 | 160 |
-| `src-tauri/` | 51 | 19,710 | 704 | 74 |
-| **TOTAL** | **504** | **204,102** | **8922** | **2770** |
+| `src-tauri/` | 51 | 20,132 | 719 | 77 |
+| **TOTAL** | **506** | **205,419** | **8971** | **2786** |
 
 ### 9.1 `crates/everyaios-acp/`
 
@@ -827,12 +827,12 @@ complete function accounting for the file. `refs` is the cross-file `stem::` ref
 
 - `fns` (1): main:20
 
-#### `crates/everyaios-acp/src/chief.rs` — 1,007 lines · 12 tests · refs 1
+#### `crates/everyaios-acp/src/chief.rs` — 1,113 lines · 14 tests · refs 1
 
 > P38 — Dynamic Chief (spec §4.2.5a): the top brain is a configurable slot.
 
-**`enum`** (4): `GovernancePreference`:143, `GovernedSession`:167, `ChiefEvent`:215, `ChiefError`:236 · **`fn`** (13): `build_chief_prompt`:62, `allow`:98, `deny`:104, `badge`:181, `governance_mode`:194, `new`:296, `spawn`:394, `spawn_with`:405, `set_permission_gate`:443, `with_permission_gate`:448, `mediated`:456, `governance_preference`:461, `capabilities`:466 · **`struct`** (10): `SessionHandle`:35, `SessionOptions`:41, `UserMessage`:51, `PermissionRequest`:84, `Approval`:92, `DenyAllGate`:128, `ChiefCapabilities`:158, `SessionState`:228, `DelegateChief`:283, `AcpChief`:374 · **`trait`** (2): `PermissionGate`:121, `ChiefAdapter`:255 · **`type`** (2): `SessionId`:31, `EventStream`:224
-- `fns` (60): build_chief_prompt:62, allow:98, deny:104, decide:124, decide:131, badge:181, governance_mode:194, initialize:256, start_session:257, send_message:258, stream_events:259, request_permission:261, cancel:263, update:265, new:296, initialize:319, start_session:325, send_message:329, stream_events:333, request_permission:337, cancel:341, update:345, spawn:394, spawn_with:405, set_permission_gate:443, with_permission_gate:448, mediated:456, governance_preference:461, capabilities:466, initialize:472, start_session:492, send_message:502, stream_events:509, request_permission:517, cancel:546, update:552, drop:562, driver_loop:571, build_client_capabilities:675, agent_caps:693, governance_advertised_is_mediated:704, governance_withhold_without_sandbox_or_mcp_is_not_governed:717, governance_withhold_with_sandbox_is_self_contained:726, build_chief_prompt_injects_passport_and_governance:733, build_chief_prompt_without_facts_is_just_governance_plus_text:751, governance_withhold_with_mcp_is_self_contained_with_channel_b:761, delegate_chief_satisfies_the_trait_contract:767, send:822, recv:826, is_alive:829, shutdown:832, ok:835, init_result:839, client_info:851, decide:865, acp_chief_negotiates_not_governed_without_mcp_or_sandbox:871, acp_chief_reports_channel_b_when_mcp_available:886, acp_chief_full_lifecycle_with_permission_seam:902, acp_chief_wire_payload_withholds_fs_terminal_by_default:969, permission_request_params_shape_parses:991
+**`const`** (1): `COWORK_AFFINITY_STEERING`:129 · **`enum`** (4): `GovernancePreference`:204, `GovernedSession`:228, `ChiefEvent`:276, `ChiefError`:297 · **`fn`** (14): `build_chief_prompt`:62, `build_chief_prompt_with_steering`:92, `allow`:159, `deny`:165, `badge`:242, `governance_mode`:255, `new`:357, `spawn`:455, `spawn_with`:466, `set_permission_gate`:504, `with_permission_gate`:509, `mediated`:517, `governance_preference`:522, `capabilities`:527 · **`struct`** (10): `SessionHandle`:35, `SessionOptions`:41, `UserMessage`:51, `PermissionRequest`:145, `Approval`:153, `DenyAllGate`:189, `ChiefCapabilities`:219, `SessionState`:289, `DelegateChief`:344, `AcpChief`:435 · **`trait`** (2): `PermissionGate`:182, `ChiefAdapter`:316 · **`type`** (2): `SessionId`:31, `EventStream`:285
+- `fns` (63): build_chief_prompt:62, build_chief_prompt_with_steering:92, allow:159, deny:165, decide:185, decide:192, badge:242, governance_mode:255, initialize:317, start_session:318, send_message:319, stream_events:320, request_permission:322, cancel:324, update:326, new:357, initialize:380, start_session:386, send_message:390, stream_events:394, request_permission:398, cancel:402, update:406, spawn:455, spawn_with:466, set_permission_gate:504, with_permission_gate:509, mediated:517, governance_preference:522, capabilities:527, initialize:533, start_session:553, send_message:563, stream_events:570, request_permission:578, cancel:607, update:613, drop:623, driver_loop:632, build_client_capabilities:736, agent_caps:754, governance_advertised_is_mediated:765, governance_withhold_without_sandbox_or_mcp_is_not_governed:778, governance_withhold_with_sandbox_is_self_contained:787, build_chief_prompt_injects_passport_and_governance:794, build_chief_prompt_without_facts_is_just_governance_plus_text:812, p71_9i_steering_blocks_follow_the_documented_order_and_use_real_newlines:822, p71_9i_steering_blocks_are_inert_when_absent_or_blank:851, governance_withhold_with_mcp_is_self_contained_with_channel_b:867, delegate_chief_satisfies_the_trait_contract:873, send:928, recv:932, is_alive:935, shutdown:938, ok:941, init_result:945, client_info:957, decide:971, acp_chief_negotiates_not_governed_without_mcp_or_sandbox:977, acp_chief_reports_channel_b_when_mcp_available:992, acp_chief_full_lifecycle_with_permission_seam:1008, acp_chief_wire_payload_withholds_fs_terminal_by_default:1075, permission_request_params_shape_parses:1097
 
 #### `crates/everyaios-acp/src/client.rs` — 1,463 lines · 25 tests · refs 5
 
@@ -862,7 +862,7 @@ complete function accounting for the file. `refs` is the cross-file `stem::` ref
 **`enum`** (1): `InstallError`:22 · **`fn`** (6): `new`:50, `install_root`:54, `install`:62, `record_path`:133, `installed`:151, `ownership`:223 · **`struct`** (3): `InstallOutcome`:35, `Installer`:45, `OwnershipMarker`:259
 - `fns` (29): new:50, install_root:54, install:62, record_path:133, installed:151, download:173, record:188, ownership:223, new:247, now_ms:270, verify_sha256:278, hex:291, rel_path:300, extract_archive:306, safe_join:324, extract_zip:352, extract_tar_gz:374, extract_tar:380, extract_tar_entries:389, tmp_root:437, tar_gz_bytes:444, zip_bytes:459, binary_tar_gz_downloads_verifies_and_extracts:470, zip_extracts:491, npx_install_records_pin_without_download:501, path_discovery_records_exact_absolute_path:530, rel_path_strips_leading_dot_slash:548, zip_slip_is_refused:554, missing_sha256_is_refused_before_download:579
 
-#### `crates/everyaios-acp/src/lib.rs` — 67 lines · 0 tests · refs ambiguous
+#### `crates/everyaios-acp/src/lib.rs` — 72 lines · 0 tests · refs ambiguous
 
 > everyaios-acp — the ACP (Agent Client Protocol) harness bridge (P6.8 / F12 / J17; doc 45 §1, doc 57 §2).
 
@@ -1010,7 +1010,7 @@ complete function accounting for the file. `refs` is the cross-file `stem::` ref
 **`enum`** (1): `AuditError`:158 · **`fn`** (6): `new`:51, `with_trace`:63, `open`:80, `write`:94, `write_traced`:101, `seq`:124 · **`struct`** (2): `AuditEvent`:34, `AuditWriter`:72
 - `fns` (11): new:51, with_trace:63, open:80, write:94, write_traced:101, seq:124, last_seq:131, now_ms:149, appends_and_resumes_sequence:171, traced_events_roundtrip_and_legacy_lines_parse:212, empty_file_starts_at_zero:245
 
-#### `crates/everyaios-audit/src/merkle.rs` — 193 lines · 4 tests · refs 3
+#### `crates/everyaios-audit/src/merkle.rs` — 193 lines · 4 tests · refs 4
 
 > P7.7 — Merkle hash-chain upgrade for the audit log (OpenFang pattern).
 
@@ -1614,7 +1614,7 @@ complete function accounting for the file. `refs` is the cross-file `stem::` ref
 **`const`** (3): `SNAPSHOT_FILE`:28, `META_FILE`:30, `SETTINGS_FILE`:32 · **`fn`** (15): `from_snapshot`:61, `if_none_match`:74, `new`:91, `dir`:95, `snapshot_path`:99, `meta_path`:103, `settings_path`:107, `load_settings`:112, `refresh_interval_secs`:120, `save_settings`:124, `load`:133, `load_meta`:139, `save`:146, `save_meta`:161, `clear`:169 · **`struct`** (3): `CatalogSettings`:37, `CatalogMeta`:45, `CatalogStore`:86
 - `fns` (26): from_snapshot:61, if_none_match:74, new:91, dir:95, snapshot_path:99, meta_path:103, settings_path:107, load_settings:112, refresh_interval_secs:120, save_settings:124, load:133, load_meta:139, save:146, save_meta:161, clear:169, write_atomic:183, dir:200, snapshot:209, save_then_load_round_trips_snapshot_and_meta:215, missing_files_are_none_not_an_error:238, corrupt_snapshot_reads_as_absent:248, meta_records_failed_attempts_honestly:258, clear_removes_both_files_and_is_idempotent:274, settings_default_to_four_hours_and_clamp:292, clear_keeps_settings:313, atomic_write_leaves_no_tmp_behind:334
 
-#### `crates/everyaios-catalog/src/sync.rs` — 393 lines · 7 tests · refs 276
+#### `crates/everyaios-catalog/src/sync.rs` — 393 lines · 7 tests · refs 281
 
 > P14-5 — Sync automation (doc 66 §1.4 — deferred maintenance loop): the vendored `models.json` baseline ships **static**; a refresh path exists for when we need it.
 
@@ -2345,6 +2345,13 @@ complete function accounting for the file. `refs` is the cross-file `stem::` ref
 **`enum`** (2): `Inbound`:42, `LinkError`:312 · **`fn`** (12): `notify`:72, `reply`:88, `reply_error`:94, `new`:129, `new_with_activity`:137, `writer`:216, `receiver`:223, `request`:228, `reply`:254, `reply_error`:260, `next_inbound`:270, `try_inbound`:278 · **`struct`** (2): `WriterHandle`:58, `SidecarLink`:119
 - `fns` (24): clone:63, notify:72, reply:88, reply_error:94, write_frame:103, new:129, new_with_activity:137, writer:216, receiver:223, request:228, reply:254, reply_error:260, next_inbound:270, try_inbound:278, write_frame:285, now_ms:295, next_request_id:304, fake_sidecar:338, pair:390, request_response_roundtrip:396, eof_fails_pending_requests:413, chat_stream_relay_forwards_events:430, coordinator_request_is_dispatched_and_replied:465, writer_handle_pushes_notifications:497
 
+#### `crates/everyaios-core/src/store_schema.rs` — 528 lines · 6 tests · refs 16
+
+> P70.A8 — durable-store schema stamps + a forward-only migration path.
+
+**`const`** (3): `STORE_SCHEMA_FILE`:40, `MANIFEST_VERSION`:44, `STORES`:75 · **`enum`** (2): `StorePolicy`:49, `StoreSchemaError`:251 · **`fn`** (7): `store`:205, `manifest_stores`:210, `load_manifest`:280, `save_manifest`:304, `ensure_all`:345, `summary`:412, `manifest_path`:426 · **`struct`** (3): `StoreSpec`:60, `StoreStamp`:218, `StoreManifest`:233
+- `fns` (18): store:205, manifest_stores:210, default:239, load_manifest:280, save_manifest:304, store_has_data:327, ensure_all:345, policy_name:402, summary:412, manifest_path:426, tmpdir:434, every_registry_row_is_unique_and_documented:442, a_first_run_writes_a_manifest_at_the_current_versions:456, pre_stamp_data_is_adopted_rather_than_claimed_as_migrated:469, a_newer_recorded_schema_is_refused_and_leaves_the_manifest_alone:480, a_corrupt_manifest_is_reported_not_overwritten:501, the_summary_names_every_manifest_store:514, storerow:524
+
 #### `crates/everyaios-core/src/supervisor.rs` — 647 lines · 13 tests · refs 5
 
 > ProcessSupervisor — synchronous child-process supervisor for the TS coordinator sidecar.
@@ -2482,6 +2489,13 @@ complete function accounting for the file. `refs` is the cross-file `stem::` ref
 > Track 5 / P54.5 — Automation-profile acceptance suite (non-Windows half).
 
 - `fns` (5): cfg_with:24, automation_profile_name_prefers_automation_then_default:36, automation_profile_is_selected_per_platform:55, resolver_yields_a_real_shell_command:73, resolver_falls_back_to_a_detected_profile_for_an_unknown_name:83
+
+#### `crates/everyaios-core/tests/acceptance_upgrade_evidence.rs` — 256 lines · 5 tests · refs 0
+
+> P70.C5/C6 — upgrade-evidence acceptance harness.
+
+**`fn`** (4): `seal`:148, `verify_unmigrated`:178, `verify_rollback`:199, `vault_newer_schema_refused`:210
+- `fns` (13): preserved_stores:22, corrupt_manifest_is_reported_not_overwritten:29, newer_stamped_store_is_refused_with_names:48, pre_stamp_data_is_adopted_and_flagged:84, evidence_list_matches_the_boot_registry:97, audit_chain_validates_after_upgrade:116, seal:148, verify_unmigrated:178, verify_rollback:199, vault_newer_schema_refused:210, walk:218, hash_concat:231, sha_like:243
 
 #### `crates/everyaios-core/tests/p10_bench.rs` — 590 lines · 14 tests · refs 0
 
@@ -3941,12 +3955,12 @@ complete function accounting for the file. `refs` is the cross-file `stem::` ref
 #### `src-tauri/build.rs` — 4 lines · 0 tests · refs 0
 - `fns` (1): main:1
 
-#### `src-tauri/src/acp_cmds.rs` — 2,454 lines · 14 tests · refs 43
+#### `src-tauri/src/acp_cmds.rs` — 2,517 lines · 14 tests · refs 43
 
 > F12 / J17 — the **ACP harness bridge** commands (doc 45 §1, doc 57 §2).
 
-**`fn`** (37): `chief_default_get`:54, `chief_default_set`:70, `agent_readiness`:129, `agent_readiness_with_live`:163, `agents_doctor_check`:188, `agent_installed`:246, `launch_registry`:268, `acp_agents`:375, `acp_registry_refresh`:408, `acp_registry_status`:422, `acp_registry_install_plan`:437, `spawn_registry_refresh_job`:475, `resolve_wsl_spawn`:632, `runtime_location_json`:643, `runtime_location_for`:727, `acp_install_status`:743, `acp_install_request`:823, `acp_install_await`:955, `acp_install_commit`:982, `acp_install`:1025, `acp_agent_import`:1036, `acp_agent_verify`:1089, `acp_launch`:1225, `acp_authenticate`:1372, `chief_subagents`:1536, `chief_subagent_set_note`:1566, `chief_subagent_set_enabled`:1587, `chief_subagent_set_policy`:1606, `chief_subagent_mix`:1663, `acp_session_commands`:1675, `acp_session_config_options`:1689, `acp_session_set_config_option`:1703, `acp_tool_log`:1726, `acp_prompt`:1763, `acp_cancel`:2039, `acp_shutdown`:2049, `acp_sessions`:2062 · **`struct`** (3): `ShellAgentReadiness`:180, `AcpHandle`:296, `AcpHandleInfo`:321
-- `fns` (73): chief_default_get:54, chief_default_set:70, install_outcome_usable:92, resolve_native_binary:110, live_facts:117, agent_readiness:129, agent_readiness_with_live:163, agents_doctor_check:188, readiness:227, agent_installed:246, launch_registry:268, from:340, acp_agents:375, acp_registry_refresh:408, acp_registry_status:422, acp_registry_install_plan:437, registry_client:451, spawn_registry_refresh_job:475, now_ms:493, installer:502, resolve_spec:508, resolve_on_path:537, discover_windows_app_path:560, discover_windows_app_path:593, discover_wsl_path:601, discover_wsl_path:626, resolve_wsl_spawn:632, runtime_location_json:643, runtime_location_for:727, acp_install_status:743, acp_install_request:823, acp_install_await:955, acp_install_commit:982, acp_install:1025, acp_agent_import:1036, acp_agent_verify:1089, acp_launch:1225, acp_authenticate:1372, build_acp_prompt_with_passport:1409, append_acp_tool_log:1466, chief_subagents:1536, chief_subagent_set_note:1566, chief_subagent_set_enabled:1587, chief_subagent_set_policy:1606, chief_subagent_mix:1663, acp_session_commands:1675, acp_session_config_options:1689, acp_session_set_config_option:1703, acp_tool_log:1726, acp_prompt:1763, acp_cancel:2039, acp_shutdown:2049, acp_sessions:2062, read_workspace_resource:2073, is_brokered_op:2109, map_tool_call:2119, hash_tool_args:2134, install_args_hash:2147, url_host:2157, delete_tool_maps_to_high_risk_delete:2166, read_tool_maps_to_low_risk_write:2179, file_and_terminal_ops_are_brokered:2193, args_hash_is_stable_for_same_input:2202, install_args_hash_is_deterministic_and_scoped:2213, url_host_extracts_authority:2229, registry_has_no_builtin_and_lists_launch_agents:2238, resolve_on_path_finds_real_binaries_and_misses_absences:2247, stale_managed_install_is_not_occupancy:2262, package_manager_install_requires_manager_readiness:2288, path_discovery_reports_installed_with_kind_path:2303, live_acp_registry_refresh_drives_the_shell_launch_registry:2344, test_user_path_import_and_verification:2410, test_wsl_spawn_resolution:2447
+**`fn`** (37): `chief_default_get`:54, `chief_default_set`:70, `agent_readiness`:129, `agent_readiness_with_live`:163, `agents_doctor_check`:188, `agent_installed`:246, `launch_registry`:268, `acp_agents`:381, `acp_registry_refresh`:414, `acp_registry_status`:428, `acp_registry_install_plan`:443, `spawn_registry_refresh_job`:481, `resolve_wsl_spawn`:638, `runtime_location_json`:649, `runtime_location_for`:733, `acp_install_status`:749, `acp_install_request`:829, `acp_install_await`:961, `acp_install_commit`:988, `acp_install`:1031, `acp_agent_import`:1042, `acp_agent_verify`:1095, `acp_launch`:1231, `acp_authenticate`:1379, `chief_subagents`:1567, `chief_subagent_set_note`:1597, `chief_subagent_set_enabled`:1618, `chief_subagent_set_policy`:1640, `chief_subagent_mix`:1697, `acp_session_commands`:1709, `acp_session_config_options`:1723, `acp_session_set_config_option`:1737, `acp_tool_log`:1760, `acp_prompt`:1797, `acp_cancel`:2102, `acp_shutdown`:2112, `acp_sessions`:2125 · **`struct`** (3): `ShellAgentReadiness`:180, `AcpHandle`:296, `AcpHandleInfo`:327
+- `fns` (73): chief_default_get:54, chief_default_set:70, install_outcome_usable:92, resolve_native_binary:110, live_facts:117, agent_readiness:129, agent_readiness_with_live:163, agents_doctor_check:188, readiness:227, agent_installed:246, launch_registry:268, from:346, acp_agents:381, acp_registry_refresh:414, acp_registry_status:428, acp_registry_install_plan:443, registry_client:457, spawn_registry_refresh_job:481, now_ms:499, installer:508, resolve_spec:514, resolve_on_path:543, discover_windows_app_path:566, discover_windows_app_path:599, discover_wsl_path:607, discover_wsl_path:632, resolve_wsl_spawn:638, runtime_location_json:649, runtime_location_for:733, acp_install_status:749, acp_install_request:829, acp_install_await:961, acp_install_commit:988, acp_install:1031, acp_agent_import:1042, acp_agent_verify:1095, acp_launch:1231, acp_authenticate:1379, build_acp_prompt_with_passport:1416, append_acp_tool_log:1492, chief_subagents:1567, chief_subagent_set_note:1597, chief_subagent_set_enabled:1618, chief_subagent_set_policy:1640, chief_subagent_mix:1697, acp_session_commands:1709, acp_session_config_options:1723, acp_session_set_config_option:1737, acp_tool_log:1760, acp_prompt:1797, acp_cancel:2102, acp_shutdown:2112, acp_sessions:2125, read_workspace_resource:2136, is_brokered_op:2172, map_tool_call:2182, hash_tool_args:2197, install_args_hash:2210, url_host:2220, delete_tool_maps_to_high_risk_delete:2229, read_tool_maps_to_low_risk_write:2242, file_and_terminal_ops_are_brokered:2256, args_hash_is_stable_for_same_input:2265, install_args_hash_is_deterministic_and_scoped:2276, url_host_extracts_authority:2292, registry_has_no_builtin_and_lists_launch_agents:2301, resolve_on_path_finds_real_binaries_and_misses_absences:2310, stale_managed_install_is_not_occupancy:2325, package_manager_install_requires_manager_readiness:2351, path_discovery_reports_installed_with_kind_path:2366, live_acp_registry_refresh_drives_the_shell_launch_registry:2407, test_user_path_import_and_verification:2473, test_wsl_spawn_resolution:2510
 
 #### `src-tauri/src/agent_backend_cmds.rs` — 456 lines · 0 tests · refs 8
 
@@ -4011,12 +4025,12 @@ complete function accounting for the file. `refs` is the cross-file `stem::` ref
 **`fn`** (4): `repomap_build`:19, `file_outline`:45, `model_aliases_resolve`:75, `ai_markers_scan`:94 · **`struct`** (1): `OutlineEntry`:35
 - `fns` (5): repomap_build:19, file_outline:45, model_aliases_resolve:75, ai_markers_scan:94, _ext_counts:129
 
-#### `src-tauri/src/commands.rs` — 460 lines · 0 tests · refs 1
+#### `src-tauri/src/commands.rs` — 471 lines · 0 tests · refs 1
 
 > Tauri command surface (Fix 1d). The single list of every `#[tauri::command]` registered on the shell's IPC handler. `lib.rs` now only calls `commands::handler()` here instead of owning a 180-line inline list. Each fam...
 
-**`fn`** (1): `handler`:60
-- `fns` (1): handler:60
+**`fn`** (1): `handler`:61
+- `fns` (1): handler:61
 
 #### `src-tauri/src/control.rs` — 322 lines · 3 tests · refs 88
 
@@ -4081,7 +4095,7 @@ complete function accounting for the file. `refs` is the cross-file `stem::` ref
 **`const`** (1): `GUARD_WINDOW_LABEL`:25 · **`fn`** (2): `ensure_guard_window`:30, `open_guard_window`:51
 - `fns` (2): ensure_guard_window:30, open_guard_window:51
 
-#### `src-tauri/src/lib.rs` — 824 lines · 0 tests · refs ambiguous
+#### `src-tauri/src/lib.rs` — 831 lines · 0 tests · refs ambiguous
 
 > EveryAIOS desktop shell — Tauri v2 backend (tasks P0.2).
 
@@ -4196,7 +4210,7 @@ complete function accounting for the file. `refs` is the cross-file `stem::` ref
 **`const`** (4): `STORE_PUBLIC_KEY_B64`:28, `STORE_INDEX_BODY`:31, `STORE_INDEX_SIGNATURE_B64`:34, `RUNTIME_CAPABILITY_ALLOWLIST`:39 · **`fn`** (5): `skills_learn`:124, `skills_catalog`:179, `skills_install`:220, `skills_uninstall`:274, `plain_language_scope`:282 · **`struct`** (1): `SkillRowView`:52
 - `fns` (14): skills_root:44, verify_bundled:71, verify:95, skills_learn:124, installed_names:161, skill_tampered:171, skills_catalog:179, skills_install:220, skills_uninstall:274, plain_language_scope:282, chrono_like_now:292, civil_from_days:306, bundled_seed_verifies:328, tampered_seed_rejected:342
 
-#### `src-tauri/src/state.rs` — 130 lines · 0 tests · refs ambiguous
+#### `src-tauri/src/state.rs` — 135 lines · 0 tests · refs ambiguous
 
 > Shell managed state (Fix 1b). Extracted verbatim — field-for-field and type-for-type — from the old `lib.rs` `AppState` so this is pure motion: every existing `use crate::AppState` (26 files) still resolves through th...
 
@@ -4237,12 +4251,12 @@ complete function accounting for the file. `refs` is the cross-file `stem::` ref
 **`fn`** (2): `trajectory_sessions`:12, `trajectory_snapshot`:20
 - `fns` (2): trajectory_sessions:12, trajectory_snapshot:20
 
-#### `src-tauri/src/updater_cmds.rs` — 61 lines · 0 tests · refs 2
+#### `src-tauri/src/updater_cmds.rs` — 397 lines · 3 tests · refs 10
 
-> P8.8 — auto-updater Tauri commands. The tauri-plugin-updater is registered at boot (`tauri.conf.json` carries the minisign pubkey + endpoints; release.yml signs artifacts with the release-private key). This module add...
+> P8.8 / P70.C1–C4 — auto-updater Tauri commands.
 
-**`fn`** (2): `updater_check`:17, `updater_install`:41
-- `fns` (2): updater_check:17, updater_install:41
+**`const`** (1): `UPDATER_EVENT`:33 · **`fn`** (7): `updater_check`:146, `updater_channel_get`:179, `updater_channel_set`:186, `updater_download`:196, `updater_restart`:281, `updater_install`:311, `spawn_periodic_check`:330 · **`struct`** (2): `PendingUpdate`:54, `PendingUpdateSlot`:358
+- `fns` (17): channel_path:60, normalize_channel:64, read_channel:76, write_channel:89, channel_endpoints:105, emit_phase:116, channel_updater:128, updater_check:146, updater_channel_get:179, updater_channel_set:186, updater_download:196, updater_restart:281, updater_install:311, spawn_periodic_check:330, channels_are_normalized_and_refused:365, stable_endpoints_carry_the_github_fallback_beta_does_not:373, unknown_channel_read_falls_back_to_stable:386
 
 #### `src-tauri/src/vault_cmds.rs` — 168 lines · 0 tests · refs 4
 
@@ -4303,7 +4317,7 @@ population. `wiring:` is the §11 verdict.
 | `packages/core-security` | 5 | 556 | 24 | 28 | 10 | 23 | 0 |
 | `packages/core-tools` | 6 | 349 | 9 | 6 | 21 | 3 | 0 |
 | `ui` | 1 | 83 | 0 | 0 | 0 | 0 | 0 |
-| `ui/src` | 278 | 64,299 | 1874 | 3562 | 1202 | 496 | 167 |
+| `ui/src` | 278 | 64,546 | 1879 | 3578 | 1203 | 496 | 167 |
 
 ### 10.1 `ARCH/archive`
 
@@ -5873,9 +5887,9 @@ population. `wiring:` is the §11 verdict.
 - `fns` (6): stateBadge:38, SchedulesSkeleton:46, SchedulesSection:65, runNow:91, toggleEnabled:106, pauseOrResume:132
 - `anon` (21): function/arrow expressions with no binding name
 
-#### `ui/src/components/panels/settings-panel.tsx` — 404 lines · 0 tests · REACHABLE · imported by 1
+#### `ui/src/components/panels/settings-panel.tsx` — 408 lines · 0 tests · REACHABLE · imported by 1
 - `exports` (1): function SettingsPanel
-- `fns` (3): SectionBody:188, SettingsPanel:286, fuzzy:299
+- `fns` (3): SectionBody:190, SettingsPanel:290, fuzzy:303
 - `anon` (12): function/arrow expressions with no binding name
 
 #### `ui/src/components/panels/settings-providers.tsx` — 1,276 lines · 0 tests · REACHABLE · imported by 1
@@ -5883,10 +5897,10 @@ population. `wiring:` is the §11 verdict.
 - `fns` (17): parseRereadEnvelope:84, RereadState:98, fmtCount:128, fmtWhen:133, CatalogStatusBar:144, SourceBadge:241, ProviderRowButton:256, ModelTable:336, ActivatePanel:501, removeKey:601, useNim:611, CustomInferenceForm:861, save:875, ProvidersSection:1015, doRefresh:1086, onInterval:1099, onClear:1113
 - `anon` (70): function/arrow expressions with no binding name
 
-#### `ui/src/components/panels/settings-sections-extra.tsx` — 535 lines · 0 tests · REACHABLE · imported by 1
-- `exports` (6): function PrivacySection, function KeyboardSection, function AdvancedSection, function AboutSection, function SyncSection, function DoctorSection
-- `fns` (21): PrivacySection:19, KeyboardSection:51, AdvancedSection:92, appVersion:155, AboutSection:171, checkForUpdates:174, installUpdate:195, SyncSection:266, refreshDevice:279, refreshServe:290, handleStart:308, handleStop:319, handlePeerSync:328, handleNodeAttach:339, handleRotate:360, handleExportBundle:370, handleImportBundle:380, DoctorSection:467, run:471, glyph:485, tone:486
-- `anon` (18): function/arrow expressions with no binding name
+#### `ui/src/components/panels/settings-sections-extra.tsx` — 773 lines · 0 tests · REACHABLE · imported by 1
+- `exports` (7): function PrivacySection, function KeyboardSection, function AdvancedSection, function AboutSection, function SyncSection, function DoctorSection, function DiagnosticsSection
+- `fns` (26): PrivacySection:20, KeyboardSection:52, AdvancedSection:93, appVersion:156, AboutSection:174, setUpdateChannel:236, checkForUpdates:248, backgroundDownload:269, restartToUpdate:280, SyncSection:373, refreshDevice:386, refreshServe:397, handleStart:415, handleStop:426, handlePeerSync:435, handleNodeAttach:446, handleRotate:467, handleExportBundle:477, handleImportBundle:487, DoctorSection:574, run:578, glyph:592, tone:593, DiagnosticsSection:649, exportBundle:667, wipeAll:690
+- `anon` (34): function/arrow expressions with no binding name
 
 #### `ui/src/components/panels/settings-sections-security.tsx` — 520 lines · 0 tests · REACHABLE · imported by 1
 - `exports` (2): function PermissionsSection, function UsageSection
@@ -6767,7 +6781,7 @@ population. `wiring:` is the §11 verdict.
 - `fns` (4): live:18, preview:19, live:32, preview:35
 - `anon` (5): function/arrow expressions with no binding name
 
-#### `ui/src/lib/runtime.ts` — 119 lines · 0 tests · REACHABLE · imported by 43
+#### `ui/src/lib/runtime.ts` — 119 lines · 0 tests · REACHABLE · imported by 44
 - `exports` (15): type RuntimeReadiness, interface RuntimeState, function getRuntimeState, function subscribeRuntimeState, function useRuntimeState, function setRuntimeState, function runtimeError, function nativeCall, function bridgeCall, function markRuntimeLive, function setRuntimeDetail, function markSidecarOffline, function markVaultSetup, function markVaultLocked, function markRuntimeBooting
 - `fns` (14): shellAvailable:4, getRuntimeState:32, subscribeRuntimeState:36, useRuntimeState:41, setRuntimeState:49, runtimeError:55, nativeCall:67, bridgeCall:83, markRuntimeLive:96, setRuntimeDetail:100, markSidecarOffline:104, markVaultSetup:108, markVaultLocked:112, markRuntimeBooting:116
 - `anon` (2): function/arrow expressions with no binding name
@@ -6826,9 +6840,9 @@ population. `wiring:` is the §11 verdict.
 - `fns` (12): storageHealth:65, storageScan:71, storageLargeFiles:77, storageDuplicates:87, storageCleanupProposals:97, storageBattery:112, bytes:117, demoHealth:133, demoScan:146, demoLargeFiles:161, demoDupGroups:169, demoCleanupProposals:176
 - `anon` (6): function/arrow expressions with no binding name
 
-#### `ui/src/lib/store.ts` — 3,041 lines · 0 tests · REACHABLE · imported by 100
+#### `ui/src/lib/store.ts` — 3,043 lines · 0 tests · REACHABLE · imported by 100
 - `exports` (41): type ViewId, type ChatMode, function normalizeChatMode, type SessionStatus, interface ToolCallRecord, interface ChatMessage, interface ChatError, interface ArtifactActionUi, interface ArtifactServerState, interface Artifact, interface ProgressStep, interface MCQInterrupt, interface TaskElevation, interface TaskSnapshot, interface VerificationRecord, interface StreamStats, interface Session, function sessionTranscriptMarkdown, function sanitizeSessionRows, function mergeHydratedSessions, interface Automation, interface SessionLayout, interface DiaryEntry, interface PendingPatch, interface Connector, interface MemoryItem, interface PermissionEntry, const mockSessions, const mockMemory, interface LiveBudget, interface QueuedTurn, type TurnDispatcher, interface LiveNotification, function streamElapsedMs, function resetStreamingTestState, type StatusBarPills, const readStatusBarPills, const SETTINGS_SECTION_IDS, type SettingsSectionId, function taskScopeHash, const useAppStore
-- `fns` (156): normalizeChatMode:50, sessionTranscriptMarkdown:289, sanitizeSessionRows:301, mergeHydratedSessions:321, iso:416, markFirstDelta:687, ttfbFor:692, freshId:702, streamSessionId:708, hasActiveStream:713, bindStreamId:719, retireStream:730, streamElapsedMs:738, resetStreamingTestState:748, patchActiveAssistant:762, patchStreamMessage:782, readStatusBarPills:806, writeStatusBarPills:817, readPowerMode:828, writePowerMode:839, readPermission:901, writePermission:911, taskScopeHash:923, streamTestReset:1379, setWorkProjection:1398, setCoworkMode:1400, markSessionsHydrated:1403, setActiveSession:1404, newSession:1420, openAutomationRun:1447, pushMonitor:1474, clearMonitorBadge:1488, deleteSession:1489, reopenClosedSession:1520, reopenClosedSessionId:1529, purgeClosedSession:1555, purgeAllClosed:1557, cycleSession:1558, renameSession:1567, toggleSessionPinned:1576, clearSessionMessages:1583, compactSessionMessages:1597, setSessionGoal:1620, markGoalAchieved:1629, rewindToUserMessage:1634, rewindBeforeAssistant:1652, forkSession:1675, setActiveView:1700, setBrowserAttached:1712, clearBrowserUrl:1713, setDesktopAttached:1716, setCuaVisionGate:1719, setProviderKeysConfigured:1721, openSetup:1723, closeSetup:1724, setSessionChiefPin:1731, clearSessionChiefPin:1739, setUserDefaultChief:1757, openInBrowser:1758, toggleRail:1769, setRailCollapsed:1773, setFullscreenView:1778, addView:1781, closeView:1791, switchOfficeDoc:1802, closeOfficeDoc:1807, openOfficeDoc:1818, reorderViews:1850, setScopedView:1864, setScopedDoc:1866, patchArtifactServer:1871, setArtifactActions:1872, setAiPointerOpen:1875, pushDiaryEntry:1878, clearDiary:1880, toggleSidebar:1883, togglePowerMode:1886, setPowerMode:1892, setDevMode:1898, setStatusBarPills:1901, setComposerMode:1907, setComposerValue:1909, setSelectedAgent:1915, setSelectedModel:1931, cycleModelVariant:1936, setPersonaId:1946, setSoulId:1948, setAgentName:1950, setLocalRuntime:1953, setReconnect:1958, noteStreamTick:1959, forkFromMessage:1984, setAutoRoute:2010, setRouting:2012, setCenterScreen:2016, setSettingsSection:2018, setPermissionMode:2020, syncAutonomyFromRust:2037, freezeTaskSnapshot:2050, clearTaskSnapshot:2070, respondAutonomyCard:2071, pushAutonomyLimit:2126, effectiveAutonomyLevel:2146, setComposerRole:2165, setTaskFolder:2167, setOfficeFlyoutOpen:2170, setPaletteOpen:2173, setCockpitOpen:2176, toggleAgentPause:2179, notify:2200, notifyMcpError:2201, setLiveAgents:2204, setLiveBudget:2206, pushLiveNotification:2212, markLiveNotificationsRead:2217, setLiveStreamId:2221, clearLiveStreamId:2223, pushUserMessage:2231, streamStart:2248, appendReasoning:2271, streamAppend:2298, streamFinalize:2344, streamFail:2386, streamBudgetKill:2438, streamCancelled:2481, streamCitations:2514, streamWalkthrough:2523, streamToolCall:2535, streamToolResult:2553, streamToolProgress:2585, retryToolCall:2595, streamStep:2637, pushMcq:2665, respondMcq:2705, clearMcq:2762, setAcpHandle:2776, setAcpConfigOptions:2779, setPendingPlan:2785, setTurnDispatcher:2792, queueTurn:2795, editQueuedTurn:2816, removeQueuedTurn:2827, setQueuePaused:2838, promoteQueuedTurn:2841, dequeueNextTurn:2857, parkEditorWrite:2887, takeEditorWrite:2889, pushVerification:2901, setOnboardingDone:2913, saveSessionLayout:2927, restoreSessionLayout:2941, setSessionPaused:2971, setPendingPatches:2981, setNlAutomationDraft:2985, setSessionCapabilityOverride:2988, resetSessionCapabilities:3003
+- `fns` (156): normalizeChatMode:50, sessionTranscriptMarkdown:289, sanitizeSessionRows:301, mergeHydratedSessions:321, iso:416, markFirstDelta:687, ttfbFor:692, freshId:702, streamSessionId:708, hasActiveStream:713, bindStreamId:719, retireStream:730, streamElapsedMs:738, resetStreamingTestState:748, patchActiveAssistant:762, patchStreamMessage:782, readStatusBarPills:806, writeStatusBarPills:817, readPowerMode:828, writePowerMode:839, readPermission:903, writePermission:913, taskScopeHash:925, streamTestReset:1381, setWorkProjection:1400, setCoworkMode:1402, markSessionsHydrated:1405, setActiveSession:1406, newSession:1422, openAutomationRun:1449, pushMonitor:1476, clearMonitorBadge:1490, deleteSession:1491, reopenClosedSession:1522, reopenClosedSessionId:1531, purgeClosedSession:1557, purgeAllClosed:1559, cycleSession:1560, renameSession:1569, toggleSessionPinned:1578, clearSessionMessages:1585, compactSessionMessages:1599, setSessionGoal:1622, markGoalAchieved:1631, rewindToUserMessage:1636, rewindBeforeAssistant:1654, forkSession:1677, setActiveView:1702, setBrowserAttached:1714, clearBrowserUrl:1715, setDesktopAttached:1718, setCuaVisionGate:1721, setProviderKeysConfigured:1723, openSetup:1725, closeSetup:1726, setSessionChiefPin:1733, clearSessionChiefPin:1741, setUserDefaultChief:1759, openInBrowser:1760, toggleRail:1771, setRailCollapsed:1775, setFullscreenView:1780, addView:1783, closeView:1793, switchOfficeDoc:1804, closeOfficeDoc:1809, openOfficeDoc:1820, reorderViews:1852, setScopedView:1866, setScopedDoc:1868, patchArtifactServer:1873, setArtifactActions:1874, setAiPointerOpen:1877, pushDiaryEntry:1880, clearDiary:1882, toggleSidebar:1885, togglePowerMode:1888, setPowerMode:1894, setDevMode:1900, setStatusBarPills:1903, setComposerMode:1909, setComposerValue:1911, setSelectedAgent:1917, setSelectedModel:1933, cycleModelVariant:1938, setPersonaId:1948, setSoulId:1950, setAgentName:1952, setLocalRuntime:1955, setReconnect:1960, noteStreamTick:1961, forkFromMessage:1986, setAutoRoute:2012, setRouting:2014, setCenterScreen:2018, setSettingsSection:2020, setPermissionMode:2022, syncAutonomyFromRust:2039, freezeTaskSnapshot:2052, clearTaskSnapshot:2072, respondAutonomyCard:2073, pushAutonomyLimit:2128, effectiveAutonomyLevel:2148, setComposerRole:2167, setTaskFolder:2169, setOfficeFlyoutOpen:2172, setPaletteOpen:2175, setCockpitOpen:2178, toggleAgentPause:2181, notify:2202, notifyMcpError:2203, setLiveAgents:2206, setLiveBudget:2208, pushLiveNotification:2214, markLiveNotificationsRead:2219, setLiveStreamId:2223, clearLiveStreamId:2225, pushUserMessage:2233, streamStart:2250, appendReasoning:2273, streamAppend:2300, streamFinalize:2346, streamFail:2388, streamBudgetKill:2440, streamCancelled:2483, streamCitations:2516, streamWalkthrough:2525, streamToolCall:2537, streamToolResult:2555, streamToolProgress:2587, retryToolCall:2597, streamStep:2639, pushMcq:2667, respondMcq:2707, clearMcq:2764, setAcpHandle:2778, setAcpConfigOptions:2781, setPendingPlan:2787, setTurnDispatcher:2794, queueTurn:2797, editQueuedTurn:2818, removeQueuedTurn:2829, setQueuePaused:2840, promoteQueuedTurn:2843, dequeueNextTurn:2859, parkEditorWrite:2889, takeEditorWrite:2891, pushVerification:2903, setOnboardingDone:2915, saveSessionLayout:2929, restoreSessionLayout:2943, setSessionPaused:2973, setPendingPatches:2983, setNlAutomationDraft:2987, setSessionCapabilityOverride:2990, resetSessionCapabilities:3005
 - `anon` (192): function/arrow expressions with no binding name
 
 #### `ui/src/lib/tasks-contract.test.ts` — 110 lines · 5 tests · TEST · imported by 0
@@ -6913,9 +6927,9 @@ population. `wiring:` is the §11 verdict.
 - `fns` (1): env:4
 - `anon` (7): function/arrow expressions with no binding name
 
-#### `ui/src/lib/work.ts` — 488 lines · 0 tests · REACHABLE · imported by 7
+#### `ui/src/lib/work.ts` — 491 lines · 0 tests · REACHABLE · imported by 7
 - `exports` (37): interface WorkAddress, function sessionOwnerSurface, function sessionKindLabel, interface WorkPresence, interface WorkEventEnvelope, type DomainEvent, type OperationalEvent, type PresenceEvent, type RuntimeEvent, type WorkEvent, function presenceLabel, type WorkLifecycleState, function workStateLabel, function waitReasonLabel, interface WorkEventDescription, function describeWorkEvent, interface WorkSnapshot, function workList, function workSnapshot, function workEvents, function workPresence, function workReviews, interface PtySession, interface AgentSession, function workPtySpawn, function workPtyResize, function workPtySignal, function workPtyClose, function workPtySnapshot, function workWorktreeCreate, function workWorktreeAttach, function workWorktreeOp, function workAgentSpawn, function workAgentOp, function workAgentSessions, interface ChildWork, function workChildren
-- `fns` (24): sessionOwnerSurface:20, sessionKindLabel:34, presenceLabel:186, workStateLabel:209, waitReasonLabel:231, describeWorkEvent:256, shortId:370, workList:383, workSnapshot:388, workEvents:393, workPresence:398, workReviews:403, workPtySpawn:431, workPtyResize:434, workPtySignal:437, workPtyClose:440, workPtySnapshot:443, workWorktreeCreate:448, workWorktreeAttach:454, workWorktreeOp:457, workAgentSpawn:461, workAgentOp:467, workAgentSessions:470, workChildren:484
+- `fns` (24): sessionOwnerSurface:20, sessionKindLabel:34, presenceLabel:186, workStateLabel:209, waitReasonLabel:231, describeWorkEvent:256, shortId:373, workList:386, workSnapshot:391, workEvents:396, workPresence:401, workReviews:406, workPtySpawn:434, workPtyResize:437, workPtySignal:440, workPtyClose:443, workPtySnapshot:446, workWorktreeCreate:451, workWorktreeAttach:457, workWorktreeOp:460, workAgentSpawn:464, workAgentOp:470, workAgentSessions:473, workChildren:487
 - `anon` (17): function/arrow expressions with no binding name
 
 #### `ui/src/main.tsx` — 37 lines · 0 tests · ENTRY · imported by 0
@@ -6946,8 +6960,8 @@ population. `wiring:` is the §11 verdict.
 
 ### 11.2 Rust files with zero cross-file references
 
-127 of 504 files have no `stem::` reference anywhere else.
-**85 are non-test source files** (the real candidates); the other 42 are
+128 of 506 files have no `stem::` reference anywhere else.
+**85 are non-test source files** (the real candidates); the other 43 are
 integration tests, fixtures, and mock servers, which are never referenced by name.
 
 **Non-test source orphans, by directory:**
@@ -6986,7 +7000,7 @@ integration tests, fixtures, and mock servers, which are never referenced by nam
 - `crates/everyaios-codeintel/src` (3): docs_lookup, mock-lsp-server, session
 - `crates/everyaios-codeintel/tests` (1): lsp_runner
 - `crates/everyaios-core/src` (26): blueprint, challenge_tests, combos, connector_approvals, decline, diagnose, distill, graph, hooks, inventory, kernel_budget, local_tests, migrate, migration, mock-worker, pairing, probe, remote_attach, research, resources, routing, self_audit, store, sync, tracing, watcher_glue
-- `crates/everyaios-core/tests` (8): acceptance_edit_ladder, acceptance_terminal_automation, p10_bench, p10_e2e, p10_security, p50_gates, sidecar_handoff, worker_pool
+- `crates/everyaios-core/tests` (9): acceptance_edit_ladder, acceptance_terminal_automation, acceptance_upgrade_evidence, p10_bench, p10_e2e, p10_security, p50_gates, sidecar_handoff, worker_pool
 - `crates/everyaios-desktop/src` (1): policy
 - `crates/everyaios-desktop/tests` (1): live_linux_e2e
 - `crates/everyaios-eval/src` (2): report, store
@@ -7317,13 +7331,13 @@ The tail of this list is where "referenced once, by its own re-export" hides.
 
 ### 11.6 Tauri commands with no static `invoke()` call site
 
-351 commands registered. 296 have a direct `invoke("name")` site.
-Of the 55 without one:
+358 commands registered. 302 have a direct `invoke("name")` site.
+Of the 56 without one:
 
 - **10 are only *indirectly* referenced** — the name appears as a string literal somewhere in the
   UI/coordinator, or Rust mentions it. These are probably fine (the UI may pass a variable, as
   `vault-gate.tsx` does with `invoke(cmd)`).
-- **45 are cold** — the name appears nowhere outside its own definition and registration.
+- **46 are cold** — the name appears nowhere outside its own definition and registration.
 
 A high `Rust mentions` count on a generic word (`version`, `status`, `tasks`) is noise — the name
 matches unrelated identifiers. Counts above 50 are flagged `(noisy)` and carry no signal.
@@ -7345,6 +7359,7 @@ matches unrelated identifiers. Counts above 50 are flagged `(noisy)` and carry n
 | `scheduler_fire_webhook` | `scheduler_cmds` | 0 | 0 |
 | `tasks_start` | `tasks_cmds` | 0 | 0 |
 | `tasks_complete` | `tasks_cmds` | 0 | 0 |
+| `updater_install` | `updater_cmds` | 0 | 0 |
 | `terminal_get_shell_integration` | `terminal_cmds` | 0 | 0 |
 | `model_aliases_resolve` | `codeintel_cmds` | 0 | 0 |
 | `ai_markers_scan` | `codeintel_cmds` | 0 | 0 |
@@ -7384,7 +7399,7 @@ matches unrelated identifiers. Counts above 50 are flagged `(noisy)` and carry n
 | `file_outline` | `codeintel_cmds` | 0 | 2 |
 | `repomap_build` | `codeintel_cmds` | 0 | 4 |
 | `agui_send` | `crate` | 0 | 6 |
-| `version` | `crate` | 1 | 658 (noisy) |
+| `version` | `crate` | 1 | 744 (noisy) |
 
 
 ---
@@ -7438,7 +7453,7 @@ matches unrelated identifiers. Counts above 50 are flagged `(noisy)` and carry n
 
 - **external (15):** serde, serde_json, urlencoding, base64, chacha20poly1305, x25519-dalek, toml, thiserror, sha2, argon2, rand, opentelemetry, ureq, portable-pty, sysinfo
 - **internal (14):** everyaios-ipc, everyaios-types, everyaios-vault, everyaios-guard, everyaios-memory, everyaios-blueprint, everyaios-mcp, everyaios-audit, everyaios-script, everyaios-storage, everyaios-office, everyaios-search, everyaios-catalog, everyaios-codeintel
-- **dev-dependencies:** everyaios-browser, everyaios-cdp
+- **dev-dependencies:** everyaios-browser, everyaios-cdp, tempfile, anyhow
 
 #### `everyaios-desktop`
 
@@ -7512,7 +7527,7 @@ matches unrelated identifiers. Counts above 50 are flagged `(noisy)` and carry n
 
 #### `package.json` — `everyaios-desktop-workspace`
 
-- **scripts:** coordinator:dev, coordinator:test, coordinator:typecheck, tauri:dev, tauri:build, tauri:verify-clean-boot, ipc:parity, check:arch, check:versions, check:release-matrix, check:app-metadata, check:native-deps, check:size-budget, check:store-schemas, check:licences, check:updater-keys, gen:sbom
+- **scripts:** coordinator:dev, coordinator:test, coordinator:typecheck, tauri:dev, tauri:build, tauri:verify-clean-boot, ipc:parity, check:arch, check:versions, check:release-matrix, check:app-metadata, check:native-deps, check:size-budget, check:store-schemas, check:licences, check:updater-keys, check:update-pipeline, check:diagnostics-surface, check:release-surface, check:prompt-steering, check:doc-refs, check:vocabulary, gen:release-surface, release:qualify, release:qualify:execute, gen:sbom
 - **dependencies:** _none_
 - **devDependencies:** @tauri-apps/cli
 
@@ -7587,7 +7602,7 @@ matches unrelated identifiers. Counts above 50 are flagged `(noisy)` and carry n
 
 ## 13. Non-source inventory — every remaining tracked file
 
-The 142 tracked files that are not Rust, TypeScript, or an npm manifest. Every one has a `####`
+The 152 tracked files that are not Rust, TypeScript, or an npm manifest. Every one has a `####`
 entry below — nothing is summarised away at this level. Line counts are omitted for binaries.
 The `wired:` verdicts in §13.7 are name searches over CI YAML, `package.json` scripts, and sibling scripts — the
 same heuristic class as §11, so a script invoked through a variable or a wrapper reads as unwired.
@@ -7600,9 +7615,9 @@ same heuristic class as §11, so a script invoked through a variable or a wrappe
 | §13.4 | 26 |
 | §13.5 | 7 |
 | §13.6 | 35 |
-| §13.7 | 23 |
-| §13.8 | 17 |
-| **TOTAL** | **142** |
+| §13.7 | 32 |
+| §13.8 | 18 |
+| **TOTAL** | **152** |
 
 ### 13.1 Rust manifests
 
@@ -7651,10 +7666,10 @@ same heuristic class as §11, so a script invoked through a variable or a wrappe
 - purpose: P7.1 — code intelligence: LSP JSON-RPC framing + core types, SCIP-style symbol index + queries, and a repo map (tag extraction + graph + ranking).
 - deps: 6 · internal: _none_ · dev-deps: 0 · features: no · bin targets: 0
 
-#### `crates/everyaios-core/Cargo.toml` — 2.2 KB · 61 lines
+#### `crates/everyaios-core/Cargo.toml` — 2.4 KB · 65 lines
 - package `everyaios-core` · edition `2021 (inherited)` · rust-version `1.80 (inherited)`
 - purpose: EveryAIOS orchestrator binary — boots headless, loads config, supervises sidecar
-- deps: 29 · internal: everyaios-ipc, everyaios-types, everyaios-vault, everyaios-guard, everyaios-memory, everyaios-blueprint, everyaios-mcp, everyaios-audit, everyaios-script, everyaios-storage, everyaios-office, everyaios-search, everyaios-catalog, everyaios-codeintel · dev-deps: 2 · features: no · bin targets: 0
+- deps: 29 · internal: everyaios-ipc, everyaios-types, everyaios-vault, everyaios-guard, everyaios-memory, everyaios-blueprint, everyaios-mcp, everyaios-audit, everyaios-script, everyaios-storage, everyaios-office, everyaios-search, everyaios-catalog, everyaios-codeintel · dev-deps: 4 · features: no · bin targets: 0
 
 #### `crates/everyaios-desktop/Cargo.toml` — 1.7 KB · 48 lines
 - package `everyaios-computeruse` · edition `2021 (inherited)` · rust-version `1.80 (inherited)`
@@ -7712,19 +7727,19 @@ same heuristic class as §11, so a script invoked through a variable or a wrappe
 - purpose: EveryAIOS vault — SQLCipher key-ring store (P0.1 init; P1.1 key pools, routing, budgets + credential broker)
 - deps: 9 · internal: _none_ · dev-deps: 0 · features: no · bin targets: 0
 
-#### `src-tauri/Cargo.toml` — 2.2 KB · 55 lines
+#### `src-tauri/Cargo.toml` — 2.5 KB · 63 lines
 - package `everyaios-desktop` · edition `2021` · rust-version `1.80`
 - purpose: EveryAIOS — agentic desktop OS shell (Tauri v2)
-- deps: 25 · internal: everyaios-core, everyaios-ipc, everyaios-vault, everyaios-audit, everyaios-guard, everyaios-office, everyaios-catalog, everyaios-acp, everyaios-mcp, everyaios-storage, everyaios-browser, everyaios-cdp, everyaios-codeintel, everyaios-agents, everyaios-types, everyaios-blueprint, everyaios-script, everyaios-computeruse, everyaios-desktop · dev-deps: 0 · features: no · bin targets: 0
+- deps: 27 · internal: everyaios-core, everyaios-ipc, everyaios-vault, everyaios-audit, everyaios-guard, everyaios-office, everyaios-catalog, everyaios-acp, everyaios-mcp, everyaios-storage, everyaios-browser, everyaios-cdp, everyaios-codeintel, everyaios-agents, everyaios-types, everyaios-blueprint, everyaios-script, everyaios-computeruse, everyaios-desktop · dev-deps: 1 · features: no · bin targets: 0
 
 ### 13.2 CI, hooks & gates
 
 *The GitHub workflows and the pre-commit hook config, with the scripts each one invokes.*
 
-#### `.github/workflows/ci.yml` — 12.8 KB · 327 lines
+#### `.github/workflows/ci.yml` — 14.9 KB · 362 lines
 - **ci** · triggers: `push`, `pull_request` · jobs (6): `docs-sync`, `rust`, `office-oracle`, `ui`, `sidecar`, `tauri-check`
 - steps: 10 · runners: `ubuntu-latest`, `${{ matrix.os }}`
-- invokes: `check-doc-sync.mjs`, `check-versions.mjs`, `check-release-matrix.mjs`, `check-app-metadata.mjs`, `check-native-deps.mjs`, `check-size-budget.mjs`, `check-store-schemas.mjs`, `check-licences.mjs`, `check-updater-keys.mjs`, `verify-packaged-e2e.mjs`, `gen-codebase-map.mjs`, `check-arch-invariants.mjs`
+- invokes: `check-doc-sync.mjs`, `check-versions.mjs`, `check-release-matrix.mjs`, `check-app-metadata.mjs`, `check-native-deps.mjs`, `check-size-budget.mjs`, `check-store-schemas.mjs`, `check-licences.mjs`, `check-updater-keys.mjs`, `check-update-pipeline.mjs`, `check-diagnostics-surface.mjs`, `release-qualify.mjs`, `gen-release-surface.mjs`, `check-public-surface.mjs`, `check-prompt-steering.mjs`, `check-doc-refs.mjs`, `check-vocabulary.mjs`, `verify-packaged-e2e.mjs`, `gen-codebase-map.mjs`, `check-arch-invariants.mjs`
 
 #### `.github/workflows/nightly-e2e.yml` — 4.9 KB · 142 lines
 - **nightly-e2e** · triggers: `schedule`, `workflow_dispatch` · jobs (3): `full-suite`, `office-oracle`, `sidecar`
@@ -7739,10 +7754,10 @@ same heuristic class as §11, so a script invoked through a variable or a wrappe
 - **perf-regression** · triggers: `schedule`, `workflow_dispatch` · jobs (1): `bench`
 - steps: 2 · runners: `ubuntu-latest`
 
-#### `.github/workflows/release.yml` — 11.6 KB · 255 lines
+#### `.github/workflows/release.yml` — 13.4 KB · 296 lines
 - **release** · triggers: `push`, `workflow_dispatch` · jobs (3): `kernel-gate`, `qualification`, `build`
 - steps: 7 · runners: `ubuntu-latest`, `${{ matrix.os }}`
-- invokes: `check-doc-sync.mjs`, `security-gate.mjs`, `check-size-budget.mjs`, `check-artifact-hygiene.mjs`, `gen-sbom.mjs`
+- invokes: `check-doc-sync.mjs`, `security-gate.mjs`, `check-size-budget.mjs`, `check-artifact-hygiene.mjs`, `gen-sbom.mjs`, `gen-release-surface.mjs`, `check-public-surface.mjs`
 
 #### `.pre-commit-config.yaml` — 2.5 KB · 67 lines
 - hooks (6): `cargo-fmt`, `cargo-clippy`, `ui-typecheck`, `coordinator-typecheck`, `ui-lint`, `docs-sync`
@@ -7878,8 +7893,8 @@ same heuristic class as §11, so a script invoked through a variable or a wrappe
 #### `bun.lock` — 3.3 KB · 38 lines
 - bun text-format lockfile — `"resolved"` rows: 0 · lines 38
 
-#### `crates/Cargo.lock` — 132.7 KB · 5,537 lines
-- Cargo resolution — `[[package]]` entries: 563 · lines 5537
+#### `crates/Cargo.lock` — 133.2 KB · 5,558 lines
+- Cargo resolution — `[[package]]` entries: 565 · lines 5558
 
 #### `package-lock.json` — 11.7 KB · 331 lines
 - npm resolution — 13 resolved package entries
@@ -7887,8 +7902,8 @@ same heuristic class as §11, so a script invoked through a variable or a wrappe
 #### `pnpm-lock.yaml` — 254.7 KB · 7,184 lines
 - pnpm resolution — lockfileVersion `9.0` · package rows: 3227
 
-#### `src-tauri/Cargo.lock` — 168.8 KB · 7,182 lines
-- Cargo resolution — `[[package]]` entries: 682 · lines 7182
+#### `src-tauri/Cargo.lock` — 168.8 KB · 7,185 lines
+- Cargo resolution — `[[package]]` entries: 682 · lines 7185
 
 #### `ui/bun.lock` — 138.9 KB · 1,125 lines
 - bun text-format lockfile — `"resolved"` rows: 0 · lines 1125
@@ -8016,9 +8031,13 @@ same heuristic class as §11, so a script invoked through a variable or a wrappe
 #### `crates/everyaios-desktop/tests/fixtures/e9_app.py` — 738 B · 28 lines
 - test fixture — 
 
+#### `scripts/check-app-metadata.mjs` — 10.5 KB · 224 lines
+- purpose: P70.A4 — app metadata + assets.
+- wired: CI ×1 · package.json ×1 · other scripts ×1
+
 #### `scripts/check-arch-invariants.mjs` — 19.7 KB · 504 lines
 - purpose: EveryAIOS architecture-invariant gate (P69.E).
-- wired: CI ×1 · package.json ×1
+- wired: CI ×1 · package.json ×1 · other scripts ×1
 
 #### `scripts/check-artifact-hygiene.mjs` — 5.5 KB · 155 lines
 - purpose: P70.B7 — secret-leak gate on PRODUCED artifacts.
@@ -8026,11 +8045,39 @@ same heuristic class as §11, so a script invoked through a variable or a wrappe
 
 #### `scripts/check-doc-sync.mjs` — 8.4 KB · 211 lines
 - purpose: EveryAIOS doc-sync check (Fix 2) — run in CI and pre-commit.
-- wired: CI ×3 · other scripts ×3
+- wired: CI ×3 · other scripts ×4
+
+#### `scripts/check-licences.mjs` — 20.2 KB · 446 lines
+- purpose: P70.B6 — third-party licence compliance.
+- wired: CI ×1 · package.json ×1 · other scripts ×2
+
+#### `scripts/check-native-deps.mjs` — 8.3 KB · 203 lines
+- purpose: P70.A3 — the per-platform native dependency audit, as a gate.
+- wired: CI ×1 · package.json ×1 · other scripts ×1
+
+#### `scripts/check-release-matrix.mjs` — 9.8 KB · 215 lines
+- purpose: P70.A1 — the published bundle target matrix.
+- wired: CI ×1 · package.json ×1 · other scripts ×1
+
+#### `scripts/check-size-budget.mjs` — 11.0 KB · 298 lines
+- purpose: P70.A5 — size + footprint budgets.
+- wired: CI ×2 · package.json ×1 · other scripts ×1
+
+#### `scripts/check-store-schemas.mjs` — 10.4 KB · 245 lines
+- purpose: P70.A8 — durable-store schema stamps, statically enforced.
+- wired: CI ×1 · package.json ×1 · other scripts ×1
+
+#### `scripts/check-update-pipeline.mjs` — 5.5 KB · 106 lines
+- purpose: P70.C7 — update-pipeline gate.
+- wired: CI ×1 · package.json ×1
+
+#### `scripts/check-updater-keys.mjs` — 4.8 KB · 95 lines
+- purpose: P70.B4 — updater signing keypair custody.
+- wired: CI ×1 · package.json ×1
 
 #### `scripts/check-versions.mjs` — 6.9 KB · 170 lines
 - purpose: EveryAIOS version-lockstep gate (P70.A7) — run in CI and pre-commit.
-- wired: CI ×1 · package.json ×1
+- wired: CI ×1 · package.json ×1 · other scripts ×1
 
 #### `scripts/clean-profile-boot-check.mjs` — 7.2 KB · 168 lines
 - purpose: P50.1.7 — clean-profile boot verification (setup/offline states, no seeds).
@@ -8067,13 +8114,17 @@ same heuristic class as §11, so a script invoked through a variable or a wrappe
 - purpose: P50.5.1 — Real vertical chat E2E.
 - **no reference found** — not named by any workflow, package script, or sibling script
 
-#### `scripts/gen-codebase-map.mjs` — 65.8 KB · 1,566 lines
+#### `scripts/gen-codebase-map.mjs` — 66.5 KB · 1,582 lines
 - purpose: EveryAIOS — CODEBASE-MAP.md generator.
 - wired: CI ×1
 
 #### `scripts/gen-icons.py` — 2.5 KB · 69 lines
 - purpose: Vertical purple->blue gradient inside a rounded square
 - **no reference found** — not named by any workflow, package script, or sibling script
+
+#### `scripts/gen-sbom.mjs` — 10.6 KB · 270 lines
+- purpose: P70.B5 — SBOM + build-provenance generation.
+- wired: CI ×1 · package.json ×1
 
 #### `scripts/ipc-parity.mjs` — 11.0 KB · 275 lines
 - purpose: P50.3.1 — IPC parity inventory (checked, not hand-maintained).
@@ -8126,6 +8177,9 @@ same heuristic class as §11, so a script invoked through a variable or a wrappe
 #### `docs/codebase/freshness.json` — 8.5 KB · 129 lines
 - data file — 14 top-level keys
 
+#### `docs/packaging/budgets.json` — 2.6 KB · 44 lines
+- data file — 9 top-level keys
+
 #### `packages/core-providers/src/generated/model-catalog.backup.json` — 94.3 KB · 4,168 lines
 - data file — 6 top-level keys
 
@@ -8139,16 +8193,16 @@ same heuristic class as §11, so a script invoked through a variable or a wrappe
 - `pnpm-workspace.yaml` — 882 B, 24 lines
 
 #### `src-tauri/icons/128x128.png` — 5.2 KB · binary
-- binary image asset — 5.2 KB · named by 3 tracked text files
+- binary image asset — 5.2 KB · named by 4 tracked text files
 
 #### `src-tauri/icons/128x128@2x.png` — 10.3 KB · binary
 - binary image asset — 10.3 KB · named by 2 tracked text files
 
 #### `src-tauri/icons/32x32.png` — 1.3 KB · binary
-- binary image asset — 1.3 KB · named by 5 tracked text files
+- binary image asset — 1.3 KB · named by 6 tracked text files
 
 #### `src-tauri/icons/icon.ico` — 14.4 KB · binary
-- binary image asset — 14.4 KB · named by 7 tracked text files
+- binary image asset — 14.4 KB · named by 9 tracked text files
 
 #### `src-tauri/icons/icon.png` — 12.0 KB · binary
 - binary image asset — 12.0 KB · named by 5 tracked text files
@@ -8164,7 +8218,7 @@ _None._
 
 ## 14. Documentation index — every tracked `.md`
 
-**All 185 Markdown files** carry an entry: title, size, and opening sentence. This closes the gap where the
+**All 189 Markdown files** carry an entry: title, size, and opening sentence. This closes the gap where the
 first draft said the corpus was "listed with their headings" but was in fact only listed by name. These are the repo's
 claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in them, not capability drift — tag them [C] per §0.
 
@@ -8182,10 +8236,11 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 | RESEARCH/2026-ai-landscape — other research | 11 | 970 |
 | RESEARCH/desktop_app — the prior-art & competitor corpus | 93 | 12,987 |
 | deploy/ — deployment docs | 1 | 105 |
+| docs/ | 2 | 235 |
 | docs/codebase/ | 10 | 977 |
-| root — specs, handover, and this map | 12 | 11,875 |
+| root — specs, handover, and this map | 14 | 13,607 |
 | ui/ — UI design docs | 1 | 83 |
-| **TOTAL** | **185** | **38,647** |
+| **TOTAL** | **189** | **40,614** |
 
 ### 14.1 .agents/
 
@@ -8284,22 +8339,22 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 #### `ARCH/00-INDEX.md` — 115 lines · 18.0 KB
 > ARCH — Derived Index (points at CORE)
 
-- opening: **⛭ ROOT AUTHORITY: [`CORE.md`](CORE.md).** Read that first.
+- opening: **⛭ ROOT AUTHORITY: [`CORE.md`](ARCH/CORE.md).** Read that first.
 
 #### `ARCH/01-SYSTEM-ARCHITECTURE.md` — 156 lines · 12.5 KB
 > 01 — System Architecture: Derived Overview
 
-- opening: **DERIVED DOCUMENT — see [`CORE.md`](CORE.md) first.** This file is a *derived overview* of the module story.
+- opening: **DERIVED DOCUMENT — see [`CORE.md`](ARCH/CORE.md) first.** This file is a *derived overview* of the module story.
 
-#### `ARCH/02-MODULE-LAYOUT.md` — 177 lines · 42.7 KB
+#### `ARCH/02-MODULE-LAYOUT.md` — 177 lines · 42.8 KB
 > 02 — Module Layout (derived from CORE §4 and §13)
 
-- opening: **DERIVED DOCUMENT — see [`CORE.md`](CORE.md) §4 first.** Ownership is defined by CORE's 9-question matrix (one owner per question).
+- opening: **DERIVED DOCUMENT — see [`CORE.md`](ARCH/CORE.md) §4 first.** Ownership is defined by CORE's 9-question matrix (one owner per question).
 
 #### `ARCH/03-BYOK-KEYRINGS.md` — 153 lines · 17.3 KB
 > 03 — BYOK Key-Rings: Multiple Keys per Provider, Fallback Rotation
 
-- opening: **Status:** Derived document, **re-scoped by [`ADR/0005`](ADR/0005-external-agents-are-the-v1-engines.md).** It owns **EveryAIOS-managed** credentials — connector tokens, browser sessions, EveryAIOS-m
+- opening: **Status:** Derived document, **re-scoped by [`ADR/0005`](ARCH/ADR/0005-external-agents-are-the-v1-engines.md).** It owns **EveryAIOS-managed** credentials — connector tokens, browser sessions, EveryAIOS-m
 
 #### `ARCH/04-OFFICE-ENGINE.md` — 117 lines · 13.5 KB
 > 04 — Office Engine: Open + Edit Word / Excel / PPT / PDF
@@ -8309,52 +8364,52 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 #### `ARCH/05-TOKEN-ECONOMY.md` — 241 lines · 24.0 KB
 > 05 — Context Engineering: Minimize Inputs, Maximize Output Power
 
-- opening: **SCOPE REDUCED — see [`CORE.md`](CORE.md) §8 and [`CONTEXT.md`](CONTEXT.md) first.** The research here is retained, but its status changed: prefix-cache economics, tool-result size control and pass-b
+- opening: **SCOPE REDUCED — see [`CORE.md`](ARCH/CORE.md) §8 and [`CONTEXT.md`](ARCH/CONTEXT.md) first.** The research here is retained, but its status changed: prefix-cache economics, tool-result size control and pass-b
 
 #### `ARCH/06-SECURITY-GUARDRAILS.md` — 322 lines · 34.9 KB
 > 06 — Security & Guardrails
 
-- opening: **DERIVED DOCUMENT — see [`CORE.md`](CORE.md) §6 and [`SECURITY.md`](SECURITY.md) first.** `SECURITY.md` owns the authorization model, the ticket lifecycle, the sandbox-as-mechanism rule, and the hone
+- opening: **DERIVED DOCUMENT — see [`CORE.md`](ARCH/CORE.md) §6 and [`SECURITY.md`](ARCH/SECURITY.md) first.** `SECURITY.md` owns the authorization model, the ticket lifecycle, the sandbox-as-mechanism rule, and the hone
 
 #### `ARCH/07-MEMORY-CONTEXT.md` — 79 lines · 9.9 KB
 > 07 — Memory & Context System
 
-- opening: **SUPERSEDED MODEL — see [`MEMORY.md`](MEMORY.md) first.** The five-tier model is replaced by **four classes** (Context · Episodic · Knowledge · Procedural), and episodic memory is now a *projection o
+- opening: **SUPERSEDED MODEL — see [`MEMORY.md`](ARCH/MEMORY.md) first.** The five-tier model is replaced by **four classes** (Context · Episodic · Knowledge · Procedural), and episodic memory is now a *projection o
 
 #### `ARCH/08-BROWSER-LAYER.md` — 150 lines · 18.5 KB
 > 08 — Browser Layer (the agent's real browser)
 
-- opening: **DERIVED DOCUMENT — see [`CORE.md`](CORE.md) §2 and [`CAPABILITIES.md`](CAPABILITIES.md) first.** Browser is one capability pack behind one `BrowserService` façade with replaceable strategies underne
+- opening: **DERIVED DOCUMENT — see [`CORE.md`](ARCH/CORE.md) §2 and [`CAPABILITIES.md`](ARCH/CAPABILITIES.md) first.** Browser is one capability pack behind one `BrowserService` façade with replaceable strategies underne
 
 #### `ARCH/09-FEATURE-MATRIX.md` — 241 lines · 103.6 KB
 > 09 — Module, Submodule & Function Matrix (the complete derivation)
 
-- opening: **SCOPE NARROWED — see [`CORE.md`](CORE.md) first.** This file’s job is the capability/feature matrix (identity + status) **only**.
+- opening: **SCOPE NARROWED — see [`CORE.md`](ARCH/CORE.md) first.** This file’s job is the capability/feature matrix (identity + status) **only**.
 
 #### `ARCH/10-BUILD-PLAN.md` — 91 lines · 10.1 KB
 > 10 — Build Plan (phases with exit criteria)
 
-- opening: **Derived from [`CORE.md`](CORE.md) — the root authority; this document specializes, never restates, it.** **SCOPE REDUCED — delivery status lives in [`../TODO.md`](../TODO.md).** This document keeps
+- opening: **Derived from [`CORE.md`](ARCH/CORE.md) — the root authority; this document specializes, never restates, it.** **SCOPE REDUCED — delivery status lives in [`../TODO.md`](ARCH/../TODO.md).** This document keeps
 
 #### `ARCH/11-AI-CHAT-FEATURES.md` — 184 lines · 23.5 KB
 > 11 — AI Chat Features: Copy · Convert · Reject (the derivation)
 
-- opening: **Split done — see [`CORE.md`](CORE.md) and [`AGENT.md`](AGENT.md) first (`P69.A22`, 2026-09-20).** The AI-architecture rationale here is superseded wherever it describes an EveryAIOS-owned reasoning
+- opening: **Split done — see [`CORE.md`](ARCH/CORE.md) and [`AGENT.md`](ARCH/AGENT.md) first (`P69.A22`, 2026-09-20).** The AI-architecture rationale here is superseded wherever it describes an EveryAIOS-owned reasoning
 
 #### `ARCH/12-UI-SPEC.md` — 922 lines · 78.2 KB
 > 12 — UI/UX Specification: Desktop Layout & Interaction Design
 
-- opening: **Derived from [`CORE.md`](CORE.md) — the root authority; this document specializes, never restates, it.** **CONTRACT RE-SCOPED — see [`UI.md`](UI.md) first.** This document remains the authority for layout and interaction *detail*.
+- opening: **Derived from [`CORE.md`](ARCH/CORE.md) — the root authority; this document specializes, never restates, it.** **CONTRACT RE-SCOPED — see [`UI.md`](ARCH/UI.md) first.** This document remains the authority for layout and interaction *detail*.
 
 #### `ARCH/13-PROMPT-ANATOMY.md` — 84 lines · 5.3 KB
 > ARCH/13 — Prompt Anatomy
 
-- opening: **Derived from [`CORE.md`](CORE.md) — the root authority; this document specializes, never restates, it.** **ABSORBED — see [`CONTEXT.md`](CONTEXT.md).** The prompt assembler is the *serializer* of Co
+- opening: **Derived from [`CORE.md`](ARCH/CORE.md) — the root authority; this document specializes, never restates, it.** **ABSORBED — see [`CONTEXT.md`](ARCH/CONTEXT.md).** The prompt assembler is the *serializer* of Co
 
 #### `ARCH/15-CONNECT-STORE.md` — 357 lines · 26.2 KB
 > Connect Store — remote MCP + OAuth connectors (the "click → sign in → use" surface)
 
-- opening: **DERIVED DOCUMENT — see [`CORE.md`](CORE.md) §4 and [`CAPABILITIES.md`](CAPABILITIES.md) first.** Connectors are a capability pack: a connector declares a manifest, authentication, capabilities, prov
+- opening: **DERIVED DOCUMENT — see [`CORE.md`](ARCH/CORE.md) §4 and [`CAPABILITIES.md`](ARCH/CAPABILITIES.md) first.** Connectors are a capability pack: a connector declares a manifest, authentication, capabilities, prov
 
 #### `ARCH/ADR/0001-connector-platform-mcp-first.md` — 32 lines · 1.3 KB
 > ADR-0001 — MCP is the connector platform; no third-party aggregator
@@ -8384,27 +8439,27 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 #### `ARCH/ADR/0006-session-kinds.md` — 91 lines · 5.9 KB
 > ADR-0006 — Session kinds: `interactive` · `automation` · `delegated`
 
-- opening: - **Status:** accepted - **Date:** 2026-09-21 - **Applies to:** [`SESSION.md`](../SESSION.md) §2, §3, §6, §8 · [`WORK.md`](../WORK.md) §7 · [`AUTOMATION.md`](../AUTOMATION.md) §10 - **Related:** [`ADR
+- opening: - **Status:** accepted - **Date:** 2026-09-21 - **Applies to:** [`SESSION.md`](ARCH/ADR/../SESSION.md) §2, §3, §6, §8 · [`WORK.md`](ARCH/ADR/../WORK.md) §7 · [`AUTOMATION.md`](ARCH/ADR/../AUTOMATION.md) §10 - **Related:** [`ADR
 
 #### `ARCH/AGENT.md` — 312 lines · 17.8 KB
 > ARCH/AGENT — the agent model: binding, adapter, bridge
 
-- opening: **Status:** Subsystem contract, derived from [`CORE.md`](CORE.md).
+- opening: **Status:** Subsystem contract, derived from [`CORE.md`](ARCH/CORE.md).
 
 #### `ARCH/AUTOMATION.md` — 285 lines · 16.0 KB
 > ARCH/AUTOMATION — triggers, revisions, and the Work factory
 
-- opening: **Status:** Subsystem contract, derived from [`CORE.md`](CORE.md) §4–§5 and [`WORK.md`](WORK.md) §7.
+- opening: **Status:** Subsystem contract, derived from [`CORE.md`](ARCH/CORE.md) §4–§5 and [`WORK.md`](ARCH/WORK.md) §7.
 
 #### `ARCH/CAPABILITIES.md` — 219 lines · 8.4 KB
 > ARCH/CAPABILITIES — capability packs, tools, actions, skills, viewers
 
-- opening: **Status:** Subsystem contract, derived from [`CORE.md`](CORE.md) §9.
+- opening: **Status:** Subsystem contract, derived from [`CORE.md`](ARCH/CORE.md) §9.
 
 #### `ARCH/CONTEXT.md` — 358 lines · 19.6 KB
 > ARCH/CONTEXT — context engineering: history, surface, prompt
 
-- opening: **Status:** Subsystem contract, derived from [`CORE.md`](CORE.md) §8.
+- opening: **Status:** Subsystem contract, derived from [`CORE.md`](ARCH/CORE.md) §8.
 
 #### `ARCH/CORE.md` — 691 lines · 43.1 KB
 > ARCH/CORE — The EveryAIOS Core Architecture (single architectural authority)
@@ -8414,7 +8469,7 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 #### `ARCH/DESKTOP.md` — 187 lines · 14.6 KB
 > ARCH/DESKTOP — computer use: driving the real OS
 
-- opening: **Status:** Subsystem contract, derived from [`CORE.md`](CORE.md).
+- opening: **Status:** Subsystem contract, derived from [`CORE.md`](ARCH/CORE.md).
 
 #### `ARCH/DIAGRAMS.md` — 1,214 lines · 49.4 KB
 > EveryAIOS — Architecture & Flow Diagrams (Mermaid)
@@ -8424,52 +8479,52 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 #### `ARCH/EXTERNAL-AGENTS.md` — 449 lines · 25.2 KB
 > ARCH/EXTERNAL-AGENTS — protocol surfaces and the shared plane
 
-- opening: **Status:** Subsystem contract, derived from [`CORE.md`](CORE.md).
+- opening: **Status:** Subsystem contract, derived from [`CORE.md`](ARCH/CORE.md).
 
 #### `ARCH/MEMORY.md` — 253 lines · 12.1 KB
 > ARCH/MEMORY — four memory classes, progressive disclosure
 
-- opening: **Status:** Subsystem contract, derived from [`CORE.md`](CORE.md) §10.
+- opening: **Status:** Subsystem contract, derived from [`CORE.md`](ARCH/CORE.md) §10.
 
 #### `ARCH/RECOVERY.md` — 189 lines · 11.6 KB
 > ARCH/RECOVERY — durable Work, uncertain effects, safe resume
 
-- opening: **Status:** Subsystem contract, derived from [`CORE.md`](CORE.md) §5.2 and §6.
+- opening: **Status:** Subsystem contract, derived from [`CORE.md`](ARCH/CORE.md) §5.2 and §6.
 
 #### `ARCH/ROUTING.md` — 137 lines · 6.3 KB
 > ARCH/ROUTING — agent routing, credentials, and usage observability
 
-- opening: **Status:** Subsystem contract, derived from [`CORE.md`](CORE.md) §4 and §8.
+- opening: **Status:** Subsystem contract, derived from [`CORE.md`](ARCH/CORE.md) §4 and §8.
 
 #### `ARCH/SECURITY.md` — 332 lines · 22.6 KB
 > ARCH/SECURITY — one gate, one authorization model
 
-- opening: **Status:** Subsystem contract, derived from [`CORE.md`](CORE.md) §6 and §7.5.
+- opening: **Status:** Subsystem contract, derived from [`CORE.md`](ARCH/CORE.md) §6 and §7.5.
 
 #### `ARCH/SESSION.md` — 189 lines · 10.8 KB
 > ARCH/SESSION — Space, Project, Workspace, Chat, Work
 
-- opening: **Status:** Subsystem contract, derived from [`CORE.md`](CORE.md).
+- opening: **Status:** Subsystem contract, derived from [`CORE.md`](ARCH/CORE.md).
 
 #### `ARCH/UI.md` — 187 lines · 11.1 KB
 > ARCH/UI — the cockpit as a projection, and the File Workbench
 
-- opening: **Status:** Subsystem contract, derived from [`CORE.md`](CORE.md) §3 and §5.
+- opening: **Status:** Subsystem contract, derived from [`CORE.md`](ARCH/CORE.md) §3 and §5.
 
 #### `ARCH/WORK.md` — 216 lines · 13.1 KB
 > ARCH/WORK — Work, Run, Step, Effect, Event and the projection rule
 
-- opening: **Status:** Subsystem contract, derived from [`CORE.md`](CORE.md) §3 and §5.
+- opening: **Status:** Subsystem contract, derived from [`CORE.md`](ARCH/CORE.md) §3 and §5.
 
 #### `ARCH/archive/16-CHAT-LOOP-RUST-PORT.md` — 201 lines · 13.2 KB
 > ARCH/16 — Porting the async chat loop to Rust (ConversationEngine `run()` + `runChatStream`) — ARCHIVED
 
-- opening: ⛔ **ARCHIVED — no v1 scope, not current architecture.** [`ADR/0005`](../ADR/0005-external-agents-are-the-v1-engines.md) defers the built-in engine to post-v1, so there is **no EveryAIOS turn loop to p
+- opening: ⛔ **ARCHIVED — no v1 scope, not current architecture.** [`ADR/0005`](ARCH/archive/../ADR/0005-external-agents-are-the-v1-engines.md) defers the built-in engine to post-v1, so there is **no EveryAIOS turn loop to p
 
 #### `ARCH/archive/17-NATIVE-AGENT.md` — 624 lines · 47.3 KB
 > ARCH/17 — The EveryAIOS Native Agent (frozen status lifted by ADR/0003) — ARCHIVED
 
-- opening: ⛔ **ARCHIVED — historical context, not current architecture.** Superseded by [`ADR/0005`](../ADR/0005-external-agents-are-the-v1-engines.md): the built-in engine is **deferred to post-v1**, so this document no longer describes a v1 binding.
+- opening: ⛔ **ARCHIVED — historical context, not current architecture.** Superseded by [`ADR/0005`](ARCH/archive/../ADR/0005-external-agents-are-the-v1-engines.md): the built-in engine is **deferred to post-v1**, so this document no longer describes a v1 binding.
 
 #### `ARCH/archive/coordinator-loop/README.md` — 74 lines · 5.1 KB
 > ARCH/archive/coordinator-loop — the built-in engine's turn loop (ARCHIVED)
@@ -8486,524 +8541,524 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 #### `RESEARCH/2026-ai-landscape/00-INDEX.md` — 51 lines · 4.1 KB
 > 2026 AI Landscape — Research Archive Index
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/2026-ai-landscape/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/2026-ai-landscape/01-master-landscape-2026.md` — 148 lines · 12.4 KB
 > 01 · Master Landscape 2026 — Every Project Researched
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/2026-ai-landscape/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/2026-ai-landscape/02-search-landscape.md` — 116 lines · 7.6 KB
 > 02 · Search Landscape — Keyless Options + BYOK APIs
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/2026-ai-landscape/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/2026-ai-landscape/03-deep-research-engines.md` — 109 lines · 6.4 KB
 > 03 · Deep Research Engines — Architecture Deep-Dives
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/2026-ai-landscape/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/2026-ai-landscape/04-desktop-apps-deep-dive.md` — 106 lines · 6.0 KB
 > 04 · Desktop Apps Deep-Dive — AnythingLLM, Jan, PyGPT, Leon, GenOffice, Vellum
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/2026-ai-landscape/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/2026-ai-landscape/05-agent-os-computer-use.md` — 82 lines · 4.3 KB
 > 05 · Agent OS + Computer-Use Layer
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/2026-ai-landscape/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/2026-ai-landscape/06-local-model-stack.md` — 71 lines · 3.7 KB
 > 06 · Local Model Stack — Ollama, Open WebUI, llama.cpp, LM Studio
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/2026-ai-landscape/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/2026-ai-landscape/07-composio-deep-dive.md` — 65 lines · 3.3 KB
 > 07 · Composio Deep-Dive + Our Existing Integration
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/2026-ai-landscape/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/2026-ai-landscape/08-automation-architectures.md` — 101 lines · 4.4 KB
 > 08 · Automation Architectures — Desktop Scheduling Options
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/2026-ai-landscape/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/2026-ai-landscape/09-repo-reality-check.md` — 43 lines · 3.2 KB
 > 09 · Repo Reality-Check — 10-Repo Verification (GitHub API)
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/2026-ai-landscape/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/2026-ai-landscape/10-steal-shortlist.md` — 78 lines · 6.2 KB
 > 10 · Steal-Shortlist — What to Build From, What to Skip
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/2026-ai-landscape/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 ### 14.9 RESEARCH/desktop_app — the prior-art & competitor corpus
 
 #### `RESEARCH/desktop_app/00-INDEX.md` — 118 lines · 87.5 KB
 > RESEARCH — Master Index
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/01-anythingllm-feature-blueprint.md` — 252 lines · 17.3 KB
 > AnythingLLM Feature Blueprint — How Each Feature Was Built
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/02-hermes-agent-feature-blueprint.md` — 148 lines · 15.3 KB
 > Hermes Agent Feature Blueprint — How the Six Flagship Features Were Built
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/03-ultra-agentic-evolvable-orchestration.md` — 178 lines · 12.9 KB
 > Ultra-Agentic Evolvable Orchestration — Research Blueprint
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/04-reality-check-pasted-blueprint.md` — 47 lines · 4.6 KB
 > 04 — Reality-Check: The Circulating "Agentic OS" Blueprint (code-verified)
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/05-coding-agents-comparison.md` — 171 lines · 15.5 KB
 > Coding Agent Comparison — opencode, pi, Claude Code, Hermes, AnythingLLM, Reasonix
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/06-browser-automation-and-scraping.md` — 46 lines · 4.2 KB
 > 06 — Browser Automation & Web Scraping for the Desktop App
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/07-deep-research-and-data-analysis.md` — 31 lines · 3.9 KB
 > 07 — Deep Research & Autonomous Data Analysis Engines
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/08-desktop-ai-app-competitor-landscape.md` — 38 lines · 5.3 KB
 > 08 — Desktop AI App Competitor Landscape (2026)
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/09-agentic-os-and-computer-use.md` — 38 lines · 4.4 KB
 > 09 — Agentic OS & Computer-Use Layer
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/10-business-automation-tool-kit.md` — 69 lines · 7.4 KB
 > 10 — Business-Automation Tool-Kit, Composio & MCP Ecosystem
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/11-rest-of-the-chat-mentions-ledger.md` — 51 lines · 4.8 KB
 > 11 — The Rest of the Chat: Final Sweep + Complete Mentions Ledger
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/12-composio-vs-nango-connector-infrastructure.md` — 88 lines · 8.6 KB
 > 12 — Connector Infrastructure: Composio vs Nango (deep dive)
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/13-connector-hub-design.md` — 157 lines · 12.1 KB
 > 13 — Connector Hub Design (the unified connection layer)
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/14-repo-implementation-ledger-1-agents-coding.md` — 215 lines · 21.8 KB
 > 14 — Repo Implementation Ledger, Part 1: Agents, Coding, Orchestration, Cyber
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/15-repo-implementation-ledger-2-apps-tools-connectors.md` — 270 lines · 25.3 KB
 > 15 — Repo Implementation Ledger, Part 2: Desktop Apps, Scraping, Deep Research, Business Tools, Connectors
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/16-feature-implementation-tier1-agents.md` — 160 lines · 17.9 KB
 > 16 — Tier-1 Feature Implementation: Agents & Coding (feature-by-feature, code-level)
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/17-feature-implementation-tier1-web-connectors.md` — 165 lines · 13.7 KB
 > 17 — Tier-1 Feature Implementation: Web, Research & Connectors (feature-by-feature, code-level)
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/18-feature-implementation-tier2-medium.md` — 99 lines · 9.8 KB
 > 18 — Tier-2 Feature Implementation: Medium-depth maps (frameworks, desktop apps, cyber, business tools)
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/19-byok-provider-implementation-reference.md` — 95 lines · 8.0 KB
 > 19 — BYOK Provider Implementation Reference (the copy-this doc)
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/20-infra-libs-new-ledger.md` — 110 lines · 7.3 KB
 > 20 — New Infra Libraries Ledger (requested 2026-08-06)
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/21-agents-search-scraping-new-ledger.md` — 156 lines · 10.9 KB
 > 21 — New Agents, Search & Scraping Ledger (requested 2026-08-06)
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/22-skills-specials-and-v2-bucket.md` — 85 lines · 8.8 KB
 > 22 — Skills, Checklists, Special Deep-Dives & V2 Bucket (requested 2026-08-06)
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/23-deep-dive-partial-and-not-done-repos.md` — 190 lines · 16.1 KB
 > 23 — Deep-Dive: Previously Partial / Not-Done Repos (2026-08-06 second pass)
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/24-completion-pass-resolutions.md` — 101 lines · 12.3 KB
 > 24 — Completion Pass: Stage-1 + Stage-2 Flags Resolved (2026-08-06)
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/25-deep-code-gap-resolutions.md` — 84 lines · 9.5 KB
 > 25 — Deep-Code Gap Resolutions + Found Repos (2026-08-06, pass 2)
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/26-tier2-code-level-upgrade.md` — 71 lines · 6.7 KB
 > 26 — Tier-2 Code-Level Upgrade (2026-08-06)
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/27-master-repo-ledger.md` — 497 lines · 93.4 KB
 > 27 — MASTER REPO LEDGER (all repos ever added, live-verified 2026-08-06; sections 20–28 added 2026-08-09/10/13)
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/28-genoffice-deep-dive.md` — 128 lines · 10.8 KB
 > 28 — GenOffice Deep-Dive (source-verified 2026-08-06)
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/29-libreoffice-core-deep-dive.md` — 67 lines · 8.7 KB
 > 29 — LibreOffice Core Deep-Dive (verified 2026-08-06)
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/30-agent-os-family-deep-dive.md` — 193 lines · 16.3 KB
 > 30 — Agent-OS Family Deep-Dive: ZeroClaw · IronClaw · BrowserOS · EverOS · MemOS · stereOS · PhyAgentOS
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/31-context-compression-family-deep-dive.md` — 166 lines · 14.5 KB
 > 31 — Context-Compression Family Deep-Dive: Headroom · Glyphdown · Terse · Janus · DarwinCaveman · Repomix
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/32-context-mode-and-tokenmining.md` — 114 lines · 12.6 KB
 > 32 — Context-Mode Deep-Dive + The Tokenmining Principle
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/33-browseros-deep-dive.md` — 323 lines · 34.6 KB
 > 33 — BrowserOS (browseros-ai/BrowserOS) Source Deep-Dive: The Agent Browser
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/34-final-pass-and-sota-2026.md` — 53 lines · 6.6 KB
 > 34 — Final Pass: Gap Closure + 2026 SOTA Validations (2026-08-06)
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/35-openwebui-vane-computer-deep-dive.md` — 100 lines · 9.5 KB
 > 35 — Open WebUI · Vane · Open WebUI Computer (deep-dive)
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/36-composio-community-batch.md` — 72 lines · 6.8 KB
 > 36 — Composio-community batch: Open ChatGPT Atlas · Secure OpenClaw · Awesome Claude Plugins · Awesome Codex Skills
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/37-command-code-taste-deep-dive.md` — 79 lines · 7.8 KB
 > 37 — Command Code (`CommandCodeAI`) & the `taste-1` preference-learning pattern
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/38-opencode-hermes-code-re-read.md` — 120 lines · 11.1 KB
 > 38 — opencode & Hermes: full code re-read (subagents · token tracking · compaction)
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/39-nooa-deep-dive.md` — 98 lines · 10.8 KB
 > 39 — NVIDIA NOOA (Object-Oriented Agents) deep-dive + audit resolutions
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/40-new-repos-and-platform-notes.md` — 253 lines · 13.3 KB
 > Doc 40 — New Repos Deep-Read + Platform Deployment Notes
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/41-steal-vs-reference-master-index.md` — 332 lines · 29.0 KB
 > Doc 41 — Master Steal vs Reference Index
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/42-ipc-architecture-validation.md` — 309 lines · 17.5 KB
 > Doc 42 — IPC Architecture Validation & Agentic OS Axioms
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/43-landmines-reinforcement-landscape.md` — 559 lines · 28.8 KB
 > Doc 43 — Landmines Reinforcement Landscape
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/44-modularity-deep-dive-vscode-zed-hermes.md` — 199 lines · 20.5 KB
 > 44 — Modularity Deep-Dive: VS Code, Zed, Hermes, Agentic Apps (source-verified)
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/45-acp-agent-client-protocol-deep-dive.md` — 200 lines · 15.8 KB
 > 45 — Agent Client Protocol (ACP) Deep-Dive (source-verified)
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/46-aider-devin-deep-dive.md` — 399 lines · 18.9 KB
 > 46 — Aider + Devin Cloud Deep Dive
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/47-terminal-agents-ide-extensions-deep-dive.md` — 169 lines · 8.7 KB
 > 47 — Terminal Agents & IDE Extensions Deep Dive
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/48-computer-use-agents-deep-dive.md` — 136 lines · 7.1 KB
 > 48 — Computer-Use Agents Deep Dive
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/49-storage-intelligence-deep-dive.md` — 126 lines · 10.4 KB
 > 49 — Storage Intelligence Deep Dive (eDirStat / UltraSearch / WinDirStat / fclones)
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/50-generative-ui-image-voice-gaps.md` — 116 lines · 10.4 KB
 > 50 — Generative UI, Image Gen, Voice, Clipboard & Email/Calendar Gaps
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/51-aider-recheck-2026-08.md` — 51 lines · 5.4 KB
 > 51 — Aider Recheck (2026-08) — doc 46 claims vs primary sources
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/52-gap-pass-2-analysis.md` — 90 lines · 11.8 KB
 > 52 — Gap Pass 2: Hierarchy, Escalation, Computer-Use & the Tiered Web-Search Stack
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/53-formalization-gaps.md` — 147 lines · 9.6 KB
 > 53 — Formalization Gaps: Credential Broker · Ticket Contract · Durable Events · Shortest-Path Routing
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/54-third-party-dep-audit.md` — 57 lines · 5.1 KB
 > 54 — Third-Party Dependency & Catalog Verification Audit
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/55-agent-browser-obscura-steel-deep-dive.md` — 175 lines · 19.3 KB
 > 55 — Agent Browser Ecosystem Deep-Dive: agent-browser / Obscura / Steel (source-verified) + the 2026 Market Map
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/56-warp-cowork-cronflow-copilot-devin.md` — 181 lines · 21.8 KB
 > 56 — Warp / cowork-forge / cronflow / Copilot-CLI / Devin-API deep-dive (agentic dev-environment, workflow engine, close
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/57-acp-registry-subscription-auth.md` — 97 lines · 12.1 KB
 > 57 — ACP Registry & BYO-Agent Subscription Auth (finalize)
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/58-repo-batch-2-omniroute-forge-office.md` — 238 lines · 26.1 KB
 > 58 — Repo Batch 2: OmniRoute + Forge-intel + Office + Skills + Agent-workspaces
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/59-omniroute-deep-dive.md` — 147 lines · 10.6 KB
 > 59 — OmniRoute Deep-Dive (routing + scoring business logic)
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/60-tencentdb-agent-memory-deep-dive.md` — 121 lines · 9.3 KB
 > 60 — TencentDB Agent Memory Deep-Dive (memory-asset governance + distillation pipeline)
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/61-desktop-agent-land-grab-2026.md` — 154 lines · 17.0 KB
 > 61 — Desktop Agent Land-Grab 2026 (market + harness/memory/model/protocol batch)
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/62-cost-optimization-event-driven-eval.md` — 87 lines · 8.8 KB
 > 62 — Cost Optimization + Event-Driven Orchestration + Eval Reality Check
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/63-thirty-seven-repo-steal-ledger.md` — 151 lines · 17.1 KB
 > 63 — 37-Repo Steal Ledger (harness / browser / office / user-capability clusters)
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/64-giants-code-level-deep-dive.md` — 238 lines · 30.9 KB
 > 64 — Giants Code-Level Deep-Dive (rustdesk · ladybird · serenity · brave · chromium + lightpanda re-read)
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/65-batch-3-agents-scraping-search-ui-deep-dive.md` — 210 lines · 15.5 KB
 > Doc 65 — Batch 3: Agent Infra, Scraping, Search & UI Deep-Dive
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/66-anomalyco-org-deep-dive.md` — 145 lines · 9.2 KB
 > Doc 66 — anomalyco Org Deep-Dive: models.dev Catalog + opencode + opentui (2026-08-15)
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/67-capability-deltas-sites-heartbeat-ui-final.md` — 151 lines · 13.2 KB
 > Doc 67 — Capability Deltas: Sites / Heartbeat / Proactivity / Inline-Edit / Kanban-ACP + UI/UX Finalization (2026-08-15)
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/68-final-all-rounder-market-research.md` — 106 lines · 10.9 KB
 > 68 — Final All-Rounder Market Research (2026) & Capability Scorecard
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/69-acp-agent-ecosystem-harness-deep-dive.md` — 169 lines · 10.3 KB
 > Doc 69 — ACP Agent Ecosystem + Harness Deep-Dive (2026-08-16)
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/70-mcp-directory-inbuilt-analysis.md` — 103 lines · 6.5 KB
 > Doc 70 — MCP Directory Inbuilt Analysis (mcpservers.org)
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/71-batch-4-coding-agents-skills-harnesses.md` — 110 lines · 7.1 KB
 > Doc 71 — Batch 4: Coding Agents, Skills, Plugins, Agentic Cores (2026-08-16)
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/72-batch-5-codeintel-parallel-search.md` — 73 lines · 4.4 KB
 > Doc 72 — Batch 5: Code-Intelligence, Parallel Agents, Search Libs (2026-08-16)
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/73-batch-6-computer-use-full-control.md` — 96 lines · 5.9 KB
 > Doc 73 — Batch 6: Computer-Use / Full-Computer Control (2026-08-16)
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/74-mcp-server-manager-builtin.md` — 91 lines · 9.2 KB
 > Doc 74 — Built-In MCP Server Manager (mcpservers.org, second pass)
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/75-anthropic-skills-plugins-cowork.md` — 74 lines · 8.6 KB
 > Doc 75 — Anthropic Skills / Plugins / Cowork Deep-Dive
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/76-batch-7-design-browser-selfheal.md` — 56 lines · 5.6 KB
 > Doc 76 — Batch 7: Design / Browser Self-Healing / Computer-Use (2026-08-16)
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/77-batch-8-workflows-graphify-browser.md` — 62 lines · 6.5 KB
 > Doc 77 — Batch 8: Programmable Workflows / Knowledge Graph / Browser (2026-08-16)
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/78-batch-9-marketplace-gws-jobs.md` — 50 lines · 4.8 KB
 > Doc 78 — Batch 9: Multi-Harness Marketplace / Google Workspace / Jobs Vertical (2026-08-16)
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/79-local-model-fetch-download-core.md` — 89 lines · 7.1 KB
 > Doc 79 — Local Model Fetch / Download Core (HF · LM Studio · Ollama · Open WebUI)
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/80-competitive-positioning-review.md` — 162 lines · 16.5 KB
 > 80 — Competitive Positioning Review: EveryAIOS vs. the Global Desktop-AI Landscape (external benchmark, reviewed & corre
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/81-non-model-moat-roadmap.md` — 110 lines · 11.4 KB
 > 81 — Non-Model Moat Roadmap + Primary-Source Notes (reviewed, corrected, and repo-mapped)
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/82-innovation-priority-decisions.md` — 89 lines · 8.2 KB
 > 82 — Innovation Priority Stack (decision-applied: add / avoid / ignore / defer)
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/83-competitor-batch-openworker-ccswitch-skales-dsh.md` — 146 lines · 19.2 KB
 > Doc 83 — Competitor Batch: openworker · cc-switch · skales · deepseek-harness (code-level, cloned + source-read)
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/84-casual-vs-power-user-ux.md` — 118 lines · 11.8 KB
 > EveryAIOS — Casual vs Power User UX: What Each Group Actually Wants
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/85-work-gateway-durable-session-cowork-openclaw-podium-codex.md` — 84 lines · 10.8 KB
 > 85 — Work Gateway / Durable Session Layer (Claude Cowork · OpenClaw · Podium · Codex)
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/86-competitor-desktop-deep-dive-2026-09.md` — 161 lines · 32.2 KB
 > 86 — Competitor desktop deep-dive (P12.1 live research, 2026-09-04)
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/87-local-models-composer-chat-ui-2026-09.md` — 78 lines · 20.6 KB
 > 87 — Local-model UX + chat-bar/UI deep-dive (A5/C/H research, 2026-09-04)
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/88-first-five-minutes-casual-surface-audit-2026-09.md` — 77 lines · 10.1 KB
 > 88 — Casual surface / first-five-minutes UX audit (2026-09-13)
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/89-guard-network-and-config-floor-audit-2026-09.md` — 64 lines · 9.3 KB
 > 89 — Guard network-destination + agent-config floor audit (2026-09-13)
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/90-native-agent-peer-schemas-2026-09.md` — 57 lines · 6.9 KB
 > Doc 90 — Native agent peer schemas & loops (2026-09-15)
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/91-windows-agent-cowork-ui-2026-09.md` — 57 lines · 5.9 KB
 > Doc 91 — Windows-first agent discovery, picker, and cowork readiness (2026-09-15)
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 #### `RESEARCH/desktop_app/DESKTOP-APP-SPEC.md` — 224 lines · 25.7 KB
 > ⛔ SUPERSEDED — DO NOT USE AS THE BUILD SPEC
 
-- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
+- opening: **⚠ NON-NORMATIVE RESEARCH — point-in-time, not a contract.** Architecture authority: [`../../ARCH/CORE.md`](RESEARCH/desktop_app/../../ARCH/CORE.md) · product contract: [`../../DESKTOP-APP-SPEC.md`](../../DESKTOP-APP-SPE
 
 ### 14.10 deploy/ — deployment docs
 
@@ -9012,59 +9067,71 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 
 - opening: The desktop stays the **control plane** (Guard-2, audit, memory, receipts).
 
-### 14.11 docs/codebase/
+### 14.11 docs/
+
+#### `docs/signing.md` — 82 lines · 5.2 KB
+> Signing and key custody
+
+- opening: **What this file is.** The custody, renewal, rotation and revocation procedures for the two signing identities a release depends on.
+
+#### `docs/updating.md` — 153 lines · 8.1 KB
+> Auto-update, channels and data migration (P70.C1–C7)
+
+- opening: The updater is `tauri-plugin-updater` (v2.10.x).
+
+### 14.12 docs/codebase/
 
 #### `docs/codebase/README.md` — 88 lines · 5.6 KB
 > EveryAIOS — Codebase Understanding
 
-- opening: **Post-thaw authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md)** (27 invariants I1–I27) **+ the subsystem contracts** (`WORK` · `SESSION` · `AGENT` · `EXTERNAL-AGENTS` · `CONTEXT` · `CAPABILITIES`
+- opening: **Post-thaw authority: [`../../ARCH/CORE.md`](docs/codebase/../../ARCH/CORE.md)** (27 invariants I1–I27) **+ the subsystem contracts** (`WORK` · `SESSION` · `AGENT` · `EXTERNAL-AGENTS` · `CONTEXT` · `CAPABILITIES`
 
 #### `docs/codebase/architecture.md` — 109 lines · 8.3 KB
 > Architecture
 
-- opening: **Post-thaw authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md)** (27 invariants I1–I27) **+ the subsystem contracts** (`WORK` · `SESSION` · `AGENT` · `EXTERNAL-AGENTS` · `CONTEXT` · `CAPABILITIES`
+- opening: **Post-thaw authority: [`../../ARCH/CORE.md`](docs/codebase/../../ARCH/CORE.md)** (27 invariants I1–I27) **+ the subsystem contracts** (`WORK` · `SESSION` · `AGENT` · `EXTERNAL-AGENTS` · `CONTEXT` · `CAPABILITIES`
 
 #### `docs/codebase/components.md` — 115 lines · 9.3 KB
 > Components
 
-- opening: **Post-thaw authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md)** (27 invariants I1–I27) **+ the subsystem contracts** (`WORK` · `SESSION` · `AGENT` · `EXTERNAL-AGENTS` · `CONTEXT` · `CAPABILITIES`
+- opening: **Post-thaw authority: [`../../ARCH/CORE.md`](docs/codebase/../../ARCH/CORE.md)** (27 invariants I1–I27) **+ the subsystem contracts** (`WORK` · `SESSION` · `AGENT` · `EXTERNAL-AGENTS` · `CONTEXT` · `CAPABILITIES`
 
 #### `docs/codebase/data-and-state.md` — 59 lines · 4.8 KB
 > Data and State
 
-- opening: **Post-thaw authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md)** (27 invariants I1–I27) **+ the subsystem contracts** (`WORK` · `SESSION` · `AGENT` · `EXTERNAL-AGENTS` · `CONTEXT` · `CAPABILITIES`
+- opening: **Post-thaw authority: [`../../ARCH/CORE.md`](docs/codebase/../../ARCH/CORE.md)** (27 invariants I1–I27) **+ the subsystem contracts** (`WORK` · `SESSION` · `AGENT` · `EXTERNAL-AGENTS` · `CONTEXT` · `CAPABILITIES`
 
 #### `docs/codebase/decisions.md` — 133 lines · 8.9 KB
 > Decisions
 
-- opening: **Post-thaw authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md)** (27 invariants I1–I27) **+ the subsystem contracts** (`WORK` · `SESSION` · `AGENT` · `EXTERNAL-AGENTS` · `CONTEXT` · `CAPABILITIES`
+- opening: **Post-thaw authority: [`../../ARCH/CORE.md`](docs/codebase/../../ARCH/CORE.md)** (27 invariants I1–I27) **+ the subsystem contracts** (`WORK` · `SESSION` · `AGENT` · `EXTERNAL-AGENTS` · `CONTEXT` · `CAPABILITIES`
 
 #### `docs/codebase/external-systems.md` — 74 lines · 5.5 KB
 > External Systems
 
-- opening: **Post-thaw authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md)** (27 invariants I1–I27) **+ the subsystem contracts** (`WORK` · `SESSION` · `AGENT` · `EXTERNAL-AGENTS` · `CONTEXT` · `CAPABILITIES`
+- opening: **Post-thaw authority: [`../../ARCH/CORE.md`](docs/codebase/../../ARCH/CORE.md)** (27 invariants I1–I27) **+ the subsystem contracts** (`WORK` · `SESSION` · `AGENT` · `EXTERNAL-AGENTS` · `CONTEXT` · `CAPABILITIES`
 
 #### `docs/codebase/flows.md` — 115 lines · 7.6 KB
 > Flows
 
-- opening: **Post-thaw authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md)** (27 invariants I1–I27) **+ the subsystem contracts** (`WORK` · `SESSION` · `AGENT` · `EXTERNAL-AGENTS` · `CONTEXT` · `CAPABILITIES`
+- opening: **Post-thaw authority: [`../../ARCH/CORE.md`](docs/codebase/../../ARCH/CORE.md)** (27 invariants I1–I27) **+ the subsystem contracts** (`WORK` · `SESSION` · `AGENT` · `EXTERNAL-AGENTS` · `CONTEXT` · `CAPABILITIES`
 
 #### `docs/codebase/hotspots.md` — 92 lines · 4.9 KB
 > Hotspots
 
-- opening: **Post-thaw authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md)** (27 invariants I1–I27) **+ the subsystem contracts** (`WORK` · `SESSION` · `AGENT` · `EXTERNAL-AGENTS` · `CONTEXT` · `CAPABILITIES`
+- opening: **Post-thaw authority: [`../../ARCH/CORE.md`](docs/codebase/../../ARCH/CORE.md)** (27 invariants I1–I27) **+ the subsystem contracts** (`WORK` · `SESSION` · `AGENT` · `EXTERNAL-AGENTS` · `CONTEXT` · `CAPABILITIES`
 
 #### `docs/codebase/invariants.md` — 99 lines · 5.2 KB
 > Invariants
 
-- opening: **Post-thaw authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md)** (27 invariants I1–I27) **+ the subsystem contracts** (`WORK` · `SESSION` · `AGENT` · `EXTERNAL-AGENTS` · `CONTEXT` · `CAPABILITIES`
+- opening: **Post-thaw authority: [`../../ARCH/CORE.md`](docs/codebase/../../ARCH/CORE.md)** (27 invariants I1–I27) **+ the subsystem contracts** (`WORK` · `SESSION` · `AGENT` · `EXTERNAL-AGENTS` · `CONTEXT` · `CAPABILITIES`
 
 #### `docs/codebase/tests-and-verification.md` — 93 lines · 5.2 KB
 > Tests and Verification
 
-- opening: **Post-thaw authority: [`../../ARCH/CORE.md`](../../ARCH/CORE.md)** (27 invariants I1–I27) **+ the subsystem contracts** (`WORK` · `SESSION` · `AGENT` · `EXTERNAL-AGENTS` · `CONTEXT` · `CAPABILITIES`
+- opening: **Post-thaw authority: [`../../ARCH/CORE.md`](docs/codebase/../../ARCH/CORE.md)** (27 invariants I1–I27) **+ the subsystem contracts** (`WORK` · `SESSION` · `AGENT` · `EXTERNAL-AGENTS` · `CONTEXT` · `CAPABILITIES`
 
-### 14.12 root — specs, handover, and this map
+### 14.13 root — specs, handover, and this map
 
 #### `AGENTS.md` — 293 lines · 13.0 KB
 > Repository Agent Instructions
@@ -9079,22 +9146,27 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 
 - opening: **Status:** research verdicts folded from doc 68 §2/§3 into the P12.1 GTM competitive analysis (P12 queue).
 
-#### `CURRENT_RUN.md` — 2,305 lines · 270.0 KB
+#### `CURRENT_RUN.md` — 2,337 lines · 274.1 KB
 > CURRENT RUN STATE — Task Handover & Checkpoint
 
-- opening: **⚠ SESSION HANDOVER ONLY — this file carries no architecture and no scale claims.** Since the 2026-09-20 thaw (`ARCH/ADR/0003`), architecture belongs to [`ARCH/CORE.md`](ARCH/CORE.md) and its subsyst
+- opening: Deeply review the complete `ARCH/` contract set, reconcile it with the live implementation and release surfaces, research current primary-source guidance, and produce a dependency-ordered remediation
 
 #### `DESKTOP-APP-SPEC.md` — 1,571 lines · 334.4 KB
 > DESKTOP-APP-SPEC.md — Complete Product Specification
 
 - opening: **Architecture authority: [`ARCH/CORE.md`](ARCH/CORE.md).** This document is the **product contract** — behavior, UI, schemas, invariants.
 
-#### `README.md` — 336 lines · 27.2 KB
+#### `PACKAGING.md` — 118 lines · 9.2 KB
+> Packaging and native dependencies
+
+- opening: **What this file is.** The P70.A3 audit: what the shipped bundle contains, what it needs on the user's machine, and — for every program the runtime can execute — who provides it and what happens when it is absent.
+
+#### `README.md` — 340 lines · 27.5 KB
 > <p align="center">
 
 - opening: <p align="center"> <img src="src-tauri/icons/128x128.png" width="88" alt="EveryAIOS" /> </p>
 
-#### `SPEC-CHANGELOG.md` — 2,591 lines · 561.1 KB
+#### `SPEC-CHANGELOG.md` — 2,769 lines · 577.8 KB
 > DESKTOP-APP-SPEC.md — Specification Changelog
 
 - opening: This file records historical decisions, research transfers, implementation updates, and verification evidence for `DESKTOP-APP-SPEC.md`.
@@ -9109,7 +9181,12 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 
 - opening: **Standard**: ISO/IEC/IEEE 29119 Software Testing Standard & IEEE 829 Test Documentation **Target System**: EveryAIOS — Universal Agentic OS & Desktop Harness **Release Target**: Windows 11 Desktop (P
 
-#### `TODO.md` — 2,815 lines · 894.8 KB
+#### `THIRD-PARTY-NOTICES.md` — 1,400 lines · 30.8 KB
+> Third-party notices
+
+- opening: Generated by `scripts/check-licences.mjs --write-notices` from the lockfiles.
+
+#### `TODO.md` — 2,815 lines · 920.3 KB
 > EveryAIOS — Master Implementation TODO
 
 - opening: **Documentation ownership:** `DESKTOP-APP-SPEC.md` is the **product contract only** (behavior, schemas, UI layouts, invariants — not a build plan).
@@ -9129,7 +9206,7 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 
 - opening: **Date**: September 16, 2026 **Target**: EveryAIOS Desktop Cowork Runtime & Multi-Agent Swarm Subsystems **Scope**: Two-Plane Native Architecture, External Agent Swapping (OpenCode, Grok Build, Codex)
 
-### 14.13 ui/ — UI design docs
+### 14.14 ui/ — UI design docs
 
 #### `ui/DESIGN-SYSTEM.md` — 83 lines · 7.0 KB
 > EveryAIOS Design System (P11.1)
@@ -9143,13 +9220,13 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 
 ### 15.1 Tauri command registry (registered ↔ UI call sites)
 
-**351 commands** registered in the single `generate_handler!` in `src-tauri/src/commands.rs`.
+**358 commands** registered in the single `generate_handler!` in `src-tauri/src/commands.rs`.
 
 | # | Command | Module family | direct `invoke()` sites | literal refs | Rust mentions |
 | ---: | --- | --- | ---: | ---: | ---: |
 | 1 | `runtime_status` | `crate` | 1 | 1 | 0 |
 | 2 | `sidecar_probe` | `crate` | 1 | 1 | 0 |
-| 3 | `version` | `crate` | 0 | 1 | 658 (noisy) |
+| 3 | `version` | `crate` | 0 | 1 | 744 (noisy) |
 | 4 | `catalog_sync_plan` | `catalog_cmds` | 0 | 0 | 0 |
 | 5 | `catalog_sync_refresh` | `catalog_cmds` | 0 | 0 | 0 |
 | 6 | `catalog_status` | `catalog_cmds` | 0 | 0 | 2 |
@@ -9351,153 +9428,160 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 | 202 | `node_attach` | `sync_cmds` | 1 | 1 | 0 |
 | 203 | `sync_fingerprint` | `sync_cmds` | 1 | 1 | 0 |
 | 204 | `updater_check` | `updater_cmds` | 1 | 1 | 0 |
-| 205 | `updater_install` | `updater_cmds` | 1 | 1 | 0 |
-| 206 | `fs_home` | `fs_cmds` | 1 | 1 | 0 |
-| 207 | `fs_list_dir` | `fs_cmds` | 1 | 1 | 0 |
-| 208 | `fs_read_file` | `fs_cmds` | 1 | 1 | 0 |
-| 209 | `fs_write_file` | `fs_cmds` | 1 | 1 | 0 |
-| 210 | `fs_write_ticket` | `fs_cmds` | 1 | 1 | 0 |
-| 211 | `fs_write_commit` | `fs_cmds` | 1 | 1 | 0 |
-| 212 | `fs_undo_list` | `fs_cmds` | 1 | 1 | 0 |
-| 213 | `fs_undo_restore` | `fs_cmds` | 1 | 1 | 0 |
-| 214 | `fs_undo_snapshot` | `fs_cmds` | 1 | 1 | 0 |
-| 215 | `terminal_profiles` | `terminal_cmds` | 1 | 1 | 0 |
-| 216 | `terminal_set_default` | `terminal_cmds` | 1 | 1 | 0 |
-| 217 | `terminal_set_automation` | `terminal_cmds` | 1 | 1 | 0 |
-| 218 | `terminal_confirm_unsafe` | `terminal_cmds` | 1 | 1 | 0 |
-| 219 | `terminal_get_shell_integration` | `terminal_cmds` | 0 | 0 | 0 |
-| 220 | `terminal_set_shell_integration` | `terminal_cmds` | 1 | 1 | 0 |
-| 221 | `terminal_spawn` | `terminal_cmds` | 1 | 1 | 0 |
-| 222 | `terminal_run` | `terminal_cmds` | 1 | 1 | 0 |
-| 223 | `terminal_replay` | `terminal_cmds` | 1 | 1 | 0 |
-| 224 | `terminal_write` | `terminal_cmds` | 1 | 1 | 0 |
-| 225 | `terminal_resize` | `terminal_cmds` | 1 | 1 | 0 |
-| 226 | `terminal_kill` | `terminal_cmds` | 1 | 1 | 0 |
-| 227 | `terminal_status` | `terminal_cmds` | 1 | 1 | 0 |
-| 228 | `terminal_commands` | `terminal_cmds` | 1 | 1 | 0 |
-| 229 | `terminal_last_command_context` | `terminal_cmds` | 1 | 1 | 0 |
-| 230 | `terminal_history_context` | `terminal_cmds` | 1 | 1 | 0 |
-| 231 | `browser_list_installed` | `browser_cmds` | 1 | 1 | 0 |
-| 232 | `browser_get_config` | `browser_cmds` | 1 | 1 | 0 |
-| 233 | `browser_set_config` | `browser_cmds` | 1 | 1 | 0 |
-| 234 | `browser_start` | `browser_cmds` | 1 | 1 | 0 |
-| 235 | `browser_navigate` | `browser_cmds` | 1 | 1 | 0 |
-| 236 | `browser_snapshot` | `browser_cmds` | 1 | 1 | 0 |
-| 237 | `browser_read` | `browser_cmds` | 1 | 1 | 0 |
-| 238 | `browser_read_url` | `browser_cmds` | 1 | 1 | 0 |
-| 239 | `browser_click` | `browser_cmds` | 1 | 1 | 0 |
-| 240 | `browser_type` | `browser_cmds` | 1 | 1 | 0 |
-| 241 | `browser_stop` | `browser_cmds` | 1 | 1 | 0 |
-| 242 | `browser_status` | `browser_cmds` | 1 | 1 | 0 |
-| 243 | `memory_request` | `memory_cmds` | 4 | 4 | 0 |
-| 244 | `memory_read` | `memory_cmds` | 1 | 1 | 0 |
-| 245 | `git_status` | `git_cmds` | 1 | 1 | 0 |
-| 246 | `git_log` | `git_cmds` | 1 | 1 | 0 |
-| 247 | `git_diff` | `git_cmds` | 1 | 1 | 0 |
-| 248 | `git_stage_all` | `git_cmds` | 1 | 1 | 0 |
-| 249 | `git_commit` | `git_cmds` | 1 | 1 | 0 |
-| 250 | `git_root` | `git_cmds` | 1 | 1 | 0 |
-| 251 | `git_worktree_add` | `git_cmds` | 1 | 1 | 0 |
-| 252 | `git_worktree_list` | `git_cmds` | 1 | 1 | 0 |
-| 253 | `git_worktree_merge` | `git_cmds` | 1 | 1 | 0 |
-| 254 | `git_worktree_revert` | `git_cmds` | 1 | 1 | 0 |
-| 255 | `lsp_diagnostics` | `lsp_cmds` | 1 | 1 | 0 |
-| 256 | `repomap_build` | `codeintel_cmds` | 0 | 0 | 4 |
-| 257 | `file_outline` | `codeintel_cmds` | 0 | 0 | 2 |
-| 258 | `model_aliases_resolve` | `codeintel_cmds` | 0 | 0 | 0 |
-| 259 | `ai_markers_scan` | `codeintel_cmds` | 0 | 0 | 0 |
-| 260 | `desktop_status` | `desktop_cmds` | 2 | 2 | 0 |
-| 261 | `desktop_attach` | `desktop_cmds` | 2 | 4 | 0 |
-| 262 | `desktop_policy_get` | `desktop_cmds` | 1 | 1 | 0 |
-| 263 | `desktop_apps` | `desktop_cmds` | 2 | 3 | 0 |
-| 264 | `desktop_policy_allow_path` | `desktop_cmds` | 1 | 3 | 0 |
-| 265 | `desktop_policy_remove_path` | `desktop_cmds` | 1 | 3 | 0 |
-| 266 | `desktop_policy_set_interaction` | `desktop_cmds` | 1 | 3 | 0 |
-| 267 | `desktop_windows` | `desktop_cmds` | 1 | 1 | 0 |
-| 268 | `desktop_read` | `desktop_cmds` | 1 | 1 | 0 |
-| 269 | `desktop_see` | `desktop_cmds` | 1 | 1 | 0 |
-| 270 | `desktop_act` | `desktop_cmds` | 1 | 1 | 0 |
-| 271 | `desktop_escalation` | `desktop_cmds` | 1 | 1 | 0 |
-| 272 | `desktop_act_escalating` | `desktop_cmds` | 1 | 1 | 0 |
-| 273 | `desktop_stop` | `desktop_cmds` | 1 | 1 | 0 |
-| 274 | `cua_dag_get` | `desktop_cmds` | 1 | 1 | 0 |
-| 275 | `cua_dag_edit_remaining` | `desktop_cmds` | 1 | 1 | 0 |
-| 276 | `work_list` | `work_cmds` | 1 | 1 | 0 |
-| 277 | `work_snapshot` | `work_cmds` | 1 | 1 | 0 |
-| 278 | `work_events` | `work_cmds` | 1 | 1 | 0 |
-| 279 | `work_presence` | `work_cmds` | 1 | 1 | 0 |
-| 280 | `work_reviews` | `work_cmds` | 1 | 1 | 0 |
-| 281 | `work_pty_spawn` | `work_cmds` | 1 | 1 | 0 |
-| 282 | `work_pty_resize` | `work_cmds` | 1 | 1 | 0 |
-| 283 | `work_pty_signal` | `work_cmds` | 1 | 1 | 0 |
-| 284 | `work_pty_close` | `work_cmds` | 1 | 1 | 0 |
-| 285 | `work_pty_snapshot` | `work_cmds` | 1 | 1 | 0 |
-| 286 | `work_worktree_create` | `work_cmds` | 1 | 1 | 0 |
-| 287 | `work_worktree_attach` | `work_cmds` | 1 | 1 | 0 |
-| 288 | `work_worktree_op` | `work_cmds` | 1 | 1 | 0 |
-| 289 | `work_agent_spawn` | `work_cmds` | 1 | 1 | 0 |
-| 290 | `work_agent_op` | `work_cmds` | 1 | 1 | 0 |
-| 291 | `work_agent_sessions` | `work_cmds` | 1 | 1 | 0 |
-| 292 | `work_children` | `work_cmds` | 1 | 1 | 0 |
-| 293 | `work_create` | `work_cmds` | 0 | 0 | 0 |
-| 294 | `work_get` | `work_cmds` | 0 | 0 | 0 |
-| 295 | `work_archive` | `work_cmds` | 0 | 0 | 0 |
-| 296 | `work_locator` | `work_cmds` | 0 | 0 | 0 |
-| 297 | `work_nodes` | `work_cmds` | 0 | 0 | 0 |
-| 298 | `work_node_register` | `work_cmds` | 0 | 0 | 0 |
-| 299 | `work_node_bind` | `work_cmds` | 0 | 0 | 0 |
-| 300 | `work_node_unbind` | `work_cmds` | 0 | 0 | 0 |
-| 301 | `work_authority_acquire` | `work_cmds` | 0 | 0 | 0 |
-| 302 | `work_authority_renew` | `work_cmds` | 0 | 0 | 0 |
-| 303 | `work_authority_release` | `work_cmds` | 0 | 0 | 0 |
-| 304 | `work_clients` | `work_cmds` | 0 | 0 | 0 |
-| 305 | `work_client_connect` | `work_cmds` | 0 | 0 | 0 |
-| 306 | `work_client_detach` | `work_cmds` | 0 | 0 | 0 |
-| 307 | `work_capabilities` | `work_cmds` | 0 | 0 | 0 |
-| 308 | `work_capability_grant` | `work_cmds` | 0 | 0 | 0 |
-| 309 | `work_capability_resolve` | `work_cmds` | 0 | 0 | 0 |
-| 310 | `work_review_resolve` | `work_cmds` | 0 | 0 | 0 |
-| 311 | `work_steer` | `work_cmds` | 0 | 0 | 0 |
-| 312 | `work_steer_interrupt` | `work_cmds` | 0 | 0 | 0 |
-| 313 | `work_manifest_create` | `work_cmds` | 0 | 0 | 0 |
-| 314 | `work_manifest_get` | `work_cmds` | 0 | 0 | 0 |
-| 315 | `work_manifest_restore` | `work_cmds` | 0 | 0 | 0 |
-| 316 | `work_attachment_add` | `work_cmds` | 0 | 0 | 0 |
-| 317 | `work_attachment_list` | `work_cmds` | 0 | 0 | 0 |
-| 318 | `work_attachment_resolve` | `work_cmds` | 0 | 0 | 0 |
-| 319 | `artifact_serve` | `artifact_cmds` | 1 | 1 | 0 |
-| 320 | `artifact_stop` | `artifact_cmds` | 1 | 1 | 0 |
-| 321 | `doctor_report` | `doctor_cmds` | 1 | 1 | 0 |
-| 322 | `openai_server_start` | `openai_cmds` | 1 | 1 | 0 |
-| 323 | `openai_server_stop` | `openai_cmds` | 1 | 1 | 0 |
-| 324 | `openai_server_status` | `openai_cmds` | 1 | 1 | 0 |
-| 325 | `discovery_inventory` | `discovery_cmds` | 1 | 1 | 0 |
-| 326 | `routing_feed_decide` | `discovery_cmds` | 1 | 1 | 0 |
-| 327 | `provider_health_probe` | `discovery_cmds` | 0 | 0 | 0 |
-| 328 | `model_download_start` | `model_cmds` | 1 | 1 | 0 |
-| 329 | `model_downloads` | `model_cmds` | 1 | 1 | 0 |
-| 330 | `model_download_cancel` | `model_cmds` | 1 | 1 | 0 |
-| 331 | `model_registry_list` | `model_cmds` | 1 | 1 | 0 |
-| 332 | `model_registry_remove` | `model_cmds` | 1 | 1 | 0 |
-| 333 | `model_recommend_quant` | `model_cmds` | 1 | 1 | 0 |
-| 334 | `model_serve` | `model_cmds` | 2 | 2 | 0 |
-| 335 | `model_estimate_fit` | `model_cmds` | 1 | 1 | 0 |
-| 336 | `model_gallery_parse` | `model_cmds` | 1 | 1 | 0 |
-| 337 | `model_best_pick` | `model_cmds` | 1 | 1 | 0 |
-| 338 | `settings_providers_list` | `settings_cmds` | 1 | 2 | 0 |
-| 339 | `settings_default_model_get` | `settings_cmds` | 1 | 2 | 0 |
-| 340 | `settings_default_model_set` | `settings_cmds` | 1 | 2 | 0 |
-| 341 | `settings_agents_list` | `settings_cmds` | 1 | 2 | 0 |
-| 342 | `settings_agent_get` | `settings_cmds` | 1 | 2 | 0 |
-| 343 | `settings_agent_loadout` | `settings_cmds` | 1 | 1 | 0 |
-| 344 | `settings_connections_list` | `settings_cmds` | 1 | 2 | 0 |
-| 345 | `settings_schedules_list` | `settings_cmds` | 1 | 2 | 0 |
-| 346 | `settings_schedule_get` | `settings_cmds` | 1 | 1 | 0 |
-| 347 | `settings_schedule_set_enabled` | `settings_cmds` | 1 | 2 | 0 |
-| 348 | `settings_extensions_list` | `settings_cmds` | 1 | 2 | 0 |
-| 349 | `voice_status` | `voice_cmds` | 1 | 1 | 0 |
-| 350 | `voice_vad_classify` | `voice_cmds` | 1 | 1 | 0 |
-| 351 | `voice_process_utterance` | `voice_cmds` | 1 | 1 | 0 |
+| 205 | `updater_install` | `updater_cmds` | 0 | 0 | 0 |
+| 206 | `updater_channel_get` | `updater_cmds` | 1 | 1 | 0 |
+| 207 | `updater_channel_set` | `updater_cmds` | 1 | 1 | 0 |
+| 208 | `updater_download` | `updater_cmds` | 1 | 1 | 0 |
+| 209 | `updater_restart` | `updater_cmds` | 1 | 1 | 0 |
+| 210 | `fs_home` | `fs_cmds` | 1 | 1 | 0 |
+| 211 | `fs_list_dir` | `fs_cmds` | 1 | 1 | 0 |
+| 212 | `fs_read_file` | `fs_cmds` | 1 | 1 | 0 |
+| 213 | `fs_write_file` | `fs_cmds` | 1 | 1 | 0 |
+| 214 | `fs_write_ticket` | `fs_cmds` | 1 | 1 | 0 |
+| 215 | `fs_write_commit` | `fs_cmds` | 1 | 1 | 0 |
+| 216 | `fs_undo_list` | `fs_cmds` | 1 | 1 | 0 |
+| 217 | `fs_undo_restore` | `fs_cmds` | 1 | 1 | 0 |
+| 218 | `fs_undo_snapshot` | `fs_cmds` | 1 | 1 | 0 |
+| 219 | `terminal_profiles` | `terminal_cmds` | 1 | 1 | 0 |
+| 220 | `terminal_set_default` | `terminal_cmds` | 1 | 1 | 0 |
+| 221 | `terminal_set_automation` | `terminal_cmds` | 1 | 1 | 0 |
+| 222 | `terminal_confirm_unsafe` | `terminal_cmds` | 1 | 1 | 0 |
+| 223 | `terminal_get_shell_integration` | `terminal_cmds` | 0 | 0 | 0 |
+| 224 | `terminal_set_shell_integration` | `terminal_cmds` | 1 | 1 | 0 |
+| 225 | `terminal_spawn` | `terminal_cmds` | 1 | 1 | 0 |
+| 226 | `terminal_run` | `terminal_cmds` | 1 | 1 | 0 |
+| 227 | `terminal_replay` | `terminal_cmds` | 1 | 1 | 0 |
+| 228 | `terminal_write` | `terminal_cmds` | 1 | 1 | 0 |
+| 229 | `terminal_resize` | `terminal_cmds` | 1 | 1 | 0 |
+| 230 | `terminal_kill` | `terminal_cmds` | 1 | 1 | 0 |
+| 231 | `terminal_status` | `terminal_cmds` | 1 | 1 | 0 |
+| 232 | `terminal_commands` | `terminal_cmds` | 1 | 1 | 0 |
+| 233 | `terminal_last_command_context` | `terminal_cmds` | 1 | 1 | 0 |
+| 234 | `terminal_history_context` | `terminal_cmds` | 1 | 1 | 0 |
+| 235 | `browser_list_installed` | `browser_cmds` | 1 | 1 | 0 |
+| 236 | `browser_get_config` | `browser_cmds` | 1 | 1 | 0 |
+| 237 | `browser_set_config` | `browser_cmds` | 1 | 1 | 0 |
+| 238 | `browser_start` | `browser_cmds` | 1 | 1 | 0 |
+| 239 | `browser_navigate` | `browser_cmds` | 1 | 1 | 0 |
+| 240 | `browser_snapshot` | `browser_cmds` | 1 | 1 | 0 |
+| 241 | `browser_read` | `browser_cmds` | 1 | 1 | 0 |
+| 242 | `browser_read_url` | `browser_cmds` | 1 | 1 | 0 |
+| 243 | `browser_click` | `browser_cmds` | 1 | 1 | 0 |
+| 244 | `browser_type` | `browser_cmds` | 1 | 1 | 0 |
+| 245 | `browser_stop` | `browser_cmds` | 1 | 1 | 0 |
+| 246 | `browser_status` | `browser_cmds` | 1 | 1 | 0 |
+| 247 | `memory_request` | `memory_cmds` | 4 | 4 | 0 |
+| 248 | `memory_read` | `memory_cmds` | 1 | 1 | 0 |
+| 249 | `git_status` | `git_cmds` | 1 | 1 | 0 |
+| 250 | `git_log` | `git_cmds` | 1 | 1 | 0 |
+| 251 | `git_diff` | `git_cmds` | 1 | 1 | 0 |
+| 252 | `git_stage_all` | `git_cmds` | 1 | 1 | 0 |
+| 253 | `git_commit` | `git_cmds` | 1 | 1 | 0 |
+| 254 | `git_root` | `git_cmds` | 1 | 1 | 0 |
+| 255 | `git_worktree_add` | `git_cmds` | 1 | 1 | 0 |
+| 256 | `git_worktree_list` | `git_cmds` | 1 | 1 | 0 |
+| 257 | `git_worktree_merge` | `git_cmds` | 1 | 1 | 0 |
+| 258 | `git_worktree_revert` | `git_cmds` | 1 | 1 | 0 |
+| 259 | `lsp_diagnostics` | `lsp_cmds` | 1 | 1 | 0 |
+| 260 | `repomap_build` | `codeintel_cmds` | 0 | 0 | 4 |
+| 261 | `file_outline` | `codeintel_cmds` | 0 | 0 | 2 |
+| 262 | `model_aliases_resolve` | `codeintel_cmds` | 0 | 0 | 0 |
+| 263 | `ai_markers_scan` | `codeintel_cmds` | 0 | 0 | 0 |
+| 264 | `desktop_status` | `desktop_cmds` | 2 | 2 | 0 |
+| 265 | `desktop_attach` | `desktop_cmds` | 2 | 4 | 0 |
+| 266 | `desktop_policy_get` | `desktop_cmds` | 1 | 1 | 0 |
+| 267 | `desktop_apps` | `desktop_cmds` | 2 | 3 | 0 |
+| 268 | `desktop_policy_allow_path` | `desktop_cmds` | 1 | 3 | 0 |
+| 269 | `desktop_policy_remove_path` | `desktop_cmds` | 1 | 3 | 0 |
+| 270 | `desktop_policy_set_interaction` | `desktop_cmds` | 1 | 3 | 0 |
+| 271 | `desktop_windows` | `desktop_cmds` | 1 | 1 | 0 |
+| 272 | `desktop_read` | `desktop_cmds` | 1 | 1 | 0 |
+| 273 | `desktop_see` | `desktop_cmds` | 1 | 1 | 0 |
+| 274 | `desktop_act` | `desktop_cmds` | 1 | 1 | 0 |
+| 275 | `desktop_escalation` | `desktop_cmds` | 1 | 1 | 0 |
+| 276 | `desktop_act_escalating` | `desktop_cmds` | 1 | 1 | 0 |
+| 277 | `desktop_stop` | `desktop_cmds` | 1 | 1 | 0 |
+| 278 | `cua_dag_get` | `desktop_cmds` | 1 | 1 | 0 |
+| 279 | `cua_dag_edit_remaining` | `desktop_cmds` | 1 | 1 | 0 |
+| 280 | `work_list` | `work_cmds` | 1 | 1 | 0 |
+| 281 | `work_snapshot` | `work_cmds` | 1 | 1 | 0 |
+| 282 | `work_events` | `work_cmds` | 1 | 1 | 0 |
+| 283 | `work_presence` | `work_cmds` | 1 | 1 | 0 |
+| 284 | `work_reviews` | `work_cmds` | 1 | 1 | 0 |
+| 285 | `work_pty_spawn` | `work_cmds` | 1 | 1 | 0 |
+| 286 | `work_pty_resize` | `work_cmds` | 1 | 1 | 0 |
+| 287 | `work_pty_signal` | `work_cmds` | 1 | 1 | 0 |
+| 288 | `work_pty_close` | `work_cmds` | 1 | 1 | 0 |
+| 289 | `work_pty_snapshot` | `work_cmds` | 1 | 1 | 0 |
+| 290 | `work_worktree_create` | `work_cmds` | 1 | 1 | 0 |
+| 291 | `work_worktree_attach` | `work_cmds` | 1 | 1 | 0 |
+| 292 | `work_worktree_op` | `work_cmds` | 1 | 1 | 0 |
+| 293 | `work_agent_spawn` | `work_cmds` | 1 | 1 | 0 |
+| 294 | `work_agent_op` | `work_cmds` | 1 | 1 | 0 |
+| 295 | `work_agent_sessions` | `work_cmds` | 1 | 1 | 0 |
+| 296 | `work_children` | `work_cmds` | 1 | 1 | 0 |
+| 297 | `work_create` | `work_cmds` | 0 | 0 | 0 |
+| 298 | `work_get` | `work_cmds` | 0 | 0 | 0 |
+| 299 | `work_archive` | `work_cmds` | 0 | 0 | 0 |
+| 300 | `work_locator` | `work_cmds` | 0 | 0 | 0 |
+| 301 | `work_nodes` | `work_cmds` | 0 | 0 | 0 |
+| 302 | `work_node_register` | `work_cmds` | 0 | 0 | 0 |
+| 303 | `work_node_bind` | `work_cmds` | 0 | 0 | 0 |
+| 304 | `work_node_unbind` | `work_cmds` | 0 | 0 | 0 |
+| 305 | `work_authority_acquire` | `work_cmds` | 0 | 0 | 0 |
+| 306 | `work_authority_renew` | `work_cmds` | 0 | 0 | 0 |
+| 307 | `work_authority_release` | `work_cmds` | 0 | 0 | 0 |
+| 308 | `work_clients` | `work_cmds` | 0 | 0 | 0 |
+| 309 | `work_client_connect` | `work_cmds` | 0 | 0 | 0 |
+| 310 | `work_client_detach` | `work_cmds` | 0 | 0 | 0 |
+| 311 | `work_capabilities` | `work_cmds` | 0 | 0 | 0 |
+| 312 | `work_capability_grant` | `work_cmds` | 0 | 0 | 0 |
+| 313 | `work_capability_resolve` | `work_cmds` | 0 | 0 | 0 |
+| 314 | `work_review_resolve` | `work_cmds` | 0 | 0 | 0 |
+| 315 | `work_steer` | `work_cmds` | 0 | 0 | 0 |
+| 316 | `work_steer_interrupt` | `work_cmds` | 0 | 0 | 0 |
+| 317 | `work_manifest_create` | `work_cmds` | 0 | 0 | 0 |
+| 318 | `work_manifest_get` | `work_cmds` | 0 | 0 | 0 |
+| 319 | `work_manifest_restore` | `work_cmds` | 0 | 0 | 0 |
+| 320 | `work_attachment_add` | `work_cmds` | 0 | 0 | 0 |
+| 321 | `work_attachment_list` | `work_cmds` | 0 | 0 | 0 |
+| 322 | `work_attachment_resolve` | `work_cmds` | 0 | 0 | 0 |
+| 323 | `artifact_serve` | `artifact_cmds` | 1 | 1 | 0 |
+| 324 | `artifact_stop` | `artifact_cmds` | 1 | 1 | 0 |
+| 325 | `doctor_report` | `doctor_cmds` | 1 | 1 | 0 |
+| 326 | `diagnostics_sandbox_posture` | `diagnostics_cmds` | 1 | 1 | 0 |
+| 327 | `diagnostics_support_bundle` | `diagnostics_cmds` | 1 | 1 | 0 |
+| 328 | `data_remove_all` | `diagnostics_cmds` | 1 | 1 | 0 |
+| 329 | `openai_server_start` | `openai_cmds` | 1 | 1 | 0 |
+| 330 | `openai_server_stop` | `openai_cmds` | 1 | 1 | 0 |
+| 331 | `openai_server_status` | `openai_cmds` | 1 | 1 | 0 |
+| 332 | `discovery_inventory` | `discovery_cmds` | 1 | 1 | 0 |
+| 333 | `routing_feed_decide` | `discovery_cmds` | 1 | 1 | 0 |
+| 334 | `provider_health_probe` | `discovery_cmds` | 0 | 0 | 0 |
+| 335 | `model_download_start` | `model_cmds` | 1 | 1 | 0 |
+| 336 | `model_downloads` | `model_cmds` | 1 | 1 | 0 |
+| 337 | `model_download_cancel` | `model_cmds` | 1 | 1 | 0 |
+| 338 | `model_registry_list` | `model_cmds` | 1 | 1 | 0 |
+| 339 | `model_registry_remove` | `model_cmds` | 1 | 1 | 0 |
+| 340 | `model_recommend_quant` | `model_cmds` | 1 | 1 | 0 |
+| 341 | `model_serve` | `model_cmds` | 2 | 2 | 0 |
+| 342 | `model_estimate_fit` | `model_cmds` | 1 | 1 | 0 |
+| 343 | `model_gallery_parse` | `model_cmds` | 1 | 1 | 0 |
+| 344 | `model_best_pick` | `model_cmds` | 1 | 1 | 0 |
+| 345 | `settings_providers_list` | `settings_cmds` | 1 | 2 | 0 |
+| 346 | `settings_default_model_get` | `settings_cmds` | 1 | 2 | 0 |
+| 347 | `settings_default_model_set` | `settings_cmds` | 1 | 2 | 0 |
+| 348 | `settings_agents_list` | `settings_cmds` | 1 | 2 | 0 |
+| 349 | `settings_agent_get` | `settings_cmds` | 1 | 2 | 0 |
+| 350 | `settings_agent_loadout` | `settings_cmds` | 1 | 1 | 0 |
+| 351 | `settings_connections_list` | `settings_cmds` | 1 | 2 | 0 |
+| 352 | `settings_schedules_list` | `settings_cmds` | 1 | 2 | 0 |
+| 353 | `settings_schedule_get` | `settings_cmds` | 1 | 1 | 0 |
+| 354 | `settings_schedule_set_enabled` | `settings_cmds` | 1 | 2 | 0 |
+| 355 | `settings_extensions_list` | `settings_cmds` | 1 | 2 | 0 |
+| 356 | `voice_status` | `voice_cmds` | 1 | 1 | 0 |
+| 357 | `voice_vad_classify` | `voice_cmds` | 1 | 1 | 0 |
+| 358 | `voice_process_utterance` | `voice_cmds` | 1 | 1 | 0 |
 
 ### 15.2 Coordinator IPC method registry (`handleRequest`)
 
@@ -9516,7 +9600,7 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 
 ### 15.3 Full file index (every git-tracked path, grouped by directory)
 
-- `./` — .gitignore, .pre-commit-config.yaml, 8cfdc45d-f91f-4857-8ca5-9777c8ae4822.png, AGENTS.md, CODEBASE-MAP.md, COMPETITIVE-POSITIONING.md, CURRENT_RUN.md, DESKTOP-APP-SPEC.md, LICENSE, LICENSE-APACHE, LICENSE-MIT, README.md, SPEC-CHANGELOG.md, SUPPORT-MATRIX.md, TEST-CASES.md, TODO.md, UI-DESIGN-PROMPT.md, UX-TESTING-PLAN.md, bun.lock, capabilities.yaml, package-lock.json, package.json, pnpm-lock.yaml, pnpm-workspace.yaml, testcases.md, tsconfig.json
+- `./` — .gitignore, .pre-commit-config.yaml, 8cfdc45d-f91f-4857-8ca5-9777c8ae4822.png, AGENTS.md, CODEBASE-MAP.md, COMPETITIVE-POSITIONING.md, CURRENT_RUN.md, DESKTOP-APP-SPEC.md, LICENSE, LICENSE-APACHE, LICENSE-MIT, PACKAGING.md, README.md, SPEC-CHANGELOG.md, SUPPORT-MATRIX.md, TEST-CASES.md, THIRD-PARTY-NOTICES.md, TODO.md, UI-DESIGN-PROMPT.md, UX-TESTING-PLAN.md, bun.lock, capabilities.yaml, package-lock.json, package.json, pnpm-lock.yaml, pnpm-workspace.yaml, testcases.md, tsconfig.json
 - `.agents/` — README.md
 - `.agents/docs/` — README.md, agent-agnostic-compatibility.md, architecture-and-protocol.md, installation.md, research.md
 - `.agents/skills/codebase-intelligence/` — SKILL.md, requirements.txt
@@ -9563,11 +9647,11 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 - `crates/everyaios-codeintel/src/bin/` — mock-lsp-server.rs
 - `crates/everyaios-codeintel/tests/` — lsp_runner.rs
 - `crates/everyaios-core/` — Cargo.toml
-- `crates/everyaios-core/src/` — adapter.rs, agui.rs, ai_marker.rs, automation_runtime.rs, blueprint.rs, capability_manifest.rs, challenge.rs, challenge_tests.rs, chat.rs, combos.rs, config.rs, connector_approvals.rs, connector_hub.rs, cua.rs, decline.rs, diagnose.rs, distill.rs, doctor.rs, email.rs, eval_service.rs, execution.rs, export.rs, file_undo.rs, forge.rs, git_commit.rs, git_queue.rs, governor.rs, guard_service.rs, hooks.rs, hwfit.rs, inventory.rs, kernel_budget.rs, lib.rs, local.rs, local_tests.rs, main.rs, memory_service.rs, messaging.rs, migrate.rs, migration.rs, multirun.rs, openai_server.rs, orphan.rs, pairing.rs, plan_service.rs, provider_ref.rs, providers.rs, reader.rs, remote_attach.rs, report.rs, research.rs, resources.rs, routing.rs, rss_measure.rs, scheduler_service.rs, search_config.rs, self_audit.rs, shell_integration.rs, sidecar_link.rs, supervisor.rs, sync.rs, sync_transport.rs, task_ledger.rs, telemetry.rs, terminal.rs, tools.rs, tracing.rs, vault_key.rs, version.rs, voice.rs, watcher_glue.rs, widgets.rs, work_gateway.rs, worker_pool.rs, worktree_cap.rs, worktrees.rs, wsl.rs
+- `crates/everyaios-core/src/` — adapter.rs, agui.rs, ai_marker.rs, automation_runtime.rs, blueprint.rs, capability_manifest.rs, challenge.rs, challenge_tests.rs, chat.rs, combos.rs, config.rs, connector_approvals.rs, connector_hub.rs, cua.rs, decline.rs, diagnose.rs, distill.rs, doctor.rs, email.rs, eval_service.rs, execution.rs, export.rs, file_undo.rs, forge.rs, git_commit.rs, git_queue.rs, governor.rs, guard_service.rs, hooks.rs, hwfit.rs, inventory.rs, kernel_budget.rs, lib.rs, local.rs, local_tests.rs, main.rs, memory_service.rs, messaging.rs, migrate.rs, migration.rs, multirun.rs, openai_server.rs, orphan.rs, pairing.rs, plan_service.rs, provider_ref.rs, providers.rs, reader.rs, remote_attach.rs, report.rs, research.rs, resources.rs, routing.rs, rss_measure.rs, scheduler_service.rs, search_config.rs, self_audit.rs, shell_integration.rs, sidecar_link.rs, store_schema.rs, supervisor.rs, sync.rs, sync_transport.rs, task_ledger.rs, telemetry.rs, terminal.rs, tools.rs, tracing.rs, vault_key.rs, version.rs, voice.rs, watcher_glue.rs, widgets.rs, work_gateway.rs, worker_pool.rs, worktree_cap.rs, worktrees.rs, wsl.rs
 - `crates/everyaios-core/src/bin/` — mock-worker.rs
 - `crates/everyaios-core/src/connectors/` — browser_session.rs, calendar.rs, gmail.rs, graph.rs, gws.rs, imap_smtp.rs, mod.rs, native.rs, read_first.rs, scopes.rs, workspace.rs
 - `crates/everyaios-core/src/models/` — best.rs, cache.rs, fit.rs, hf.rs, local_url.rs, mlx.rs, mod.rs, probe.rs, store.rs
-- `crates/everyaios-core/tests/` — acceptance_edit_ladder.rs, acceptance_terminal_automation.rs, p10_bench.rs, p10_e2e.rs, p10_security.rs, p50_gates.rs, sidecar_handoff.rs, worker_pool.rs
+- `crates/everyaios-core/tests/` — acceptance_edit_ladder.rs, acceptance_terminal_automation.rs, acceptance_upgrade_evidence.rs, p10_bench.rs, p10_e2e.rs, p10_security.rs, p50_gates.rs, sidecar_handoff.rs, worker_pool.rs
 - `crates/everyaios-core/tests/fixtures/` — p64_edit_ladder.json
 - `crates/everyaios-desktop/` — Cargo.toml
 - `crates/everyaios-desktop/src/` — apps.rs, launch.rs, lib.rs, ocr.rs, policy.rs, readiness.rs, router.rs, types.rs, verify.rs
@@ -9609,7 +9693,9 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 - `crates/everyaios-vault/src/` — auth_bridge.rs, broker.rs, credential_broker.rs, egress.rs, keyring.rs, ledger.rs, lib.rs, local.rs, local_tests.rs, oauth.rs, oauth_tests.rs, session.rs, session_budget.rs, session_tests.rs, tier.rs
 - `crates/everyaios-vault/tests/` — acceptance_vault_hydration.rs
 - `deploy/` — BYO-HOST.md, Dockerfile, com.everyaios.node.plist, docker-compose.yml, everyaios-node.service, fly.toml
+- `docs/` — signing.md, updating.md
 - `docs/codebase/` — README.md, architecture.md, components.md, data-and-state.md, decisions.md, external-systems.md, flows.md, freshness.json, hotspots.md, invariants.md, tests-and-verification.md
+- `docs/packaging/` — budgets.json
 - `packages/coordinator/` — package.json, tsconfig.json
 - `packages/coordinator/src/` — agent-builder.test.ts, agui.ts, budget.test.ts, budget.ts, capability-seams.test.ts, capability-seams.ts, catalog.test.ts, catalog.ts, channel-a.test.ts, channel-a.ts, combo-pick.test.ts, combo-pick.ts, companion.ts, connector-bridge.ts, context-trace.test.ts, context-trace.ts, core-providers.smoke.test.ts, cua-brief.test.ts, cua-brief.ts, cua-perceive.test.ts, cua-perceive.ts, cua-replan.test.ts, cua-replan.ts, cua-route.test.ts, cua-route.ts, cua-skill.test.ts, cua-skill.ts, cua-stop.test.ts, cua-stop.ts, cua-verify.test.ts, cua-verify.ts, dream-diary.test.ts, dream-diary.ts, external-inbox.test.ts, external-inbox.ts, fabric.test.ts, fabric.ts, fleet.test.ts, fleet.ts, frame.ts, goal.test.ts, goal.ts, guard.test.ts, guard.ts, h32.test.ts, h32.ts, heap.test.ts, heap.ts, index.test.ts, index.ts, live-agent-harness.test.ts, mcp-bridge.test.ts, mcp-bridge.ts, mcp-catalog.test.ts, mcp-catalog.ts, mcp-install.test.ts, mcp-install.ts, mcp-manager.test.ts, mcp-manager.ts, message.ts, migration-import.test.ts, migration-import.ts, observations.test.ts, observations.ts, orphan.ts, patch-overlay.test.ts, patch-overlay.ts, persona-registry.test.ts, persona-registry.ts, primary-agent.test.ts, primary-agent.ts, reflection-agui.test.ts, reflection.ts, resumable.test.ts, resumable.ts, router-scorer.test.ts, router.ts, run-identity.ts, runtime-bind.test.ts, runtime-bind.ts, scheduler.test.ts, scheduler.ts, scorer.test.ts, scorer.ts, skill-warm.test.ts, skill-warm.ts, spend-split.test.ts, spend-split.ts, stream-session.test.ts, stream-session.ts, surfaces.test.ts, surfaces.ts, waterfall.test.ts, waterfall.ts, work-events.ts
 - `packages/core-agents/` — package.json, tsconfig.json
@@ -9664,7 +9750,7 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 - `packages/core-tools/.turbo/` — turbo-build.log, turbo-test.log, turbo-type-check.log
 - `packages/core-tools/src/` — image-generation.ts, index.ts, tool-function-calling.ts, tool-runtime.ts, types.ts
 - `packages/core-tools/src/__tests__/` — tool-runtime.test.ts
-- `scripts/` — check-arch-invariants.mjs, check-artifact-hygiene.mjs, check-doc-sync.mjs, check-versions.mjs, clean-profile-boot-check.mjs, gen-codebase-map.mjs, gen-icons.py, ipc-parity.mjs, measure-perf-p45.mjs, p45-live-measurements.json, verify-packaged-e2e.mjs, zen-free-probe.mjs
+- `scripts/` — check-app-metadata.mjs, check-arch-invariants.mjs, check-artifact-hygiene.mjs, check-doc-sync.mjs, check-licences.mjs, check-native-deps.mjs, check-release-matrix.mjs, check-size-budget.mjs, check-store-schemas.mjs, check-update-pipeline.mjs, check-updater-keys.mjs, check-versions.mjs, clean-profile-boot-check.mjs, gen-codebase-map.mjs, gen-icons.py, gen-sbom.mjs, ipc-parity.mjs, measure-perf-p45.mjs, p45-live-measurements.json, verify-packaged-e2e.mjs, zen-free-probe.mjs
 - `scripts/e2e/` — debug-cancel.mjs, debug-probe.mjs, failure-injection.mjs, searxng-settings.yml, security-gate.mjs, vertical-chat.mjs
 - `scripts/e2e/lib/` — protocol.mjs, provider.mjs
 - `src-tauri/` — Cargo.lock, Cargo.toml, build.rs, tauri.conf.json
@@ -9692,14 +9778,14 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 
 | Extension | Files |
 | --- | ---: |
-| `.rs` | 504 |
+| `.rs` | 506 |
 | `.ts` | 475 |
-| `.md` | 185 |
+| `.md` | 189 |
 | `.tsx` | 146 |
-| `.json` | 42 |
+| `.json` | 43 |
 | `.log` | 34 |
+| `.mjs` | 27 |
 | `.toml` | 24 |
-| `.mjs` | 18 |
 | `.yml` | 7 |
 | `(no extension)` | 6 |
 | `.png` | 5 |
@@ -9713,9 +9799,9 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 | `.ico` | 1 |
 | `.js` | 1 |
 | `.css` | 1 |
-| **TOTAL tracked** | **1465** |
+| **TOTAL tracked** | **1481** |
 
-Lines counted across the 1458 tracked text files at generation time: **411,168** (this map excluded — self-referential).
+Lines counted across the 1474 tracked text files at generation time: **416,982** (this map excluded — self-referential).
 
 ### 15.5 Coverage audit — is any tracked file unaccounted for?
 
@@ -9723,12 +9809,12 @@ Each section registers the files it gives an entry to; this table is a diff agai
 
 | Section | Files accounted for |
 | --- | ---: |
-| §9 Rust — per-file `####` | 504 |
+| §9 Rust — per-file `####` | 506 |
 | §10 TS/TSX — per-file `####` | 621 |
 | §12.2 npm manifests | 13 |
-| §13 non-source inventory | 142 |
-| §14 documentation index | 185 |
-| **TOTAL** | **1465 / 1465** |
+| §13 non-source inventory | 152 |
+| §14 documentation index | 189 |
+| **TOTAL** | **1481 / 1481** |
 
 **100% of tracked files have an entry, and that is mechanically enforced:** the generator exits non-zero if this
 list is ever non-empty. Note what this does *not* claim — an entry is accounting, not explanation. §9/§10

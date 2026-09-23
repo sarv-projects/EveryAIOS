@@ -351,16 +351,19 @@ export function describeWorkEvent(envelope: WorkEventEnvelope): WorkEventDescrip
         case 'worktree_destroyed':
           return { label: `Worktree ${shortId(ev.data.worktreeId)} destroyed`, tone: 'worktree', status: 'done' }
         case 'agent_session_spawned':
-          return { label: `Agent session ${shortId(ev.data.agentSessionId)} spawned`, detail: `${ev.data.agentId} (${ev.data.lifetime})`, tone: 'session', status: 'active' }
+          return { label: `Agent run ${shortId(ev.data.agentSessionId)} spawned`, detail: `${ev.data.agentId} (${ev.data.lifetime})`, tone: 'session', status: 'active' }
         case 'agent_session_message':
           return { label: `Agent message ${ev.data.direction === 'toAgent' ? 'sent' : 'received'}`, detail: shortId(ev.data.agentSessionId), tone: 'session', status: 'done' }
         case 'agent_session_attached':
+          return { label: `Agent run ${shortId(ev.data.agentSessionId)} attached`, tone: 'session', status: 'active' }
         case 'agent_session_detached':
+          return { label: `Agent run ${shortId(ev.data.agentSessionId)} detached`, tone: 'session', status: 'done' }
         case 'agent_session_steered':
+          return { label: `Agent run ${shortId(ev.data.agentSessionId)} steered`, tone: 'session', status: 'active' }
         case 'agent_session_terminated':
-          return { label: `Agent session ${shortId(ev.data.agentSessionId)} ${ev.kind.replace('agent_session_', '')}`, tone: 'session', status: ev.kind === 'agent_session_terminated' ? 'done' : 'active' }
+          return { label: `Agent run ${shortId(ev.data.agentSessionId)} terminated`, tone: 'session', status: 'done' }
         case 'agent_session_checkpointed':
-          return { label: `Agent session ${shortId(ev.data.agentSessionId)} checkpoint ${ev.data.checkpoint}`, tone: 'session', status: 'done' }
+          return { label: `Agent run ${shortId(ev.data.agentSessionId)} checkpoint ${ev.data.checkpoint}`, tone: 'session', status: 'done' }
       }
       break
   }

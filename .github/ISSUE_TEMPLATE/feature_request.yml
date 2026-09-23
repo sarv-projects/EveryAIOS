@@ -1,0 +1,44 @@
+name: Feature request
+description: Propose a capability or a change in behaviour
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before proposing: check `docs/release/post-v1.md` — much of the deferred
+        work is already registered there, and `TODO.md` owns the live status of
+        every row. Proposals that arrive with evidence and a named owner move
+        fastest; capability claims without evidence do not move at all.
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What can you not do today, and what does that cost you?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behaviour
+      description: What the app should do. If it changes an invariant in `ARCH/CORE.md`, say which one and why.
+    validations:
+      required: true
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Scope
+      options:
+        - v1 (blocking the release)
+        - post-v1 (registered deferral)
+        - unclear — needs triage
+    validations:
+      required: true
+  - type: checkboxes
+    id: invariants
+    attributes:
+      label: Invariants
+      options:
+        - label: This does not move credential custody out of the Rust vault
+          required: true
+        - label: Every mutating effect this adds would go through a Rust-minted authorization ticket
+          required: true

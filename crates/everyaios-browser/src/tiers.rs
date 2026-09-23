@@ -698,8 +698,8 @@ fn html_to_markdown(html: &str) -> String {
                     "script" | "style" => {
                         if open {
                             dropping += 1;
-                        } else if dropping > 0 {
-                            dropping -= 1;
+                        } else {
+                            dropping = dropping.saturating_sub(1);
                         }
                     }
                     "h1" | "h2" | "h3" | "h4" | "h5" | "h6" => {

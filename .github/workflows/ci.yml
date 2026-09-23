@@ -61,6 +61,37 @@ jobs:
       # published update contract cannot silently stop describing the binary.
       - name: Update pipeline
         run: node scripts/check-update-pipeline.mjs
+      # P70.D — install layout, the recovery playbook, the diagnostics
+      # commands and the platform-honesty statements (D1/D4/D5/D6/D7/D8/D9).
+      - name: Diagnostics surface
+        run: node scripts/check-diagnostics-surface.mjs
+      # P70.E — the executable half of the release qualification: kernel gate
+      # state, doc gates and the honest-capability audit. The items that need a
+      # host, live credentials or a release candidate are reported as BLOCKED
+      # with the blocker named (never silently passed).
+      - name: Release qualification (executable items)
+        run: node scripts/release-qualify.mjs
+      # P70.F2/F3 — the public download surface names the authoritative version.
+      - name: Release surface agreement
+        run: node scripts/gen-release-surface.mjs --check
+      # P70.F5/F6/F8 + G — legal/policy documents, the telemetry posture and
+      # the launch checklist cannot rot away from what ships.
+      - name: Public surface + release process
+        run: node scripts/check-public-surface.mjs
+      # P71.9i — the published tool-affinity block and the shipped prompt
+      # string are one contract, in one order, with real newlines.
+      - name: Prompt steering agreement
+        run: node scripts/check-prompt-steering.mjs
+      # P69.E11 — the only mechanical signal that a heading or a claim was
+      # silently removed: every section reference, relative link and link
+      # anchor must resolve.
+      - name: Cross-document references
+        run: node scripts/check-doc-refs.mjs
+      # P69.E10 — nothing user-visible may say "Session" (ARCH/SESSION.md §2):
+      # user-facing words are Chat / Space / Project; internal/API vocabulary
+      # must not leak into strings, templates, JSX text or i18n catalogs.
+      - name: User-facing vocabulary
+        run: node scripts/check-vocabulary.mjs
       # Packaging verification suite: static checks over the shipped surfaces.
       - name: Packaged release verification
         run: node scripts/verify-packaged-e2e.mjs

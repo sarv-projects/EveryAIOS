@@ -129,11 +129,11 @@ fn audit_chain_validates_after_upgrade() -> Result<()> {
     Ok(())
 }
 
-/// The vault's own refusal: a vault database stamped by a newer build is
-/// refused with `NewerSchema` before any read (C6, in-store half). Executed
-/// on the Windows driver host against real sequential builds — the driver
-/// step `vault_newer_schema_refused` below is its named checklist entry.
-/// No unit-test body here: there is no build N-1 on this machine to stamp.
+// The vault's own refusal: a vault database stamped by a newer build is
+// refused with `NewerSchema` before any read (C6, in-store half). Executed
+// on the Windows driver host against real sequential builds — the driver
+// step `vault_newer_schema_refused` below is its named checklist entry.
+// No unit-test body here: there is no build N-1 on this machine to stamp.
 
 /// The upgrade driver's checklist, in order. Each step is one function the
 /// Windows-host driver executes between build N-1 and build N

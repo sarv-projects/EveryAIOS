@@ -15,9 +15,12 @@
 //!   HTTP transport).
 //! - [`installer`] — F8: the install executor (download → sha256 → extract +
 //!   install-state persistence).
+//! - [`prefix_guard`] — P69.E9: the I16 prefix-stability guard (fingerprint +
+//!   per-Work state machine over cache-boundary events).
 
 pub mod a2a;
 pub mod agent_backend;
+pub mod prefix_guard;
 pub mod chief;
 pub mod client;
 pub mod frame;
@@ -34,11 +37,13 @@ pub use agent_backend::{
     BackendChannel, BackendError, ProviderBinding,
 };
 pub use chief::{
-    build_chief_prompt, governance_mode, AcpChief, Approval, ChiefAdapter, ChiefCapabilities,
-    ChiefError, ChiefEvent, DelegateChief, EventStream, GovernedSession, PermissionRequest,
-    SessionHandle, SessionOptions, SessionState, UserMessage,
+    build_chief_prompt, build_chief_prompt_with_steering, governance_mode, AcpChief, Approval,
+    ChiefAdapter, ChiefCapabilities, ChiefError, ChiefEvent, COWORK_AFFINITY_STEERING,
+    DelegateChief, EventStream, GovernedSession, PermissionRequest, SessionHandle, SessionOptions,
+    SessionState, UserMessage,
 };
 pub use client::{AcpError, AcpSession, AcpTransport, ProcessTransport, PromptOutcome};
+pub use prefix_guard::{fingerprint_stable_prefix, PrefixEvent, PrefixGuard};
 pub use frame::{decode_messages, encode_message};
 pub use harness_config::{
     builtin_writers, ClaudeCodeConfig, CodexConfig, HarnessConfigError, HarnessConfigWriter,

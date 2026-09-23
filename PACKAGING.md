@@ -101,6 +101,7 @@ losing one costs a rebuild, and stamping them would misstate what an upgrade has
 | `cua_replan_log` | `replan_log.jsonl` | v1 | manifest | replan history, as user-openable diagnostic evidence |
 | `plan_cache` | `plans.db` | v1 | derived | nothing — a miss rebuilds the plan |
 | `repo_cache` | `repo_cache.db` | v1 | derived | nothing — a stale index falls back to a full rebuild |
+| `update_channel` | `update_channel.json` | v1 | manifest | the user reverts to the stable channel — never a broken state (P70.C2) |
 
 A store that already holds data but has no recorded version is **adopted** at the current version and marked
 as such in the manifest: the honest statement is "written before stamps existed", not "already migrated".

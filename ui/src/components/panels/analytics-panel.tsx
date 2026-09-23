@@ -106,14 +106,14 @@ export default function AnalyticsPanel() {
           return
         }
         const csv = [
-          'session,tokens_in,tokens_out,cost_usd',
+          'chat,tokens_in,tokens_out,cost_usd',
           ...rows.map((r) => `${JSON.stringify(r.session)},${r.tokensIn},${r.tokensOut},${r.cost.toFixed(4)}`),
         ].join('\n')
         const blob = new Blob([csv], { type: 'text/csv' })
         const url = URL.createObjectURL(blob)
         const a = document.createElement('a')
         a.href = url
-        a.download = 'session-usage.csv'
+        a.download = 'chat-usage.csv'
         a.click()
         URL.revokeObjectURL(url)
         notify(`Exported ${rows.length} ledger rows`)

@@ -1739,7 +1739,7 @@ export function SearchEnginesSection() {
       await load()
       notify(
         usePublic
-          ? `Public instances on — ${out.discovered} in the cascade; ${out.appliedLive ? 'applied to the live session' : 'applies on next boot'}`
+          ? `Public instances on — ${out.discovered} in the cascade; ${out.appliedLive ? 'applied live' : 'applies on next boot'}`
           : 'Public instances off — local SearXNG + DDG fallback only',
       )
     } catch (e) {

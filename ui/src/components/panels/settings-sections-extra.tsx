@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { ExternalLink, Github } from 'lucide-react'
+import { ExternalLink, Github, ShieldQuestion, FileDown, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useAppStore } from '@/lib/store'
@@ -12,6 +12,7 @@ import { Slider } from '@/components/ui/slider'
 import { Switch } from '@/components/ui/switch'
 import { LinkChip, Row, SectionShell } from './settings-shared'
 import { inTauri } from '@/lib/tauri'
+import { nativeCall } from '@/lib/runtime'
 import { usePref } from '@/lib/ui-prefs'
 import { SHORTCUTS } from '@/components/shell/keyboard-shortcuts'
 
@@ -82,7 +83,7 @@ export function KeyboardSection() {
 /** P58.10 — which queue owns each staged experimental flag. The switch stays
  * disabled until its owner lands a flag the runtime actually reads. */
 const EXPERIMENTAL_OWNERS: Record<string, string> = {
-  'Multi-agent sessions': 'Not wired — the five-way agent split is P60 (Agent Runtime).',
+  'Multi-agent chats': 'Not wired — the five-way agent split is P60 (Agent Runtime).',
   'Local Whisper transcription': 'Not wired — voice capture/STT is P50.4.3.',
   'Vision grounding (VLM)': 'Not wired — the CUA vision gate is P59.',
   'Pre-emptive memory compaction': 'Not wired — compaction runs on the coordinator budget formula, not this pref.',
@@ -95,7 +96,7 @@ export function AdvancedSection() {
   // Staged-only record of the experimental surface (never written while the
   // rows are disabled — see EXPERIMENTAL_OWNERS).
   const [experimental] = usePref<Record<string, boolean>>('advanced.experimental', {
-    'Multi-agent sessions': false,
+    'Multi-agent chats': false,
     'Local Whisper transcription': true,
     'Vision grounding (VLM)': false,
     'Pre-emptive memory compaction': true,
@@ -633,6 +634,137 @@ export function DoctorSection() {
           Also available on the terminal: <code className="font-mono">everyaios doctor</code> (add{' '}
           <code className="font-mono">--json</code> for machine output). Credentials are reported as a
           count only — never a value.
+        </p>
+      </div>
+    </SectionShell>
+  )
+}
+
+// === Diagnostics (P70.D4/D7/D8) ===
+// Sandbox honesty + support bundle + the confirmed remove-all-data path.
+// The posture line renders the backend's own words — the UI never restates
+// confinement on its own behalf.
+type SandboxPosture = { posture: string; contained: boolean; detail: string; platform: string }
+
+export function DiagnosticsSection() {
+  const notify = useAppStore((s) => s.notify)
+  const [posture, setPosture] = useState<SandboxPosture | null>(null)
+  const [exporting, setExporting] = useState(false)
+  const [confirmText, setConfirmText] = useState('')
+  const [wiping, setWiping] = useState(false)
+
+  useEffect(() => {
+    if (!inTauri()) return
+    nativeCall('sandbox posture', () =>
+      import('@/lib/tauri').then(({ invoke }) =>
+        invoke<SandboxPosture>('diagnostics_sandbox_posture'),
+      ),
+    )
+      .then(setPosture)
+      .catch(() => setPosture(null))
+  }, [])
+
+  async function exportBundle() {
+    setExporting(true)
+    try {
+      const { invoke } = await import('@/lib/tauri')
+      const bundle = await nativeCall('support bundle', () =>
+        invoke<Record<string, unknown>>('diagnostics_support_bundle'),
+      )
+      const name = `everyaios-support-${new Date().toISOString().slice(0, 10)}.json`
+      const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = name
+      a.click()
+      URL.revokeObjectURL(url)
+      notify(`Support bundle saved as ${name} — secrets scrubbed structurally`)
+    } catch (e) {
+      notify(e instanceof Error ? e.message : 'Support bundle failed', 'error')
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  async function wipeAll() {
+    if (confirmText.trim().toUpperCase() !== 'DELETE') return
+    setWiping(true)
+    try {
+      const { invoke } = await import('@/lib/tauri')
+      const r = await nativeCall('remove all data', () =>
+        invoke<{ files: number; bytes: number }>('data_remove_all'),
+      )
+      notify(`Removed ${r.files} files — restart EveryAIOS to re-initialize`)
+      setConfirmText('')
+    } catch (e) {
+      notify(e instanceof Error ? e.message : 'Data removal failed', 'error')
+    } finally {
+      setWiping(false)
+    }
+  }
+
+  return (
+    <SectionShell
+      title="Diagnostics"
+      desc="Sandbox posture, support bundle and the remove-all-data path"
+    >
+      <div className="space-y-3">
+        {/* P70.D7 — the host's actual containment posture, verbatim. */}
+        <Row
+          label="Sandbox posture"
+          desc={
+            posture
+              ? posture.detail
+              : 'Reports what third-party MCP servers get on this host — available in the desktop shell'
+          }
+        >
+          <span
+            className={`rounded px-2 py-0.5 font-mono text-[10px] ${
+              posture?.contained
+                ? 'bg-emerald-500/10 text-emerald-400'
+                : 'bg-warning/10 text-warning'
+            }`}
+          >
+            {posture ? posture.posture : '…'}
+          </span>
+        </Row>
+
+        {/* P70.D8 — the scrubbed support bundle. */}
+        <Row label="Support bundle" desc="Versions, doctor report, capability probes, audit summary — secrets scrubbed by allow-list, never by deny-list">
+          <Button size="sm" variant="outline" className="h-7 text-xs" disabled={exporting} onClick={exportBundle}>
+            <FileDown className="mr-1 h-3 w-3" />
+            {exporting ? 'Building…' : 'Export'}
+          </Button>
+        </Row>
+
+        {/* P70.D4 — explicit, typed-confirmation removal. */}
+        <Row label="Remove all data" desc="Deletes the entire per-user data directory — vault, keys, chats, memory, audit. Uninstall does NOT do this by default.">
+          <div className="flex items-center gap-2">
+            <Input
+              value={confirmText}
+              onChange={(e) => setConfirmText(e.target.value)}
+              placeholder="type DELETE"
+              className="h-7 w-28 text-xs"
+              disabled={wiping}
+            />
+            <Button
+              size="sm"
+              variant="destructive"
+              className="h-7 text-xs"
+              disabled={wiping || confirmText.trim().toUpperCase() !== 'DELETE'}
+              onClick={wipeAll}
+            >
+              <Trash2 className="mr-1 h-3 w-3" />
+              {wiping ? 'Removing…' : 'Remove'}
+            </Button>
+          </div>
+        </Row>
+
+        <p className="flex items-start gap-1.5 text-[10px] text-muted-foreground">
+          <ShieldQuestion className="mt-0.5 h-3 w-3 shrink-0" />
+          The bundle is assembled from an explicit allow-list of files and fields — the vault,
+          key rings and token caches are never read, so a secret can only ship if review adds it.
         </p>
       </div>
     </SectionShell>

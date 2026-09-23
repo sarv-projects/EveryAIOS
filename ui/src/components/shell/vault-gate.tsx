@@ -91,7 +91,7 @@ export default function VaultGate({ children }: { children: React.ReactNode }) {
         </div>
         <p className="mb-4 text-xs text-muted-foreground">
           {setup
-            ? 'Keys, sessions and secrets are encrypted with Argon2id. There is no silent generated key — this passphrase is required before the app runs.'
+            ? '      Keys, chats and secrets are encrypted with Argon2id. There is no silent generated key — this passphrase is required before the app runs.'
             : 'Enter the passphrase for this device’s vault.'}
         </p>
         <label className="mb-2 block text-[10px] uppercase tracking-wider text-muted-foreground">

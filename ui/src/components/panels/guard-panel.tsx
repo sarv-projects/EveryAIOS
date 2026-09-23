@@ -83,11 +83,11 @@ const CELL_LABEL: Record<Cell, string> = {
 // P11.5.7 — preview-mode fallback rows (the live bridge replaces these in the
 // Tauri shell; kept so the panel stays explorable without the backend).
 const demoActivityRows: RecentAction[] = [
-  { action: 'ToolCompleted', target: 'fs_write_file · src/api.ts', scope: 'session demo-1', time: '09:15:02', status: 'ok' },
-  { action: 'ToolCompleted', target: 'browser.read · gmail.com', scope: 'session demo-1', time: '09:14:50', status: 'ok' },
-  { action: 'ToolStarted', target: 'shell.exec · npm run build', scope: 'session demo-1', time: '09:15:08', status: 'pending' },
-  { action: 'PermissionGranted', target: 'write src/api.ts', scope: 'session demo-1', time: '09:15:04', status: 'ok' },
-  { action: 'ToolCompleted', target: 'provider/stream · openai', scope: 'session demo-1', time: '09:14:45', status: 'ok' },
+  { action: 'ToolCompleted', target: 'fs_write_file · src/api.ts', scope: 'chat demo-1', time: '09:15:02', status: 'ok' },
+  { action: 'ToolCompleted', target: 'browser.read · gmail.com', scope: 'chat demo-1', time: '09:14:50', status: 'ok' },
+  { action: 'ToolStarted', target: 'shell.exec · npm run build', scope: 'chat demo-1', time: '09:15:08', status: 'pending' },
+  { action: 'PermissionGranted', target: 'write src/api.ts', scope: 'chat demo-1', time: '09:15:04', status: 'ok' },
+  { action: 'ToolCompleted', target: 'provider/stream · openai', scope: 'chat demo-1', time: '09:14:45', status: 'ok' },
 ]
 
 const ACTION_TONE = {

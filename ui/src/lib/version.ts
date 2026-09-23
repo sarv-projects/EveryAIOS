@@ -11,4 +11,4 @@
  * from the authoritative `src-tauri/tauri.conf.json` `version` — P70.A7), which
  * is the *application* version shown in About.
  */
-export const ARCH_VERSION = 'v4.00'
+export const ARCH_VERSION = 'v4.06'

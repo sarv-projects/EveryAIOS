@@ -512,10 +512,10 @@ export const mockSessions: Session[] = [
         id: 's2m2',
         role: 'assistant',
         content:
-          'Switched browser to **system Chrome** with your signed-in profile (vault session `acme-personal`). Tier-2 engine. Currently on page 23/47 — `everyaios-cdp` is taking accessibility-tree snapshots, extracting the price via the `[data-product-card]` locator, and writing rows to `pricing.csv`.',
+          'Switched browser to **system Chrome** with your signed-in profile (vault profile `acme-personal`). Tier-2 engine. Currently on page 23/47 — `everyaios-cdp` is taking accessibility-tree snapshots, extracting the price via the `[data-product-card]` locator, and writing rows to `pricing.csv`.',
         timestamp: iso(8),
         steps: [
-          { id: 's2p1', label: 'Login session inherited from Chrome', status: 'done', type: 'browser' },
+          { id: 's2p1', label: 'Chrome login inherited', status: 'done', type: 'browser' },
           { id: 's2p2', label: 'Crawling product pages (23/47)', status: 'active', type: 'browser', detail: 'Lightpanda → Chrome escalation on 2 pages' },
           { id: 's2p3', label: 'Writing to pricing.csv', status: 'pending', type: 'file' },
         ],
@@ -891,6 +891,8 @@ export const SETTINGS_SECTION_IDS = [
   'keyboard',
   'advanced',
   'doctor',
+  // P70.D4/D7/D8 — sandbox honesty, support bundle, remove-all-data.
+  'diagnostics',
   'discover',
   'runtime',
   'about',
@@ -3031,7 +3033,7 @@ if (typeof window !== 'undefined') {
           // Persistence failure is a product state, not a recoverable no-op:
           // keep the in-memory UI intact but tell the runtime and user that
           // the latest session projection is not durable.
-          setRuntimeState('degraded', `session persistence: ${runtimeError(error)}`)
+          setRuntimeState('degraded', `chat persistence: ${runtimeError(error)}`)
           s.notify('Chat changes could not be saved. Check the vault and retry.', 'error')
         }
       })()
