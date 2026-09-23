@@ -19,13 +19,29 @@
 ---
 
 ## 1. Active Goal
-**(Current, 2026-09-21 — external-agent engine decision: `ADR-0005` + `ADR-0006`; P71 opened)**:**
-- **Decision:** **external agents are the only first-class main engines in v1**; the built-in engine (model routing, the native loop, its ~50-tool catalog, `ChatRelay` provider broker, `core-providers` inference) is **deferred to post-v1** as a *governed baseline binding*. Session **kinds** (`interactive` · `automation` · `delegated`) resolve the headless-Work gap.
-- Docs landed: `ARCH/ADR/0005`, `ARCH/ADR/0006`, **`ARCH/AUTOMATION.md`** (new — the 14th subsystem contract), `ARCH/ROUTING.md` **rewritten** as agent routing + observability, `ARCH/CORE.md` §6/§7.1/§11, `ARCH/AGENT.md` §2, `ARCH/SESSION.md` §2/§3/§5/§6/§8/§9, `ARCH/17-NATIVE-AGENT.md` **archived**, `ARCH/00-INDEX.md`, `ARCH/01`–`ARCH/03`, `ARCH/09`, `ARCH/11`, `ARCH/16`, `ARCH/DIAGRAMS.md`, `DESKTOP-APP-SPEC.md`, `TEST-CASES.md` **§5**, `testcases.md`, `README.md`, `UI-DESIGN-PROMPT.md`, `ui/DESIGN-SYSTEM.md`, `docs/codebase/*`, `TODO.md` (**P71 — 33 rows**), `SPEC-CHANGELOG.md` (**v3.81–v3.83**), `ui/src/lib/version.ts`.
-- **Code: none written** — deliberately. This wave is the decision, the contracts, the tests and the ledger.
-- **Normative order:** **`P71.1` — the `delegate.*` façade on the shared plane — must land *before* any removal.** Delegation exists only on the built-in path today, so removing the engine first would silently delete the multiagent feature.
-- Gate status at handover: `check-doc-sync.mjs` · `gen-codebase-map.mjs --check` · `check-arch-invariants.mjs` all **exit 0**; capability census **unchanged at 166**; `TODO.md 1640 = 1305 done + 335 open`.
-- **Next:** 1) land `P71.1`; 2) close the `[IMPLEMENTED — unverified]` P69 wave with a verification pass before any row flips to `DONE`; 3) work the P71 rows in the ADR-0005 §8 order. — *in progress: see the P71 implementation-wave entry below (P71.1 + P71.3a landed).*
+**(Current, 2026-09-23 — Full 71-Repository & 20-Brief Architecture & Document Audit Completed & Verified)**:
+- **Task Executed**: Completed an exhaustive, end-to-end cross-audit of all 71 repositories across `REPO-COMPARE/` (`clone2/` [55 repos], `clone3/` [16 repos]), 20 domain briefs (4,067 lines), `MASTER-COMPARISON.md`, `DISPOSITION.md`, `DELTA-ANALYSIS.md`, and `LICENSE-LEDGER.md`. Synthesized all findings into EveryAIOS High-Level Design (HLD), Low-Level Design (LLD), subsystem architecture contracts (`ARCH/*`), product specification (`DESKTOP-APP-SPEC.md`), master roadmap (`TODO.md`), codebase maps (`CODEBASE-MAP.md`), and session tracking.
+- **Subsystem Architecture Contracts Updated**:
+  - `ARCH/06-SECURITY-GUARDRAILS.md` & `ARCH/SECURITY.md`: Sliding-window rate limiting on native IPC (`SEC-2`), ACP permission bridge create/wait split (`SEC-3`), Tree-Sitter AST shell command parsing (`SEC-4`), 2D authorization matrix `(AskForApproval, SandboxPolicy)` (`SEC-5`), pre-persistence secret scrubbing, hermetic child environment building, and password/credential manager hard denylist.
+  - `ARCH/05-TOKEN-ECONOMY.md` & `ARCH/CONTEXT.md`: Live-zone byte surgery (`MEM-14`), content-addressed blob spooling (`CCR` / `MEM-15`), middle-slice tool-pair atomic compaction, non-destructive context tombstones, and fault recovery nudges / doom loop circuit breakers.
+  - `ARCH/MEMORY.md` & `ARCH/07-MEMORY-CONTEXT.md`: Bi-temporal knowledge schema (`valid_at`, `invalid_at`, `superseded_by_fact_id`), non-touching memory channel, asynchronous Observer -> Reflector extraction pipeline, 2-tier progressive retrieval, dynamic BM25 sigmoid normalization, monotonic memory write barriers, and 3-phase memory dreaming sweeps.
+  - `ARCH/04-OFFICE-ENGINE.md`: DOCX/PPTX surgical XML invariants, field-character balancing (`field-balance.ts`), orphaned media garbage collection (`resource-cleanup.ts`), `quick-xml` streaming pipelines, and direct in-process Office API bypass rule.
+  - `ARCH/DESKTOP.md` & `ARCH/08-BROWSER-LAYER.md`: Windows 4-tier click ladder (`UIA Invoke -> PostMessage -> Direct Composition -> Gated SendInput`), patch-aligned coordinate quantization (`IMAGE_FACTOR = 28`), and loader ref invalidation.
+  - `ARCH/RECOVERY.md`: Turn-atomic multi-file snapshots with pre-commit rollback, Windows named pipe lifecycle mutex & birth-identity PID verification, and subagent queue deadlock prevention.
+  - `ARCH/15-CONNECT-STORE.md`: Official MCP `server.json` (2025-12-11) schema, 5-meta-tool catalog scaling (`list_apps`, `list_connections`, `search_actions`, `get_action_guide`, `execute_action`), proactive Rust OAuth token refresh state machine (`CON-2`), and native Windows Everything search integration.
+  - `ARCH/UI.md` & `ARCH/12-UI-SPEC.md`: Drafting table in-pane search grammar (`/file:`, `/symbol:`, `/line:`, `#section`, `$range`), physical spring damping constants (`mass: 1.0, stiffness: 280, damping: 28`), semantic Cool Blue tokenization, JetBrains Mono tabular telemetry, and WCAG 2.2 accessibility.
+- **Verification Suites Executed & Green**:
+  - `node scripts/check-doc-sync.mjs`: **PASS (exit code 0)** — 166 capabilities in sync (`yaml == ARCH/09 == spec §0`); TODO.md 1640 = 1304 done + 336 open.
+  - `node scripts/check-arch-invariants.mjs`: **PASS (exit code 0)** — `CRED-1/2/3`, `AUTH-1/2/3`, `SCHEMA-1`, `DECIDE-1/2`, `LAYER-1/2/3/4`, `PURITY-1/2/3/4`, `TS-DUP`, `RUST-DUP` all green.
+  - `node scripts/gen-codebase-map.mjs --check`: **PASS (exit code 0)** — 1469/1469 tracked files verified up to date.
+  - `node scripts/ipc-parity.mjs`: **PASS (exit code 0)** — 350 registered commands, 0 broken.
+  - `cd ui && pnpm run type-check` (`tsc --noEmit`): **PASS (exit code 0)** — 0 TypeScript errors.
+- **Next Steps**:
+  1. Continue executing the P70 release qualification and packaging workflows.
+  2. Implement native Windows ConPTY acceptance and verify platform-specific capture/input on a real Windows runner.
+  3. Maintain strict vendor-neutral protocol across all Git commits and documentation.
+
+**(Previous, 2026-09-21 — external-agent engine decision: `ADR-0005` + `ADR-0006`; P71 opened)**:
 
 **(Now, 2026-09-21 — P71 implementation wave: external agents are the v1 engines — in progress, NOT verified)**:
 - `P71.1` **landed** — the `delegate.*` façade family on the shared plane: a `DelegationToolBackend` seam in `everyaios-core::tools` (mounted by `ChatRelay`), `delegate.spawn`/`delegate.status`/`delegate.cancel` entries in both façade tables (`SHARED_FACADES` for the MCP surface, `kernel_route` for the kernel surface), both routed into the one delegation path. `delegate.spawn` requires the delegating `workId` (bridge-credential identity derivation is `P69.B4` and is not mounted yet) and fails honestly when the seam is unmounted.

@@ -761,7 +761,7 @@ complete function accounting for the file. `refs` is the cross-file `stem::` ref
 
 | Location | Files | Lines | Functions | `#[test]` fns |
 | --- | ---: | ---: | ---: | ---: |
-| `crates/everyaios-acp/` | 22 | 8,593 | 348 | 108 |
+| `crates/everyaios-acp/` | 23 | 8,809 | 357 | 112 |
 | `crates/everyaios-agents/` | 8 | 1,447 | 96 | 26 |
 | `crates/everyaios-audit/` | 8 | 4,303 | 188 | 56 |
 | `crates/everyaios-blueprint/` | 36 | 12,670 | 634 | 201 |
@@ -769,7 +769,7 @@ complete function accounting for the file. `refs` is the cross-file `stem::` ref
 | `crates/everyaios-catalog/` | 20 | 9,021 | 344 | 116 |
 | `crates/everyaios-cdp/` | 6 | 3,038 | 120 | 49 |
 | `crates/everyaios-codeintel/` | 17 | 4,139 | 200 | 63 |
-| `crates/everyaios-core/` | 107 | 59,605 | 2481 | 801 |
+| `crates/everyaios-core/` | 106 | 59,743 | 2488 | 803 |
 | `crates/everyaios-desktop/` | 15 | 6,921 | 279 | 65 |
 | `crates/everyaios-engine/` | 4 | 1,102 | 51 | 26 |
 | `crates/everyaios-eval/` | 11 | 2,885 | 133 | 47 |
@@ -782,9 +782,9 @@ complete function accounting for the file. `refs` is the cross-file `stem::` ref
 | `crates/everyaios-search/` | 3 | 1,820 | 83 | 26 |
 | `crates/everyaios-storage/` | 19 | 4,149 | 208 | 54 |
 | `crates/everyaios-types/` | 1 | 1,453 | 58 | 11 |
-| `crates/everyaios-vault/` | 17 | 11,576 | 446 | 159 |
-| `src-tauri/` | 51 | 19,643 | 703 | 74 |
-| **TOTAL** | **508** | **204,471** | **8951** | **2789** |
+| `crates/everyaios-vault/` | 17 | 11,670 | 447 | 160 |
+| `src-tauri/` | 51 | 19,710 | 704 | 74 |
+| **TOTAL** | **508** | **204,986** | **8969** | **2796** |
 
 ### 9.1 `crates/everyaios-acp/`
 
@@ -899,6 +899,12 @@ complete function accounting for the file. `refs` is the cross-file `stem::` ref
 > Track 2 / P65.8 — External-agent ACP handshake acceptance suite.
 
 - `fns` (6): client_info:26, fixture_bin:36, acp_frame_roundtrips_and_preserves_partial_lines:57, spawned_agent_full_handshake_and_capability_negotiation:92, mediated_client_capabilities_are_advertised:140, permission_round_trip_is_recorded_on_the_outcome:164
+
+#### `crates/everyaios-acp/tests/acceptance_engine_optional.rs` — 216 lines · 4 tests · refs 0
+
+> P71.6b — **prove the engine is optional.** `ADR/0005` §2's rule is that every v1 feature works with **no built-in binding present**.
+
+- `fns` (9): client_info:30, fixture_bin:40, repo_root:57, a_turn_completes_on_an_external_agent_alone:67, an_agent_that_reports_nothing_is_unreported_not_zero:130, no_built_in_protocol_variant_exists:161, agent_protocol_spelling:162, harness_protocol_spelling:168, the_built_in_engine_is_archived_or_deleted:191
 
 #### `crates/everyaios-acp/tests/live_registry.rs` — 146 lines · 1 tests · refs 0
 
@@ -1985,12 +1991,12 @@ complete function accounting for the file. `refs` is the cross-file `stem::` ref
 **`const`** (1): `CHARS_PER_TOKEN`:19 · **`fn`** (3): `enabled`:42, `should_distill`:50, `distill_context`:106 · **`struct`** (4): `DistillConfig`:24, `ContextBlock`:57, `DistilledBlock`:65, `DistilledContext`:82
 - `fns` (13): default:33, enabled:42, should_distill:50, sha256_hex:92, approx_tokens:99, distill_context:106, block:180, disabled_config_is_a_zero_loss_pass_through:188, ratio_one_is_a_pass_through_even_when_enabled:200, enabled_prunes_long_blocks_and_flags_the_gap:208, pruned_content_is_digested_not_dropped:225, token_estimates_are_reported_for_the_profiling_gate:244, empty_input_is_an_empty_zero_gap_result:254
 
-#### `crates/everyaios-core/src/doctor.rs` — 584 lines · 6 tests · refs 1
+#### `crates/everyaios-core/src/doctor.rs` — 723 lines · 8 tests · refs 1
 
 > P46.2 — `everyaios doctor`: per-subsystem readiness report (spec H35).
 
-**`const`** (2): `DISK_WARN_PCT`:189, `DISK_FAIL_PCT`:191 · **`enum`** (1): `Status`:30 · **`fn`** (8): `glyph`:41, `ok`:75, `warn`:83, `fail`:91, `render_table`:122, `exit_code`:157, `run_doctor`:195, `new`:319 · **`struct`** (3): `Check`:63, `DoctorReport`:104, `LiveProbe`:314 · **`trait`** (1): `DoctorProbe`:169
-- `fns` (38): glyph:41, worse:50, ok:75, warn:83, fail:91, from_checks:112, render_table:122, exit_code:157, vault_status:172, disk_free:174, local_runtimes:176, chrome_available:178, credential_count:181, mcp_server_count:183, database_writable:185, run_doctor:195, new:319, vault_status:325, disk_free:334, local_runtimes:342, chrome_available:351, credential_count:398, mcp_server_count:415, database_writable:423, default:449, vault_status:464, disk_free:467, local_runtimes:470, chrome_available:473, credential_count:476, mcp_server_count:479, database_writable:482, all_ok_when_everything_healthy:488, vault_failure_makes_overall_fail:498, no_credentials_and_no_local_is_warn_not_fail:512, disk_thresholds_map_to_status:526, render_table_and_json_never_leak_secret_values:555, overall_is_worst_of_all_checks:574
+**`const`** (2): `DISK_WARN_PCT`:201, `DISK_FAIL_PCT`:203 · **`enum`** (1): `Status`:30 · **`fn`** (8): `glyph`:41, `ok`:75, `warn`:83, `fail`:91, `render_table`:122, `exit_code`:157, `run_doctor`:207, `new`:377 · **`struct`** (3): `Check`:63, `DoctorReport`:104, `LiveProbe`:372 · **`trait`** (1): `DoctorProbe`:169
+- `fns` (45): glyph:41, worse:50, ok:75, warn:83, fail:91, from_checks:112, render_table:122, exit_code:157, vault_status:172, disk_free:174, local_runtimes:176, chrome_available:178, credential_count:181, mcp_server_count:183, database_writable:185, sidecar_binary:190, platform:195, run_doctor:207, new:377, vault_status:383, disk_free:392, local_runtimes:400, chrome_available:409, credential_count:456, mcp_server_count:473, database_writable:481, sidecar_binary:496, default:547, vault_status:564, disk_free:567, local_runtimes:570, chrome_available:573, credential_count:576, mcp_server_count:579, database_writable:582, sidecar_binary:585, platform:588, all_ok_when_everything_healthy:594, missing_sidecar_fails_with_the_reinstall_remedy_on_windows:607, out_of_scope_platform_warns_with_the_matrix_pointer:622, vault_failure_makes_overall_fail:637, no_credentials_and_no_local_is_warn_not_fail:651, disk_thresholds_map_to_status:665, render_table_and_json_never_leak_secret_values:694, overall_is_worst_of_all_checks:713
 
 #### `crates/everyaios-core/src/email.rs` — 539 lines · 9 tests · refs 6
 
@@ -2493,8 +2499,6 @@ complete function accounting for the file. `refs` is the cross-file `stem::` ref
 > P10.2 — Security & adversarial testing (doc 26 red-team corpus, ARCH/06 guards, doc 53 tickets).
 
 - `fns` (20): temp_dir:25, red_team_corpus_fully_blocked_by_guard_one:37, injection_corpus:57, prompt_injection_corpus_50_plus_all_detected:102, next:144, traversal_corpus:153, path_traversal_fuzz_10000_no_escape:203, symlink_attack_suite_refused:231, revoked_key_suspension_and_failover:286, sidecar_crash_leaves_no_orphans:337, sidecar_crash_orphan_mechanism_is_platform_specific:396, kill_core_children_die_within_5s:407, malicious_skill_md_audit_blocks_execution:436, authorize:471, record:480, on_page_created:488, pages:495, exec:498, over_capability_plugin_denied:514, policy_blocks_delete_without_approval:579
-
-#### `crates/everyaios-core/tests/p50_e2e.rs` — 1 lines · 0 tests · refs 0
 
 #### `crates/everyaios-core/tests/p50_gates.rs` — 448 lines · 10 tests · refs 0
 
@@ -3891,12 +3895,12 @@ complete function accounting for the file. `refs` is the cross-file `stem::` ref
 **`const`** (1): `fn`:121 · **`fn`** (6): `total`:37, `billable_input`:43, `from_any`:50, `merge_max`:86, `cost_of`:132, `default_pricing`:148 · **`struct`** (5): `Usage`:26, `Pricing`:111, `UsageRow`:197, `SessionTotal`:220, `RecentUsage`:235
 - `fns` (16): total:37, billable_input:43, from_any:50, merge_max:86, get_u64:94, default_pricing:121, cost_of:132, default:141, default_pricing:148, openai_cached_input_is_normalized_out_of_cost:251, anthropic_cache_fields_parsed:276, total_tokens_only_fallback_counts_as_input:291, non_usage_value_returns_none:299, merge_max_keeps_late_partial_usage:304, default_pricing_known_providers:321, cache_read_is_cheaper_than_input:329
 
-#### `crates/everyaios-vault/src/lib.rs` — 1,436 lines · 13 tests · refs ambiguous
+#### `crates/everyaios-vault/src/lib.rs` — 1,530 lines · 14 tests · refs ambiguous
 
 > everyaios-vault — SQLCipher-encrypted key-ring store (ARCH/03, J8).
 
-**`enum`** (1): `VaultError`:781 · **`fn`** (25): `open`:299, `open_in_memory`:319, `status`:328, `connection`:347, `register_key`:353, `put_ui_session`:362, `get_ui_session`:371, `list_ui_sessions`:381, `delete_ui_session`:391, `put_ui_calendar`:399, `list_ui_calendars`:409, `delete_ui_calendar`:426, `put_ui_calendar_event`:432, `list_ui_calendar_events`:454, `delete_ui_calendar_event`:515, `list_keys`:522, `verify_key`:536, `record_usage`:548, `record_usage_scoped`:578, `session_spend`:594, `ledger_count`:608, `recent_usage`:621, `usage_for_task`:651, `task_cost`:689, `session_totals`:707 · **`struct`** (3): `CalendarRow`:54, `CalendarEventRow`:64, `Vault`:288
-- `fns` (40): open:299, open_in_memory:319, status:328, connection:347, register_key:353, put_ui_session:362, get_ui_session:371, list_ui_sessions:381, delete_ui_session:391, put_ui_calendar:399, list_ui_calendars:409, delete_ui_calendar:426, put_ui_calendar_event:432, list_ui_calendar_events:454, delete_ui_calendar_event:515, list_keys:522, verify_key:536, record_usage:548, record_usage_scoped:578, session_spend:594, ledger_count:608, recent_usage:621, usage_for_task:651, task_cost:689, session_totals:707, ensure_token_usage_scope_columns:741, now_ms:772, vault_keeps_safe_pragma_defaults_untouched:797, open_create_and_roundtrip:828, test_calendar_crud_roundtrip:857, portable_encrypted_bytes_reopen_with_only_the_key:911, session_list_empty_malformed_and_delete:975, in_memory_roundtrip:1020, stale_v1_schema_gets_bumped_to_v5_on_open:1036, ledger_records_rows_and_session_spend:1067, session_totals_are_empty_fresh_and_durable_across_reopen:1141, recent_usage_feeds_the_coordinator_observation_ring:1210, ledger_cost_carrier_joins_task:1281, old_rows_read_with_empty_task_id:1345, wrong_key_fails_verify:1423
+**`enum`** (1): `VaultError`:811 · **`fn`** (25): `open`:299, `open_in_memory`:349, `status`:358, `connection`:377, `register_key`:383, `put_ui_session`:392, `get_ui_session`:401, `list_ui_sessions`:411, `delete_ui_session`:421, `put_ui_calendar`:429, `list_ui_calendars`:439, `delete_ui_calendar`:456, `put_ui_calendar_event`:462, `list_ui_calendar_events`:484, `delete_ui_calendar_event`:545, `list_keys`:552, `verify_key`:566, `record_usage`:578, `record_usage_scoped`:608, `session_spend`:624, `ledger_count`:638, `recent_usage`:651, `usage_for_task`:681, `task_cost`:719, `session_totals`:737 · **`struct`** (3): `CalendarRow`:54, `CalendarEventRow`:64, `Vault`:288
+- `fns` (41): open:299, open_in_memory:349, status:358, connection:377, register_key:383, put_ui_session:392, get_ui_session:401, list_ui_sessions:411, delete_ui_session:421, put_ui_calendar:429, list_ui_calendars:439, delete_ui_calendar:456, put_ui_calendar_event:462, list_ui_calendar_events:484, delete_ui_calendar_event:545, list_keys:552, verify_key:566, record_usage:578, record_usage_scoped:608, session_spend:624, ledger_count:638, recent_usage:651, usage_for_task:681, task_cost:719, session_totals:737, ensure_token_usage_scope_columns:771, now_ms:802, vault_keeps_safe_pragma_defaults_untouched:835, open_create_and_roundtrip:866, test_calendar_crud_roundtrip:895, portable_encrypted_bytes_reopen_with_only_the_key:949, session_list_empty_malformed_and_delete:1013, in_memory_roundtrip:1058, stale_v1_schema_gets_bumped_to_v5_on_open:1074, newer_schema_refuses_open_and_leaves_the_file_untouched:1109, ledger_records_rows_and_session_spend:1161, session_totals_are_empty_fresh_and_durable_across_reopen:1235, recent_usage_feeds_the_coordinator_observation_ring:1304, ledger_cost_carrier_joins_task:1375, old_rows_read_with_empty_task_id:1439, wrong_key_fails_verify:1517
 
 #### `crates/everyaios-vault/src/local.rs` — 367 lines · 0 tests · refs 0
 
@@ -4036,7 +4040,7 @@ complete function accounting for the file. `refs` is the cross-file `stem::` ref
 **`fn`** (4): `repomap_build`:19, `file_outline`:45, `model_aliases_resolve`:75, `ai_markers_scan`:94 · **`struct`** (1): `OutlineEntry`:35
 - `fns` (5): repomap_build:19, file_outline:45, model_aliases_resolve:75, ai_markers_scan:94, _ext_counts:129
 
-#### `src-tauri/src/commands.rs` — 459 lines · 0 tests · refs 1
+#### `src-tauri/src/commands.rs` — 460 lines · 0 tests · refs 1
 
 > Tauri command surface (Fix 1d). The single list of every `#[tauri::command]` registered on the shell's IPC handler. `lib.rs` now only calls `commands::handler()` here instead of owning a 180-line inline list. Each fam...
 
@@ -4106,12 +4110,12 @@ complete function accounting for the file. `refs` is the cross-file `stem::` ref
 **`const`** (1): `GUARD_WINDOW_LABEL`:25 · **`fn`** (2): `ensure_guard_window`:30, `open_guard_window`:51
 - `fns` (2): ensure_guard_window:30, open_guard_window:51
 
-#### `src-tauri/src/lib.rs` — 758 lines · 0 tests · refs ambiguous
+#### `src-tauri/src/lib.rs` — 824 lines · 0 tests · refs ambiguous
 
 > EveryAIOS desktop shell — Tauri v2 backend (tasks P0.2).
 
-**`const`** (4): `CHAT_EVENT`:78, `GUARD_EVENT`:85, `AGUI_EVENT`:90, `MODEL_DOWNLOAD_EVENT`:94 · **`fn`** (1): `run`:578
-- `fns` (22): agui_send:100, agui_listen:114, connect_chat_relay:127, runtime_status:243, now_ms:287, version:295, core_boot_report:300, scan_text:309, usage_snapshot:320, session_totals:336, probe_vault:344, vault_key_status:356, reopen_disk_vault:379, vault_setup:388, vault_unlock:411, session_list:434, session_put:445, session_delete:459, locate_coordinator_bin:470, pre_spawn_coordinator:513, serve_unix_control_channel:538, run:578
+**`const`** (4): `CHAT_EVENT`:78, `GUARD_EVENT`:85, `AGUI_EVENT`:90, `MODEL_DOWNLOAD_EVENT`:94 · **`fn`** (1): `run`:644
+- `fns` (23): agui_send:100, agui_listen:114, connect_chat_relay:127, runtime_status:243, now_ms:287, version:295, core_boot_report:300, scan_text:309, usage_snapshot:320, session_totals:336, probe_vault:344, vault_key_status:356, reopen_disk_vault:379, vault_setup:388, vault_unlock:411, session_list:434, session_put:445, session_delete:459, locate_coordinator_bin:470, sidecar_probe:525, pre_spawn_coordinator:579, serve_unix_control_channel:604, run:644
 
 #### `src-tauri/src/local_cmds.rs` — 48 lines · 0 tests · refs 3
 
@@ -4305,7 +4309,7 @@ complete function accounting for the file. `refs` is the cross-file `stem::` ref
 
 ## 10. TypeScript / TSX — per-area, per-file LLD
 
-**Every tracked `.ts`/`.tsx` file is enumerated below** (619 of them). `exports:` lists every exported
+**Every tracked `.ts`/`.tsx` file is enumerated below** (621 of them). `exports:` lists every exported
 declaration and re-export. `fns:` lists **every named function** — declarations, class and object-literal
 methods, constructors, get/set accessors, and function/arrow expressions bound to a name — as `name:line`,
 parsed with the TypeScript compiler. `anon:` counts the
@@ -4316,20 +4320,19 @@ population. `wiring:` is the §11 verdict.
 
 | Area | Files | Lines | Fns | Anon | Exports | Tests | Prod-reachable |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `ARCH/archive` | 49 | 13,027 | 367 | 636 | 275 | 345 | 0 |
-| `packages/coordinator` | 93 | 8,497 | 265 | 446 | 286 | 281 | 11 |
+| `ARCH/archive` | 50 | 13,043 | 367 | 636 | 275 | 345 | 0 |
+| `packages/coordinator` | 95 | 8,935 | 281 | 474 | 306 | 304 | 12 |
 | `packages/core-agents` | 4 | 315 | 10 | 8 | 10 | 5 | 0 |
 | `packages/core-ai` | 41 | 4,763 | 133 | 222 | 148 | 142 | 0 |
 | `packages/core-connectors` | 39 | 7,243 | 206 | 203 | 73 | 104 | 1 |
 | `packages/core-domain` | 18 | 1,209 | 10 | 11 | 94 | 9 | 1 |
-| `packages/core-engine` | 1 | 1 | 0 | 0 | 0 | 0 | 0 |
 | `packages/core-memory` | 25 | 4,768 | 122 | 234 | 104 | 116 | 0 |
 | `packages/core-providers` | 12 | 2,348 | 40 | 76 | 34 | 33 | 0 |
 | `packages/core-search` | 47 | 4,071 | 164 | 186 | 136 | 81 | 1 |
 | `packages/core-security` | 5 | 556 | 24 | 28 | 10 | 23 | 0 |
 | `packages/core-tools` | 6 | 349 | 9 | 6 | 21 | 3 | 0 |
 | `ui` | 1 | 73 | 0 | 0 | 0 | 0 | 0 |
-| `ui/src` | 278 | 64,268 | 1873 | 3562 | 1200 | 496 | 167 |
+| `ui/src` | 278 | 64,293 | 1874 | 3562 | 1202 | 496 | 167 |
 
 ### 10.1 `ARCH/archive`
 
@@ -4529,6 +4532,8 @@ population. `wiring:` is the §11 verdict.
 
 #### `ARCH/archive/core-engine/src/types.ts` — 59 lines · 0 tests · UNREACHED · imported by 8
 - `exports` (6): re-export Scope, type SurfaceKind, type ToolFamily, interface AgentSandbox, interface SurfaceContract, interface TurnInput
+
+#### `ARCH/archive/core-engine/vitest.config.ts` — 16 lines · 0 tests · NOT IMPORTED · imported by 0
 
 ### 10.2 `packages/coordinator`
 
@@ -4796,6 +4801,13 @@ population. `wiring:` is the §11 verdict.
 - `exports` (7): type PersonaSource, interface PersonaManifest, interface PersonaValidation, function validateManifest, const BUILTIN_IDS, function builtinManifests, class PersonaRegistry
 - `fns` (7): validateManifest:34, builtinManifests:56, constructor:99, register:104, get:114, list:118, effectiveText:123
 - `anon` (1): function/arrow expressions with no binding name
+
+#### `packages/coordinator/src/primary-agent.test.ts` — 164 lines · 23 tests · TEST · imported by 0
+- `anon` (28): function/arrow expressions with no binding name
+
+#### `packages/coordinator/src/primary-agent.ts` — 274 lines · 0 tests · REACHABLE · imported by 3
+- `exports` (20): type PrimaryAgentId, const RETIRED_AGENT_IDS, function isRetiredAgentId, type GovernanceMode, function governanceBadge, function resolvePrimaryAgentId, function resolveSessionPrimaryAgent, function validateSessionPin, interface PrimaryAgentContext, function injectPrimaryContext, interface SubagentLimits, const DEFAULT_SUBAGENT_LIMITS, interface SpawnState, type SpawnVerdict, function checkSpawn, function deriveChildPermissions, interface PrimaryAgentRecord, function buildResumePrompt, class PrimaryAgentRegistry, const primaryAgentRegistry
+- `fns` (16): isRetiredAgentId:33, governanceBadge:43, resolvePrimaryAgentId:60, resolveSessionPrimaryAgent:78, validateSessionPin:90, injectPrimaryContext:114, checkSpawn:164, deriveChildPermissions:178, buildResumePrompt:203, record:226, get:230, setSessionPin:235, sessionPin:247, clearSessionPin:251, swap:256, get size:268
 
 #### `packages/coordinator/src/reflection-agui.test.ts` — 161 lines · 16 tests · TEST · imported by 0
 - `anon` (21): function/arrow expressions with no binding name
@@ -5309,11 +5321,7 @@ population. `wiring:` is the §11 verdict.
 
 #### `packages/core-domain/vitest.config.ts` — 10 lines · 0 tests · NOT IMPORTED · imported by 0
 
-### 10.7 `packages/core-engine`
-
-#### `packages/core-engine/vitest.config.ts` — 1 lines · 0 tests · NOT IMPORTED · imported by 0
-
-### 10.8 `packages/core-memory`
+### 10.7 `packages/core-memory`
 
 #### `packages/core-memory/src/__tests__/categories.test.ts` — 19 lines · 4 tests · TEST · imported by 0
 - `anon` (4): function/arrow expressions with no binding name
@@ -5420,7 +5428,7 @@ population. `wiring:` is the §11 verdict.
 
 #### `packages/core-memory/vitest.config.ts` — 10 lines · 0 tests · NOT IMPORTED · imported by 0
 
-### 10.9 `packages/core-providers`
+### 10.8 `packages/core-providers`
 
 #### `packages/core-providers/src/__tests__/live-pricing.test.ts` — 175 lines · 15 tests · TEST · imported by 0
 - `anon` (23): function/arrow expressions with no binding name
@@ -5467,7 +5475,7 @@ population. `wiring:` is the §11 verdict.
 
 #### `packages/core-providers/vitest.config.ts` — 9 lines · 0 tests · NOT IMPORTED · imported by 0
 
-### 10.10 `packages/core-search`
+### 10.9 `packages/core-search`
 
 #### `packages/core-search/src/__tests__/bm25-rerank.test.ts` — 52 lines · 5 tests · TEST · imported by 0
 - `anon` (6): function/arrow expressions with no binding name
@@ -5674,7 +5682,7 @@ population. `wiring:` is the §11 verdict.
 
 #### `packages/core-search/vitest.config.ts` — 10 lines · 0 tests · NOT IMPORTED · imported by 0
 
-### 10.11 `packages/core-security`
+### 10.10 `packages/core-security`
 
 #### `packages/core-security/src/__tests__/crypto-edge.test.ts` — 171 lines · 17 tests · TEST · imported by 0
 - `anon` (19): function/arrow expressions with no binding name
@@ -5691,7 +5699,7 @@ population. `wiring:` is the §11 verdict.
 
 #### `packages/core-security/vitest.config.ts` — 9 lines · 0 tests · NOT IMPORTED · imported by 0
 
-### 10.12 `packages/core-tools`
+### 10.11 `packages/core-tools`
 
 #### `packages/core-tools/src/__tests__/tool-runtime.test.ts` — 34 lines · 3 tests · TEST · imported by 0
 - `fns` (1): mockExec:9
@@ -5716,11 +5724,11 @@ population. `wiring:` is the §11 verdict.
 #### `packages/core-tools/src/types.ts` — 44 lines · 0 tests · TEST-ONLY · imported by 3
 - `exports` (6): type RiskLevel, type ToolFamily, interface ToolContext, interface ToolContract, interface PermissionGateResult, interface ToolInvocation
 
-### 10.13 `ui`
+### 10.12 `ui`
 
 #### `ui/vite.config.ts` — 73 lines · 0 tests · NOT IMPORTED · imported by 0
 
-### 10.14 `ui/src`
+### 10.13 `ui/src`
 
 #### `ui/src/App.tsx` — 77 lines · 0 tests · REACHABLE · imported by 1
 - `exports` (1): function App
@@ -6449,9 +6457,9 @@ population. `wiring:` is the §11 verdict.
 - `fns` (1): seedSession:9
 - `anon` (17): function/arrow expressions with no binding name
 
-#### `ui/src/lib/bridge.ts` — 1,027 lines · 0 tests · REACHABLE · imported by 8
+#### `ui/src/lib/bridge.ts` — 1,040 lines · 0 tests · REACHABLE · imported by 8
 - `exports` (5): function refreshAgentCatalog, function registerTurnDispatcher, function handleChatEvent, function initBridge, function sendUserMessage
-- `fns` (19): pushLive:48, mergeAgentCatalog:69, refreshAgentCatalog:115, registerTurnDispatcher:133, mergeDirectoryAgents:155, synthesizeAgent:208, mcqLabel:236, budgetKillText:260, budgetEventText:266, updateLiveBudget:273, handleChatEvent:288, initBridge:526, startBridge:543, recordFault:560, updateReadiness:565, loadLiveData:600, pollGuard:712, sendUserMessage:818, isAgentBinding:859
+- `fns` (19): pushLive:48, mergeAgentCatalog:69, refreshAgentCatalog:115, registerTurnDispatcher:133, mergeDirectoryAgents:155, synthesizeAgent:208, mcqLabel:236, budgetKillText:260, budgetEventText:266, updateLiveBudget:273, handleChatEvent:288, initBridge:526, startBridge:543, recordFault:560, updateReadiness:565, loadLiveData:613, pollGuard:725, sendUserMessage:831, isAgentBinding:872
 - `anon` (33): function/arrow expressions with no binding name
 
 #### `ui/src/lib/browser.ts` — 196 lines · 0 tests · REACHABLE · imported by 2
@@ -6861,9 +6869,9 @@ population. `wiring:` is the §11 verdict.
 - `fns` (18): tasksList:99, live:102, preview:107, tasksShow:111, live:114, preview:124, tasksCancel:128, live:131, preview:135, tasksRetry:139, live:142, preview:147, tasksEnqueue:151, live:158, preview:163, onTaskUpdate:169, taskStatusLabel:183, taskKindLabel:195
 - `anon` (2): function/arrow expressions with no binding name
 
-#### `ui/src/lib/tauri.ts` — 229 lines · 0 tests · REACHABLE · imported by 79
-- `exports` (15): re-export listen, type UnlistenFn, function inTauri, function invoke, interface ChatWireEvent, function schedulerPauseSession, function onChatEvent, interface RuntimeStatus, function runtimeStatus, interface AgentCard, interface InterruptCard, interface CockpitState, function cockpitSnapshot, function agentStop, function agentUndo
-- `fns` (9): inTauri:21, invoke:26, schedulerPauseSession:112, onChatEvent:124, runtimeStatus:137, cockpitSnapshot:174, agentStop:180, agentUndo:186, demoCockpit:191
+#### `ui/src/lib/tauri.ts` — 241 lines · 0 tests · REACHABLE · imported by 79
+- `exports` (17): re-export listen, type UnlistenFn, function inTauri, function invoke, interface ChatWireEvent, function schedulerPauseSession, function onChatEvent, interface RuntimeStatus, function runtimeStatus, interface SidecarProbe, function sidecarProbe, interface AgentCard, interface InterruptCard, interface CockpitState, function cockpitSnapshot, function agentStop, function agentUndo
+- `fns` (10): inTauri:21, invoke:26, schedulerPauseSession:112, onChatEvent:124, runtimeStatus:137, sidecarProbe:149, cockpitSnapshot:186, agentStop:192, agentUndo:198, demoCockpit:203
 - `anon` (2): function/arrow expressions with no binding name
 
 #### `ui/src/lib/terminal-split.test.ts` — 73 lines · 7 tests · TEST · imported by 0
@@ -6998,7 +7006,7 @@ integration tests, fixtures, and mock servers, which are never referenced by nam
 <details><summary>All orphan candidates including tests/fixtures</summary>
 
 - `crates/everyaios-acp/src` (4): acpx, mock-agent, mock-agent-permission, mock_acp_agent
-- `crates/everyaios-acp/tests` (6): acceptance_acp_handshake, live_registry, live_spawn, p10_harness_drive, p63_backend_env, side_by_side
+- `crates/everyaios-acp/tests` (7): acceptance_acp_handshake, acceptance_engine_optional, live_registry, live_spawn, p10_harness_drive, p63_backend_env, side_by_side
 - `crates/everyaios-agents/src` (1): registry
 - `crates/everyaios-blueprint/src` (8): inbuilt, jobs, marketplace, plugin_manifest, surgical, swarm, workflow, worktree
 - `crates/everyaios-blueprint/tests` (1): acceptance_skill_distillation
@@ -7008,7 +7016,7 @@ integration tests, fixtures, and mock servers, which are never referenced by nam
 - `crates/everyaios-codeintel/src` (3): docs_lookup, mock-lsp-server, session
 - `crates/everyaios-codeintel/tests` (1): lsp_runner
 - `crates/everyaios-core/src` (26): blueprint, challenge_tests, combos, connector_approvals, decline, diagnose, distill, graph, hooks, inventory, kernel_budget, local_tests, migrate, migration, mock-worker, pairing, probe, remote_attach, research, resources, routing, self_audit, store, sync, tracing, watcher_glue
-- `crates/everyaios-core/tests` (9): acceptance_edit_ladder, acceptance_terminal_automation, p10_bench, p10_e2e, p10_security, p50_e2e, p50_gates, sidecar_handoff, worker_pool
+- `crates/everyaios-core/tests` (8): acceptance_edit_ladder, acceptance_terminal_automation, p10_bench, p10_e2e, p10_security, p50_gates, sidecar_handoff, worker_pool
 - `crates/everyaios-desktop/src` (1): policy
 - `crates/everyaios-desktop/tests` (1): live_linux_e2e
 - `crates/everyaios-engine/src` (3): gate, plan, risk
@@ -7093,6 +7101,7 @@ The tail of this list is where "referenced once, by its own re-export" hides.
 
 172 files (excluding test files).
 
+- `ARCH/archive/core-engine/vitest.config.ts`
 - `packages/coordinator/src/companion.ts`
 - `packages/coordinator/src/run-identity.ts`
 - `packages/coordinator/src/work-events.ts`
@@ -7165,7 +7174,6 @@ The tail of this list is where "referenced once, by its own re-export" hides.
 - `packages/core-domain/src/types/search.ts`
 - `packages/core-domain/src/types/tasks.ts`
 - `packages/core-domain/vitest.config.ts`
-- `packages/core-engine/vitest.config.ts`
 - `packages/core-memory/src/auto-promote.ts`
 - `packages/core-memory/src/categories.ts`
 - `packages/core-memory/src/conflict.ts`
@@ -7340,7 +7348,7 @@ The tail of this list is where "referenced once, by its own re-export" hides.
 
 ### 11.6 Tauri commands with no static `invoke()` call site
 
-340 commands registered. 285 have a direct `invoke("name")` site.
+341 commands registered. 286 have a direct `invoke("name")` site.
 Of the 55 without one:
 
 - **10 are only *indirectly* referenced** — the name appears as a string literal somewhere in the
@@ -7407,7 +7415,7 @@ matches unrelated identifiers. Counts above 50 are flagged `(noisy)` and carry n
 | `file_outline` | `codeintel_cmds` | 0 | 2 |
 | `repomap_build` | `codeintel_cmds` | 0 | 4 |
 | `agui_send` | `crate` | 0 | 6 |
-| `version` | `crate` | 1 | 655 (noisy) |
+| `version` | `crate` | 1 | 660 (noisy) |
 
 
 ---
@@ -7532,6 +7540,12 @@ matches unrelated identifiers. Counts above 50 are flagged `(noisy)` and carry n
 
 ### 12.2 npm — per manifest
 
+#### `ARCH/archive/core-engine/package.json` — `@everyaios/core-engine`
+
+- **scripts:** build, test, type-check
+- **dependencies:** @everyaios/core-domain, @everyaios/core-tools, @stablelib/sha256
+- **devDependencies:** typescript, vitest
+
 #### `package.json` — `everyaios-desktop-workspace`
 
 - **scripts:** coordinator:dev, coordinator:test, coordinator:typecheck, tauri:dev, tauri:build, tauri:verify-clean-boot, ipc:parity, check:arch
@@ -7609,7 +7623,7 @@ matches unrelated identifiers. Counts above 50 are flagged `(noisy)` and carry n
 
 ## 13. Non-source inventory — every remaining tracked file
 
-The 145 tracked files that are not Rust, TypeScript, or an npm manifest. Every one has a `####`
+The 142 tracked files that are not Rust, TypeScript, or an npm manifest. Every one has a `####`
 entry below — nothing is summarised away at this level. Line counts are omitted for binaries.
 The `wired:` verdicts in §13.7 are name searches over CI YAML, `package.json` scripts, and sibling scripts — the
 same heuristic class as §11, so a script invoked through a variable or a wrapper reads as unwired.
@@ -7621,10 +7635,10 @@ same heuristic class as §11, so a script invoked through a variable or a wrappe
 | §13.3 | 5 |
 | §13.4 | 26 |
 | §13.5 | 7 |
-| §13.6 | 38 |
-| §13.7 | 21 |
-| §13.8 | 18 |
-| **TOTAL** | **145** |
+| §13.6 | 35 |
+| §13.7 | 22 |
+| §13.8 | 17 |
+| **TOTAL** | **142** |
 
 ### 13.1 Rust manifests
 
@@ -7765,10 +7779,10 @@ same heuristic class as §11, so a script invoked through a variable or a wrappe
 - **perf-regression** · triggers: `schedule`, `workflow_dispatch` · jobs (1): `bench`
 - steps: 2 · runners: `ubuntu-latest`
 
-#### `.github/workflows/release.yml` — 5.9 KB · 156 lines
-- **release** · triggers: `push`, `workflow_dispatch` · jobs (2): `kernel-gate`, `build`
-- steps: 4 · runners: `ubuntu-latest`, `${{ matrix.os }}`
-- invokes: `check-doc-sync.mjs`
+#### `.github/workflows/release.yml` — 7.3 KB · 185 lines
+- **release** · triggers: `push`, `workflow_dispatch` · jobs (3): `kernel-gate`, `qualification`, `build`
+- steps: 7 · runners: `ubuntu-latest`, `${{ matrix.os }}`
+- invokes: `check-doc-sync.mjs`, `security-gate.mjs`, `check-artifact-hygiene.mjs`
 
 #### `.pre-commit-config.yaml` — 2.5 KB · 67 lines
 - hooks (6): `cargo-fmt`, `cargo-clippy`, `ui-typecheck`, `coordinator-typecheck`, `ui-lint`, `docs-sync`
@@ -7802,6 +7816,10 @@ same heuristic class as §11, so a script invoked through a variable or a wrappe
 
 *Tauri shell config, capability manifests, generated ACL schemas, TypeScript configs, and the HTML/CSS entry points.*
 
+#### `ARCH/archive/core-engine/tsconfig.json` — 212 B · 12 lines
+- compilerOptions (5): `composite`, `declaration`, `declarationMap`, `outDir`, `rootDir`
+- include `"src"` · references: 0
+
 #### `capabilities.yaml` — 44.3 KB · 1,011 lines
 - capability ledger (root) — top-level sections: 0 · total lines 1011
 - §7 item 3: this file is the canonical example of doc-vs-code capability drift — treat its claims as [C]
@@ -7825,10 +7843,6 @@ same heuristic class as §11, so a script invoked through a variable or a wrappe
 #### `packages/core-domain/tsconfig.json` — 189 B · 11 lines
 - compilerOptions (4): `declaration`, `declarationMap`, `outDir`, `rootDir`
 - include `"src"` · references: 0
-
-#### `packages/core-engine/tsconfig.json` — 0 B · 0 lines
-- compilerOptions (0): ``
-- include `—` · references: 0
 
 #### `packages/core-memory/tsconfig.json` — 184 B · 11 lines
 - compilerOptions (4): `composite`, `declaration`, `outDir`, `rootDir`
@@ -7974,15 +7988,6 @@ same heuristic class as §11, so a script invoked through a variable or a wrappe
 #### `packages/core-domain/.turbo/turbo-type-check.log` — 100 B · 5 lines
 - **committed build artifact** — turbo's per-package task log; contains no error text · lines 5
 
-#### `packages/core-engine/.turbo/turbo-build.log` — 0 B · 0 lines
-- **committed build artifact** — turbo's per-package task log; contains no error text · lines 0
-
-#### `packages/core-engine/.turbo/turbo-test.log` — 0 B · 0 lines
-- **committed build artifact** — turbo's per-package task log; contains no error text · lines 0
-
-#### `packages/core-engine/.turbo/turbo-type-check.log` — 0 B · 0 lines
-- **committed build artifact** — turbo's per-package task log; contains no error text · lines 0
-
 #### `packages/core-memory/.turbo/turbo-build.log` — 86 B · 5 lines
 - **committed build artifact** — turbo's per-package task log; contains no error text · lines 5
 
@@ -8055,6 +8060,10 @@ same heuristic class as §11, so a script invoked through a variable or a wrappe
 - purpose: EveryAIOS architecture-invariant gate (P69.E).
 - wired: CI ×1 · package.json ×1
 
+#### `scripts/check-artifact-hygiene.mjs` — 5.5 KB · 155 lines
+- purpose: P70.B7 — secret-leak gate on PRODUCED artifacts.
+- wired: CI ×1
+
 #### `scripts/check-doc-sync.mjs` — 8.4 KB · 211 lines
 - purpose: EveryAIOS doc-sync check (Fix 2) — run in CI and pre-commit.
 - wired: CI ×3 · other scripts ×1
@@ -8088,7 +8097,7 @@ same heuristic class as §11, so a script invoked through a variable or a wrappe
 
 #### `scripts/e2e/security-gate.mjs` — 7.1 KB · 170 lines
 - purpose: P50.5.7 — Security release gate (crate suites + shell-integration proofs).
-- wired: CI ×2
+- wired: CI ×3
 
 #### `scripts/e2e/vertical-chat.mjs` — 9.5 KB · 217 lines
 - purpose: P50.5.1 — Real vertical chat E2E.
@@ -8153,9 +8162,6 @@ same heuristic class as §11, so a script invoked through a variable or a wrappe
 #### `docs/codebase/freshness.json` — 8.5 KB · 129 lines
 - data file — 14 top-level keys
 
-#### `packages/core-engine/package.json` — 0 B · 0 lines
-- data file — 0 top-level keys
-
 #### `packages/core-providers/src/generated/model-catalog.backup.json` — 94.3 KB · 4,168 lines
 - data file — 6 top-level keys
 
@@ -8194,7 +8200,7 @@ _None._
 
 ## 14. Documentation index — every tracked `.md`
 
-**All 182 Markdown files** carry an entry: title, size, and opening sentence. This closes the gap where the
+**All 185 Markdown files** carry an entry: title, size, and opening sentence. This closes the gap where the
 first draft said the corpus was "listed with their headings" but was in fact only listed by name. These are the repo's
 claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in them, not capability drift — tag them [C] per §0.
 
@@ -8208,14 +8214,14 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 | .agents/skills/codebase-intelligence/references/ | 7 | 466 |
 | .agents/skills/skill-creator/ | 1 | 85 |
 | .agents/templates/ | 1 | 169 |
-| ARCH — the design set (+ DIAGRAMS & ADR) | 38 | 8,567 |
+| ARCH — the design set (+ DIAGRAMS & ADR) | 40 | 9,689 |
 | RESEARCH/2026-ai-landscape — other research | 11 | 970 |
 | RESEARCH/desktop_app — the prior-art & competitor corpus | 93 | 12,987 |
 | deploy/ — deployment docs | 1 | 105 |
 | docs/codebase/ | 10 | 976 |
-| root — specs, handover, and this map | 11 | 11,463 |
+| root — specs, handover, and this map | 12 | 11,616 |
 | ui/ — UI design docs | 1 | 83 |
-| **TOTAL** | **182** | **36,797** |
+| **TOTAL** | **185** | **38,072** |
 
 ### 14.1 .agents/
 
@@ -8311,7 +8317,7 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 
 ### 14.7 ARCH — the design set (+ DIAGRAMS & ADR)
 
-#### `ARCH/00-INDEX.md` — 114 lines · 17.4 KB
+#### `ARCH/00-INDEX.md` — 115 lines · 17.9 KB
 > ARCH — Derived Index (points at CORE)
 
 - opening: **⛭ ROOT AUTHORITY: [`CORE.md`](CORE.md).** Read that first.
@@ -8321,27 +8327,27 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 
 - opening: **DERIVED DOCUMENT — see [`CORE.md`](CORE.md) first.** This file is a *derived overview* of the module story.
 
-#### `ARCH/02-MODULE-LAYOUT.md` — 177 lines · 41.9 KB
+#### `ARCH/02-MODULE-LAYOUT.md` — 177 lines · 42.8 KB
 > 02 — Module Layout (derived from CORE §4 and §13)
 
 - opening: **DERIVED DOCUMENT — see [`CORE.md`](CORE.md) §4 first.** Ownership is defined by CORE's 9-question matrix (one owner per question).
 
-#### `ARCH/03-BYOK-KEYRINGS.md` — 125 lines · 15.2 KB
+#### `ARCH/03-BYOK-KEYRINGS.md` — 153 lines · 17.3 KB
 > 03 — BYOK Key-Rings: Multiple Keys per Provider, Fallback Rotation
 
 - opening: **Status:** Derived document, **re-scoped by [`ADR/0005`](ADR/0005-external-agents-are-the-v1-engines.md).** It owns **EveryAIOS-managed** credentials — connector tokens, browser sessions, EveryAIOS-m
 
-#### `ARCH/04-OFFICE-ENGINE.md` — 75 lines · 9.2 KB
+#### `ARCH/04-OFFICE-ENGINE.md` — 97 lines · 12.7 KB
 > 04 — Office Engine: Open + Edit Word / Excel / PPT / PDF
 
 - opening: **The user requirement, verbatim:** *"must have the capability to open excel, word, ppt, pdf, etc — all types of files, Microsoft files — edit."* Design rules: **surgical, byte-preserving** edits (nev
 
-#### `ARCH/05-TOKEN-ECONOMY.md` — 189 lines · 19.9 KB
+#### `ARCH/05-TOKEN-ECONOMY.md` — 241 lines · 24.0 KB
 > 05 — Context Engineering: Minimize Inputs, Maximize Output Power
 
 - opening: **SCOPE REDUCED — see [`CORE.md`](CORE.md) §8 and [`CONTEXT.md`](CONTEXT.md) first.** The research here is retained, but its status changed: prefix-cache economics, tool-result size control and pass-b
 
-#### `ARCH/06-SECURITY-GUARDRAILS.md` — 264 lines · 29.2 KB
+#### `ARCH/06-SECURITY-GUARDRAILS.md` — 322 lines · 34.9 KB
 > 06 — Security & Guardrails
 
 - opening: **DERIVED DOCUMENT — see [`CORE.md`](CORE.md) §6 and [`SECURITY.md`](SECURITY.md) first.** `SECURITY.md` owns the authorization model, the ticket lifecycle, the sandbox-as-mechanism rule, and the hone
@@ -8351,12 +8357,12 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 
 - opening: **SUPERSEDED MODEL — see [`MEMORY.md`](MEMORY.md) first.** The five-tier model is replaced by **four classes** (Context · Episodic · Knowledge · Procedural), and episodic memory is now a *projection o
 
-#### `ARCH/08-BROWSER-LAYER.md` — 113 lines · 13.9 KB
+#### `ARCH/08-BROWSER-LAYER.md` — 128 lines · 17.5 KB
 > 08 — Browser Layer (the agent's real browser)
 
 - opening: **DERIVED DOCUMENT — see [`CORE.md`](CORE.md) §2 and [`CAPABILITIES.md`](CAPABILITIES.md) first.** Browser is one capability pack behind one `BrowserService` façade with replaceable strategies underne
 
-#### `ARCH/09-FEATURE-MATRIX.md` — 241 lines · 102.8 KB
+#### `ARCH/09-FEATURE-MATRIX.md` — 241 lines · 103.6 KB
 > 09 — Module, Submodule & Function Matrix (the complete derivation)
 
 - opening: **SCOPE NARROWED — see [`CORE.md`](CORE.md) first.** This file’s job is the capability/feature matrix (identity + status) **only**.
@@ -8366,22 +8372,22 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 
 - opening: **Derived from [`CORE.md`](CORE.md) — the root authority; this document specializes, never restates, it.** **SCOPE REDUCED — delivery status lives in [`../TODO.md`](../TODO.md).** This document keeps
 
-#### `ARCH/11-AI-CHAT-FEATURES.md` — 184 lines · 23.1 KB
+#### `ARCH/11-AI-CHAT-FEATURES.md` — 184 lines · 23.5 KB
 > 11 — AI Chat Features: Copy · Convert · Reject (the derivation)
 
 - opening: **Split done — see [`CORE.md`](CORE.md) and [`AGENT.md`](AGENT.md) first (`P69.A22`, 2026-09-20).** The AI-architecture rationale here is superseded wherever it describes an EveryAIOS-owned reasoning
 
-#### `ARCH/12-UI-SPEC.md` — 907 lines · 74.2 KB
+#### `ARCH/12-UI-SPEC.md` — 922 lines · 78.2 KB
 > 12 — UI/UX Specification: Desktop Layout & Interaction Design
 
 - opening: **Derived from [`CORE.md`](CORE.md) — the root authority; this document specializes, never restates, it.** **CONTRACT RE-SCOPED — see [`UI.md`](UI.md) first.** This document remains the authority for layout and interaction *detail*.
 
-#### `ARCH/13-PROMPT-ANATOMY.md` — 57 lines · 3.5 KB
+#### `ARCH/13-PROMPT-ANATOMY.md` — 67 lines · 4.5 KB
 > ARCH/13 — Prompt Anatomy
 
 - opening: **Derived from [`CORE.md`](CORE.md) — the root authority; this document specializes, never restates, it.** **ABSORBED — see [`CONTEXT.md`](CONTEXT.md).** The prompt assembler is the *serializer* of Co
 
-#### `ARCH/15-CONNECT-STORE.md` — 159 lines · 11.3 KB
+#### `ARCH/15-CONNECT-STORE.md` — 357 lines · 26.2 KB
 > Connect Store — remote MCP + OAuth connectors (the "click → sign in → use" surface)
 
 - opening: **DERIVED DOCUMENT — see [`CORE.md`](CORE.md) §4 and [`CAPABILITIES.md`](CAPABILITIES.md) first.** Connectors are a capability pack: a connector declares a manifest, authentication, capabilities, prov
@@ -8421,7 +8427,7 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 
 - opening: **Status:** Subsystem contract, derived from [`CORE.md`](CORE.md).
 
-#### `ARCH/AUTOMATION.md` — 270 lines · 13.2 KB
+#### `ARCH/AUTOMATION.md` — 285 lines · 16.0 KB
 > ARCH/AUTOMATION — triggers, revisions, and the Work factory
 
 - opening: **Status:** Subsystem contract, derived from [`CORE.md`](CORE.md) §4–§5 and [`WORK.md`](WORK.md) §7.
@@ -8431,7 +8437,7 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 
 - opening: **Status:** Subsystem contract, derived from [`CORE.md`](CORE.md) §9.
 
-#### `ARCH/CONTEXT.md` — 217 lines · 8.8 KB
+#### `ARCH/CONTEXT.md` — 358 lines · 19.6 KB
 > ARCH/CONTEXT — context engineering: history, surface, prompt
 
 - opening: **Status:** Subsystem contract, derived from [`CORE.md`](CORE.md) §8.
@@ -8441,7 +8447,7 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 
 - opening: **Status:** Architecture authority. This file is the **root** of the `ARCH/` set: every other architecture document derives from it and none may weaken it.
 
-#### `ARCH/DESKTOP.md` — 131 lines · 6.6 KB
+#### `ARCH/DESKTOP.md` — 167 lines · 13.2 KB
 > ARCH/DESKTOP — computer use: driving the real OS
 
 - opening: **Status:** Subsystem contract, derived from [`CORE.md`](CORE.md).
@@ -8451,17 +8457,17 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 
 - opening: **Generated:** 2026-09-21 · **Spec version:** v3.83 (current contract; the two-plane content in diagram 27 froze at v3.75 — see `SPEC-CHANGELOG.md`) · **Diagrams:** 28 (diagram 0 is the canonical back
 
-#### `ARCH/EXTERNAL-AGENTS.md` — 244 lines · 14.2 KB
+#### `ARCH/EXTERNAL-AGENTS.md` — 313 lines · 20.1 KB
 > ARCH/EXTERNAL-AGENTS — protocol surfaces and the shared plane
 
 - opening: **Status:** Subsystem contract, derived from [`CORE.md`](CORE.md).
 
-#### `ARCH/MEMORY.md` — 161 lines · 6.5 KB
+#### `ARCH/MEMORY.md` — 238 lines · 11.2 KB
 > ARCH/MEMORY — four memory classes, progressive disclosure
 
 - opening: **Status:** Subsystem contract, derived from [`CORE.md`](CORE.md) §10.
 
-#### `ARCH/RECOVERY.md` — 132 lines · 4.9 KB
+#### `ARCH/RECOVERY.md` — 173 lines · 10.6 KB
 > ARCH/RECOVERY — durable Work, uncertain effects, safe resume
 
 - opening: **Status:** Subsystem contract, derived from [`CORE.md`](CORE.md) §5.2 and §6.
@@ -8471,22 +8477,22 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 
 - opening: **Status:** Subsystem contract, derived from [`CORE.md`](CORE.md) §4 and §8.
 
-#### `ARCH/SECURITY.md` — 165 lines · 7.3 KB
+#### `ARCH/SECURITY.md` — 332 lines · 22.6 KB
 > ARCH/SECURITY — one gate, one authorization model
 
 - opening: **Status:** Subsystem contract, derived from [`CORE.md`](CORE.md) §6 and §7.5.
 
-#### `ARCH/SESSION.md` — 178 lines · 8.8 KB
+#### `ARCH/SESSION.md` — 189 lines · 10.8 KB
 > ARCH/SESSION — Space, Project, Workspace, Chat, Work
 
 - opening: **Status:** Subsystem contract, derived from [`CORE.md`](CORE.md).
 
-#### `ARCH/UI.md` — 152 lines · 6.8 KB
+#### `ARCH/UI.md` — 187 lines · 11.1 KB
 > ARCH/UI — the cockpit as a projection, and the File Workbench
 
 - opening: **Status:** Subsystem contract, derived from [`CORE.md`](CORE.md) §3 and §5.
 
-#### `ARCH/WORK.md` — 196 lines · 8.7 KB
+#### `ARCH/WORK.md` — 216 lines · 13.1 KB
 > ARCH/WORK — Work, Run, Step, Effect, Event and the projection rule
 
 - opening: **Status:** Subsystem contract, derived from [`CORE.md`](CORE.md) §3 and §5.
@@ -8500,6 +8506,16 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 > ARCH/17 — The EveryAIOS Native Agent (frozen status lifted by ADR/0003) — ARCHIVED
 
 - opening: ⛔ **ARCHIVED — historical context, not current architecture.** Superseded by [`ADR/0005`](../ADR/0005-external-agents-are-the-v1-engines.md): the built-in engine is **deferred to post-v1**, so this document no longer describes a v1 binding.
+
+#### `ARCH/archive/coordinator-loop/README.md` — 74 lines · 5.1 KB
+> ARCH/archive/coordinator-loop — the built-in engine's turn loop (ARCHIVED)
+
+- opening: ⛔ **ARCHIVED 2026-09-22 (`P71.2c`) — not compiled, not part of any package, not a workspace member.** Nothing in the live tree imports anything here.
+
+#### `ARCH/archive/core-engine/README.md` — 37 lines · 2.1 KB
+> ARCH/archive/core-engine — `@everyaios/core-engine` (ARCHIVED)
+
+- opening: ⛔ **ARCHIVED 2026-09-22 (`P71.2c`) — the package is no longer a workspace member.** `packages/core-engine/` is gone; this directory holds its source, tests, `package.json` and `tsconfig.json` for the post-v1 return.
 
 ### 14.8 RESEARCH/2026-ai-landscape — other research
 
@@ -9086,7 +9102,7 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 
 ### 14.12 root — specs, handover, and this map
 
-#### `AGENTS.md` — 272 lines · 11.1 KB
+#### `AGENTS.md` — 280 lines · 12.4 KB
 > Repository Agent Instructions
 
 - opening: This file is intentionally **agent-agnostic**.
@@ -9099,7 +9115,7 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 
 - opening: **Status:** research verdicts folded from doc 68 §2/§3 into the P12.1 GTM competitive analysis (P12 queue).
 
-#### `CURRENT_RUN.md` — 2,288 lines · 264.4 KB
+#### `CURRENT_RUN.md` — 2,289 lines · 267.8 KB
 > CURRENT RUN STATE — Task Handover & Checkpoint
 
 - opening: **⚠ SESSION HANDOVER ONLY — this file carries no architecture and no scale claims.** Since the 2026-09-20 thaw (`ARCH/ADR/0003`), architecture belongs to [`ARCH/CORE.md`](ARCH/CORE.md) and its subsyst
@@ -9109,22 +9125,27 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 
 - opening: **Architecture authority: [`ARCH/CORE.md`](ARCH/CORE.md).** This document is the **product contract** — behavior, UI, schemas, invariants.
 
-#### `README.md` — 336 lines · 26.5 KB
+#### `README.md` — 336 lines · 27.2 KB
 > <p align="center">
 
 - opening: <p align="center"> <img src="src-tauri/icons/128x128.png" width="88" alt="EveryAIOS" /> </p>
 
-#### `SPEC-CHANGELOG.md` — 2,318 lines · 536.3 KB
+#### `SPEC-CHANGELOG.md` — 2,386 lines · 541.5 KB
 > DESKTOP-APP-SPEC.md — Specification Changelog
 
 - opening: This file records historical decisions, research transfers, implementation updates, and verification evidence for `DESKTOP-APP-SPEC.md`.
+
+#### `SUPPORT-MATRIX.md` — 76 lines · 5.0 KB
+> EveryAIOS v1 — support matrix
+
+- opening: **What this file is.** The published statement of which platforms v1 ships for, what is verified on each, and what is explicitly **not** in v1.
 
 #### `TEST-CASES.md` — 1,034 lines · 90.4 KB
 > Enterprise MNC Master Test Cases Specification: EveryAIOS
 
 - opening: **Standard**: ISO/IEC/IEEE 29119 Software Testing Standard & IEEE 829 Test Documentation **Target System**: EveryAIOS — Universal Agentic OS & Desktop Harness **Release Target**: Windows 11 Desktop (P
 
-#### `TODO.md` — 2,803 lines · 868.3 KB
+#### `TODO.md` — 2,803 lines · 869.7 KB
 > EveryAIOS — Master Implementation TODO
 
 - opening: **Documentation ownership:** `DESKTOP-APP-SPEC.md` is the **product contract only** (behavior, schemas, UI layouts, invariants — not a build plan).
@@ -9158,350 +9179,351 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 
 ### 15.1 Tauri command registry (registered ↔ UI call sites)
 
-**340 commands** registered in the single `generate_handler!` in `src-tauri/src/commands.rs`.
+**341 commands** registered in the single `generate_handler!` in `src-tauri/src/commands.rs`.
 
 | # | Command | Module family | direct `invoke()` sites | literal refs | Rust mentions |
 | ---: | --- | --- | ---: | ---: | ---: |
 | 1 | `runtime_status` | `crate` | 1 | 1 | 0 |
-| 2 | `version` | `crate` | 0 | 1 | 655 (noisy) |
-| 3 | `catalog_sync_plan` | `catalog_cmds` | 0 | 0 | 0 |
-| 4 | `catalog_sync_refresh` | `catalog_cmds` | 0 | 0 | 0 |
-| 5 | `catalog_status` | `catalog_cmds` | 0 | 0 | 2 |
-| 6 | `catalog_refresh` | `catalog_cmds` | 1 | 1 | 0 |
-| 7 | `catalog_set_interval` | `catalog_cmds` | 1 | 1 | 0 |
-| 8 | `catalog_clear` | `catalog_cmds` | 1 | 1 | 0 |
-| 9 | `catalog_providers` | `catalog_cmds` | 1 | 1 | 0 |
-| 10 | `catalog_provider_models` | `catalog_cmds` | 1 | 1 | 0 |
-| 11 | `provider_probe` | `catalog_cmds` | 1 | 1 | 0 |
-| 12 | `provider_profiles_list` | `catalog_cmds` | 0 | 0 | 0 |
-| 13 | `provider_profile_upsert` | `catalog_cmds` | 1 | 1 | 0 |
-| 14 | `provider_profile_remove` | `catalog_cmds` | 1 | 1 | 0 |
-| 15 | `provider_nim_profile` | `catalog_cmds` | 1 | 1 | 0 |
-| 16 | `core_boot_report` | `crate` | 0 | 0 | 0 |
-| 17 | `scan_text` | `crate` | 0 | 0 | 0 |
-| 18 | `probe_vault` | `crate` | 0 | 0 | 0 |
-| 19 | `vault_key_status` | `crate` | 1 | 1 | 0 |
-| 20 | `vault_setup` | `crate` | 1 | 2 | 0 |
-| 21 | `vault_unlock` | `crate` | 0 | 1 | 0 |
-| 22 | `session_list` | `crate` | 1 | 1 | 0 |
-| 23 | `session_put` | `crate` | 1 | 1 | 0 |
-| 24 | `session_delete` | `crate` | 1 | 1 | 0 |
-| 25 | `calendar_list` | `calendar_cmds` | 1 | 2 | 0 |
-| 26 | `calendar_put` | `calendar_cmds` | 1 | 2 | 0 |
-| 27 | `calendar_delete` | `calendar_cmds` | 1 | 2 | 0 |
-| 28 | `calendar_event_list` | `calendar_cmds` | 1 | 2 | 0 |
-| 29 | `calendar_event_put` | `calendar_cmds` | 1 | 2 | 0 |
-| 30 | `calendar_event_delete` | `calendar_cmds` | 1 | 2 | 0 |
-| 31 | `oauth_status` | `oauth_cmds` | 1 | 1 | 0 |
-| 32 | `oauth_accounts` | `oauth_cmds` | 2 | 2 | 0 |
-| 33 | `oauth_start_pkce` | `oauth_cmds` | 1 | 1 | 0 |
-| 34 | `oauth_start_device` | `oauth_cmds` | 1 | 1 | 0 |
-| 35 | `oauth_poll_device` | `oauth_cmds` | 1 | 1 | 0 |
-| 36 | `oauth_revoke` | `oauth_cmds` | 1 | 3 | 0 |
-| 37 | `local_models` | `local_cmds` | 1 | 1 | 0 |
-| 38 | `local_ensure` | `local_cmds` | 1 | 1 | 0 |
-| 39 | `local_hardware` | `local_cmds` | 1 | 1 | 0 |
-| 40 | `agui_send` | `crate` | 0 | 0 | 6 |
-| 41 | `agui_listen` | `crate` | 0 | 0 | 2 |
-| 42 | `usage_snapshot` | `crate` | 1 | 1 | 0 |
-| 43 | `session_totals` | `crate` | 1 | 1 | 0 |
-| 44 | `search_config` | `search_cmds` | 2 | 2 | 0 |
-| 45 | `search_instances` | `search_cmds` | 1 | 1 | 0 |
-| 46 | `search_instances_apply` | `search_cmds` | 1 | 1 | 0 |
-| 47 | `replay_sessions` | `replay_cmds` | 1 | 1 | 0 |
-| 48 | `replay_timeline` | `replay_cmds` | 1 | 1 | 0 |
-| 49 | `replay_screenshot` | `replay_cmds` | 1 | 1 | 0 |
-| 50 | `watch_events` | `replay_cmds` | 1 | 1 | 0 |
-| 51 | `agent_stop` | `replay_cmds` | 1 | 1 | 0 |
-| 52 | `trajectory_sessions` | `trajectory_cmds` | 1 | 1 | 0 |
-| 53 | `trajectory_snapshot` | `trajectory_cmds` | 1 | 1 | 0 |
-| 54 | `guard_tickets` | `guard_cmds` | 2 | 2 | 0 |
-| 55 | `feedback_submit` | `feedback_cmds` | 1 | 1 | 0 |
-| 56 | `guard_respond` | `guard_cmds` | 2 | 2 | 0 |
-| 57 | `guard_open_window` | `guard_cmds` | 1 | 1 | 0 |
-| 58 | `guard_receipts` | `guard_cmds` | 1 | 1 | 0 |
-| 59 | `guard_policy` | `guard_cmds` | 1 | 1 | 0 |
-| 60 | `guard_extend_ttl` | `guard_cmds` | 2 | 2 | 0 |
-| 61 | `guard_explain_block` | `guard_cmds` | 1 | 1 | 0 |
-| 62 | `guard_set_policy_rules` | `guard_cmds` | 1 | 1 | 0 |
-| 63 | `guard_autonomy` | `guard_cmds` | 1 | 1 | 0 |
-| 64 | `guard_set_autonomy` | `guard_cmds` | 1 | 1 | 0 |
-| 65 | `guard_estop` | `guard_cmds` | 1 | 1 | 0 |
-| 66 | `guard_activity` | `guard_cmds` | 1 | 1 | 0 |
-| 67 | `guard_permissions_matrix` | `guard_cmds` | 1 | 1 | 0 |
-| 68 | `guard_combos` | `guard_cmds` | 1 | 1 | 0 |
-| 69 | `guard_apply_combo` | `guard_cmds` | 1 | 1 | 0 |
-| 70 | `cockpit_snapshot` | `cockpit_cmds` | 2 | 2 | 0 |
-| 71 | `cockpit_activity` | `cockpit_cmds` | 1 | 1 | 0 |
-| 72 | `cockpit_tokens` | `cockpit_cmds` | 1 | 1 | 0 |
-| 73 | `cockpit_quiet` | `cockpit_cmds` | 1 | 1 | 0 |
-| 74 | `agent_undo` | `cockpit_cmds` | 1 | 1 | 0 |
-| 75 | `interrupt_respond` | `cockpit_cmds` | 1 | 1 | 0 |
-| 76 | `cockpit_upsert_agent` | `cockpit_cmds` | 1 | 1 | 0 |
-| 77 | `xlsx_open` | `xlsx_cmds` | 1 | 1 | 0 |
-| 78 | `xlsx_recalc` | `xlsx_cmds` | 1 | 1 | 0 |
-| 79 | `xlsx_edit_request` | `xlsx_cmds` | 1 | 1 | 0 |
-| 80 | `xlsx_edit_commit` | `xlsx_cmds` | 1 | 1 | 0 |
-| 81 | `xlsx_batch_request` | `xlsx_cmds` | 1 | 1 | 0 |
-| 82 | `xlsx_batch_commit` | `xlsx_cmds` | 1 | 1 | 0 |
-| 83 | `xlsx_pivot` | `xlsx_cmds` | 1 | 1 | 0 |
-| 84 | `mcp_catalog` | `mcp_cmds` | 1 | 1 | 0 |
-| 85 | `mcp_servers` | `mcp_cmds` | 1 | 6 | 0 |
-| 86 | `mcp_attach_request` | `mcp_cmds` | 1 | 1 | 0 |
-| 87 | `mcp_attach_commit` | `mcp_cmds` | 1 | 1 | 0 |
-| 88 | `mcp_external_tools` | `mcp_cmds` | 1 | 1 | 0 |
-| 89 | `mcp_detach` | `mcp_cmds` | 1 | 1 | 0 |
-| 90 | `mcp_refresh` | `mcp_cmds` | 1 | 1 | 0 |
-| 91 | `mcp_start` | `mcp_cmds` | 1 | 1 | 0 |
-| 92 | `mcp_stop` | `mcp_cmds` | 1 | 1 | 0 |
-| 93 | `mcp_set_autostart` | `mcp_cmds` | 1 | 1 | 0 |
-| 94 | `store_catalog` | `mcp_cmds` | 1 | 1 | 0 |
-| 95 | `mcp_connect_start` | `mcp_cmds` | 1 | 1 | 0 |
-| 96 | `mcp_remote_status` | `mcp_cmds` | 1 | 1 | 0 |
-| 97 | `mcp_remote_call` | `mcp_cmds` | 0 | 0 | 0 |
-| 98 | `mcp_remote_call_commit` | `mcp_cmds` | 0 | 0 | 1 |
-| 99 | `mcp_remote_tools` | `mcp_cmds` | 1 | 1 | 0 |
-| 100 | `skills_catalog` | `skills_cmds` | 1 | 1 | 0 |
-| 101 | `skills_install` | `skills_cmds` | 1 | 3 | 0 |
-| 102 | `skills_learn` | `skills_cmds` | 0 | 0 | 0 |
-| 103 | `skills_uninstall` | `skills_cmds` | 1 | 1 | 0 |
-| 104 | `docx_open` | `office_cmds` | 1 | 1 | 0 |
-| 105 | `docx_patch` | `office_cmds` | 1 | 1 | 0 |
-| 106 | `docx_tracks` | `office_cmds` | 1 | 1 | 0 |
-| 107 | `pptx_open` | `office_cmds` | 1 | 1 | 0 |
-| 108 | `pptx_notes` | `office_cmds` | 1 | 1 | 0 |
-| 109 | `pdf_open` | `office_cmds` | 1 | 1 | 0 |
-| 110 | `pdf_bytes` | `office_cmds` | 1 | 1 | 0 |
-| 111 | `pdf_page_op` | `office_cmds` | 1 | 1 | 0 |
-| 112 | `office_open_external` | `office_cmds` | 1 | 1 | 0 |
-| 113 | `vault_keys_list` | `vault_cmds` | 3 | 3 | 0 |
-| 114 | `vault_key_add` | `vault_cmds` | 2 | 2 | 0 |
-| 115 | `vault_key_remove` | `vault_cmds` | 1 | 1 | 0 |
-| 116 | `vault_key_rotate` | `vault_cmds` | 0 | 0 | 0 |
-| 117 | `chief_default_get` | `acp_cmds` | 1 | 1 | 0 |
-| 118 | `chief_default_set` | `acp_cmds` | 1 | 1 | 0 |
-| 119 | `agent_registry_list` | `agent_cmds` | 1 | 1 | 0 |
-| 120 | `agent_registry_save` | `agent_cmds` | 1 | 1 | 0 |
-| 121 | `agent_registry_get` | `agent_cmds` | 1 | 1 | 0 |
-| 122 | `agent_registry_remove` | `agent_cmds` | 1 | 1 | 0 |
-| 123 | `agent_registry_duplicate` | `agent_cmds` | 1 | 1 | 0 |
-| 124 | `agent_registry_set_disabled` | `agent_cmds` | 1 | 1 | 0 |
-| 125 | `agent_directory_list` | `agent_cmds` | 1 | 1 | 0 |
-| 126 | `acp_agents` | `acp_cmds` | 1 | 1 | 0 |
-| 127 | `acp_launch` | `acp_cmds` | 1 | 1 | 0 |
-| 128 | `agent_backend_get` | `agent_backend_cmds` | 1 | 1 | 0 |
-| 129 | `agent_backend_providers` | `agent_backend_cmds` | 1 | 1 | 0 |
-| 130 | `agent_backend_set` | `agent_backend_cmds` | 1 | 1 | 0 |
-| 131 | `agent_backend_clear` | `agent_backend_cmds` | 1 | 1 | 0 |
-| 132 | `agent_backend_probe` | `agent_backend_cmds` | 1 | 1 | 0 |
-| 133 | `acp_prompt` | `acp_cmds` | 1 | 1 | 0 |
-| 134 | `acp_session_commands` | `acp_cmds` | 1 | 1 | 0 |
-| 135 | `acp_session_config_options` | `acp_cmds` | 1 | 1 | 0 |
-| 136 | `acp_session_set_config_option` | `acp_cmds` | 1 | 1 | 0 |
-| 137 | `acp_tool_log` | `acp_cmds` | 1 | 1 | 0 |
-| 138 | `chief_subagents` | `acp_cmds` | 1 | 1 | 0 |
-| 139 | `chief_subagent_set_policy` | `acp_cmds` | 1 | 1 | 0 |
-| 140 | `chief_subagent_set_note` | `acp_cmds` | 1 | 1 | 0 |
-| 141 | `chief_subagent_set_enabled` | `acp_cmds` | 1 | 1 | 0 |
-| 142 | `chief_subagent_mix` | `acp_cmds` | 1 | 1 | 0 |
-| 143 | `acp_cancel` | `acp_cmds` | 1 | 1 | 0 |
-| 144 | `acp_shutdown` | `acp_cmds` | 1 | 1 | 0 |
-| 145 | `acp_sessions` | `acp_cmds` | 1 | 1 | 0 |
-| 146 | `acp_registry_refresh` | `acp_cmds` | 1 | 1 | 0 |
-| 147 | `acp_registry_status` | `acp_cmds` | 0 | 0 | 0 |
-| 148 | `acp_registry_install_plan` | `acp_cmds` | 0 | 0 | 0 |
-| 149 | `acp_install_status` | `acp_cmds` | 1 | 1 | 0 |
-| 150 | `acp_install_request` | `acp_cmds` | 1 | 1 | 0 |
-| 151 | `acp_install_commit` | `acp_cmds` | 1 | 1 | 0 |
-| 152 | `acp_install_await` | `acp_cmds` | 1 | 1 | 0 |
-| 153 | `acp_install` | `acp_cmds` | 0 | 0 | 0 |
-| 154 | `acp_agent_import` | `acp_cmds` | 1 | 1 | 0 |
-| 155 | `acp_agent_verify` | `acp_cmds` | 1 | 1 | 0 |
-| 156 | `acp_authenticate` | `acp_cmds` | 1 | 1 | 0 |
-| 157 | `audit_compact` | `maintenance_cmds` | 0 | 0 | 1 |
-| 158 | `scheduler_list` | `scheduler_cmds` | 1 | 1 | 0 |
-| 159 | `scheduler_create` | `scheduler_cmds` | 1 | 1 | 0 |
-| 160 | `scheduler_delete` | `scheduler_cmds` | 1 | 1 | 0 |
-| 161 | `scheduler_enable` | `scheduler_cmds` | 1 | 1 | 0 |
-| 162 | `scheduler_pause` | `scheduler_cmds` | 1 | 1 | 0 |
-| 163 | `scheduler_pause_session` | `scheduler_cmds` | 1 | 1 | 0 |
-| 164 | `scheduler_resume` | `scheduler_cmds` | 1 | 1 | 0 |
-| 165 | `scheduler_run_now` | `scheduler_cmds` | 1 | 1 | 0 |
-| 166 | `scheduler_runs` | `scheduler_cmds` | 1 | 1 | 0 |
-| 167 | `scheduler_duplicate` | `scheduler_cmds` | 1 | 1 | 0 |
-| 168 | `scheduler_export` | `scheduler_cmds` | 1 | 1 | 0 |
-| 169 | `scheduler_battery` | `scheduler_cmds` | 1 | 1 | 0 |
-| 170 | `scheduler_fire_event` | `scheduler_cmds` | 1 | 1 | 0 |
-| 171 | `scheduler_fire_webhook` | `scheduler_cmds` | 0 | 0 | 0 |
-| 172 | `scheduler_nudges` | `scheduler_cmds` | 1 | 1 | 0 |
-| 173 | `scheduler_nudge` | `scheduler_cmds` | 1 | 1 | 0 |
-| 174 | `scheduler_notepad_get` | `scheduler_cmds` | 1 | 1 | 0 |
-| 175 | `scheduler_notepad_append` | `scheduler_cmds` | 1 | 1 | 0 |
-| 176 | `scheduler_incidents` | `scheduler_cmds` | 1 | 1 | 0 |
-| 177 | `scheduler_incident_ack` | `scheduler_cmds` | 1 | 1 | 0 |
-| 178 | `scheduler_doctor` | `scheduler_cmds` | 1 | 1 | 0 |
-| 179 | `tasks_list` | `tasks_cmds` | 1 | 1 | 0 |
-| 180 | `tasks_show` | `tasks_cmds` | 1 | 1 | 0 |
-| 181 | `tasks_cancel` | `tasks_cmds` | 1 | 1 | 0 |
-| 182 | `tasks_retry` | `tasks_cmds` | 1 | 1 | 0 |
-| 183 | `tasks_enqueue` | `tasks_cmds` | 1 | 1 | 0 |
-| 184 | `tasks_start` | `tasks_cmds` | 0 | 0 | 0 |
-| 185 | `tasks_complete` | `tasks_cmds` | 0 | 0 | 0 |
-| 186 | `tasks_sweep` | `tasks_cmds` | 0 | 0 | 1 |
-| 187 | `storage_health` | `storage_cmds` | 1 | 1 | 0 |
-| 188 | `storage_scan` | `storage_cmds` | 1 | 1 | 0 |
-| 189 | `storage_large_files` | `storage_cmds` | 1 | 1 | 0 |
-| 190 | `storage_duplicates` | `storage_cmds` | 1 | 1 | 0 |
-| 191 | `storage_cleanup_proposals` | `storage_cmds` | 1 | 1 | 0 |
-| 192 | `storage_battery` | `storage_cmds` | 1 | 1 | 0 |
-| 193 | `sync_export_bundle` | `sync_cmds` | 1 | 1 | 0 |
-| 194 | `sync_import_bundle` | `sync_cmds` | 1 | 1 | 0 |
-| 195 | `sync_keypair_generate` | `sync_cmds` | 1 | 1 | 0 |
-| 196 | `sync_public_key` | `sync_cmds` | 1 | 1 | 0 |
-| 197 | `sync_serve_start` | `sync_cmds` | 1 | 1 | 0 |
-| 198 | `sync_serve_stop` | `sync_cmds` | 1 | 1 | 0 |
-| 199 | `sync_serve_status` | `sync_cmds` | 1 | 1 | 0 |
-| 200 | `sync_peer_sync` | `sync_cmds` | 1 | 1 | 0 |
-| 201 | `node_attach` | `sync_cmds` | 1 | 1 | 0 |
-| 202 | `sync_fingerprint` | `sync_cmds` | 1 | 1 | 0 |
-| 203 | `updater_check` | `updater_cmds` | 1 | 1 | 0 |
-| 204 | `updater_install` | `updater_cmds` | 1 | 1 | 0 |
-| 205 | `fs_home` | `fs_cmds` | 1 | 1 | 0 |
-| 206 | `fs_list_dir` | `fs_cmds` | 1 | 1 | 0 |
-| 207 | `fs_read_file` | `fs_cmds` | 1 | 1 | 0 |
-| 208 | `fs_write_file` | `fs_cmds` | 1 | 1 | 0 |
-| 209 | `fs_write_ticket` | `fs_cmds` | 1 | 1 | 0 |
-| 210 | `fs_write_commit` | `fs_cmds` | 1 | 1 | 0 |
-| 211 | `fs_undo_list` | `fs_cmds` | 1 | 1 | 0 |
-| 212 | `fs_undo_restore` | `fs_cmds` | 1 | 1 | 0 |
-| 213 | `fs_undo_snapshot` | `fs_cmds` | 1 | 1 | 0 |
-| 214 | `terminal_profiles` | `terminal_cmds` | 1 | 1 | 0 |
-| 215 | `terminal_set_default` | `terminal_cmds` | 1 | 1 | 0 |
-| 216 | `terminal_set_automation` | `terminal_cmds` | 1 | 1 | 0 |
-| 217 | `terminal_confirm_unsafe` | `terminal_cmds` | 1 | 1 | 0 |
-| 218 | `terminal_get_shell_integration` | `terminal_cmds` | 0 | 0 | 0 |
-| 219 | `terminal_set_shell_integration` | `terminal_cmds` | 1 | 1 | 0 |
-| 220 | `terminal_spawn` | `terminal_cmds` | 1 | 1 | 0 |
-| 221 | `terminal_run` | `terminal_cmds` | 1 | 1 | 0 |
-| 222 | `terminal_replay` | `terminal_cmds` | 1 | 1 | 0 |
-| 223 | `terminal_write` | `terminal_cmds` | 1 | 1 | 0 |
-| 224 | `terminal_resize` | `terminal_cmds` | 1 | 1 | 0 |
-| 225 | `terminal_kill` | `terminal_cmds` | 1 | 1 | 0 |
-| 226 | `terminal_status` | `terminal_cmds` | 1 | 1 | 0 |
-| 227 | `terminal_commands` | `terminal_cmds` | 1 | 1 | 0 |
-| 228 | `terminal_last_command_context` | `terminal_cmds` | 1 | 1 | 0 |
-| 229 | `terminal_history_context` | `terminal_cmds` | 1 | 1 | 0 |
-| 230 | `browser_list_installed` | `browser_cmds` | 1 | 1 | 0 |
-| 231 | `browser_get_config` | `browser_cmds` | 1 | 1 | 0 |
-| 232 | `browser_set_config` | `browser_cmds` | 1 | 1 | 0 |
-| 233 | `browser_start` | `browser_cmds` | 1 | 1 | 0 |
-| 234 | `browser_navigate` | `browser_cmds` | 1 | 1 | 0 |
-| 235 | `browser_snapshot` | `browser_cmds` | 1 | 1 | 0 |
-| 236 | `browser_read` | `browser_cmds` | 1 | 1 | 0 |
-| 237 | `browser_read_url` | `browser_cmds` | 1 | 1 | 0 |
-| 238 | `browser_click` | `browser_cmds` | 1 | 1 | 0 |
-| 239 | `browser_type` | `browser_cmds` | 1 | 1 | 0 |
-| 240 | `browser_stop` | `browser_cmds` | 1 | 1 | 0 |
-| 241 | `browser_status` | `browser_cmds` | 1 | 1 | 0 |
-| 242 | `memory_request` | `memory_cmds` | 4 | 4 | 0 |
-| 243 | `memory_read` | `memory_cmds` | 1 | 1 | 0 |
-| 244 | `git_status` | `git_cmds` | 1 | 1 | 0 |
-| 245 | `git_log` | `git_cmds` | 1 | 1 | 0 |
-| 246 | `git_diff` | `git_cmds` | 1 | 1 | 0 |
-| 247 | `git_stage_all` | `git_cmds` | 1 | 1 | 0 |
-| 248 | `git_commit` | `git_cmds` | 1 | 1 | 0 |
-| 249 | `git_root` | `git_cmds` | 1 | 1 | 0 |
-| 250 | `git_worktree_add` | `git_cmds` | 1 | 1 | 0 |
-| 251 | `git_worktree_list` | `git_cmds` | 1 | 1 | 0 |
-| 252 | `git_worktree_merge` | `git_cmds` | 1 | 1 | 0 |
-| 253 | `git_worktree_revert` | `git_cmds` | 1 | 1 | 0 |
-| 254 | `lsp_diagnostics` | `lsp_cmds` | 1 | 1 | 0 |
-| 255 | `repomap_build` | `codeintel_cmds` | 0 | 0 | 4 |
-| 256 | `file_outline` | `codeintel_cmds` | 0 | 0 | 2 |
-| 257 | `model_aliases_resolve` | `codeintel_cmds` | 0 | 0 | 0 |
-| 258 | `ai_markers_scan` | `codeintel_cmds` | 0 | 0 | 0 |
-| 259 | `desktop_status` | `desktop_cmds` | 2 | 2 | 0 |
-| 260 | `desktop_attach` | `desktop_cmds` | 2 | 4 | 0 |
-| 261 | `desktop_policy_get` | `desktop_cmds` | 1 | 1 | 0 |
-| 262 | `desktop_apps` | `desktop_cmds` | 2 | 3 | 0 |
-| 263 | `desktop_policy_allow_path` | `desktop_cmds` | 1 | 3 | 0 |
-| 264 | `desktop_policy_remove_path` | `desktop_cmds` | 1 | 3 | 0 |
-| 265 | `desktop_policy_set_interaction` | `desktop_cmds` | 1 | 3 | 0 |
-| 266 | `desktop_windows` | `desktop_cmds` | 1 | 1 | 0 |
-| 267 | `desktop_read` | `desktop_cmds` | 1 | 1 | 0 |
-| 268 | `desktop_see` | `desktop_cmds` | 1 | 1 | 0 |
-| 269 | `desktop_act` | `desktop_cmds` | 1 | 1 | 0 |
-| 270 | `desktop_escalation` | `desktop_cmds` | 1 | 1 | 0 |
-| 271 | `desktop_act_escalating` | `desktop_cmds` | 1 | 1 | 0 |
-| 272 | `desktop_stop` | `desktop_cmds` | 1 | 1 | 0 |
-| 273 | `cua_dag_get` | `desktop_cmds` | 1 | 1 | 0 |
-| 274 | `cua_dag_edit_remaining` | `desktop_cmds` | 1 | 1 | 0 |
-| 275 | `work_list` | `work_cmds` | 1 | 1 | 0 |
-| 276 | `work_snapshot` | `work_cmds` | 1 | 1 | 0 |
-| 277 | `work_events` | `work_cmds` | 1 | 1 | 0 |
-| 278 | `work_presence` | `work_cmds` | 1 | 1 | 0 |
-| 279 | `work_reviews` | `work_cmds` | 1 | 1 | 0 |
-| 280 | `work_pty_spawn` | `work_cmds` | 1 | 1 | 0 |
-| 281 | `work_pty_resize` | `work_cmds` | 1 | 1 | 0 |
-| 282 | `work_pty_signal` | `work_cmds` | 1 | 1 | 0 |
-| 283 | `work_pty_close` | `work_cmds` | 1 | 1 | 0 |
-| 284 | `work_pty_snapshot` | `work_cmds` | 1 | 1 | 0 |
-| 285 | `work_worktree_create` | `work_cmds` | 1 | 1 | 0 |
-| 286 | `work_worktree_attach` | `work_cmds` | 1 | 1 | 0 |
-| 287 | `work_worktree_op` | `work_cmds` | 1 | 1 | 0 |
-| 288 | `work_agent_spawn` | `work_cmds` | 1 | 1 | 0 |
-| 289 | `work_agent_op` | `work_cmds` | 1 | 1 | 0 |
-| 290 | `work_agent_sessions` | `work_cmds` | 1 | 1 | 0 |
-| 291 | `work_children` | `work_cmds` | 1 | 1 | 0 |
-| 292 | `work_create` | `work_cmds` | 0 | 0 | 0 |
-| 293 | `work_get` | `work_cmds` | 0 | 0 | 0 |
-| 294 | `work_archive` | `work_cmds` | 0 | 0 | 0 |
-| 295 | `work_locator` | `work_cmds` | 0 | 0 | 0 |
-| 296 | `work_nodes` | `work_cmds` | 0 | 0 | 0 |
-| 297 | `work_node_register` | `work_cmds` | 0 | 0 | 0 |
-| 298 | `work_node_bind` | `work_cmds` | 0 | 0 | 0 |
-| 299 | `work_node_unbind` | `work_cmds` | 0 | 0 | 0 |
-| 300 | `work_authority_acquire` | `work_cmds` | 0 | 0 | 0 |
-| 301 | `work_authority_renew` | `work_cmds` | 0 | 0 | 0 |
-| 302 | `work_authority_release` | `work_cmds` | 0 | 0 | 0 |
-| 303 | `work_clients` | `work_cmds` | 0 | 0 | 0 |
-| 304 | `work_client_connect` | `work_cmds` | 0 | 0 | 0 |
-| 305 | `work_client_detach` | `work_cmds` | 0 | 0 | 0 |
-| 306 | `work_capabilities` | `work_cmds` | 0 | 0 | 0 |
-| 307 | `work_capability_grant` | `work_cmds` | 0 | 0 | 0 |
-| 308 | `work_capability_resolve` | `work_cmds` | 0 | 0 | 0 |
-| 309 | `work_review_resolve` | `work_cmds` | 0 | 0 | 0 |
-| 310 | `work_steer` | `work_cmds` | 0 | 0 | 0 |
-| 311 | `work_steer_interrupt` | `work_cmds` | 0 | 0 | 0 |
-| 312 | `work_manifest_create` | `work_cmds` | 0 | 0 | 0 |
-| 313 | `work_manifest_get` | `work_cmds` | 0 | 0 | 0 |
-| 314 | `work_manifest_restore` | `work_cmds` | 0 | 0 | 0 |
-| 315 | `work_attachment_add` | `work_cmds` | 0 | 0 | 0 |
-| 316 | `work_attachment_list` | `work_cmds` | 0 | 0 | 0 |
-| 317 | `work_attachment_resolve` | `work_cmds` | 0 | 0 | 0 |
-| 318 | `artifact_serve` | `artifact_cmds` | 1 | 1 | 0 |
-| 319 | `artifact_stop` | `artifact_cmds` | 1 | 1 | 0 |
-| 320 | `doctor_report` | `doctor_cmds` | 1 | 1 | 0 |
-| 321 | `openai_server_start` | `openai_cmds` | 1 | 1 | 0 |
-| 322 | `openai_server_stop` | `openai_cmds` | 1 | 1 | 0 |
-| 323 | `openai_server_status` | `openai_cmds` | 1 | 1 | 0 |
-| 324 | `discovery_inventory` | `discovery_cmds` | 1 | 1 | 0 |
-| 325 | `routing_feed_decide` | `discovery_cmds` | 1 | 1 | 0 |
-| 326 | `provider_health_probe` | `discovery_cmds` | 0 | 0 | 0 |
-| 327 | `settings_providers_list` | `settings_cmds` | 1 | 2 | 0 |
-| 328 | `settings_default_model_get` | `settings_cmds` | 1 | 2 | 0 |
-| 329 | `settings_default_model_set` | `settings_cmds` | 1 | 2 | 0 |
-| 330 | `settings_agents_list` | `settings_cmds` | 1 | 2 | 0 |
-| 331 | `settings_agent_get` | `settings_cmds` | 1 | 2 | 0 |
-| 332 | `settings_agent_loadout` | `settings_cmds` | 1 | 1 | 0 |
-| 333 | `settings_connections_list` | `settings_cmds` | 1 | 2 | 0 |
-| 334 | `settings_schedules_list` | `settings_cmds` | 1 | 2 | 0 |
-| 335 | `settings_schedule_get` | `settings_cmds` | 1 | 1 | 0 |
-| 336 | `settings_schedule_set_enabled` | `settings_cmds` | 1 | 2 | 0 |
-| 337 | `settings_extensions_list` | `settings_cmds` | 1 | 2 | 0 |
-| 338 | `voice_status` | `voice_cmds` | 1 | 1 | 0 |
-| 339 | `voice_vad_classify` | `voice_cmds` | 1 | 1 | 0 |
-| 340 | `voice_process_utterance` | `voice_cmds` | 1 | 1 | 0 |
+| 2 | `sidecar_probe` | `crate` | 1 | 1 | 0 |
+| 3 | `version` | `crate` | 0 | 1 | 660 (noisy) |
+| 4 | `catalog_sync_plan` | `catalog_cmds` | 0 | 0 | 0 |
+| 5 | `catalog_sync_refresh` | `catalog_cmds` | 0 | 0 | 0 |
+| 6 | `catalog_status` | `catalog_cmds` | 0 | 0 | 2 |
+| 7 | `catalog_refresh` | `catalog_cmds` | 1 | 1 | 0 |
+| 8 | `catalog_set_interval` | `catalog_cmds` | 1 | 1 | 0 |
+| 9 | `catalog_clear` | `catalog_cmds` | 1 | 1 | 0 |
+| 10 | `catalog_providers` | `catalog_cmds` | 1 | 1 | 0 |
+| 11 | `catalog_provider_models` | `catalog_cmds` | 1 | 1 | 0 |
+| 12 | `provider_probe` | `catalog_cmds` | 1 | 1 | 0 |
+| 13 | `provider_profiles_list` | `catalog_cmds` | 0 | 0 | 0 |
+| 14 | `provider_profile_upsert` | `catalog_cmds` | 1 | 1 | 0 |
+| 15 | `provider_profile_remove` | `catalog_cmds` | 1 | 1 | 0 |
+| 16 | `provider_nim_profile` | `catalog_cmds` | 1 | 1 | 0 |
+| 17 | `core_boot_report` | `crate` | 0 | 0 | 0 |
+| 18 | `scan_text` | `crate` | 0 | 0 | 0 |
+| 19 | `probe_vault` | `crate` | 0 | 0 | 0 |
+| 20 | `vault_key_status` | `crate` | 1 | 1 | 0 |
+| 21 | `vault_setup` | `crate` | 1 | 2 | 0 |
+| 22 | `vault_unlock` | `crate` | 0 | 1 | 0 |
+| 23 | `session_list` | `crate` | 1 | 1 | 0 |
+| 24 | `session_put` | `crate` | 1 | 1 | 0 |
+| 25 | `session_delete` | `crate` | 1 | 1 | 0 |
+| 26 | `calendar_list` | `calendar_cmds` | 1 | 2 | 0 |
+| 27 | `calendar_put` | `calendar_cmds` | 1 | 2 | 0 |
+| 28 | `calendar_delete` | `calendar_cmds` | 1 | 2 | 0 |
+| 29 | `calendar_event_list` | `calendar_cmds` | 1 | 2 | 0 |
+| 30 | `calendar_event_put` | `calendar_cmds` | 1 | 2 | 0 |
+| 31 | `calendar_event_delete` | `calendar_cmds` | 1 | 2 | 0 |
+| 32 | `oauth_status` | `oauth_cmds` | 1 | 1 | 0 |
+| 33 | `oauth_accounts` | `oauth_cmds` | 2 | 2 | 0 |
+| 34 | `oauth_start_pkce` | `oauth_cmds` | 1 | 1 | 0 |
+| 35 | `oauth_start_device` | `oauth_cmds` | 1 | 1 | 0 |
+| 36 | `oauth_poll_device` | `oauth_cmds` | 1 | 1 | 0 |
+| 37 | `oauth_revoke` | `oauth_cmds` | 1 | 3 | 0 |
+| 38 | `local_models` | `local_cmds` | 1 | 1 | 0 |
+| 39 | `local_ensure` | `local_cmds` | 1 | 1 | 0 |
+| 40 | `local_hardware` | `local_cmds` | 1 | 1 | 0 |
+| 41 | `agui_send` | `crate` | 0 | 0 | 6 |
+| 42 | `agui_listen` | `crate` | 0 | 0 | 2 |
+| 43 | `usage_snapshot` | `crate` | 1 | 1 | 0 |
+| 44 | `session_totals` | `crate` | 1 | 1 | 0 |
+| 45 | `search_config` | `search_cmds` | 2 | 2 | 0 |
+| 46 | `search_instances` | `search_cmds` | 1 | 1 | 0 |
+| 47 | `search_instances_apply` | `search_cmds` | 1 | 1 | 0 |
+| 48 | `replay_sessions` | `replay_cmds` | 1 | 1 | 0 |
+| 49 | `replay_timeline` | `replay_cmds` | 1 | 1 | 0 |
+| 50 | `replay_screenshot` | `replay_cmds` | 1 | 1 | 0 |
+| 51 | `watch_events` | `replay_cmds` | 1 | 1 | 0 |
+| 52 | `agent_stop` | `replay_cmds` | 1 | 1 | 0 |
+| 53 | `trajectory_sessions` | `trajectory_cmds` | 1 | 1 | 0 |
+| 54 | `trajectory_snapshot` | `trajectory_cmds` | 1 | 1 | 0 |
+| 55 | `guard_tickets` | `guard_cmds` | 2 | 2 | 0 |
+| 56 | `feedback_submit` | `feedback_cmds` | 1 | 1 | 0 |
+| 57 | `guard_respond` | `guard_cmds` | 2 | 2 | 0 |
+| 58 | `guard_open_window` | `guard_cmds` | 1 | 1 | 0 |
+| 59 | `guard_receipts` | `guard_cmds` | 1 | 1 | 0 |
+| 60 | `guard_policy` | `guard_cmds` | 1 | 1 | 0 |
+| 61 | `guard_extend_ttl` | `guard_cmds` | 2 | 2 | 0 |
+| 62 | `guard_explain_block` | `guard_cmds` | 1 | 1 | 0 |
+| 63 | `guard_set_policy_rules` | `guard_cmds` | 1 | 1 | 0 |
+| 64 | `guard_autonomy` | `guard_cmds` | 1 | 1 | 0 |
+| 65 | `guard_set_autonomy` | `guard_cmds` | 1 | 1 | 0 |
+| 66 | `guard_estop` | `guard_cmds` | 1 | 1 | 0 |
+| 67 | `guard_activity` | `guard_cmds` | 1 | 1 | 0 |
+| 68 | `guard_permissions_matrix` | `guard_cmds` | 1 | 1 | 0 |
+| 69 | `guard_combos` | `guard_cmds` | 1 | 1 | 0 |
+| 70 | `guard_apply_combo` | `guard_cmds` | 1 | 1 | 0 |
+| 71 | `cockpit_snapshot` | `cockpit_cmds` | 2 | 2 | 0 |
+| 72 | `cockpit_activity` | `cockpit_cmds` | 1 | 1 | 0 |
+| 73 | `cockpit_tokens` | `cockpit_cmds` | 1 | 1 | 0 |
+| 74 | `cockpit_quiet` | `cockpit_cmds` | 1 | 1 | 0 |
+| 75 | `agent_undo` | `cockpit_cmds` | 1 | 1 | 0 |
+| 76 | `interrupt_respond` | `cockpit_cmds` | 1 | 1 | 0 |
+| 77 | `cockpit_upsert_agent` | `cockpit_cmds` | 1 | 1 | 0 |
+| 78 | `xlsx_open` | `xlsx_cmds` | 1 | 1 | 0 |
+| 79 | `xlsx_recalc` | `xlsx_cmds` | 1 | 1 | 0 |
+| 80 | `xlsx_edit_request` | `xlsx_cmds` | 1 | 1 | 0 |
+| 81 | `xlsx_edit_commit` | `xlsx_cmds` | 1 | 1 | 0 |
+| 82 | `xlsx_batch_request` | `xlsx_cmds` | 1 | 1 | 0 |
+| 83 | `xlsx_batch_commit` | `xlsx_cmds` | 1 | 1 | 0 |
+| 84 | `xlsx_pivot` | `xlsx_cmds` | 1 | 1 | 0 |
+| 85 | `mcp_catalog` | `mcp_cmds` | 1 | 1 | 0 |
+| 86 | `mcp_servers` | `mcp_cmds` | 1 | 6 | 0 |
+| 87 | `mcp_attach_request` | `mcp_cmds` | 1 | 1 | 0 |
+| 88 | `mcp_attach_commit` | `mcp_cmds` | 1 | 1 | 0 |
+| 89 | `mcp_external_tools` | `mcp_cmds` | 1 | 1 | 0 |
+| 90 | `mcp_detach` | `mcp_cmds` | 1 | 1 | 0 |
+| 91 | `mcp_refresh` | `mcp_cmds` | 1 | 1 | 0 |
+| 92 | `mcp_start` | `mcp_cmds` | 1 | 1 | 0 |
+| 93 | `mcp_stop` | `mcp_cmds` | 1 | 1 | 0 |
+| 94 | `mcp_set_autostart` | `mcp_cmds` | 1 | 1 | 0 |
+| 95 | `store_catalog` | `mcp_cmds` | 1 | 1 | 0 |
+| 96 | `mcp_connect_start` | `mcp_cmds` | 1 | 1 | 0 |
+| 97 | `mcp_remote_status` | `mcp_cmds` | 1 | 1 | 0 |
+| 98 | `mcp_remote_call` | `mcp_cmds` | 0 | 0 | 0 |
+| 99 | `mcp_remote_call_commit` | `mcp_cmds` | 0 | 0 | 1 |
+| 100 | `mcp_remote_tools` | `mcp_cmds` | 1 | 1 | 0 |
+| 101 | `skills_catalog` | `skills_cmds` | 1 | 1 | 0 |
+| 102 | `skills_install` | `skills_cmds` | 1 | 3 | 0 |
+| 103 | `skills_learn` | `skills_cmds` | 0 | 0 | 0 |
+| 104 | `skills_uninstall` | `skills_cmds` | 1 | 1 | 0 |
+| 105 | `docx_open` | `office_cmds` | 1 | 1 | 0 |
+| 106 | `docx_patch` | `office_cmds` | 1 | 1 | 0 |
+| 107 | `docx_tracks` | `office_cmds` | 1 | 1 | 0 |
+| 108 | `pptx_open` | `office_cmds` | 1 | 1 | 0 |
+| 109 | `pptx_notes` | `office_cmds` | 1 | 1 | 0 |
+| 110 | `pdf_open` | `office_cmds` | 1 | 1 | 0 |
+| 111 | `pdf_bytes` | `office_cmds` | 1 | 1 | 0 |
+| 112 | `pdf_page_op` | `office_cmds` | 1 | 1 | 0 |
+| 113 | `office_open_external` | `office_cmds` | 1 | 1 | 0 |
+| 114 | `vault_keys_list` | `vault_cmds` | 3 | 3 | 0 |
+| 115 | `vault_key_add` | `vault_cmds` | 2 | 2 | 0 |
+| 116 | `vault_key_remove` | `vault_cmds` | 1 | 1 | 0 |
+| 117 | `vault_key_rotate` | `vault_cmds` | 0 | 0 | 0 |
+| 118 | `chief_default_get` | `acp_cmds` | 1 | 1 | 0 |
+| 119 | `chief_default_set` | `acp_cmds` | 1 | 1 | 0 |
+| 120 | `agent_registry_list` | `agent_cmds` | 1 | 1 | 0 |
+| 121 | `agent_registry_save` | `agent_cmds` | 1 | 1 | 0 |
+| 122 | `agent_registry_get` | `agent_cmds` | 1 | 1 | 0 |
+| 123 | `agent_registry_remove` | `agent_cmds` | 1 | 1 | 0 |
+| 124 | `agent_registry_duplicate` | `agent_cmds` | 1 | 1 | 0 |
+| 125 | `agent_registry_set_disabled` | `agent_cmds` | 1 | 1 | 0 |
+| 126 | `agent_directory_list` | `agent_cmds` | 1 | 1 | 0 |
+| 127 | `acp_agents` | `acp_cmds` | 1 | 1 | 0 |
+| 128 | `acp_launch` | `acp_cmds` | 1 | 1 | 0 |
+| 129 | `agent_backend_get` | `agent_backend_cmds` | 1 | 1 | 0 |
+| 130 | `agent_backend_providers` | `agent_backend_cmds` | 1 | 1 | 0 |
+| 131 | `agent_backend_set` | `agent_backend_cmds` | 1 | 1 | 0 |
+| 132 | `agent_backend_clear` | `agent_backend_cmds` | 1 | 1 | 0 |
+| 133 | `agent_backend_probe` | `agent_backend_cmds` | 1 | 1 | 0 |
+| 134 | `acp_prompt` | `acp_cmds` | 1 | 1 | 0 |
+| 135 | `acp_session_commands` | `acp_cmds` | 1 | 1 | 0 |
+| 136 | `acp_session_config_options` | `acp_cmds` | 1 | 1 | 0 |
+| 137 | `acp_session_set_config_option` | `acp_cmds` | 1 | 1 | 0 |
+| 138 | `acp_tool_log` | `acp_cmds` | 1 | 1 | 0 |
+| 139 | `chief_subagents` | `acp_cmds` | 1 | 1 | 0 |
+| 140 | `chief_subagent_set_policy` | `acp_cmds` | 1 | 1 | 0 |
+| 141 | `chief_subagent_set_note` | `acp_cmds` | 1 | 1 | 0 |
+| 142 | `chief_subagent_set_enabled` | `acp_cmds` | 1 | 1 | 0 |
+| 143 | `chief_subagent_mix` | `acp_cmds` | 1 | 1 | 0 |
+| 144 | `acp_cancel` | `acp_cmds` | 1 | 1 | 0 |
+| 145 | `acp_shutdown` | `acp_cmds` | 1 | 1 | 0 |
+| 146 | `acp_sessions` | `acp_cmds` | 1 | 1 | 0 |
+| 147 | `acp_registry_refresh` | `acp_cmds` | 1 | 1 | 0 |
+| 148 | `acp_registry_status` | `acp_cmds` | 0 | 0 | 0 |
+| 149 | `acp_registry_install_plan` | `acp_cmds` | 0 | 0 | 0 |
+| 150 | `acp_install_status` | `acp_cmds` | 1 | 1 | 0 |
+| 151 | `acp_install_request` | `acp_cmds` | 1 | 1 | 0 |
+| 152 | `acp_install_commit` | `acp_cmds` | 1 | 1 | 0 |
+| 153 | `acp_install_await` | `acp_cmds` | 1 | 1 | 0 |
+| 154 | `acp_install` | `acp_cmds` | 0 | 0 | 0 |
+| 155 | `acp_agent_import` | `acp_cmds` | 1 | 1 | 0 |
+| 156 | `acp_agent_verify` | `acp_cmds` | 1 | 1 | 0 |
+| 157 | `acp_authenticate` | `acp_cmds` | 1 | 1 | 0 |
+| 158 | `audit_compact` | `maintenance_cmds` | 0 | 0 | 1 |
+| 159 | `scheduler_list` | `scheduler_cmds` | 1 | 1 | 0 |
+| 160 | `scheduler_create` | `scheduler_cmds` | 1 | 1 | 0 |
+| 161 | `scheduler_delete` | `scheduler_cmds` | 1 | 1 | 0 |
+| 162 | `scheduler_enable` | `scheduler_cmds` | 1 | 1 | 0 |
+| 163 | `scheduler_pause` | `scheduler_cmds` | 1 | 1 | 0 |
+| 164 | `scheduler_pause_session` | `scheduler_cmds` | 1 | 1 | 0 |
+| 165 | `scheduler_resume` | `scheduler_cmds` | 1 | 1 | 0 |
+| 166 | `scheduler_run_now` | `scheduler_cmds` | 1 | 1 | 0 |
+| 167 | `scheduler_runs` | `scheduler_cmds` | 1 | 1 | 0 |
+| 168 | `scheduler_duplicate` | `scheduler_cmds` | 1 | 1 | 0 |
+| 169 | `scheduler_export` | `scheduler_cmds` | 1 | 1 | 0 |
+| 170 | `scheduler_battery` | `scheduler_cmds` | 1 | 1 | 0 |
+| 171 | `scheduler_fire_event` | `scheduler_cmds` | 1 | 1 | 0 |
+| 172 | `scheduler_fire_webhook` | `scheduler_cmds` | 0 | 0 | 0 |
+| 173 | `scheduler_nudges` | `scheduler_cmds` | 1 | 1 | 0 |
+| 174 | `scheduler_nudge` | `scheduler_cmds` | 1 | 1 | 0 |
+| 175 | `scheduler_notepad_get` | `scheduler_cmds` | 1 | 1 | 0 |
+| 176 | `scheduler_notepad_append` | `scheduler_cmds` | 1 | 1 | 0 |
+| 177 | `scheduler_incidents` | `scheduler_cmds` | 1 | 1 | 0 |
+| 178 | `scheduler_incident_ack` | `scheduler_cmds` | 1 | 1 | 0 |
+| 179 | `scheduler_doctor` | `scheduler_cmds` | 1 | 1 | 0 |
+| 180 | `tasks_list` | `tasks_cmds` | 1 | 1 | 0 |
+| 181 | `tasks_show` | `tasks_cmds` | 1 | 1 | 0 |
+| 182 | `tasks_cancel` | `tasks_cmds` | 1 | 1 | 0 |
+| 183 | `tasks_retry` | `tasks_cmds` | 1 | 1 | 0 |
+| 184 | `tasks_enqueue` | `tasks_cmds` | 1 | 1 | 0 |
+| 185 | `tasks_start` | `tasks_cmds` | 0 | 0 | 0 |
+| 186 | `tasks_complete` | `tasks_cmds` | 0 | 0 | 0 |
+| 187 | `tasks_sweep` | `tasks_cmds` | 0 | 0 | 1 |
+| 188 | `storage_health` | `storage_cmds` | 1 | 1 | 0 |
+| 189 | `storage_scan` | `storage_cmds` | 1 | 1 | 0 |
+| 190 | `storage_large_files` | `storage_cmds` | 1 | 1 | 0 |
+| 191 | `storage_duplicates` | `storage_cmds` | 1 | 1 | 0 |
+| 192 | `storage_cleanup_proposals` | `storage_cmds` | 1 | 1 | 0 |
+| 193 | `storage_battery` | `storage_cmds` | 1 | 1 | 0 |
+| 194 | `sync_export_bundle` | `sync_cmds` | 1 | 1 | 0 |
+| 195 | `sync_import_bundle` | `sync_cmds` | 1 | 1 | 0 |
+| 196 | `sync_keypair_generate` | `sync_cmds` | 1 | 1 | 0 |
+| 197 | `sync_public_key` | `sync_cmds` | 1 | 1 | 0 |
+| 198 | `sync_serve_start` | `sync_cmds` | 1 | 1 | 0 |
+| 199 | `sync_serve_stop` | `sync_cmds` | 1 | 1 | 0 |
+| 200 | `sync_serve_status` | `sync_cmds` | 1 | 1 | 0 |
+| 201 | `sync_peer_sync` | `sync_cmds` | 1 | 1 | 0 |
+| 202 | `node_attach` | `sync_cmds` | 1 | 1 | 0 |
+| 203 | `sync_fingerprint` | `sync_cmds` | 1 | 1 | 0 |
+| 204 | `updater_check` | `updater_cmds` | 1 | 1 | 0 |
+| 205 | `updater_install` | `updater_cmds` | 1 | 1 | 0 |
+| 206 | `fs_home` | `fs_cmds` | 1 | 1 | 0 |
+| 207 | `fs_list_dir` | `fs_cmds` | 1 | 1 | 0 |
+| 208 | `fs_read_file` | `fs_cmds` | 1 | 1 | 0 |
+| 209 | `fs_write_file` | `fs_cmds` | 1 | 1 | 0 |
+| 210 | `fs_write_ticket` | `fs_cmds` | 1 | 1 | 0 |
+| 211 | `fs_write_commit` | `fs_cmds` | 1 | 1 | 0 |
+| 212 | `fs_undo_list` | `fs_cmds` | 1 | 1 | 0 |
+| 213 | `fs_undo_restore` | `fs_cmds` | 1 | 1 | 0 |
+| 214 | `fs_undo_snapshot` | `fs_cmds` | 1 | 1 | 0 |
+| 215 | `terminal_profiles` | `terminal_cmds` | 1 | 1 | 0 |
+| 216 | `terminal_set_default` | `terminal_cmds` | 1 | 1 | 0 |
+| 217 | `terminal_set_automation` | `terminal_cmds` | 1 | 1 | 0 |
+| 218 | `terminal_confirm_unsafe` | `terminal_cmds` | 1 | 1 | 0 |
+| 219 | `terminal_get_shell_integration` | `terminal_cmds` | 0 | 0 | 0 |
+| 220 | `terminal_set_shell_integration` | `terminal_cmds` | 1 | 1 | 0 |
+| 221 | `terminal_spawn` | `terminal_cmds` | 1 | 1 | 0 |
+| 222 | `terminal_run` | `terminal_cmds` | 1 | 1 | 0 |
+| 223 | `terminal_replay` | `terminal_cmds` | 1 | 1 | 0 |
+| 224 | `terminal_write` | `terminal_cmds` | 1 | 1 | 0 |
+| 225 | `terminal_resize` | `terminal_cmds` | 1 | 1 | 0 |
+| 226 | `terminal_kill` | `terminal_cmds` | 1 | 1 | 0 |
+| 227 | `terminal_status` | `terminal_cmds` | 1 | 1 | 0 |
+| 228 | `terminal_commands` | `terminal_cmds` | 1 | 1 | 0 |
+| 229 | `terminal_last_command_context` | `terminal_cmds` | 1 | 1 | 0 |
+| 230 | `terminal_history_context` | `terminal_cmds` | 1 | 1 | 0 |
+| 231 | `browser_list_installed` | `browser_cmds` | 1 | 1 | 0 |
+| 232 | `browser_get_config` | `browser_cmds` | 1 | 1 | 0 |
+| 233 | `browser_set_config` | `browser_cmds` | 1 | 1 | 0 |
+| 234 | `browser_start` | `browser_cmds` | 1 | 1 | 0 |
+| 235 | `browser_navigate` | `browser_cmds` | 1 | 1 | 0 |
+| 236 | `browser_snapshot` | `browser_cmds` | 1 | 1 | 0 |
+| 237 | `browser_read` | `browser_cmds` | 1 | 1 | 0 |
+| 238 | `browser_read_url` | `browser_cmds` | 1 | 1 | 0 |
+| 239 | `browser_click` | `browser_cmds` | 1 | 1 | 0 |
+| 240 | `browser_type` | `browser_cmds` | 1 | 1 | 0 |
+| 241 | `browser_stop` | `browser_cmds` | 1 | 1 | 0 |
+| 242 | `browser_status` | `browser_cmds` | 1 | 1 | 0 |
+| 243 | `memory_request` | `memory_cmds` | 4 | 4 | 0 |
+| 244 | `memory_read` | `memory_cmds` | 1 | 1 | 0 |
+| 245 | `git_status` | `git_cmds` | 1 | 1 | 0 |
+| 246 | `git_log` | `git_cmds` | 1 | 1 | 0 |
+| 247 | `git_diff` | `git_cmds` | 1 | 1 | 0 |
+| 248 | `git_stage_all` | `git_cmds` | 1 | 1 | 0 |
+| 249 | `git_commit` | `git_cmds` | 1 | 1 | 0 |
+| 250 | `git_root` | `git_cmds` | 1 | 1 | 0 |
+| 251 | `git_worktree_add` | `git_cmds` | 1 | 1 | 0 |
+| 252 | `git_worktree_list` | `git_cmds` | 1 | 1 | 0 |
+| 253 | `git_worktree_merge` | `git_cmds` | 1 | 1 | 0 |
+| 254 | `git_worktree_revert` | `git_cmds` | 1 | 1 | 0 |
+| 255 | `lsp_diagnostics` | `lsp_cmds` | 1 | 1 | 0 |
+| 256 | `repomap_build` | `codeintel_cmds` | 0 | 0 | 4 |
+| 257 | `file_outline` | `codeintel_cmds` | 0 | 0 | 2 |
+| 258 | `model_aliases_resolve` | `codeintel_cmds` | 0 | 0 | 0 |
+| 259 | `ai_markers_scan` | `codeintel_cmds` | 0 | 0 | 0 |
+| 260 | `desktop_status` | `desktop_cmds` | 2 | 2 | 0 |
+| 261 | `desktop_attach` | `desktop_cmds` | 2 | 4 | 0 |
+| 262 | `desktop_policy_get` | `desktop_cmds` | 1 | 1 | 0 |
+| 263 | `desktop_apps` | `desktop_cmds` | 2 | 3 | 0 |
+| 264 | `desktop_policy_allow_path` | `desktop_cmds` | 1 | 3 | 0 |
+| 265 | `desktop_policy_remove_path` | `desktop_cmds` | 1 | 3 | 0 |
+| 266 | `desktop_policy_set_interaction` | `desktop_cmds` | 1 | 3 | 0 |
+| 267 | `desktop_windows` | `desktop_cmds` | 1 | 1 | 0 |
+| 268 | `desktop_read` | `desktop_cmds` | 1 | 1 | 0 |
+| 269 | `desktop_see` | `desktop_cmds` | 1 | 1 | 0 |
+| 270 | `desktop_act` | `desktop_cmds` | 1 | 1 | 0 |
+| 271 | `desktop_escalation` | `desktop_cmds` | 1 | 1 | 0 |
+| 272 | `desktop_act_escalating` | `desktop_cmds` | 1 | 1 | 0 |
+| 273 | `desktop_stop` | `desktop_cmds` | 1 | 1 | 0 |
+| 274 | `cua_dag_get` | `desktop_cmds` | 1 | 1 | 0 |
+| 275 | `cua_dag_edit_remaining` | `desktop_cmds` | 1 | 1 | 0 |
+| 276 | `work_list` | `work_cmds` | 1 | 1 | 0 |
+| 277 | `work_snapshot` | `work_cmds` | 1 | 1 | 0 |
+| 278 | `work_events` | `work_cmds` | 1 | 1 | 0 |
+| 279 | `work_presence` | `work_cmds` | 1 | 1 | 0 |
+| 280 | `work_reviews` | `work_cmds` | 1 | 1 | 0 |
+| 281 | `work_pty_spawn` | `work_cmds` | 1 | 1 | 0 |
+| 282 | `work_pty_resize` | `work_cmds` | 1 | 1 | 0 |
+| 283 | `work_pty_signal` | `work_cmds` | 1 | 1 | 0 |
+| 284 | `work_pty_close` | `work_cmds` | 1 | 1 | 0 |
+| 285 | `work_pty_snapshot` | `work_cmds` | 1 | 1 | 0 |
+| 286 | `work_worktree_create` | `work_cmds` | 1 | 1 | 0 |
+| 287 | `work_worktree_attach` | `work_cmds` | 1 | 1 | 0 |
+| 288 | `work_worktree_op` | `work_cmds` | 1 | 1 | 0 |
+| 289 | `work_agent_spawn` | `work_cmds` | 1 | 1 | 0 |
+| 290 | `work_agent_op` | `work_cmds` | 1 | 1 | 0 |
+| 291 | `work_agent_sessions` | `work_cmds` | 1 | 1 | 0 |
+| 292 | `work_children` | `work_cmds` | 1 | 1 | 0 |
+| 293 | `work_create` | `work_cmds` | 0 | 0 | 0 |
+| 294 | `work_get` | `work_cmds` | 0 | 0 | 0 |
+| 295 | `work_archive` | `work_cmds` | 0 | 0 | 0 |
+| 296 | `work_locator` | `work_cmds` | 0 | 0 | 0 |
+| 297 | `work_nodes` | `work_cmds` | 0 | 0 | 0 |
+| 298 | `work_node_register` | `work_cmds` | 0 | 0 | 0 |
+| 299 | `work_node_bind` | `work_cmds` | 0 | 0 | 0 |
+| 300 | `work_node_unbind` | `work_cmds` | 0 | 0 | 0 |
+| 301 | `work_authority_acquire` | `work_cmds` | 0 | 0 | 0 |
+| 302 | `work_authority_renew` | `work_cmds` | 0 | 0 | 0 |
+| 303 | `work_authority_release` | `work_cmds` | 0 | 0 | 0 |
+| 304 | `work_clients` | `work_cmds` | 0 | 0 | 0 |
+| 305 | `work_client_connect` | `work_cmds` | 0 | 0 | 0 |
+| 306 | `work_client_detach` | `work_cmds` | 0 | 0 | 0 |
+| 307 | `work_capabilities` | `work_cmds` | 0 | 0 | 0 |
+| 308 | `work_capability_grant` | `work_cmds` | 0 | 0 | 0 |
+| 309 | `work_capability_resolve` | `work_cmds` | 0 | 0 | 0 |
+| 310 | `work_review_resolve` | `work_cmds` | 0 | 0 | 0 |
+| 311 | `work_steer` | `work_cmds` | 0 | 0 | 0 |
+| 312 | `work_steer_interrupt` | `work_cmds` | 0 | 0 | 0 |
+| 313 | `work_manifest_create` | `work_cmds` | 0 | 0 | 0 |
+| 314 | `work_manifest_get` | `work_cmds` | 0 | 0 | 0 |
+| 315 | `work_manifest_restore` | `work_cmds` | 0 | 0 | 0 |
+| 316 | `work_attachment_add` | `work_cmds` | 0 | 0 | 0 |
+| 317 | `work_attachment_list` | `work_cmds` | 0 | 0 | 0 |
+| 318 | `work_attachment_resolve` | `work_cmds` | 0 | 0 | 0 |
+| 319 | `artifact_serve` | `artifact_cmds` | 1 | 1 | 0 |
+| 320 | `artifact_stop` | `artifact_cmds` | 1 | 1 | 0 |
+| 321 | `doctor_report` | `doctor_cmds` | 1 | 1 | 0 |
+| 322 | `openai_server_start` | `openai_cmds` | 1 | 1 | 0 |
+| 323 | `openai_server_stop` | `openai_cmds` | 1 | 1 | 0 |
+| 324 | `openai_server_status` | `openai_cmds` | 1 | 1 | 0 |
+| 325 | `discovery_inventory` | `discovery_cmds` | 1 | 1 | 0 |
+| 326 | `routing_feed_decide` | `discovery_cmds` | 1 | 1 | 0 |
+| 327 | `provider_health_probe` | `discovery_cmds` | 0 | 0 | 0 |
+| 328 | `settings_providers_list` | `settings_cmds` | 1 | 2 | 0 |
+| 329 | `settings_default_model_get` | `settings_cmds` | 1 | 2 | 0 |
+| 330 | `settings_default_model_set` | `settings_cmds` | 1 | 2 | 0 |
+| 331 | `settings_agents_list` | `settings_cmds` | 1 | 2 | 0 |
+| 332 | `settings_agent_get` | `settings_cmds` | 1 | 2 | 0 |
+| 333 | `settings_agent_loadout` | `settings_cmds` | 1 | 1 | 0 |
+| 334 | `settings_connections_list` | `settings_cmds` | 1 | 2 | 0 |
+| 335 | `settings_schedules_list` | `settings_cmds` | 1 | 2 | 0 |
+| 336 | `settings_schedule_get` | `settings_cmds` | 1 | 1 | 0 |
+| 337 | `settings_schedule_set_enabled` | `settings_cmds` | 1 | 2 | 0 |
+| 338 | `settings_extensions_list` | `settings_cmds` | 1 | 2 | 0 |
+| 339 | `voice_status` | `voice_cmds` | 1 | 1 | 0 |
+| 340 | `voice_vad_classify` | `voice_cmds` | 1 | 1 | 0 |
+| 341 | `voice_process_utterance` | `voice_cmds` | 1 | 1 | 0 |
 
 ### 15.2 Coordinator IPC method registry (`handleRequest`)
 
@@ -9520,7 +9542,7 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 
 ### 15.3 Full file index (every git-tracked path, grouped by directory)
 
-- `./` — .gitignore, .pre-commit-config.yaml, 8cfdc45d-f91f-4857-8ca5-9777c8ae4822.png, AGENTS.md, CODEBASE-MAP.md, COMPETITIVE-POSITIONING.md, CURRENT_RUN.md, DESKTOP-APP-SPEC.md, LICENSE, LICENSE-APACHE, LICENSE-MIT, README.md, SPEC-CHANGELOG.md, TEST-CASES.md, TODO.md, UI-DESIGN-PROMPT.md, UX-TESTING-PLAN.md, bun.lock, capabilities.yaml, package-lock.json, package.json, pnpm-lock.yaml, pnpm-workspace.yaml, testcases.md, tsconfig.json
+- `./` — .gitignore, .pre-commit-config.yaml, 8cfdc45d-f91f-4857-8ca5-9777c8ae4822.png, AGENTS.md, CODEBASE-MAP.md, COMPETITIVE-POSITIONING.md, CURRENT_RUN.md, DESKTOP-APP-SPEC.md, LICENSE, LICENSE-APACHE, LICENSE-MIT, README.md, SPEC-CHANGELOG.md, SUPPORT-MATRIX.md, TEST-CASES.md, TODO.md, UI-DESIGN-PROMPT.md, UX-TESTING-PLAN.md, bun.lock, capabilities.yaml, package-lock.json, package.json, pnpm-lock.yaml, pnpm-workspace.yaml, testcases.md, tsconfig.json
 - `.agents/` — README.md
 - `.agents/docs/` — README.md, agent-agnostic-compatibility.md, architecture-and-protocol.md, installation.md, research.md
 - `.agents/skills/codebase-intelligence/` — SKILL.md, requirements.txt
@@ -9532,7 +9554,8 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 - `ARCH/` — 00-INDEX.md, 01-SYSTEM-ARCHITECTURE.md, 02-MODULE-LAYOUT.md, 03-BYOK-KEYRINGS.md, 04-OFFICE-ENGINE.md, 05-TOKEN-ECONOMY.md, 06-SECURITY-GUARDRAILS.md, 07-MEMORY-CONTEXT.md, 08-BROWSER-LAYER.md, 09-FEATURE-MATRIX.md, 10-BUILD-PLAN.md, 11-AI-CHAT-FEATURES.md, 12-UI-SPEC.md, 13-PROMPT-ANATOMY.md, 15-CONNECT-STORE.md, AGENT.md, AUTOMATION.md, CAPABILITIES.md, CONTEXT.md, CORE.md, DESKTOP.md, DIAGRAMS.md, EXTERNAL-AGENTS.md, MEMORY.md, RECOVERY.md, ROUTING.md, SECURITY.md, SESSION.md, UI.md, WORK.md
 - `ARCH/ADR/` — 0001-connector-platform-mcp-first.md, 0002-ui-v2-cockpit-replaces-v1-router-pages.md, 0003-architecture-thaw-core-authority.md, 0004-behaviour-profile-invariant.md, 0005-external-agents-are-the-v1-engines.md, 0006-session-kinds.md
 - `ARCH/archive/` — 16-CHAT-LOOP-RUST-PORT.md, 17-NATIVE-AGENT.md, native_loop.rs
-- `ARCH/archive/coordinator-loop/` — agent-patterns.test.ts, agent-patterns.ts, chat.test.ts, chat.ts, chief-dispatch.test.ts, chunking.test.ts, chunking.ts, citations.test.ts, citations.ts, context-providers.ts, cowork-swarm-verification.test.ts, edit-strategies.ts, first-class-tools.test.ts, first-class-tools.ts, intent.ts, mention.test.ts, mention.ts, p64-ladder-diff.test.ts, p64-lane.test.ts, plan.test.ts, plan.ts, prompt.test.ts, prompt.ts, real-tasks-benchmark.test.ts, tools.test.ts, tools.ts
+- `ARCH/archive/coordinator-loop/` — README.md, agent-patterns.test.ts, agent-patterns.ts, chat.test.ts, chat.ts, chief-dispatch.test.ts, chunking.test.ts, chunking.ts, citations.test.ts, citations.ts, context-providers.ts, cowork-swarm-verification.test.ts, edit-strategies.ts, first-class-tools.test.ts, first-class-tools.ts, intent.ts, mention.test.ts, mention.ts, p64-ladder-diff.test.ts, p64-lane.test.ts, plan.test.ts, plan.ts, prompt.test.ts, prompt.ts, real-tasks-benchmark.test.ts, tools.test.ts, tools.ts
+- `ARCH/archive/core-engine/` — README.md, package.json, tsconfig.json, vitest.config.ts
 - `ARCH/archive/core-engine/src/` — automation-engine.ts, engine.ts, index.ts, risk-compass.ts, surface-contract.ts, trajectory.ts, types.ts
 - `ARCH/archive/core-engine/src/__tests__/` — agent-routing.test.ts, engine.test.ts, permission-gate.test.ts, risk-compass.test.ts, trajectory.test.ts, trust-ladder.test.ts
 - `ARCH/archive/core-engine/src/context/` — index.ts, manager.ts
@@ -9545,7 +9568,7 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 - `crates/everyaios-acp/` — Cargo.toml
 - `crates/everyaios-acp/src/` — a2a.rs, agent_backend.rs, chief.rs, client.rs, frame.rs, harness_config.rs, installer.rs, lib.rs, messages.rs, registry.rs, registry_client.rs, registry_index.rs
 - `crates/everyaios-acp/src/bin/` — acpx.rs, mock-agent-permission.rs, mock-agent.rs, mock_acp_agent.rs
-- `crates/everyaios-acp/tests/` — acceptance_acp_handshake.rs, live_registry.rs, live_spawn.rs, p10_harness_drive.rs, p63_backend_env.rs, side_by_side.rs
+- `crates/everyaios-acp/tests/` — acceptance_acp_handshake.rs, acceptance_engine_optional.rs, live_registry.rs, live_spawn.rs, p10_harness_drive.rs, p63_backend_env.rs, side_by_side.rs
 - `crates/everyaios-agents/` — Cargo.toml
 - `crates/everyaios-agents/src/` — bundle.rs, directory.rs, lib.rs, moa.rs, registry.rs, scope.rs, templates.rs, workflows.rs
 - `crates/everyaios-audit/` — Cargo.toml
@@ -9570,7 +9593,7 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 - `crates/everyaios-core/src/bin/` — mock-worker.rs
 - `crates/everyaios-core/src/connectors/` — browser_session.rs, calendar.rs, gmail.rs, graph.rs, gws.rs, imap_smtp.rs, mod.rs, native.rs, read_first.rs, scopes.rs, workspace.rs
 - `crates/everyaios-core/src/models/` — best.rs, cache.rs, fit.rs, hf.rs, local_url.rs, mlx.rs, mod.rs, probe.rs, store.rs
-- `crates/everyaios-core/tests/` — acceptance_edit_ladder.rs, acceptance_terminal_automation.rs, p10_bench.rs, p10_e2e.rs, p10_security.rs, p50_e2e.rs, p50_gates.rs, sidecar_handoff.rs, worker_pool.rs
+- `crates/everyaios-core/tests/` — acceptance_edit_ladder.rs, acceptance_terminal_automation.rs, p10_bench.rs, p10_e2e.rs, p10_security.rs, p50_gates.rs, sidecar_handoff.rs, worker_pool.rs
 - `crates/everyaios-core/tests/fixtures/` — p64_edit_ladder.json
 - `crates/everyaios-desktop/` — Cargo.toml
 - `crates/everyaios-desktop/src/` — apps.rs, launch.rs, lib.rs, ocr.rs, policy.rs, readiness.rs, router.rs, types.rs, verify.rs
@@ -9616,7 +9639,7 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 - `deploy/` — BYO-HOST.md, Dockerfile, com.everyaios.node.plist, docker-compose.yml, everyaios-node.service, fly.toml
 - `docs/codebase/` — README.md, architecture.md, components.md, data-and-state.md, decisions.md, external-systems.md, flows.md, freshness.json, hotspots.md, invariants.md, tests-and-verification.md
 - `packages/coordinator/` — package.json, tsconfig.json
-- `packages/coordinator/src/` — agent-builder.test.ts, agui.ts, budget.test.ts, budget.ts, capability-seams.test.ts, capability-seams.ts, catalog.test.ts, catalog.ts, channel-a.test.ts, channel-a.ts, combo-pick.test.ts, combo-pick.ts, companion.ts, connector-bridge.ts, context-trace.test.ts, context-trace.ts, core-providers.smoke.test.ts, cua-brief.test.ts, cua-brief.ts, cua-perceive.test.ts, cua-perceive.ts, cua-replan.test.ts, cua-replan.ts, cua-route.test.ts, cua-route.ts, cua-skill.test.ts, cua-skill.ts, cua-stop.test.ts, cua-stop.ts, cua-verify.test.ts, cua-verify.ts, dream-diary.test.ts, dream-diary.ts, external-inbox.test.ts, external-inbox.ts, fabric.test.ts, fabric.ts, fleet.test.ts, fleet.ts, frame.ts, goal.test.ts, goal.ts, guard.test.ts, guard.ts, h32.test.ts, h32.ts, heap.test.ts, heap.ts, index.test.ts, index.ts, live-agent-harness.test.ts, mcp-bridge.test.ts, mcp-bridge.ts, mcp-catalog.test.ts, mcp-catalog.ts, mcp-install.test.ts, mcp-install.ts, mcp-manager.test.ts, mcp-manager.ts, message.ts, migration-import.test.ts, migration-import.ts, observations.test.ts, observations.ts, orphan.ts, patch-overlay.test.ts, patch-overlay.ts, persona-registry.test.ts, persona-registry.ts, reflection-agui.test.ts, reflection.ts, resumable.test.ts, resumable.ts, router-scorer.test.ts, router.ts, run-identity.ts, runtime-bind.test.ts, runtime-bind.ts, scheduler.test.ts, scheduler.ts, scorer.test.ts, scorer.ts, skill-warm.test.ts, skill-warm.ts, spend-split.test.ts, spend-split.ts, stream-session.test.ts, stream-session.ts, surfaces.test.ts, surfaces.ts, waterfall.test.ts, waterfall.ts, work-events.ts
+- `packages/coordinator/src/` — agent-builder.test.ts, agui.ts, budget.test.ts, budget.ts, capability-seams.test.ts, capability-seams.ts, catalog.test.ts, catalog.ts, channel-a.test.ts, channel-a.ts, combo-pick.test.ts, combo-pick.ts, companion.ts, connector-bridge.ts, context-trace.test.ts, context-trace.ts, core-providers.smoke.test.ts, cua-brief.test.ts, cua-brief.ts, cua-perceive.test.ts, cua-perceive.ts, cua-replan.test.ts, cua-replan.ts, cua-route.test.ts, cua-route.ts, cua-skill.test.ts, cua-skill.ts, cua-stop.test.ts, cua-stop.ts, cua-verify.test.ts, cua-verify.ts, dream-diary.test.ts, dream-diary.ts, external-inbox.test.ts, external-inbox.ts, fabric.test.ts, fabric.ts, fleet.test.ts, fleet.ts, frame.ts, goal.test.ts, goal.ts, guard.test.ts, guard.ts, h32.test.ts, h32.ts, heap.test.ts, heap.ts, index.test.ts, index.ts, live-agent-harness.test.ts, mcp-bridge.test.ts, mcp-bridge.ts, mcp-catalog.test.ts, mcp-catalog.ts, mcp-install.test.ts, mcp-install.ts, mcp-manager.test.ts, mcp-manager.ts, message.ts, migration-import.test.ts, migration-import.ts, observations.test.ts, observations.ts, orphan.ts, patch-overlay.test.ts, patch-overlay.ts, persona-registry.test.ts, persona-registry.ts, primary-agent.test.ts, primary-agent.ts, reflection-agui.test.ts, reflection.ts, resumable.test.ts, resumable.ts, router-scorer.test.ts, router.ts, run-identity.ts, runtime-bind.test.ts, runtime-bind.ts, scheduler.test.ts, scheduler.ts, scorer.test.ts, scorer.ts, skill-warm.test.ts, skill-warm.ts, spend-split.test.ts, spend-split.ts, stream-session.test.ts, stream-session.ts, surfaces.test.ts, surfaces.ts, waterfall.test.ts, waterfall.ts, work-events.ts
 - `packages/core-agents/` — package.json, tsconfig.json
 - `packages/core-agents/.turbo/` — turbo-build.log, turbo-test.log, turbo-type-check.log
 - `packages/core-agents/src/` — index.ts, registry.ts, types.ts
@@ -9643,8 +9666,6 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 - `packages/core-domain/src/` — index.ts
 - `packages/core-domain/src/types/` — assistant-request-plan.ts, billing.ts, connectors.ts, files.ts, index.ts, ledger.ts, machines.ts, memory.ts, message-parts.ts, op-log.ts, providers.ts, result.ts, router.ts, search.ts, tasks.ts
 - `packages/core-domain/src/types/__tests__/` — message-parts.test.ts
-- `packages/core-engine/` — package.json, tsconfig.json, vitest.config.ts
-- `packages/core-engine/.turbo/` — turbo-build.log, turbo-test.log, turbo-type-check.log
 - `packages/core-memory/` — package.json, tsconfig.json, vitest.config.ts
 - `packages/core-memory/.turbo/` — turbo-build.log, turbo-lint.log, turbo-test.log, turbo-type-check.log
 - `packages/core-memory/src/` — auto-promote.ts, categories.ts, conflict.ts, correction-detector.ts, correction-store.ts, decay.ts, forgetting-to-remember.ts, index.ts, kg-extraction.ts, kg-llm-refinement.ts, knowledge-graph.ts, phantom-thread.ts, router-integration.ts, service.ts, spreading-activation.ts, temporal-anticipation.ts
@@ -9671,7 +9692,7 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 - `packages/core-tools/.turbo/` — turbo-build.log, turbo-test.log, turbo-type-check.log
 - `packages/core-tools/src/` — image-generation.ts, index.ts, tool-function-calling.ts, tool-runtime.ts, types.ts
 - `packages/core-tools/src/__tests__/` — tool-runtime.test.ts
-- `scripts/` — check-arch-invariants.mjs, check-doc-sync.mjs, clean-profile-boot-check.mjs, gen-codebase-map.mjs, gen-icons.py, ipc-parity.mjs, measure-perf-p45.mjs, p45-live-measurements.json, verify-packaged-e2e.mjs, zen-free-probe.mjs
+- `scripts/` — check-arch-invariants.mjs, check-artifact-hygiene.mjs, check-doc-sync.mjs, clean-profile-boot-check.mjs, gen-codebase-map.mjs, gen-icons.py, ipc-parity.mjs, measure-perf-p45.mjs, p45-live-measurements.json, verify-packaged-e2e.mjs, zen-free-probe.mjs
 - `scripts/e2e/` — debug-cancel.mjs, debug-probe.mjs, failure-injection.mjs, searxng-settings.yml, security-gate.mjs, vertical-chat.mjs
 - `scripts/e2e/lib/` — protocol.mjs, provider.mjs
 - `src-tauri/` — Cargo.lock, Cargo.toml, build.rs, tauri.conf.json
@@ -9700,13 +9721,13 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 | Extension | Files |
 | --- | ---: |
 | `.rs` | 508 |
-| `.ts` | 473 |
-| `.md` | 182 |
+| `.ts` | 475 |
+| `.md` | 185 |
 | `.tsx` | 146 |
 | `.json` | 42 |
-| `.log` | 37 |
+| `.log` | 34 |
 | `.toml` | 25 |
-| `.mjs` | 16 |
+| `.mjs` | 17 |
 | `.yml` | 7 |
 | `(no extension)` | 6 |
 | `.png` | 5 |
@@ -9720,9 +9741,9 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 | `.ico` | 1 |
 | `.js` | 1 |
 | `.css` | 1 |
-| **TOTAL tracked** | **1466** |
+| **TOTAL tracked** | **1469** |
 
-Lines counted across the 1459 tracked text files at generation time: **409,054** (this map excluded — self-referential).
+Lines counted across the 1462 tracked text files at generation time: **411,543** (this map excluded — self-referential).
 
 ### 15.5 Coverage audit — is any tracked file unaccounted for?
 
@@ -9731,11 +9752,11 @@ Each section registers the files it gives an entry to; this table is a diff agai
 | Section | Files accounted for |
 | --- | ---: |
 | §9 Rust — per-file `####` | 508 |
-| §10 TS/TSX — per-file `####` | 619 |
-| §12.2 npm manifests | 12 |
-| §13 non-source inventory | 145 |
-| §14 documentation index | 182 |
-| **TOTAL** | **1466 / 1466** |
+| §10 TS/TSX — per-file `####` | 621 |
+| §12.2 npm manifests | 13 |
+| §13 non-source inventory | 142 |
+| §14 documentation index | 185 |
+| **TOTAL** | **1469 / 1469** |
 
 **100% of tracked files have an entry, and that is mechanically enforced:** the generator exits non-zero if this
 list is ever non-empty. Note what this does *not* claim — an entry is accounting, not explanation. §9/§10
