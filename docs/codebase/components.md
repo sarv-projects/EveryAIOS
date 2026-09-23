@@ -44,7 +44,7 @@ coverage claim — see [tests-and-verification.md](tests-and-verification.md)).
 - **Protocol:** must match `PROTOCOL_VERSION = 1` on the UI side
   (`crates/everyaios-ipc/src/lib.rs:40`).
 
-## L2 — Rust kernel (`crates/`, 22 workspace members)
+## L2 — Rust kernel (`crates/`, 21 workspace members)
 
 Responsibilities are each crate's own module doc (`crates/*/src/lib.rs`):
 
@@ -66,7 +66,7 @@ Responsibilities are each crate's own module doc (`crates/*/src/lib.rs`):
 | `everyaios-agents` | "P31 — custom agent bundles (B9)" — `bundle.rs`, `moa.rs` |
 | `everyaios-catalog` | "P14 — Model catalog (models.dev)" — `catalog.rs`, `discovery.rs`, `fetch.rs` |
 | `everyaios-codeintel` | "code intelligence (P7.1, I11)" — `docs_lookup.rs`, `edit.rs` |
-| `everyaios-engine` | "Rust port slice of the TS `ConversationEngine`" — `gate.rs`, `plan.rs`. *(Module doc verbatim; post-thaw status: `ARCH/16` (**archived 2026-09-22** — [`ARCH/archive/16-CHAT-LOOP-RUST-PORT.md`](../../ARCH/archive/16-CHAT-LOOP-RUST-PORT.md), `P71.5a`) is an ownership/migration note — the loop is owned by the selected agent binding, the coordinator does turn coordination, and this crate's target is pure policies/helpers (TODO P69.A25/P69.D8). **Amended 2026-09-21:** v1 ships no built-in engine ([`../ARCH/ADR/0005`](../../ARCH/ADR/0005-external-agents-are-the-v1-engines.md)), so there is no EveryAIOS turn loop to port at all.)* |
+| `everyaios-engine` | *(deleted 2026-09-23, P72 — had been "Rust port slice of the TS `ConversationEngine`": `gate.rs`, `plan.rs`, `risk.rs`, `contract`)* — zero dependents since `P71.2c`; post-thaw the loop is owned by the selected agent binding (`ARCH/16` archived, `P71.5a`), v1 ships no built-in engine (`ADR/0005`), so the crate had no remaining consumers |
 | `everyaios-eval` | "Verified-Completion Eval Subsystem (P8.0, EV1)" — `batch.rs`, `corpus.rs`, `evidence.rs` |
 | `everyaios-script` | "the `run`/`evaluate` sandbox (ARCH/08 §8.4, E4)" — `artifact.rs`, `sandbox.rs` |
 | `everyaios-search` | "search & research (P8.4)" — `searx_space.rs` |

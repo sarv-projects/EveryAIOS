@@ -20,6 +20,10 @@ tauri-plugin-dialog = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 base64 = "0.22"
+# P70.C2 — the channel-aware updater builds endpoint URLs from strings.
+url = "2"
+# P70.C4 — the periodic update-check loop shares the runtime the plugin uses.
+tokio = { version = "1", features = ["time"] }
 # P63 — scrub the raw provider key the moment an agent's spawn env is built
 # (`agent_backend_cmds`). The vault already zeroizes internally; this keeps
 # the shell's own copy of the value from lingering in the heap.

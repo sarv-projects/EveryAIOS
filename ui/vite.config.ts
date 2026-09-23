@@ -5,16 +5,26 @@ import { fileURLToPath, URL } from "node:url";
 // Tauri expects a fixed frontend port for `devUrl` (see src-tauri/tauri.conf.json).
 const host = process.env.TAURI_DEV_HOST;
 
-// P58.2 — inject the package version at build time so the About stamp can
+// P58.2 — inject the application version at build time so the About stamp can
 // never rot. A plain literal in settings-sections-extra.tsx drifted (claimed
 // v0.7.2 · build 2026.01.15 while package.json says 2.0.0).
-import pkg from "./package.json" with { type: "json" };
+//
+// P70.A7 — the source of that version is `src-tauri/tauri.conf.json`, **not**
+// `ui/package.json`. That file's `version` is what Tauri writes into the
+// installer metadata and the updater manifest, so injecting it here is what
+// stops the badge from disagreeing with what was actually installed (it read
+//
+//   2.0.0 (ui/package.json)  vs  0.1.0 (installer/updater)
+//
+// — two surfaces stating different versions of the same product).
+// `scripts/check-versions.mjs` fails the build if any consumer drifts.
+import tauriConf from "../src-tauri/tauri.conf.json" with { type: "json" };
 
 export default defineConfig({
   plugins: [react()],
-  // P58.2 — __APP_VERSION__ is compile-time only (see the About section).
+  // P58.2/P70.A7 — __APP_VERSION__ is compile-time only (see the About section).
   define: {
-    __APP_VERSION__: JSON.stringify(pkg.version),
+    __APP_VERSION__: JSON.stringify(tauriConf.version),
   },
   resolve: {
     alias: {

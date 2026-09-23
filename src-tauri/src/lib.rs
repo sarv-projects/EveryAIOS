@@ -729,7 +729,11 @@ pub fn run() {
             catalog: std::sync::Arc::new(catalog_cmds::CatalogState::new(
                 everyaios_core::default_data_dir().join("catalog"),
             )),
+            pending_update: Mutex::new(None),
         })
+        // P70.C3 — the slot holding a downloaded-but-not-installed update
+        // artifact between the background download and the explicit restart.
+        .manage(updater_cmds::PendingUpdateSlot(Default::default()))
         .invoke_handler(commands::handler())
         // P8.8: auto-updater (checks + downloads against the configured
         // endpoints; signing key is the release secret).
@@ -816,6 +820,9 @@ pub fn run() {
             // merge into `launch_registry()` is memoised on the cache file's
             // mtime, so a refresh lands without a restart.
             acp_cmds::spawn_registry_refresh_job();
+            // P70.C4 — auto-update check: one shortly after boot, then every
+            // 4h. Emits `updater-status`; never degrades the running app.
+            updater_cmds::spawn_periodic_check(app.handle().clone());
             Ok(())
         })
         .run(tauri::generate_context!())

@@ -147,9 +147,11 @@ export function AdvancedSection() {
 }
 
 // === About ===
-// P58.2 — the version stamp comes from the build, never a literal that can
-// rot. `define` in vite.config.ts injects the package.json version at build
-// time (declared in src/globals.d.ts); outside a Vite build it is 'dev'.
+// P58.2/P70.A7 — the version stamp comes from the build, never a literal that
+// can rot. `define` in vite.config.ts injects the authoritative
+// `src-tauri/tauri.conf.json` version at build time (declared in
+// src/globals.d.ts); outside a Vite build it is 'dev'. One authority, so the
+// badge can never disagree with the installer/updater metadata.
 function appVersion(): string {
   try {
     return typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : 'dev'
@@ -163,11 +165,84 @@ type UpdaterState =
   | { phase: 'checking' }
   | { phase: 'up-to-date' }
   | { phase: 'available'; version: string; notes: string | null }
+  | { phase: 'downloading'; progress?: number }
+  | { phase: 'downloaded'; version?: string }
   | { phase: 'installing' }
   | { phase: 'error'; message: string }
 
 export function AboutSection() {
   const [updater, setUpdater] = useState<UpdaterState>({ phase: 'idle' })
+  // P70.C2 — the persisted release channel; the backend is authoritative.
+  const [channel, setChannel] = useState<string>('stable')
+
+  // P70.C4 — the shell pushes updater phases as `updater-status` events
+  // (auto-check at boot + every 4h, download progress). The visible state
+  // never has to lie by polling a stale snapshot.
+  useEffect(() => {
+    if (!inTauri()) return
+    let unlisten: (() => void) | undefined
+    let cancelled = false
+    ;(async () => {
+      const { listen } = await import('@/lib/tauri')
+      const off = await listen<{ phase: string; version?: string; progress?: number; error?: string; channel?: string }>(
+        'updater-status',
+        (ev) => {
+          const p = ev.payload
+          switch (p.phase) {
+            case 'available':
+              if (p.version) setUpdater({ phase: 'available', version: p.version, notes: null })
+              break
+            case 'up-to-date':
+              setUpdater((cur) => (cur.phase === 'installing' ? cur : { phase: 'up-to-date' }))
+              break
+            case 'downloading':
+              setUpdater({ phase: 'downloading', progress: p.progress })
+              break
+            case 'downloaded':
+              setUpdater({ phase: 'downloaded', version: p.version })
+              break
+            case 'failed':
+              setUpdater({ phase: 'error', message: p.error ?? 'update failed' })
+              break
+            default:
+              break
+          }
+        },
+      )
+      if (cancelled) off()
+      else unlisten = off
+    })()
+    return () => {
+      cancelled = true
+      unlisten?.()
+    }
+  }, [])
+
+  // P70.C2 — read the persisted channel once.
+  useEffect(() => {
+    if (!inTauri()) return
+    ;(async () => {
+      try {
+        const { invoke } = await import('@/lib/tauri')
+        const r = await invoke<{ channel: string }>('updater_channel_get')
+        setChannel(r.channel)
+      } catch {
+        /* the default stands; the selector still renders */
+      }
+    })()
+  }, [])
+
+  async function setUpdateChannel(next: string) {
+    setChannel(next)
+    if (!inTauri()) return
+    try {
+      const { invoke } = await import('@/lib/tauri')
+      const r = await invoke<{ channel: string }>('updater_channel_set', { channel: next })
+      setChannel(r.channel)
+    } catch (e) {
+      setUpdater({ phase: 'error', message: String(e) })
+    }
+  }
 
   async function checkForUpdates() {
     if (!inTauri()) {
@@ -190,13 +265,24 @@ export function AboutSection() {
     }
   }
 
-  async function installUpdate() {
+  async function backgroundDownload() {
+    if (!inTauri()) return
+    try {
+      const { invoke } = await import('@/lib/tauri')
+      await invoke('updater_download')
+      // Phases now arrive as `updater-status` events.
+    } catch (e) {
+      setUpdater({ phase: 'error', message: String(e) })
+    }
+  }
+
+  async function restartToUpdate() {
     if (!inTauri()) return
     setUpdater({ phase: 'installing' })
     try {
       const { invoke } = await import('@/lib/tauri')
       // On success the process relaunches, so this normally never resolves.
-      await invoke('updater_install')
+      await invoke('updater_restart')
     } catch (e) {
       setUpdater({ phase: 'error', message: String(e) })
     }
@@ -216,11 +302,19 @@ export function AboutSection() {
           <LinkChip icon={<ExternalLink className="h-3 w-3" />} label="Docs" href="https://github.com/sarv-projects/EveryAIOS#readme" />
           <LinkChip icon={<Github className="h-3 w-3" />} label="GitHub" href="https://github.com/sarv-projects/EveryAIOS" />
           <LinkChip icon={<ExternalLink className="h-3 w-3" />} label="Issues" href="https://github.com/sarv-projects/EveryAIOS/issues" />
-        </div>
-        {/* P8.8 auto-updater surface */}
+        </div>        {/* P8.8 / P70.C2–C4 auto-updater surface */}
         <div className="mt-3 border-t border-border/40 pt-3">
-          <div className="flex items-center gap-2">
-            <Button size="sm" variant="outline" disabled={updater.phase === 'checking' || updater.phase === 'installing'} onClick={checkForUpdates}>
+          <Row label="Release channel" desc="Stable is the default; beta receives preview builds first (applies to the next check)">
+            <Select value={channel} onValueChange={(v) => setUpdateChannel(v)}>
+              <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="stable">stable</SelectItem>
+                <SelectItem value="beta">beta</SelectItem>
+              </SelectContent>
+            </Select>
+          </Row>
+          <div className="mt-2 flex items-center gap-2">
+            <Button size="sm" variant="outline" disabled={updater.phase === 'checking' || updater.phase === 'installing' || updater.phase === 'downloading'} onClick={checkForUpdates}>
               {updater.phase === 'checking'
                 ? 'Checking…'
                 : updater.phase === 'installing'
@@ -229,6 +323,11 @@ export function AboutSection() {
             </Button>
             {updater.phase === 'up-to-date' && (
               <span className="text-xs text-muted-foreground">Up to date</span>
+            )}
+            {updater.phase === 'downloading' && (
+              <span className="text-xs text-muted-foreground">
+                Downloading…{typeof updater.progress === 'number' ? ` ${updater.progress}%` : ''}
+              </span>
             )}
             {(updater.phase === 'idle' || updater.phase === 'error') && (
               <span className="text-[10px] text-muted-foreground">Signed with the release key; verified before install</span>
@@ -240,11 +339,20 @@ export function AboutSection() {
               {updater.notes && (
                 <p className="mt-1 line-clamp-2 whitespace-pre-wrap text-muted-foreground">{updater.notes}</p>
               )}
-              <Button size="sm" className="mt-2" onClick={installUpdate}>
-                Download &amp; relaunch
+              <Button size="sm" className="mt-2" onClick={backgroundDownload}>
+                Download in background
               </Button>
             </div>
           )}
+          {updater.phase === 'downloaded' && (
+            <div className="mt-2 rounded-md border border-border bg-background/50 p-2 text-xs">
+              <span className="font-mono text-brand">v{updater.version ?? ''}</span> downloaded — ready to install
+              <Button size="sm" className="mt-2" onClick={restartToUpdate}>
+                Restart to update
+              </Button>
+            </div>
+          )}
+
           {updater.phase === 'error' && (
             <p className="mt-1 text-xs text-red-400">{updater.message}</p>
           )}

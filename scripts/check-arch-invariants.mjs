@@ -23,7 +23,6 @@
 //   LAYER-3  the TS search cascade is not wired into the turn loop (P69.D9)
 //   LAYER-4  the coordinator orchestrates only — no privileged IO (P69.D22)
 //   PURITY-1 `everyaios-ipc` is transport only (D26)
-//   PURITY-2 `everyaios-engine` is pure policy — no IO (D27)
 //   PURITY-3 `everyaios-catalog` is metadata only — no vault/guard (D28)
 //   PURITY-4 CDP is a backend under BrowserService, not a kernel dependency (D31)
 //
@@ -347,19 +346,8 @@ function productionDeps(crateName) {
     fail("PURITY-1", "crates/everyaios-ipc/Cargo.toml", `transport crate must not depend on ${ipcDeps.join(", ")}`);
   }
 
-  // D27 — pure policy: no IO, no runtime.
-  const engineDeps = productionDeps("everyaios-engine");
-  for (const banned of ["tokio", "ureq", "reqwest", "rusqlite"]) {
-    if (engineDeps.includes(banned)) {
-      fail("PURITY-2", "crates/everyaios-engine/Cargo.toml", `engine must stay pure — ${banned} is an IO/runtime dependency`);
-    }
-  }
-  for (const file of walk(join(ROOT, "crates", "everyaios-engine", "src"), new Set([".rs"]))) {
-    const src = readFileSync(file, "utf8");
-    for (const hit of matchesInCode(src, /(?:std::fs|std::process|std::net)::|Command::new\s*\(/)) {
-      fail("PURITY-2", rel(file), `IO in the pure engine layer at line ${hit.line}: ${hit.text}`);
-    }
-  }
+  // D27 (PURITY-2) retired 2026-09-23 with the `everyaios-engine` deletion (P72):
+  // the pure policy crate had zero dependents, so there is no purity left to gate.
 
   // D28 — provider/model metadata only; credentials and custody are elsewhere.
   const catalogDeps = productionDeps("everyaios-catalog");
@@ -511,5 +499,5 @@ if (failures.length) {
 }
 
 console.log(
-  "architecture-invariant gate: OK (CRED-1/2/3, AUTH-1/2/3, SCHEMA-1, DECIDE-1/2, LAYER-1/2/3/4, PURITY-1/2/3/4, TS-DUP, RUST-DUP)",
+  "architecture-invariant gate: OK (CRED-1/2/3, AUTH-1/2/3, SCHEMA-1, DECIDE-1/2, LAYER-1/2/3/4, PURITY-1/3/4, TS-DUP, RUST-DUP)",
 );

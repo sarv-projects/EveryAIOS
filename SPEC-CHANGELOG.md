@@ -17,6 +17,240 @@ Each entry records the date or release marker, change category, affected section
 - A citation or implementation detail may remain in the spec only when it is itself a current behavioral constraint; its historical or evidentiary explanation belongs here.
 
 ---
+## v4.00 — 2026-09-23 — The C block: update pipeline, channels, rollout, upgrade evidence (P70.C1–C7)
+
+**Category:** release engineering — the auto-update pipeline end to end, implemented and machine-checked. No capability
+change. **Capability rows:** none added, none removed — census stays **166**. **Flipped:** no checkbox flips; the seven
+rows move to `[IMPLEMENTED — unverified]` and stay counted open (**1645 = 1311 + 334**). Every marker names its residual
+— dominant one: no hosted endpoint, no served beta manifest and no sequential Windows builds exist, so the pipeline is
+verified by construction + gates, not by a live update cycle.
+
+**1. Channel-aware updater (C1/C2).** `updater_cmds.rs` reworked: channels `stable|beta` persisted atomically in
+`update_channel.json` (now a registered durable store, schema v1, stamped by `boot()`); endpoint selection is
+channel-aware — hosted base gains the channel segment, the static GitHub `latest.json` fallback is **stable-only** by
+design; `updater_check` / `updater_channel_get` / `updater_channel_set` / `updater_download` / `updater_restart` (+
+legacy `updater_install`) registered; boot check + 4h periodic check emit phases. `docs/updating.md` published (§1
+hosting contract, §2 channels, §3 staged rollout + kill switch, §4 UX, §5 upgrade data, §6 downgrade/minimum-version,
+§7 rollback drill). New gate `scripts/check-update-pipeline.mjs` keeps code, config, docs and the store registry in
+agreement.
+
+**2. Update UX that never lies (C4).** Phases arrive as `updater-status` events (background download with byte
+progress, passive install pinned in `tauri.conf.json` and asserted by the gate); the About section renders every phase
+including the running version and a stable/beta channel selector.
+
+**3. Upgrade-evidence harness (C5/C6/C7).** `crates/everyaios-core/tests/acceptance_upgrade_evidence.rs`: five pure
+tests pass (corrupt manifest reported-not-overwritten; newer-stamped store refused before any write, naming store +
+versions; pre-stamp data adopted and flagged; audit-chain validity; evidence list ↔ boot registry agreement) plus the
+ordered Windows-host driver (seal → verify-unmigrated → verify-rollback → vault `NewerSchema` refusal). Minimum-version
+statement published in `docs/updating.md` §6 and `SUPPORT-MATRIX.md` §4. **Residual: the actual N-1→N drill on
+sequential builds is P70.E8's — no marker here claims it ran.**
+
+---
+## v3.99 — 2026-09-23 — The B block: signing trust, SBOM/provenance, licence compliance (P70.B1 · B4 · B5 · B6 · B7)
+
+**Category:** release engineering — signing, provenance and licence compliance, implemented and machine-checked. No
+capability change. **Capability rows:** none added, none removed — census stays **166**. **Flipped:** no checkbox flips;
+the five rows move to `[IMPLEMENTED — unverified]` and stay counted open (**1645 = 1304 + 341**). Every marker names its
+residual — the dominant one being that no Windows artifact exists, so nothing here is verified by execution.
+
+**1. Windows code signing fails loudly instead of shipping unsigned (P70.B1).** `release.yml` gains a **`Require the
+Authenticode certificate`** step that fails the job when `WINDOWS_CERTIFICATE` / `WINDOWS_CERTIFICATE_PASSWORD` secrets
+are absent, and a **decode + import** step that refuses when the PFX yields nothing or carries no private key, exporting
+the thumbprint for tauri-bundler (signtool + RFC-3161 timestamp so signatures survive expiry). Custody, renewal,
+rotation and revocation are documented in `docs/signing.md`. `check-release-matrix.mjs` fails if the signing step
+disappears. **Residual: the certificate itself is a procurement item — the fail-loudly path is what is implemented.**
+
+**2. Updater keypair custody is machine-checked (P70.B4).** New `scripts/check-updater-keys.mjs`: `.tauri/` stays
+gitignored, the release env stays wired, the `plugins.updater.pubkey` anchor is a real minisign `RWR…` key, and — the real
+trap — **the anchor and the local public key agree** (a mismatch means locally-signed artifacts are refused by shipped
+installs, or the shipped anchor trusts a key nobody holds). Negative-tested with a fake anchor. Rotation/revocation
+procedures in `docs/signing.md` §3.2–3.3 carry the load-bearing ordering rule: an anchor update must ship **in a release
+signed with the old key**, or every existing install loses update trust.
+
+**3. SBOM + provenance per release (P70.B5).** New `scripts/gen-sbom.mjs` derives four CycloneDX 1.5 documents from the
+committed lockfiles (Rust 585 + shell 697 + UI 511 + sidecar/workspace 1126 components — the vendored `@everyaios/core-*`
+enumerated from their manifests) plus an in-toto/SLSA-v1 provenance statement (subject, commit, run, toolchains, required
+gates). Deterministic and offline; a missing/empty lockfile fails the generator rather than emitting a hollow SBOM.
+`release.yml` generates after bundling and uploads all five files to the GitHub release.
+
+**4. Licence compliance — one real copyleft defect found and removed (P70.B6).** New `scripts/check-licences.mjs`
+inventories **1337 components** across the four lockfiles, resolves every SPDX expression (`OR` = distributor's choice,
+`AND` = all arms, slash/LLVM-exception spellings), and **fails on copyleft and on any unclassified licence**. It found
+`html2md` — the tier-0 static browser engine's HTML→markdown converter — is **GPL-3.0+**, statically linked into an
+MIT OR Apache-2.0 product. **Replaced** with an in-tree ~150-line converter in `everyaios-browser/src/tiers.rs`
+(block elements, headings, emphasis/code, lists, blockquotes, entities; scripts/styles stripped; the real engines remain
+the fidelity path); the dependency is gone from `everyaios-browser/Cargo.toml` and both lockfiles; the existing
+`static_html_converts_to_markdown` test passes against the replacement. `THIRD-PARTY-NOTICES.md` is generated (1.4k
+lines) and the gate fails when it goes stale. 35 recorded decisions each carry a reason (ICU/Unicode data, `ring`,
+`webpki-roots` CDLA, `r-efi`'s LGPL arm — UEFI-target only with MIT/Apache chosen, `caniuse-lite` CC-BY build-time data,
+`model2vec-rs`'s license-file MIT). Also fixed: all ten `packages/*` manifests lacked `license` fields — now
+`MIT OR Apache-2.0`.
+
+**5. The artifact-leak gate marker was stale (P70.B7).** `check-artifact-hygiene.mjs` already scanned the produced bundle
+directories (forbidden filenames + content patterns, failing loudly on a missing scan path) and was wired into the release
+job. The row now records that honestly with the cross-checks (`check-updater-keys`, gitignore, step-scoped secrets) — no
+code was written for it.
+
+**Verification.** All gates green: `check-doc-sync` (166 capabilities; 1645 = 1304 + 341; v3.98 chrome),
+`check-arch-invariants`, `check-versions`, `check-release-matrix`, `check-app-metadata`, `check-native-deps`,
+`check-store-schemas`, `check-size-budget`, `check-licences` (**0 copyleft, 0 unclassified**), `check-updater-keys`,
+`gen-sbom` (five documents, negative-tested), `verify-packaged-e2e` (7/7). `cargo check -p everyaios-browser` clean after
+the `html2md` removal (its tier tests pass); **the full workspace test suite was not run** (instruction: compile-check
+only). `Cargo.lock` refreshed in both workspaces.
+
+---
+## v3.98 — 2026-09-23 — The packaging pipeline becomes stated, gated and budgeted (P70.A1 · A3 · A4 · A5 · A6 · A8)
+
+**Category:** release engineering — the P70.A build/bundle block, implemented and machine-checked. No capability change.
+**Capability rows:** none added, none removed — census stays **166**. **Flipped:** no checkbox flips; the six rows move from
+`[NOT DONE]`/`[PARTIAL]` to `[IMPLEMENTED — unverified]` and stay counted open, so the live count is unchanged at
+**1645 = 1304 + 341**. (Every one of them has a residual — no Windows artifact has been produced, so nothing here is
+verified by execution; the markers say so individually.)
+
+**1. The published platform set is enforced, not asserted (P70.A1).** `release.yml` already built exactly `nsis` + `msi` for
+the two Windows targets, but nothing stopped the next commit from adding a macOS leg or a `dmg` bundle. New
+`scripts/check-release-matrix.mjs` fails when a build-matrix leg runs anywhere but `windows-latest`, when the target set is
+not exactly `x86_64-pc-windows-msvc` + `aarch64-pc-windows-msvc`, when `--bundles` is anything but `nsis,msi`, when
+`tauri.conf.json` stops declaring the pair or its NSIS install mode stops being per-user `currentUser`, when
+`SUPPORT-MATRIX.md` stops declaring macOS + native Linux desktop out of v1, or when another workflow grows a `tauri-action`
+publish step or a version-tag trigger. `tauri.conf.json` deliberately keeps all six targets — that is what the local
+verification harness builds against, and the row says so.
+
+**2. The native-dependency audit is published and gated (P70.A3).** New `PACKAGING.md` states what the bundle contains
+(application binary; the coordinator compiled to a **standalone** executable and staged as a bundle resource; icons; updater
+artifacts + manifest), what is build-time only (Rust/Cargo, Node, pnpm, Bun), and classifies **every** program the shipping
+paths can execute with what provides it and what happens when it is absent — the bundled sidecar, `git`, `ollama`,
+`mlx_lm.server`, `soffice`/`libreoffice`, `tesseract`, `nvidia-smi`, `bwrap`, `pgrep`, Windows-provided `reg`/`reg.exe`/
+`wsl.exe`, the user's own agent/LSP/connector binaries, and the macOS-only `osascript`/`screencapture`/`open` paths v1 does
+not ship. `scripts/check-native-deps.mjs` enforces it: an unclassified `Command::new("…")` in shipping Rust code fails the
+build, and the toolchain names (`node`, `npm`, `npx`, `pnpm`, `bun`, `yarn`, `cargo`, `rustc`, `rustup`, `python`, `tsc`, …)
+fail outright in any spawn position **including inside a `sh -c` payload**. It also pins the two properties the whole claim
+rests on — the coordinator's build stays `bun build --compile`, and the release workflow keeps staging it as a resource.
+
+**3. Installer metadata is complete, and three real defects are fixed (P70.A4).** (a) **The MSI had no upgrade identity.**
+`bundle.windows.wix.upgradeCode` was unset, so the bundler derives it from `<productName>.exe.app.x64` — renaming the
+product would have made Windows treat the next release as a *different application*, producing duplicate installs instead of
+upgrades. It is now pinned to `5420d70f-175e-5ffa-b1d1-bd2ab2d3b8c9` (the value `tauri inspect wix-upgrade-code` derives
+today, independently reproduced as UUIDv5 over `EveryAIOS.exe.app.x64`), so pinning changes nothing now and survives a
+rename. (b) **The publisher was a fragment of the identifier** — `bundle.publisher` was unset and tauri-utils documents the
+fallback as "the second element in the identifier string", i.e. `everyaios`; it is now explicit alongside `copyright`,
+`homepage` and the SPDX `license`. (c) **File associations and a URL scheme are deliberately not declared**: the app has an
+in-app file-open path but no OS-level open-document entry point (no single-instance handling, no document event, `boot()`
+reads `args` as flags only), so registering a `.xlsx`/`.docx` double-click target would route documents to a process that
+drops them — the decision is published in `SUPPORT-MATRIX.md` §3 instead of being left implicit. New
+`scripts/check-app-metadata.mjs` holds all of it: required metadata present and not placeholders, identifier reverse-DNS,
+category in Tauri's set, every declared icon present **and carrying real PNG/ICO magic bytes**, the Windows-required icon
+set complete, the upgrade code pinned *and equal to the derived value*, the updater's passive install mode compatible with
+the per-user NSIS mode, and no association or scheme declared without its handler.
+
+**4. Size and footprint budgets are recorded with their basis (P70.A5).** New `docs/packaging/budgets.json` holds, per
+published target, NSIS/MSI ceilings, an installed-size ceiling, idle and warm combined-RSS ceilings and the 10 % regression
+threshold — each with the reason for the number, including the honest note that the spec's <30 MB idle / <80 MB warm figures
+are the Rust core only while the Bun-compiled sidecar alone measures ~93 MB (J16). `scripts/check-size-budget.mjs` validates
+the budget file in CI, measures the produced bundle in `release.yml` right after `tauri build` (installers **and** installed
+footprint, failing loudly when an artifact it was supposed to measure is missing rather than passing vacuously), and applies
+the same ceiling + regression rule to an RSS measurement file — the hook `crates/everyaios-core/src/rss_measure.rs` feeds.
+Baselines stay `null` until an artifact is measured, and the gate says so out loud.
+
+**5. CI-only, provenance-carrying builds are enforced (P70.A6).** The release workflow already triggered only on `v*` tags
+and recorded the source commit and toolchain versions; the same gate now fails when the tag trigger disappears (an untagged
+dispatch could publish), when the provenance lines are dropped, or when the published tag stops being derived from the single
+config version. 'Reproducible' is enforced as *CI-produced from a tagged commit with recorded provenance* — not as
+bit-identical rebuilds, which signed Windows installers cannot promise, and the row does not claim otherwise.
+
+**6. Durable stores get schema stamps and a forward-only path (P70.A8).** New
+`crates/everyaios-core/src/store_schema.rs` registers 14 stores (name, path, version, policy) and `boot()` stamps them, which
+is what turns 'forward-only' from a claim into behaviour. `vault` v8 and `calendar` v8 are **in-store** (`everyaios-vault`
+already keeps `schema_meta.schema_version` and returns `VaultError::NewerSchema`); `audit`, `memory`, `work_journal`,
+`checkpoints`, `scheduler`, `tasks`, `installed_agents`, `catalog_observations`, `cua_graph` and `cua_replan_log` are
+**manifest** stores recorded in `<data_dir>/store-schema.json` (written atomically) — an append-only log cannot carry
+inserted metadata without invalidating every hash after the insertion point, so the stamp lives beside it; `plan_cache` and
+`repo_cache` are **derived**, because stamping a rebuildable cache would misstate what an upgrade must preserve. Data that
+predates stamps is **adopted** and flagged as such (not claimed as migrated), a store recorded at a newer version refuses
+the boot naming the store and both versions, and a corrupt manifest is reported rather than overwritten. New
+`scripts/check-store-schemas.mjs` re-derives the persistence paths from shipping Rust code, fails on any path that is
+neither registered nor explicitly classified, cross-checks the registry against `everyaios-vault`'s own `SCHEMA_VERSION`
+and its `NewerSchema` path, requires `boot()` to keep calling `ensure_all`, and requires every store to appear with its
+version in `PACKAGING.md` §6.
+
+**7. A verification script broken by the P72 archival is re-homed.** `scripts/verify-packaged-e2e.mjs` still read
+`packages/coordinator/src/tools.ts` and `chat.ts`, which `ADR/0005` archived — it threw `ENOENT` instead of verifying
+anything. Per the archive rule the two checks move to the live owners: the first-class tool surface is now checked on
+`crates/everyaios-mcp/src/lib.rs` (`all_tools` / `inbuilt_catalog` / `validate_facades`), and prompt/context assembly on the
+Rust context passport in `src-tauri/src/acp_cmds.rs` (`build_acp_prompt_with_passport` →
+`everyaios_acp::build_chief_prompt` with `GovernedSession`). Every read now goes through a helper that records a **failed
+check** — naming the missing path — instead of crashing the runner, so the next archival cannot silently disable the suite.
+It reports **7/7 PASS** again and is wired into CI.
+
+**Verification.** `cargo check -p everyaios-core --all-targets` clean (`cargo test --workspace` **not** run for this change —
+the instruction for this pass is compile-only, and the new `store_schema` tests are therefore unexecuted); the five new gates
+run clean and each was negative-tested (added macOS leg; `--bundles nsis,msi,dmg`; dropped tag trigger + provenance line;
+dropped `publisher`; declared `.xlsx` association; mismatched upgrade code; 80 MiB NSIS against a 75 MiB ceiling; 812 MB idle
+RSS against 400 MB; unclassified persistence path; removed store-table row; registry/vault version disagreement).
+`check-doc-sync` (166 capabilities; **1645 = 1304 + 341**; shell chrome v3.98), `check-versions` (0.1.0 from
+`src-tauri/tauri.conf.json`), `check-arch-invariants`, `ipc-parity` and `verify-packaged-e2e` (7/7) are green.
+
+---
+## v3.97 — 2026-09-23 — The dead engine crate is retired, the app version gets one authority, and two gates are repaired (P72 · P70.A7)
+
+**Category:** dead-code retirement (P72) + release engineering — one application-version authority (P70.A7) + gate repair
+(two doc gates were red on the tree that P72 left behind; the generator was undercounting Tauri commands). No capability
+change.
+**Capability rows:** none added, none removed — census stays **166**. **Flipped:** no checkbox flips; the live count moves to
+**1645 = 1304 + 341** because P72 added two open rows and the header had not been bumped (repair 1 below). The three landed
+rows stay `[IMPLEMENTED — unverified]` and stay counted open.
+
+**1. `everyaios-engine` is deleted, not left dead (P72).** The crate had zero Cargo dependents since `P71.2c` archived its
+TypeScript counterpart (`packages/core-engine`, now `ARCH/archive/core-engine/`), because `ADR/0005` deferred the built-in
+engine out of v1 entirely — there was no loop left for a pure-stage port to serve. Its purity gate (PURITY-2 / `P69.D27`)
+was retired with it (a dated note sits where the block was; the gate's OK banner now reads PURITY-1/3/4). Downstream kept
+consistent: `crates/Cargo.toml` members **22 → 21**, `ARCH/00-INDEX` workspace-count note, `ARCH/01` plane table +
+context-engineering logic line, `ARCH/02` tree/table/row, `ARCH/CORE` plane table, `AGENTS.md` §12, `DESKTOP-APP-SPEC`
+algorithm index #2/#17, the core mermaid box, §4.0 runtime prose + crate table row, §4.2.9 status banner, §6 capability map
+and §7 three-runtimes list, `docs/codebase/{components,decisions}.md`, and the `RiskLevel` doc comment in `everyaios-types`.
+Historical records are deliberately untouched (`ARCH/archive/*`, this file's earlier entries, the two dated `[DONE]`
+port rows). **Post-v1 return vehicle stays `P71.7`** (a governed baseline binding), not a resurrected crate.
+
+**2. Two gates were red, and both are repaired (the half of P72 its own row still listed as pending).**
+(a) `check-doc-sync` failed — the header claimed `1643 total = 1304 done + 339 open` while the file had grown to
+`1645 = 1304 + 341` when the two P72 rows landed; the header now states the file's real numbers, which is what that gate
+exists to guarantee.
+(b) `gen-codebase-map --check` failed — `CODEBASE-MAP.md` still enumerated the deleted crate (§9.11, the §9.0 summary
+row, the §13/§15 inventories). The map is regenerated (1,464 tracked files, 504 Rust, 621 TS/TSX), and the hand-authored
+§1–§8 narrative — which the generator does **not** rewrite — was corrected: the §1.2 topology box (21 crates / 453 `.rs`
+in `crates/`; 351 registered commands), §2.16's command count, §6's dead-engine claim (now **Resolved**, naming P72),
+§7 item 5 (dead crate → deleted) and item 8's command figure, and §0/§8's coverage numbers (1,416 → 1,464 tracked,
+395,551 → 410,777 lines, §14's `.md` count 137 → 185).
+
+**3. The generator was undercounting the Tauri command surface.** `scripts/gen-codebase-map.mjs` matched registrations as
+exactly `module::name`, so the ten entries the shell writes with a `crate::` prefix (`crate::model_cmds::model_serve`, the
+whole `model_*` family) were silently dropped — the map published **341** commands while `ipc-parity` correctly saw **351**.
+The parse now accepts an optional `crate::` prefix, and both tools agree at 351. This was a measurement bug, not a code
+bug: the ten commands were always registered and always callable.
+
+**4. P70.A7 — one authoritative application version (a real defect, found while auditing the release surface).** The About
+badge was injected from `ui/package.json`, which read **2.0.0**, while `src-tauri/tauri.conf.json` — the string Tauri writes
+into the installer metadata *and* the updater manifest — read **0.1.0**. Two surfaces stated different versions of the same
+product. The authority is now `src-tauri/tauri.conf.json`'s `version`: `ui/vite.config.ts` imports that file directly
+(config-load verified: `__APP_VERSION__ = "0.1.0"`), and the comments that named `ui/package.json` as the source
+(`ui/src/globals.d.ts`, `ui/src/lib/version.ts`, `settings-sections-extra.tsx`) were corrected. A new gate,
+**`scripts/check-versions.mjs`**, enforces the repo's existing hand-kept-lockstep pattern (the same shape as the
+capability index): the authority must agree with `src-tauri/Cargo.toml` `[package]`, `crates/Cargo.toml`
+`[workspace.package]`, the root `package.json`, `packages/coordinator`'s manifest **and** the `VERSION` it advertises to the
+shell in the IPC handshake (`serverVersion`), and `ui/vite.config.ts` must read the authority rather than `ui/package.json`.
+Sibling workspace packages are reported as advisories, not failures — a package may legitimately carry its own version.
+Wired to `pnpm check:versions` and a `docs-sync` CI step. `ARCH_VERSION` (the architecture/spec marker) stays owned by
+`check-doc-sync`.
+
+**Verification actually executed:** `cargo check --workspace --all-targets` **clean** in 3m23s (the crate removal compiles
+workspace-wide and through all targets); `check-doc-sync` ✅ (166 in sync; `1645 = 1304 + 341` matches the header);
+`check-arch-invariants` ✅ (PURITY-2 retired cleanly, PURITY-1/3/4 intact); `ipc-parity` **351 registered / 0 broken**;
+`gen-codebase-map --check` ✅ up to date; `check-versions` ✅ and **negative-tested** (bumping the authority to `0.2.0` fails
+with all five consumers named); `ui` `tsc --noEmit` clean.
+**Not verified — stated plainly:** no test suite was run for any of these changes (the standing "implement first"
+instruction); the Windows acceptance rows remain untouched, and `P70`'s release-engineering block is still open.
+
+---
 ## v3.96 — 2026-09-22 — The first full-suite pass, and the five defects it caught (verification · P69/P71 waves)
 
 **Category:** verification + defect repair (the first complete test pass over the P69 architecture thaw and the P71

@@ -1,0 +1,43 @@
+{
+  "schema": 1,
+  "authority": "P70.A5",
+  "what": "Installer, installed-size and idle/warm RSS budgets for the v1 Windows artifacts, enforced by scripts/check-size-budget.mjs.",
+  "enforced_by": "scripts/check-size-budget.mjs",
+  "docs": "PACKAGING.md §4",
+  "note": "Ceilings are hard: exceeding one fails the release job that produced the artifact. `baseline` is the last recorded measurement; when it is present the gate additionally fails on a regression worse than `regression_threshold_pct`, which is the 'agreed threshold' of the row. A null baseline means 'no artifact has been measured yet' — the gate says so out loud rather than pretending the check ran.",
+  "basis": {
+    "installer_nsis_bytes": "LZMA-compressed NSIS installer of the shell + the compiled coordinator sidecar. Provisional until the first measured bundle (P70.E9); the ceiling is deliberately loose so a first measurement records reality instead of a guess.",
+    "installer_msi_bytes": "WiX MSI is uncompressed-by-default per-component and therefore materially larger than NSIS; budgeted higher on purpose.",
+    "installed_bytes": "Application binary + the bundled coordinator sidecar + icons. The webview and the OS runtime are provided by Windows and are not part of this figure.",
+    "idle_rss_mb": "Combined RSS (Rust core + coordinator sidecar + webview) after a quiet period. The spec's <30MB idle / <80MB warm numbers are the Rust core only and are 'targets to verify, not promises' (DESKTOP-APP-SPEC.md R6); the Bun-compiled sidecar alone measures ~93MB (J16), so the honest combined ceiling is far above that.",
+    "warm_rss_mb": "Combined RSS after active work (a live session with the sidecar warm).",
+    "measured_by": "crates/everyaios-core/src/rss_measure.rs (measure_idle_and_warm) for RSS; the produced bundle for sizes."
+  },
+  "regression_threshold_pct": 10,
+  "targets": {
+    "x86_64-pc-windows-msvc": {
+      "installer_bytes": { "nsis": 78643200, "msi": 104857600 },
+      "installed_bytes": 419430400,
+      "idle_rss_mb": 400,
+      "warm_rss_mb": 600,
+      "baseline": {
+        "installer_bytes": { "nsis": null, "msi": null },
+        "installed_bytes": null,
+        "idle_rss_mb": null,
+        "warm_rss_mb": null
+      }
+    },
+    "aarch64-pc-windows-msvc": {
+      "installer_bytes": { "nsis": 78643200, "msi": 104857600 },
+      "installed_bytes": 419430400,
+      "idle_rss_mb": 400,
+      "warm_rss_mb": 600,
+      "baseline": {
+        "installer_bytes": { "nsis": null, "msi": null },
+        "installed_bytes": null,
+        "idle_rss_mb": null,
+        "warm_rss_mb": null
+      }
+    }
+  }
+}

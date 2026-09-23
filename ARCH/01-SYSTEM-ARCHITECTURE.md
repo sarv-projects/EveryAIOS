@@ -20,7 +20,7 @@ Dependency rule, not a folder preference: plane *n* may depend on plane *n+1*, n
 | Plane | Modules | Role |
 |---|---|---|
 | **1 Shell** | `src-tauri` · `ui` | projection only — mutation only through the Work Gateway |
-| **2 Agent plane** | `coordinator` (turn coordination) · `core-ai` · `core-agents` · `core-memory` (reasoning only) · `core-providers` · `core-search` · `core-tools` · `everyaios-engine` (pure policy) · `everyaios-blueprint` (declarative plans) | orchestration, NOT reasoning — the loop owner is the selected agent ([AGENT.md](AGENT.md)) |
+| **2 Agent plane** | `coordinator` (turn coordination) · `core-ai` · `core-agents` · `core-memory` (reasoning only) · `core-providers` · `core-search` · `core-tools` · `everyaios-blueprint` (declarative plans) | orchestration, NOT reasoning — the loop owner is the selected agent ([AGENT.md](AGENT.md)) |
 | **3 Runtime kernel** | `everyaios-core` · `everyaios-types` · `everyaios-ipc` · `everyaios-guard` · `everyaios-vault` · `everyaios-audit` | one owner each (CORE §4) |
 | **4 Capability plane** | `everyaios-browser` · `everyaios-cdp` · `everyaios-desktop` · `everyaios-office` · `everyaios-storage` · `everyaios-search` · `everyaios-codeintel` · `everyaios-script` · connectors · `everyaios-mcp` | stable façades; capability crates *request* effects, the kernel executor performs them |
 | **5 External agents** | `everyaios-acp` (adapter + bridge) | hosted, not owned — lifecycle protocol, never a second kernel |
@@ -82,7 +82,7 @@ Every subsystem placement follows this test (derived from the ownership matrix, 
 
 ### Cockpit shell & context engineering (planes 1 + 2)
 
-- **Logic**: `crates/everyaios-engine`, `src-tauri/src/` (the context passport in `acp_cmds.rs` is the live projection). *`packages/coordinator/src/prompt.ts` was **archived 2026-09-22** (`ARCH/archive/coordinator-loop/`, `P71.2c`).*
+- **Logic**: `src-tauri/src/` (the context passport in `acp_cmds.rs` is the live projection; the former `crates/everyaios-engine` pure-stage slice was **deleted 2026-09-23**, `P72`). *`packages/coordinator/src/prompt.ts` was **archived 2026-09-22** (`ARCH/archive/coordinator-loop/`, `P71.2c`).*
 - **Submodules & Functions**:
   - `prompt_assembler`: 12-segment cache-affine prompt builder with `CACHE_BOUNDARY` markers (I16, I22: serializes Context, owns no policy).
   - `context_compaction_pipeline`: Trims volatile turns, enforces pass-by-ref handles (`refRegistry`), paginates large outputs (50KB cap) — strategies under [`CONTEXT.md`](CONTEXT.md) (I17–I20).

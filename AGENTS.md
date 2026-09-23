@@ -135,7 +135,18 @@ Keep descriptions factual and tied to the repository. Do not add marketing langu
 
 > The sections below are specific to this repository. Sections 1–9 above are universal.
 
-## 10. Architecture (4 layers)
+## 10. Architecture
+
+> **Root authority: [`ARCH/CORE.md`](ARCH/CORE.md)** (architecture thaw — see
+> [`ARCH/ADR/0003`](ARCH/ADR/0003-architecture-thaw-core-authority.md)). The
+> product contract is [`DESKTOP-APP-SPEC.md`](DESKTOP-APP-SPEC.md); delivery
+> status is [`TODO.md`](TODO.md); subsystem contracts live beside CORE under
+> [`ARCH/`](ARCH/00-INDEX.md). **This section is a teaching summary only** —
+> where it and `ARCH/CORE.md` disagree, `ARCH/CORE.md` wins. Do not restate,
+> extend, or fork the invariant set here; read it from CORE.
+
+The runtime's four deployment layers (a convenience view for orientation, not
+the contract):
 
 ```
 L4  COCKPIT           ui/ — React 19 + Zustand 5 + Tailwind 4
@@ -144,14 +155,17 @@ L3  Tauri Shell        src-tauri/ — thin Rust shell, 40 *_cmds.rs modules
         ↓ direct Rust calls
 L2  Rust Kernel        crates/everyaios-* — guard/vault/audit/office/browser
         ↓ stdio JSON-RPC 2.0, [u32 LE len][JSON] framing
-L1  Bun Sidecar        packages/coordinator — LLM turn loop
+L1  Bun Sidecar        packages/coordinator — turn coordination (not reasoning)
         ↓ ACP/MCP/CDP
-L0  External Agents    Claude Code, Codex, OpenCode, MCP servers, Chrome
+L0  External Agents    the v1 engines (ADR/0005), MCP servers, Chrome
 ```
 
-### The One Invariant
+### The One Invariant (summary)
 
-**The sidecar proposes; the Rust core disposes.** Every mutating effect requires an authorization ticket minted in Rust. Provider API keys never leave the vault. This is enforced structurally, not by convention.
+The load-bearing invariant, quoted from `ARCH/CORE.md`: **the sidecar proposes;
+the Rust core disposes.** Every mutating effect requires an authorization
+ticket minted in Rust, and provider API keys never leave the vault. The full
+invariant set lives only in `ARCH/CORE.md`.
 
 ## 11. Development Commands
 
@@ -203,8 +217,7 @@ skill's routing contract.
 ## 12. File Structure
 
 ```
-crates/                          # 22 workspace members (the kernel) — incl. everyaios-engine:
-                                 #   dead (no dependents), deletion queued (2026-09-22; TODO P72)
+crates/                          # 21 workspace members (the kernel)
   everyaios-core/                #   Orchestrator: supervisor, worktrees, CUA, tools
   everyaios-guard/               #   Guard-1/2: netfloor, pathfloor, tickets, sandboxes
   everyaios-memory/              #   RRF fusion, ACT-R, compaction, graph

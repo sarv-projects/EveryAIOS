@@ -22,6 +22,48 @@ jobs:
       - uses: actions/checkout@v4
       - name: Run doc-sync check
         run: node scripts/check-doc-sync.mjs
+      # P70.A7 — one authoritative application version across the installer,
+      # the updater manifest, the sidecar handshake and the shell-chrome badge.
+      - name: Version lockstep
+        run: node scripts/check-versions.mjs
+      # P70.A1 — the PUBLISHED bundle matrix is Windows-only `nsis`+`msi` on the
+      # two Windows targets. tauri.conf.json keeps all six targets for the local
+      # harness, so the assertion lives on the release workflow plus the
+      # published support matrix.
+      - name: Release matrix (published platform set)
+        run: node scripts/check-release-matrix.mjs
+      # P70.A4 — installer metadata, icon assets, a pinned MSI upgrade identity,
+      # and no OS integration claimed without a handler behind it.
+      - name: App metadata + assets
+        run: node scripts/check-app-metadata.mjs
+      # P70.A3 — every externally spawned program is classified, and no shipping
+      # path requires a build toolchain on the user's machine.
+      - name: Native dependency audit
+        run: node scripts/check-native-deps.mjs
+      # P70.A5 — the size/footprint budgets are valid and still cover both
+      # published targets (the release job measures against them).
+      - name: Size + footprint budgets
+        run: node scripts/check-size-budget.mjs
+      # P70.A8 — every durable store carries a schema version and a
+      # forward-only migration path (the registry, the vault's own constant and
+      # the published table must agree).
+      - name: Durable store schemas
+        run: node scripts/check-store-schemas.mjs
+      # P70.B6 — every dependency licence is allow-listed or on a recorded
+      # decision, zero copyleft, and the notices file is current.
+      - name: Licence compliance
+        run: node scripts/check-licences.mjs
+      # P70.B4 — updater key custody: private key gitignored, release secrets
+      # wired, pubkey trust anchor in agreement.
+      - name: Updater key custody
+        run: node scripts/check-updater-keys.mjs
+      # P70.C7 — updater code, config, docs and store registry agree; the
+      # published update contract cannot silently stop describing the binary.
+      - name: Update pipeline
+        run: node scripts/check-update-pipeline.mjs
+      # Packaging verification suite: static checks over the shipped surfaces.
+      - name: Packaged release verification
+        run: node scripts/verify-packaged-e2e.mjs
       - name: Verify CODEBASE-MAP.md is up to date
         run: node scripts/gen-codebase-map.mjs --check
       # P69.E — structural invariants: no TS credential custody, no second

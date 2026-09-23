@@ -126,4 +126,9 @@ pub struct AppState {
     /// Settings → Providers, the model table and the chat relay's endpoint
     /// resolution all read this one owner.
     pub catalog: Arc<CatalogState>,
+    /// P70.C3/C4 — metadata for the pending update (channel + version) while
+    /// the background download runs. The artifact bytes live in the managed
+    /// `updater_cmds::PendingUpdateSlot` (different lifetime); this slot only
+    /// tracks *that a download is in flight* so a second one can be refused.
+    pub pending_update: Mutex<Option<crate::updater_cmds::PendingUpdate>>,
 }

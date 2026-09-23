@@ -25,7 +25,7 @@
 | :--- | :--- | :--- | :--- |
 | **Harness & swarm orchestration (planes 2 + 5)** | `everyaios-acp`, `everyaios-core` (`multirun.rs`, `worktrees.rs`), `everyaios-blueprint` (`subagent.rs`), `everyaios-agents` | `coordinator` (`primary-agent.ts` — bound-agent owner, the live rename of `chief.ts`, which is archived with the loop at `ARCH/archive/coordinator-loop/` — 2026-09-22), `core-agents` | `screens/AgentsScreen.tsx`, `screens/ChatScreen.tsx` (agent picker), right-rail `diff` viewport |
 | **Module 2: Agent Registry, Discovery, Binding & the Encrypted Vault** *(ex-“Model Gateway”, re-scoped by [`ADR/0005`](ADR/0005-external-agents-are-the-v1-engines.md))* | `everyaios-vault`, `everyaios-catalog`, `everyaios-agents` | `core-providers` (catalogue + usage metadata only), `core-ai` | `settings` **Agents** + Providers & Keys tabs, `guard.html` unlock modal |
-| **Module 3: Unified Cockpit Shell & Context Compactor** | `everyaios-engine` (dead — zero dependents, deletion queued 2026-09-22), `everyaios-ipc`, `src-tauri` (40 command modules) | `coordinator` (services the turn calls into: memory/guard/work/skills/MCP/connectors) | `App.tsx`, `Layout.tsx`, multi-control composer, 19 right-rail viewports |
+| **Module 3: Unified Cockpit Shell & Context Compactor** | `everyaios-ipc`, `src-tauri` (40 command modules) | `coordinator` (services the turn calls into: memory/guard/work/skills/MCP/connectors) | `App.tsx`, `Layout.tsx`, multi-control composer, 19 right-rail viewports |
 | **Module 4: Governed MCP & Capability Marketplace** | `everyaios-mcp` | `core-connectors` (`connector_hub`) | `screens/ConnectorsScreen.tsx`, per-agent tool scoping drawer |
 | **Module 5: Work-Native Primitives (Office, Browser, CUA)** | `everyaios-office` (IronCalc 0.8.3, OOXML), `everyaios-browser`, `everyaios-cdp`, `everyaios-desktop` (CUA) | `coordinator` (`tools/browser.ts`, `tools/office.ts`) | Right-rails: `office-xlsx`, `office-docx`, `office-pdf`, `browse`, `desktop` |
 | **Module 6: Durable Work & Cognitive Memory (four classes)** | `everyaios-memory` (ACT-R), `everyaios-storage`, `everyaios-codeintel` | `core-memory` | `screens/MemoryScreen.tsx`, `screens/ProjectsScreen.tsx`, `screens/FilesScreen.tsx`, right-rail `graph` |
@@ -37,7 +37,7 @@
 ```
 desktop_app/
 ├── ARCH/                        ← Architecture specifications (00-INDEX through 15 + the subsystem contracts + DIAGRAMS; 16/17 archived under ARCH/archive/)
-├── crates/                      ← Rust workspace: 22 members per crates/Cargo.toml (incl. everyaios-engine — dead, no dependents, deletion queued; 2026-09-22)
+├── crates/                      ← Rust workspace: 21 members per crates/Cargo.toml (everyaios-engine deleted 2026-09-23, P72)
 │   ├── everyaios-core/          ← Process lifecycle, worktree manager, multirun fanout, automation runtime
 │   ├── everyaios-acp/           ← ACP stdio JSON-RPC bridge (external agent harness)
 │   ├── everyaios-vault/         ← SQLCipher encrypted vault, keyring pools, 429 auto-failover, broker
@@ -54,7 +54,7 @@ desktop_app/
 │   ├── everyaios-blueprint/     ← Task DAG state machine, checkpoint/resume, skill store (.everyaios/skills/)
 │   ├── everyaios-search/        ← Search cascade (SearXNG + DDG circuit-breaker), deep research tree
 │   ├── everyaios-catalog/       ← 4-hour models.dev catalog sync, capability probes
-│   ├── everyaios-engine/        ← DEAD (zero dependents since P71.2c) — deletion queued 2026-09-22 (TODO P72); post-v1 return vehicle P71.7; no new code
+│   ├── everyaios-engine/        ← DELETED 2026-09-23 (zero dependents since P71.2c; TODO P72). Post-v1 return vehicle is P71.7, not a resurrected crate
 │   ├── everyaios-agents/        ← Custom agent bundle schemas (agent.toml)
 │   ├── everyaios-eval/          ← Deterministic verifier, completion eval, adversarial test suite
 │   ├── everyaios-script/        ← rquickjs sandboxed JavaScript evaluation
@@ -138,7 +138,7 @@ me** (`subagent.rs` `DelegationPolicy` — fresh-context `SubAgentSpec` + `DELEG
 | `everyaios-guard` | 3 Runtime kernel | permissions | **Canonical security authority** | the only allow/deny/ask decider |
 | `everyaios-vault` | 3 Runtime kernel | credentials | **Canonical credential authority** | the only holder of key material |
 | `everyaios-audit` | 3 Runtime kernel | events (evidence) | **Canonical evidence authority** | append-only log + receipts |
-| `everyaios-engine` | 2 Agent plane | — (pure policy) | **Dead — deletion queued (2026-09-22)** | zero dependents since `P71.2c`; dead weight that must not become a second engine. Post-v1 return vehicle is `P71.7`; deletion queued in `../TODO.md` P72. Today's workspace count (22 members) includes this dead row; no new code may land here |
+| `everyaios-engine` | 2 Agent plane | — (pure policy) | **Deleted (2026-09-23, P72)** | zero dependents since `P71.2c`; deleted as dead weight so it can never become a second engine. Post-v1 return vehicle is `P71.7` (a governed baseline binding under `ADR/0005`), not a resurrected crate. Workspace count is 21 members |
 | `everyaios-agents` | 2 Agent plane | agents | **Canonical `AgentRegistry`** | one `AgentDefinition`, one registry |
 | `everyaios-blueprint` | 2 Agent plane | — (declarative plans) | **Shrink to declarative planning** | plans, dependencies, acceptance; no execution |
 | `everyaios-acp` | 5 External agents | — (adapter + bridge) | **Keep — becomes the adapter + AgentBridge** | lifecycle protocol; never a second kernel |

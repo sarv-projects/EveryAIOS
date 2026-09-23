@@ -21,59 +21,100 @@ function recordCheck(name, passed, detail) {
   }
 }
 
+// A missing file is a FAILED check, not a stack trace: a path that moved (or
+// was archived) must be reported as this suite failing, with the path named,
+// rather than crashing the runner before the remaining checks execute.
+function readOrFail(label, relPath) {
+  const abs = join(process.cwd(), relPath);
+  if (!existsSync(abs)) {
+    recordCheck(label, false, `${relPath} is missing — the check cannot be evaluated`);
+    return null;
+  }
+  return readFileSync(abs, "utf-8");
+}
+
 // 1. Check Store Hydration Gate
-const storeSrc = readFileSync(join(process.cwd(), "ui", "src", "lib", "store.ts"), "utf-8");
-const hasTauriGate = storeSrc.includes("inTauri() ? [] : mockSessions") && storeSrc.includes("sessionsHydrated");
-recordCheck(
-  "P50.2.1 Store Hydration Gate",
-  hasTauriGate,
-  "UI store strictly gates mock preview data behind inTauri() === false"
-);
+const storeSrc = readOrFail("P50.2.1 Store Hydration Gate", "ui/src/lib/store.ts");
+if (storeSrc) {
+  const hasTauriGate =
+    storeSrc.includes("inTauri() ? [] : mockSessions") && storeSrc.includes("sessionsHydrated");
+  recordCheck(
+    "P50.2.1 Store Hydration Gate",
+    hasTauriGate,
+    "UI store strictly gates mock preview data behind inTauri() === false"
+  );
+}
 
 // 2. Check Calendar IPC and Vault Schema
-const calendarCmds = readFileSync(join(process.cwd(), "src-tauri", "src", "calendar_cmds.rs"), "utf-8");
-const hasCalendarCRUD = calendarCmds.includes("calendar_event_put") && calendarCmds.includes("calendar_event_list");
-recordCheck(
-  "P6.22 Calendar IPC & Schema v8",
-  hasCalendarCRUD,
-  "Native calendar CRUD commands registered and mapped to encrypted SQLCipher tables"
-);
+const calendarCmds = readOrFail("P6.22 Calendar IPC & Schema v8", "src-tauri/src/calendar_cmds.rs");
+if (calendarCmds) {
+  const hasCalendarCRUD =
+    calendarCmds.includes("calendar_event_put") && calendarCmds.includes("calendar_event_list");
+  recordCheck(
+    "P6.22 Calendar IPC & Schema v8",
+    hasCalendarCRUD,
+    "Native calendar CRUD commands registered and mapped to encrypted SQLCipher tables"
+  );
+}
 
-// 3. Check Native Agent Plane First-Class Tools
-const toolsSrc = readFileSync(join(process.cwd(), "packages", "coordinator", "src", "tools.ts"), "utf-8");
-const hasNativeTools = toolsSrc.includes("FIRST_CLASS_NATIVE_TOOLS") && toolsSrc.includes("mergeWithNativeTools");
-recordCheck(
-  "P64.1 Native Agent Plane Tools",
-  hasNativeTools,
-  "Native ask, plan, todo, subagent tools registered and merged with catalog"
-);
+// 3. Check the tool surface on its live owner.
+// ADR-0005 retired the built-in turn loop, and with it the coordinator's
+// `tools.ts` (`FIRST_CLASS_NATIVE_TOOLS` / `mergeWithNativeTools`). The tool
+// surface now lives in `everyaios-mcp`, which validates its own catalog.
+const mcpLib = readOrFail("P64.1 Tool surface (everyaios-mcp)", "crates/everyaios-mcp/src/lib.rs");
+if (mcpLib) {
+  const hasToolSurface =
+    mcpLib.includes("pub fn all_tools") &&
+    mcpLib.includes("pub fn inbuilt_catalog") &&
+    mcpLib.includes("pub fn validate_facades");
+  recordCheck(
+    "P64.1 Tool surface (everyaios-mcp)",
+    hasToolSurface,
+    "The inbuilt tool catalog and facade validation are owned by everyaios-mcp"
+  );
+}
 
-// 4. Check Context Provider @Codebase Resolution
-const chatSrc = readFileSync(join(process.cwd(), "packages", "coordinator", "src", "chat.ts"), "utf-8");
-const hasMentionResolution = chatSrc.includes("resolveMentions") && chatSrc.includes("mergeWithNativeTools");
-recordCheck(
-  "P64.2 / C14 Live Context Resolution",
-  hasMentionResolution,
-  "Turn loop dynamically resolves @-mentions into context blocks below cache boundary"
-);
+// 4. Check the context passport on the external-agent path.
+// The retired coordinator loop resolved @-mentions in `chat.ts`; the live
+// owner of prompt/context assembly is the Rust context passport in
+// `acp_cmds.rs`, which injects the memory warm set and the governance block
+// before the prompt reaches the bound agent.
+const acpCmds = readOrFail("P64.2 / C14 Context passport", "src-tauri/src/acp_cmds.rs");
+if (acpCmds) {
+  const hasPassport =
+    acpCmds.includes("fn build_acp_prompt_with_passport") &&
+    acpCmds.includes("everyaios_acp::build_chief_prompt") &&
+    acpCmds.includes("GovernedSession");
+  recordCheck(
+    "P64.2 / C14 Context passport",
+    hasPassport,
+    "The ACP prompt carries the memory facts + governance block (built in Rust, not in the sidecar)"
+  );
+}
 
 // 5. Check Avoidance Memory Store
-const avoidSrc = readFileSync(join(process.cwd(), "crates", "everyaios-memory", "src", "avoid.rs"), "utf-8");
-const hasAvoidanceStore = avoidSrc.includes("AvoidanceStore") && avoidSrc.includes("record_failure");
-recordCheck(
-  "P51.34 Negative Failure Memory",
-  hasAvoidanceStore,
-  "AvoidanceStore records tool failures to prevent repetitive agent loops"
-);
+const avoidSrc = readOrFail("P51.34 Negative Failure Memory", "crates/everyaios-memory/src/avoid.rs");
+if (avoidSrc) {
+  const hasAvoidanceStore =
+    avoidSrc.includes("AvoidanceStore") && avoidSrc.includes("record_failure");
+  recordCheck(
+    "P51.34 Negative Failure Memory",
+    hasAvoidanceStore,
+    "AvoidanceStore records tool failures to prevent repetitive agent loops"
+  );
+}
 
 // 6. Check Multi-Agent Fleet Worktree Concurrency
-const fleetSrc = readFileSync(join(process.cwd(), "packages", "coordinator", "src", "fleet.ts"), "utf-8");
-const hasFleetIsolation = fleetSrc.includes("worktreeSpecs") && fleetSrc.includes("multiplex");
-recordCheck(
-  "P51.13 Swarm Worktree Isolation",
-  hasFleetIsolation,
-  "Independent Git worktrees with 3-file blackboards prevent index lock collisions"
-);
+const fleetSrc = readOrFail("P51.13 Swarm Worktree Isolation", "packages/coordinator/src/fleet.ts");
+if (fleetSrc) {
+  const hasFleetIsolation =
+    fleetSrc.includes("worktreeSpecs") && fleetSrc.includes("multiplex");
+  recordCheck(
+    "P51.13 Swarm Worktree Isolation",
+    hasFleetIsolation,
+    "Independent Git worktrees with 3-file blackboards prevent index lock collisions"
+  );
+}
 
 // 7. Check P45 Performance Measurements
 const perfMeasurementsPath = join(process.cwd(), "scripts", "p45-live-measurements.json");

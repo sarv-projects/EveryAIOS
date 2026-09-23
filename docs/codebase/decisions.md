@@ -28,8 +28,8 @@ docs, code, or Git history, that is stated explicitly.
 ## D3 — Chat loop is being ported from TS to Rust
 
 - **Decision:** the conversation engine's authority moves from the Bun sidecar
-  into `crates/everyaios-engine` ("Rust port slice of the TS
-  `ConversationEngine`").
+  into a Rust crate (`crates/everyaios-engine` — "Rust port slice of the TS
+  `ConversationEngine`"; **that crate was deleted 2026-09-23**, `TODO` P72).
 - **Provenance:** engine module doc; `ARCH/16-CHAT-LOOP-RUST-PORT.md` (**archived 2026-09-22** — [`ARCH/archive/16-CHAT-LOOP-RUST-PORT.md`](../../ARCH/archive/16-CHAT-LOOP-RUST-PORT.md), `P71.5a`).
 - **Status (amended 2026-09-21 by [`ADR/0005`](../../ARCH/ADR/0005-external-agents-are-the-v1-engines.md)):**
   **superseded in purpose.** The loop belongs to the bound agent, and v1 ships no built-in engine, so there is
@@ -42,7 +42,7 @@ docs, code, or Git history, that is stated explicitly.
 - **Decision:** `src-tauri/` validates and delegates only; business logic lives
   in crates.
 - **Provenance:** structure itself — 351 registered commands across 40
-  `*_cmds.rs` modules delegating into 22 crates; `AGENTS.md` §10/§12. Git
+  `*_cmds.rs` modules delegating into 21 crates; `AGENTS.md` §10/§12. Git
   history: `docs/ipc-parity` CI checks keep the two sides aligned.
 
 ## D5 — Bun sidecar for the LLM loop
@@ -107,8 +107,9 @@ docs, code, or Git history, that is stated explicitly.
 - **Decision:** none — this entry records how the thaw (D9) changes the *status* of two earlier entries.
   D1–D9 above are preserved as recorded; nothing above this line was edited by the thaw refresh.
 - **D3 (chat-loop port):** superseded as a direction. The loop is owned by the selected agent
-  (`AgentBinding`); the coordinator owns turn coordination, not reasoning; `everyaios-engine`'s target
-  is pure policies/helpers (`ARCH/AGENT.md`, `ARCH/CORE.md` §7.1, TODO P69.A25/P69.D8). That the sidecar
+  (`AgentBinding`); the coordinator owns turn coordination, not reasoning; the pure policies/helpers
+  that `everyaios-engine` once held were **deleted 2026-09-23** (`TODO` P72) along with the crate's
+  last consumers (`ARCH/AGENT.md`, `ARCH/CORE.md` §7.1, TODO P69.A25/P69.D8). That the sidecar
   still runs the turn loop today is current behavior, not the target.
 - **D5 (Bun sidecar):** rationale sharpened — TypeScript keeps ecosystem velocity for orchestration while
   the kernel trust boundary is structural (the sidecar has no effect-execution surface and holds no

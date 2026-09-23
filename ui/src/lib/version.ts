@@ -7,7 +7,8 @@
  * `SPEC-CHANGELOG.md` was at `v3.72` at the time of that fix). `scripts/check-doc-sync.mjs` now fails
  * the build if this drifts from the newest changelog heading again.
  *
- * Distinct from `__APP_VERSION__` (compile-time, injected from
- * `ui/package.json`), which is the *application* version shown in About.
+ * Distinct from `__APP_VERSION__` (compile-time, injected by `vite.config.ts`
+ * from the authoritative `src-tauri/tauri.conf.json` `version` — P70.A7), which
+ * is the *application* version shown in About.
  */
-export const ARCH_VERSION = 'v3.96'
+export const ARCH_VERSION = 'v4.00'

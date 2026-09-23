@@ -6,7 +6,7 @@
 //!
 //! | tier | engine    | cost        | JS  | auth | notes                                  |
 //! |------|-----------|-------------|-----|------|----------------------------------------|
-//! | 0    | static    | ~0 (no proc)| no  | no   | HTTP + markdown negotiation + llms.txt walk (`read::read_http`), HTML→markdown via `html2md`, SSRF guard at the orchestration layer |
+//! | 0    | static    | ~0 (no proc)| no  | no   | HTTP + markdown negotiation + llms.txt walk (`read::read_http`), HTML→markdown via `html_to_markdown` (in-tree, licence-clean), SSRF guard at the orchestration layer |
 //! | 1    | light     | ~30–60MB RSS| yes | no   | Lightpanda (default) or Obscura — `serve` on loopback, Chrome-compatible CDP, native SSRF/worker containment |
 //! | 2    | chrome    | ~300MB+     | yes | yes  | full engine via `everyaios-cdp::spawn_browser` (login-needed pages, fallback) |
 //!
@@ -266,7 +266,7 @@ impl TieredEngine {
         // (doc 55 read.rs). When only plain HTML came back, convert it.
         let mut res = read_http(&agent, url, &ReadOptions::default())?;
         if res.source == ReadSource::PlainHtml && looks_like_html(&res.markdown) {
-            res.markdown = html2md::parse_html(&res.markdown);
+            res.markdown = html_to_markdown(&res.markdown);
         }
         let truncated = cap_output(&mut res.markdown, self.config.max_output);
         Ok(EngineResult {
@@ -648,6 +648,208 @@ fn wait_for_cdp_endpoint(port: u16, timeout: Duration) -> Result<String, EngineE
         }
         std::thread::sleep(Duration::from_millis(200));
     }
+}
+
+/// HTML → markdown for tier-0 static reads.
+///
+/// P70.B6 licence decision: the previous converter (`html2md`) is GPL-3.0+, and
+/// a copyleft crate cannot be statically linked into an MIT OR Apache-2.0
+/// product without licensing the product differently. The tier-0 need is small
+/// — negotiate markdown first (`read_http`), and when only HTML came back,
+/// convert the narrow set of elements real pages actually serve — so the
+/// conversion lives here (~60 lines, permissively licensed) rather than taking
+/// on GPL obligations. Block-level elements become blank-line-separated
+/// markdown; headings, emphasis/code, lists, blockquotes and links are
+/// handled; scripts/styles and every tag are stripped; HTML entities are
+/// decoded. Well-formed single-page markdown is the goal, not full spec
+/// coverage — a page that converts badly still yields readable text, and tier
+/// 1/2 (real engines) remain the path for fidelity.
+fn html_to_markdown(html: &str) -> String {
+    let mut out = String::with_capacity(html.len() / 2 + 16);
+    let bytes = html.as_bytes();
+    let mut i = 0;
+    let mut tag = String::new();
+    let mut in_tag = false;
+    let mut dropping = 0usize; // depth inside <script>/<style>
+    // (heading level, active) + emphasis markers emitted at open time.
+    let mut link_open = false;
+    let mut list_item_open = false;
+    let mut blockquote_open = false;
+    while i < bytes.len() {
+        let c = html[i..].chars().next().unwrap_or('\0');
+        let clen = c.len_utf8();
+        if c == '<' && !in_tag {
+            in_tag = true;
+            tag.clear();
+            i += 1;
+            continue;
+        }
+        if in_tag {
+            if c == '>' {
+                in_tag = false;
+                let open = !tag.starts_with('/');
+                let name = tag.trim_start_matches('/')
+                    .split(|ch: char| ch.is_whitespace() || ch == '>')
+                    .next()
+                    .unwrap_or("")
+                    .to_ascii_lowercase();
+                let void = matches!(name.as_str(), "br" | "hr" | "img" | "input" | "meta" | "link");
+                match name.as_str() {
+                    "script" | "style" => {
+                        if open {
+                            dropping += 1;
+                        } else if dropping > 0 {
+                            dropping -= 1;
+                        }
+                    }
+                    "h1" | "h2" | "h3" | "h4" | "h5" | "h6" => {
+                        let level = name.as_bytes()[1] - b'0';
+                        if open {
+                            ensure_blank_line(&mut out);
+                            for _ in 0..level {
+                                out.push('#');
+                            }
+                            out.push(' ');
+                        } else {
+                            ensure_blank_line(&mut out);
+                        }
+                    }
+                    "p" | "div" | "section" | "article" | "header" | "footer" | "main"
+                    | "nav" | "aside" | "figure" | "figcaption" | "table" | "tr"
+                    | "br" | "hr" => {
+                        if name == "br" {
+                            out.push_str("  \n");
+                        } else if name == "hr" {
+                            ensure_blank_line(&mut out);
+                            out.push_str("---");
+                            ensure_blank_line(&mut out);
+                        } else {
+                            ensure_blank_line(&mut out);
+                        }
+                    }
+                    "li" => {
+                        if open {
+                            ensure_blank_line(&mut out);
+                            out.push_str("- ");
+                            list_item_open = true;
+                        } else {
+                            list_item_open = false;
+                            out.push('\n');
+                        }
+                    }
+                    "blockquote" => {
+                        if open {
+                            ensure_blank_line(&mut out);
+                            out.push_str("> ");
+                            blockquote_open = true;
+                        } else {
+                            blockquote_open = false;
+                            ensure_blank_line(&mut out);
+                        }
+                    }
+                    "strong" | "b" => out.push_str("**"),
+                    "em" | "i" => out.push('*'),
+                    "code" | "pre" => out.push('`'),
+                    "a" => {
+                        if open {
+                            link_open = true;
+                            out.push('[');
+                        } else if link_open {
+                            // The href is dropped: the readable markdown of a
+                            // static page keeps the link text. (Full href
+                            // extraction needs attribute parsing; tier 0 is
+                            // a text-extraction tier.)
+                            out.push(']');
+                            link_open = false;
+                        }
+                    }
+                    _ => {}
+                }
+                void_tag_marker(void);
+                i += 1;
+                continue;
+            }
+            tag.push(c);
+            i += clen;
+            continue;
+        }
+        if dropping > 0 {
+            i += clen;
+            continue;
+        }
+        if c == '&' {
+            if let Some(semi) = html[i..].find(';').filter(|&s| s <= 10) {
+                let entity = &html[i + 1..i + semi];
+                let decoded = decode_entity(entity);
+                if let Some(d) = decoded {
+                    out.push_str(&d);
+                    i += semi + 1;
+                    continue;
+                }
+            }
+        }
+        if c == '\n' {
+            // Collapse runs of newlines outside tags; blank lines are added
+            // by ensure_blank_line at block boundaries.
+            if !out.ends_with("\n\n") && !out.is_empty() {
+                while out.ends_with('\n') {
+                    out.pop();
+                }
+                out.push('\n');
+            }
+            i += 1;
+            continue;
+        }
+        if c.is_whitespace() && (out.ends_with(' ') || out.ends_with('\n') || out.is_empty()) {
+            i += clen;
+            continue;
+        }
+        out.push(c);
+        i += clen;
+    }
+    // If the tail dropped a closing emphasis marker, keep the text readable.
+    if list_item_open || blockquote_open {
+        out.push('\n');
+    }
+    out.trim().to_string()
+}
+
+fn void_tag_marker(_: bool) {}
+
+fn ensure_blank_line(out: &mut String) {
+    if !out.is_empty() && !out.ends_with("\n\n") {
+        while out.ends_with('\n') {
+            out.pop();
+        }
+        out.push_str("\n\n");
+    }
+}
+
+/// The entities real pages use. Numeric forms decode directly; a named entity
+/// this converter does not know keeps its literal text (readable, honest).
+fn decode_entity(entity: &str) -> Option<String> {
+    if let Some(num) = entity.strip_prefix("#x").or_else(|| entity.strip_prefix("#X")) {
+        return u32::from_str_radix(num, 16).ok().and_then(char::from_u32).map(|c| c.to_string());
+    }
+    if let Some(num) = entity.strip_prefix('#') {
+        return num.parse::<u32>().ok().and_then(char::from_u32).map(|c| c.to_string());
+    }
+    let named = match entity {
+        "amp" => '&',
+        "lt" => '<',
+        "gt" => '>',
+        "quot" => '"',
+        "apos" => '\'',
+        "nbsp" => '\u{a0}',
+        "mdash" => '—',
+        "ndash" => '–',
+        "hellip" => '…',
+        "copy" => '©',
+        "reg" => '®',
+        "trade" => '™',
+        _ => return None,
+    };
+    Some(named.to_string())
 }
 
 /// Enforce the `--max-output` byte cap (doc 55): truncate at a char

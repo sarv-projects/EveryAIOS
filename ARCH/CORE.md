@@ -620,7 +620,7 @@ Plane → module. This is the **target**; the disposition of what exists today b
 | Plane | Modules |
 |---|---|
 | **1 Shell** | `src-tauri` · `ui` |
-| **2 Agent plane** | `coordinator` (turn coordination) · `core-ai` (context · prompt · generation) · `core-agents` · `core-memory` (reasoning only) · `core-providers` · `core-search` · `core-tools` · `everyaios-engine` (pure policy) · `everyaios-blueprint` (declarative plans) |
+| **2 Agent plane** | `coordinator` (turn coordination) · `core-ai` (context · prompt · generation) · `core-agents` · `core-memory` (reasoning only) · `core-providers` · `core-search` · `core-tools` · `everyaios-blueprint` (declarative plans) |
 | **3 Runtime kernel** | `everyaios-core` (Work · Run · Step · Effect · Event · Receipt · ToolRegistry · Workspace · Work Gateway) · `everyaios-types` · `everyaios-ipc` · `everyaios-guard` · `everyaios-vault` · `everyaios-audit` |
 | **4 Capability plane** | `everyaios-browser` · `everyaios-cdp` · `everyaios-desktop` · `everyaios-office` · `everyaios-storage` · `everyaios-search` · `everyaios-codeintel` · `everyaios-script` · connectors · `everyaios-mcp` |
 | **5 External agents** | `everyaios-acp` (adapter + bridge) |

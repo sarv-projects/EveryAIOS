@@ -44,6 +44,10 @@
       "icons/icon.png"
     ],
     "category": "DeveloperTool",
+    "publisher": "EveryAIOS",
+    "copyright": "Copyright © 2026 EveryAIOS contributors",
+    "homepage": "https://github.com/sarv-projects/EveryAIOS",
+    "license": "MIT OR Apache-2.0",
     "shortDescription": "EveryAIOS — agentic desktop OS shell",
     "longDescription": "A local-first, BYOK, open-source desktop workspace where your chat, browser, files, documents, code, automations, agents, and connected accounts live in one safe continuity.",
     "createUpdaterArtifacts": true,
@@ -56,7 +60,8 @@
         "uninstallerIcon": "icons/icon.ico"
       },
       "wix": {
-        "language": "en-US"
+        "language": "en-US",
+        "upgradeCode": "5420d70f-175e-5ffa-b1d1-bd2ab2d3b8c9"
       }
     },
     "linux": {

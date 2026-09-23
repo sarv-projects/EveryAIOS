@@ -461,8 +461,8 @@ pub enum ExecutionState {
 }
 
 /// The guard risk band. Canonical so every crate grades an action on the
-/// same scale (the `RiskLevel` re-declarations in `everyaios-guard` and
-/// `everyaios-engine` are aliased to this).
+/// same scale (the `RiskLevel` re-declarations in `everyaios-guard` are
+/// aliased to this).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum RiskLevel {

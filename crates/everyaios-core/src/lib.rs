@@ -80,6 +80,8 @@ pub mod search_config;
 pub mod self_audit;
 pub mod shell_integration;
 pub mod sidecar_link;
+// P70.A8 — durable-store schema stamps + forward-only migration.
+pub mod store_schema;
 pub mod supervisor;
 pub mod sync;
 pub mod sync_transport;
@@ -277,13 +279,20 @@ pub fn boot(args: &[String]) -> Result<String, Box<dyn std::error::Error>> {
     let vault = everyaios_vault::Vault::open(&vault_path, &resolved.key)?;
     let status = vault.status();
 
+    // P70.A8 — stamp the durable stores on the way up. This is where a
+    // forward-only policy becomes true for the stores that cannot stamp
+    // themselves: a store recorded at a newer schema refuses the boot with a
+    // named store instead of being read by a build that cannot understand it.
+    let stores = store_schema::ensure_all(&cfg.data_dir)?;
+
     Ok(format!(
-        "everyaios-core {} ready — data_dir={} vault={} ({}), retention_days={}",
+        "everyaios-core {} ready — data_dir={} vault={} ({}), retention_days={}, {}",
         version::VERSION,
         cfg.data_dir.display(),
         vault_path.display(),
         status,
         cfg.retention_days,
+        store_schema::summary(&stores),
     ))
 }
 

@@ -528,7 +528,10 @@ function tauriCommands() {
   for (const line of body.split("\n")) {
     const seg = line.trim().replace(/,$/, "");
     if (!seg || seg.startsWith("//")) continue;
-    const m = /^([a-z_][\w]*)::([a-z_][\w]*)$/.exec(seg);
+    // Accept an optional `crate::` prefix: `crate::model_cmds::model_serve` is a
+    // registration like any other, and requiring exactly two segments silently
+    // dropped the ten `model_*` commands the shell registers that way.
+    const m = /^(?:crate::)?([a-z_][\w]*)::([a-z_][\w]*)$/.exec(seg);
     if (!m || seen.has(m[2])) continue;
     seen.add(m[2]);
     names.push({ name: m[2], module: m[1] });

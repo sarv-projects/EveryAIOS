@@ -53,6 +53,11 @@ and returning them to scope later is a matrix change plus an acceptance pass, no
 - **No Linux package** (`.deb`, `.rpm`, `.AppImage`, Flatpak, AUR) is published for v1.
 - **Telemetry is opt-in, content-free, and off by default**; the app is fully functional with it off and with
   no network (`P70.F6`).
+- **No file associations and no `everyaios://` URL scheme are registered.** Documents open through the app's
+  own file-open path; there is no OS-level open-document entry point (no single-instance handling, no
+  document event), so registering a double-click target would route `.xlsx`/`.docx`/`.csv` to a process that
+  cannot receive them. `scripts/check-app-metadata.mjs` fails if an association is declared without a handler
+  (`P70.A4`).
 
 ## 4. Data and upgrade policy
 

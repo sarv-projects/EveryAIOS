@@ -443,8 +443,13 @@ pub enum RuntimeEvent {
         agent_session_id: String,
     },
     // --- AgentBinding (P69.B2) — the durable unit that survives restart ---
+    // Boxed: `AgentBinding` is ~300 bytes against ~72 for the next-largest
+    // variant, and this enum rides in every `WorkEventEnvelope` the gateway
+    // retains for replay, so the box is held once per event instead of paying
+    // the outlier size on every copy. `Box<T>` serializes exactly as `T`, so
+    // the journal's wire shape is unchanged (`clippy::large_enum_variant`).
     AgentBindingCreated {
-        binding: AgentBinding,
+        binding: Box<AgentBinding>,
     },
     AgentBindingActivated {
         binding_id: String,
@@ -983,7 +988,7 @@ impl WorkGateway {
             // from the journal so a restart re-attaches to live provider
             // sessions instead of forgetting them.
             WorkEvent::Runtime(RuntimeEvent::AgentBindingCreated { binding }) => {
-                let mut binding = binding.clone();
+                let mut binding = (**binding).clone();
                 binding.last_event_seq = event.sequence;
                 self.agent_bindings
                     .insert(binding.binding_id.as_str().to_string(), binding);
@@ -1929,7 +1934,9 @@ impl WorkGateway {
         let envelope = self
             .append(
                 &work_id,
-                WorkEvent::Runtime(RuntimeEvent::AgentBindingCreated { binding }),
+                WorkEvent::Runtime(RuntimeEvent::AgentBindingCreated {
+                    binding: Box::new(binding),
+                }),
                 None,
             )
             .ok_or("append AgentBindingCreated")?;

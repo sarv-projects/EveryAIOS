@@ -417,7 +417,7 @@ Breaking a large job into simple subtasks **is viable and required**, but **not 
 | # | Algorithm | Where |
 |---|---|---|
 | 1 | **Forgetting-to-Remember** — polarized retention; negative lessons suppressed in normal recall, top-ranked for defensive queries (`POLARITY_SUPPRESSION=0.6`, `POLARITY_OVERLAP_FLOOR=0.4`) | core-memory/forgetting-to-remember |
-| 2 | **Evidence Grounding Score**  — empirical grounding score (retrieval confidence, coverage, hedging density); risk-band gating | core-engine/risk-compass **(pure stage ported: `everyaios-engine::risk::assess_evidence_grounding`)** |
+| 2 | **Evidence Grounding Score**  — empirical grounding score (retrieval confidence, coverage, hedging density); risk-band gating | core-engine/risk-compass **(pure stage port deleted with `everyaios-engine`, 2026-09-23 `P72`)** |
 | 3 | **Phantom Thread** — activity-aware memory pre-loading, warm set, ~0ms TTFT (target), leakage floors | core-memory/phantom-thread |
 | 4 | **Temporal Graph Anticipation** — weekly-rhythm prediction, morning briefs, beats recency by >15pts | core-memory/temporal-anticipation |
 | 5 | **Crystallization Engine** — compile non-cognitive workflow steps to deterministic 0-token loops | `everyaios-blueprint/crystallize.rs` |
@@ -432,7 +432,7 @@ Breaking a large job into simple subtasks **is viable and required**, but **not 
 | 14 | Adaptive query rewrite + RAG chunking + hybrid-search | `everyaios-storage` + `everyaios-memory` |
 | 15 | Circuit-breaker / backoff / alarms (rate discipline) | `everyaios-blueprint/iteration.rs` + `everyaios-core::automation_runtime` |
 | 16 | Cache-aware cost accounting (pi EMPTY_USAGE pattern) — **Rust per-call ledger + key-affinity (A9)** | core-providers/core-ai |
-| 17 | 3-stage agent loop: RetrievalPlanner → ToolPlanner → PermissionGate (≤5 tool rounds + extra-final guard) | core-engine **(pure stages ported: `everyaios-engine::{plan,gate}` — the async stream loop stays TS/coordinator)** |
+| 17 | 3-stage agent loop: RetrievalPlanner → ToolPlanner → PermissionGate (≤5 tool rounds + extra-final guard) | core-engine **(pure-stage Rust port deleted with `everyaios-engine`, 2026-09-23 `P72` — the async stream loop stays TS/coordinator)** |
 | 18 | Multi-signal retrieval fusion (mem0 SOTA: semantic + BM25 + entity-graph fused score; +29.6 temporal / +23.1 multi-hop claims) | C3 |
 | 19 | Cross-encoder hybrid rerank (OpenWebUI chunk-merge + rerank steal) | C3 |
 | 20 | Agent-managed context paging (Letta pattern: core/archival/recall) | C2 |
@@ -569,7 +569,7 @@ Open-source licenses: app MIT/Apache-2.0; bundled engines keep their own license
 ```mermaid
 flowchart TD
     UI["**TAURI WINDOW (Rust)** — lean native webview<br/>Chat · Reader · Workspace (Editor/Files/Terminal/Git) · Office · Connector Hub · Permission cards · Cockpit/Replay · Tray"]
-    CORE["**RUST CORE — 22 crates** (everyaios-*)<br/>core · ipc · guard · audit · vault · cdp · browser · script · mcp · office<br/>storage · memory · eval · blueprint · codeintel · acp · search · engine<br/>agents · catalog · desktop · types<br/>CDP driver + tiered engines (Chrome/Edge → Obscura/Lightpanda)<br/>rquickjs run sandbox · Guard1/Guard2 · append-only audit<br/>key-ring vault + Session Vault (SQLCipher) · MCP server"]
+    CORE["**RUST CORE — 21 crates** (everyaios-*)<br/>core · ipc · guard · audit · vault · cdp · browser · script · mcp · office<br/>storage · memory · eval · blueprint · codeintel · acp · search<br/>agents · catalog · desktop · types<br/>CDP driver + tiered engines (Chrome/Edge → Obscura/Lightpanda)<br/>rquickjs run sandbox · Guard1/Guard2 · append-only audit<br/>key-ring vault + Session Vault (SQLCipher) · MCP server"]
     SIDE["**BUN SIDECAR** — coordinator (reuses the core-* lineage packages)"]
     BROWSER["**BROWSER child(s)** — tiered · CDP loopback"]
     SANDBOX["**EXECUTION SANDBOX** — native OS sandbox (bwrap/Seatbelt/Windows) default · Docker/gVisor escalation · Firecracker extreme ("]
@@ -626,7 +626,7 @@ flowchart TD
 
 ## 4.0 Subsystem Map — modules, responsibilities & interfaces
 
-The runtime is exactly **three primary runtimes** (physical process location is an implementation detail of the Work Gateway/ExecutionNode model) — the Tauri window (UI), the Rust core (**22 crates + 1 planned `everyaios-sandbox` — the workspace `crates/Cargo.toml` is authoritative; the older 17/18/21 lists predate `engine`/`agents`/`catalog`/`desktop`/`types`, one orchestrator binary), and the Bun-compiled coordinator sidecar — plus spawned children (browser, ACP agents, MCP servers, sandbox). Every crate is a library; `everyaios-core` is the only binary-plus-library. The table is the complete module contract: what each module owns, its public interface, and its boundaries. (Section 5 gives module ownership per capability row; this section is the reverse map — per module.)
+The runtime is exactly **three primary runtimes** (physical process location is an implementation detail of the Work Gateway/ExecutionNode model) — the Tauri window (UI), the Rust core (**21 crates + 1 planned `everyaios-sandbox` — the workspace `crates/Cargo.toml` is authoritative; the older 17/18/21 lists predate `agents`/`catalog`/`desktop`/`types`, one orchestrator binary; the former 22nd crate `everyaios-engine` was deleted 2026-09-23, `P72`), and the Bun-compiled coordinator sidecar — plus spawned children (browser, ACP agents, MCP servers, sandbox). Every crate is a library; `everyaios-core` is the only binary-plus-library. The table is the complete module contract: what each module owns, its public interface, and its boundaries. (Section 5 gives module ownership per capability row; this section is the reverse map — per module.)
 
 ### The wire (who talks to whom)
 
@@ -654,7 +654,7 @@ The runtime is exactly **three primary runtimes** (physical process location is 
 | **everyaios-codeintel** | Code intelligence (I11/I7) | `lsp` (manager), `lsp_runner` (spawn), `lsp_config`, `repomap` (tree-sitter), `scip` (SCIP index), `semantic`, `session` | Read-only; no mutation.
 | **everyaios-search** | G8 cascade + deep research | `SearchTransport` trait; `G8Cascade`; `DeepResearch` (`ResearchNode`, `CitedClaim`, `CitedReport`), `ParallelFetchCascade` (`FETCH_TIERS`), `SiteIndex`, `DepEdge` | Live registries/sources only; results are evidence inputs, never claims.
 | **everyaios-blueprint** | The Forge + B2/B6 (agents as versioned bundles) | `blueprint`/`spec`/`md`/`frontmatter`/`persona`; `subagent` (B3: depth, per-parent budget), `topology` (B4), `surgical` (Aider-style SEARCH/REPLACE), `iteration`; `checkpoint`/`plan_cache`; `plugin`/`skill_store` (I6/I2 — the on-disk `SKILL.md` registry: `save`/`scan`/`load`/`delete`/`default_home`); `automation` (B7), `crystallize` | Blueprints are data + JS-in-sandbox; nothing here can mutate the host without a ticket. |
-| **everyaios-engine** | The engine's **pure** stage pipeline ported to Rust (Alg #2/#17 — surface-contract, retrieval/tool planners, Evidence Grounding Score, PermissionGate + session-approval map) | `contract::default_contract`; `plan::{plan_retrieval, plan_tools, family_to_tools, family_of}`; `risk::{assess_evidence_grounding, evaluate_calibration, count_uncertainty_markers}`; `gate::{evaluate, approve, clear, SessionApprovals, higher_risk, RiskLevel, GateResult, ConfirmationKind}` | Deterministic + LLM-free only. The **async streaming loop stays TS** (coordinator `StreamSession`) — this crate is the diffable, unit-tested slice (26 tests), not yet the live loop. |
+| **everyaios-engine** | *(deleted 2026-09-23, `P72`)* | — | Was the engine's **pure** stage pipeline ported to Rust (Alg #2/#17). Zero dependents since `P71.2c`; deleted so it can never become a second engine. Post-v1 return vehicle is `P71.7` under `ADR/0005`. |
 | **everyaios-agents** | P31/B9 custom-agent bundles — `agent.toml` schema, registry, templates, scope computation | `bundle` (`agent.toml` persona + engine binding + optional model pin + scoped MCP/connectors/skills/tools + workflows), `registry`, `moa`, `scope`, `workflows` | Composes existing rows (F8/F12/J17 ACP, A2/A6 models, P22 MCP, I6 guard); adds no engines — bundle schema + registry only.
 | **everyaios-catalog** | Provider/model catalog (P14/A6) + provider records & capability probes (P44/A11) | `catalog` (`ModelEntry` vendorable index), `model`, `pricing` (cache-aware cost engine), `routing` (filter matrix), `tier`, `gateway`, `sync`; `provider` (`ProviderRecord`/`ProviderRegistry`/alias normalization/merge), `probe` (`verify_report` — advertised vs observed hard caps) | Read-only index + pure merge/probe logic (network/registry access is the caller's injected seam); no secrets — `effective_base_url` never holds a key.
 | **everyaios-computeruse** (crate dir `everyaios-desktop`; was `everyaios-desktop`) | E9/P9.1 desktop computer-use — see/read/act over *native* windows. The package name is distinct from the src-tauri shell; host wiring is provided by `desktop_cmds`. | `platform` (X11/Win/macOS capture), `ocr`, `types` (`DesktopSnapshot` — screenshot_ref + window/app + a11y/OCR elements + stable `eN` refs + bounds/roles/labels + timestamp), `router` (element-ref action), `verify` (post-action verification), `policy` | Governed by the same effect funnel; model acts by stable element ref, never raw pixel coords; ref-invalidation invariant (re-observe before next action). **E9 path:** desktop observation and actions use the shared effect funnel, trusted gesture provenance for human actions, stable element references, post-action verification, and fail-closed policy. Autonomous use requires the same authorization, audit, verification, and recovery contracts as every other capability.
@@ -1034,10 +1034,18 @@ flowchart TD
     INSTALL -->|"skills_uninstall(id)"| DELETE["blueprint::SkillStore.delete"]
 ```
 
-### 4.2.9 Engine stage pipeline (Alg #2/#17, `everyaios-engine`)
+### 4.2.9 Engine stage pipeline (Alg #2/#17)
+
+> **Status (2026-09-23, `P72`):** the `everyaios-engine` pure-stage Rust port was **deleted** — zero
+> dependents since `P71.2c`, and [`ADR/0005`](ARCH/ADR/0005-external-agents-are-the-v1-engines.md)
+> deferred the built-in engine out of v1, so there was no loop left to serve. The algorithms below
+> remain specified (Alg #2/#17); their live implementations are the TS `core-engine` stages under the
+> coordinator's turn coordination, and the post-v1 return vehicle is `P71.7` (a governed baseline
+> binding), not a resurrected crate.
+
 ```mermaid
 flowchart LR
-    subgraph PORT["everyaios-engine — Rust pure-stage pipeline"]
+    subgraph PORT["former everyaios-engine — Rust pure-stage pipeline (deleted 2026-09-23)"]
       A["default_contract(surface)"] --> B["plan_retrieval · plan_tools · family_of"]
       B --> C["assess_hallucination_risk (Alg #2 risk compass)"]
       C --> D["PermissionGate + SessionApprovals (Alg #17)<br/>higher_risk · allowlist hard-fail · session-first / always confirm · 30-min TTL map"]
@@ -1370,7 +1378,7 @@ EveryAIOS hosts agents. An agent is either **external** (Codex CLI, Claude Code,
 | Connectors | `core-connectors/`: orchestrator, connection-manager (⚠️ the composio-adapter + aggregator catalog is dropped per the  Connector-platform decision — MCP-first: MCP Servers + Native BYO-vault + Tool Catalog) |
 | Search | `core-search/`: cascades, searxng-pool, bm25-rerank, query-rewrite, fan-out, research-tiers, mcp-client |
 | Automation | `everyaios-blueprint/` (workflow DAG, `crystallize.rs`, circuit-breaker in `iteration.rs`) + `everyaios-core::automation_runtime`; scheduler in `coordinator/scheduler.ts` |
-| Engine | `core-engine/`: stages (tool-planner, permission-gate, retrieval-planner), trajectory, risk-compass (→ Evidence Grounding Score, ) — **pure-stage Rust port in `everyaios-engine`** (contract · plan · risk · gate; 26 tests, Alg #2/#17) |
+| Engine | `core-engine/`: stages (tool-planner, permission-gate, retrieval-planner), trajectory, risk-compass (→ Evidence Grounding Score, ) — former **pure-stage Rust port `everyaios-engine` deleted 2026-09-23** (`P72`; contract · plan · risk · gate) |
 | Security | `core-engine/`: trust-ladder, permission-gate (advisory policy; `P69.D5`/`D6`); `core-tools/`: tool-runtime; `core-security/`: crypto, seal |
 | Sessions/data | `everyaios-core` (durable Work/session state via `work_gateway.rs`) + `everyaios-core::sync` (E2E) + `core-domain` schemas |
 | Agents | `core-agents/` registry (spec-file loader on top) |
@@ -1384,7 +1392,7 @@ EveryAIOS hosts agents. An agent is either **external** (Codex CLI, Claude Code,
 > Historical decisions and implementation evidence live in `SPEC-CHANGELOG.md`; delivery status and open work live in `TODO.md`. This list is the complete new-build surface (scope), sequenced in §7. **Architecture note:** the durable routing feed is vault `token_usage` → core `usage/recent` → coordinator `hydrateObservations()` → `RouteDecision`; audit retention is `everyaios-audit::retention::compact` with the Tauri daily sweep in `maintenance_cmds.rs`. The authoritative current counts are **only** the `TODO.md` header (do not copy a number into this file — it will rot). Older changelog entries preserve historical counts and are not current status. Named-type contracts that land on existing rows (no new matrix IDs): `ManagedResource` (process managers), `RouteDecision`/`ProviderObservation` (A7/H9), `MCPServerRecord` (F6/F8), **`BatchTicket`** (UC-1 “approve all” — exact operation list + args-hashes + resource identities + immutable change set; approval binds the exact set, never an operation category), ExecutionKernel fields (immutable `config_hash`/runtime manifest per run, pending Guard-2 inside the checkpoint, never-started vs started-unknown repair, event-sourced session as source of truth), `DocumentAsset` provenance, C6 edge confidence/source-span, B3 derived child permissions + abort/termination events, C2/C7 branch memory + `maintain()` tools, C3 abortable retrieval, E14 learned helpers, E10 acquisition adapter — each specified in its row above.
 
 1. Tauri v2 shell + workspace UI (Editor·Files·Terminal·Git tabs, chat, reader, office, blueprint editor, permission cards, analytics, tray)
-2. **Rust core (22 crates)** — everyaios-core · ipc · guard · audit · vault · cdp · browser · script · mcp · office (D1–D8 OOXML/IronCalc/lopdf) · storage (D9–D12) · memory (C-series + 7 algos) · eval (EV1) · blueprint (B2/B6) · codeintel (I7 LSP/SCIP) · acp (F8/F12/J17) · search (G1–G6/G8) · **engine (pure-stage port)** · agents (P31/B9 bundles) · catalog (P14/A11 provider records + probes) · desktop (E9/P9.1 computer-use) · **types (P47.3 shared contracts)**
+2. **Rust core (21 crates)** — everyaios-core · ipc · guard · audit · vault · cdp · browser · script · mcp · office (D1–D8 OOXML/IronCalc/lopdf) · storage (D9–D12) · memory (C-series + 7 algos) · eval (EV1) · blueprint (B2/B6) · codeintel (I7 LSP/SCIP) · acp (F8/F12/J17) · search (G1–G6/G8) · agents (P31/B9 bundles) · catalog (P14/A11 provider records + probes) · desktop (E9/P9.1 computer-use) · **types (P47.3 shared contracts)** *(former 22nd crate `everyaios-engine` deleted 2026-09-23, `P72`)*
 3. Coordinator sidecar (blueprint loader, agent loops, events) + ProcessSupervisor
 4. Key-ring vault (A2/A3) + OAuth subscription flows (A4) + Session Vault (E11) + session inheritance (E13)
 5. Browser tiers: **Lightpanda integration (default — `lightpanda serve` spawn, SSRF/file:// defaults, the browser/session contract), Obscura opt-in (`obscura serve` spawn)**, Camoufox/Fortress user-gated (E10); ⚠️ CloakBrowser deprecated (proprietary binary); challenge handler (E12); behavioral realism (E14); **browser network containment (06 §6.15 — WebRTC disable + worker fail-closed + SSRF-defaults)**; Session Vault full storage context. **Live (2026-09-10, verified against `src-tauri/src/browser_cmds.rs` + `everyaios-cdp`):** `browser_start` spawns system Chrome — `spawn_light()` is a crate/tests path, **not** the product default, until `browser_start` (or a Settings control that actually invokes it) uses it. The Settings → Browser engine dropdown is localStorage-only chrome (§4.1). See the E10 live note.

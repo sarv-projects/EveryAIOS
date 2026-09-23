@@ -125,6 +125,44 @@ jobs:
       - name: Install pnpm
         run: npm install -g pnpm
 
+      # P70.B1 — Authenticode code signing. The certificate itself cannot live
+      # in the repo; it arrives as the WINDOWS_CERTIFICATE (PFX, base64) and
+      # WINDOWS_CERTIFICATE_PASSWORD secrets. This step FAILS the job when
+      # either is absent — a lapsed/missing certificate must stop the release,
+      # never quietly produce an unsigned installer (B1's stated failure mode).
+      # signtool (Windows SDK) signs every produced executable + installer with
+      # an RFC-3161 trusted timestamp; the tauri-action step below then bundles
+      # the already-signed binaries.
+      - name: Require the Authenticode certificate (P70.B1)
+        shell: bash
+        run: |
+          if [ -z "${WINDOWS_CERTIFICATE:-}" ] || [ -z "${WINDOWS_CERTIFICATE_PASSWORD:-}" ]; then
+            echo "::error::P70.B1 — WINDOWS_CERTIFICATE / WINDOWS_CERTIFICATE_PASSWORD secrets are not set on this repository."
+            echo "::error::Refusing to produce an UNSIGNED release: Authenticode-sign every executable and installer, or fix the certificate (custody/renewal: docs/signing.md)."
+            exit 1
+          fi
+          echo "P70.B1: Authenticode certificate secrets present"
+        env:
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+
+      - name: Decode + install the certificate into the user store (P70.B1)
+        shell: pwsh
+        run: |
+          $pfxPath = Join-Path $env:RUNNER_TEMP "codesign.pfx"
+          [IO.File]::WriteAllBytes($pfxPath, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE))
+          $pwd = ConvertTo-SecureString -String $env:WINDOWS_CERTIFICATE_PASSWORD -Force -AsPlainText
+          $imported = Import-PfxCertificate -FilePath $pfxPath -CertStoreLocation Cert:\CurrentUser\My -Password $pwd
+          if (-not $imported -or $imported.Count -eq 0) { throw "P70.B1: the Authenticode certificate could not be imported" }
+          $code = $imported | Where-Object { $_.HasPrivateKey }
+          if (-not $code) { throw "P70.B1: imported certificate has no private key" }
+          $thumb = ($code | Select-Object -First 1).Thumbprint
+          echo "CODESIGN_THUMBPRINT=$thumb" >> $env:GITHUB_ENV
+          Remove-Item -Force $pfxPath
+        env:
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+
       - name: Install workspace deps
         run: |
           pnpm install
@@ -148,9 +186,15 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Updater signing: only the release-private key can sign artifacts.
+          # P70.B1 — tauri-bundler signs the bundle's executables with signtool
+          # when it finds the certificate in the user store (thumbprint above).
+          # The timestamp server makes the signatures valid beyond certificate
+          # expiry (a lapsed certificate must not invalidate past releases).
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+          # Updater signing: only the release-private key can sign artifacts.
           args: --target ${{ matrix.target }} --bundles nsis,msi
           tagName: v__VERSION__
           releaseName: 'EveryAIOS v__VERSION__'
@@ -175,6 +219,13 @@ jobs:
           releaseDraft: true
           prerelease: false
 
+      # P70.A5 — the produced installer and the installed footprint are measured
+      # against the recorded budgets; a release that breaks its size/footprint
+      # budget fails here rather than shipping and being noticed later.
+      - name: Size + footprint budget (P70.A5)
+        shell: bash
+        run: node scripts/check-size-budget.mjs --bundle "desktop_app/src-tauri/target/${{ matrix.target }}/release/bundle" --target ${{ matrix.target }}
+
       # P70.B7 — the artifact-leak gate runs on the PRODUCED bundle, not just
       # the source tree: no key material, .env, dev database, or signing key
       # may ever ship inside an installer. Scans the whole bundle directory
@@ -182,3 +233,22 @@ jobs:
       - name: Secret-leak gate on produced artifacts (P70.B7)
         shell: bash
         run: node scripts/check-artifact-hygiene.mjs --paths "desktop_app/src-tauri/target/*/release/bundle"
+
+      # P70.B5 — a software bill of materials (CycloneDX) covering the Rust
+      # workspace, the shell, the UI and the coordinator, plus a build-provenance
+      # attestation, attached to the release so a consumer can verify what was
+      # built, from which commit, by which pipeline. Generated from the lockfiles
+      # (deterministic, offline); a missing SBOM fails the job.
+      - name: Generate SBOM + provenance attestation (P70.B5)
+        shell: bash
+        run: node scripts/gen-sbom.mjs --out desktop_app/dist-sbom --commit "$GITHUB_SHA" --run "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+
+      - name: Attach SBOM + provenance to the release (P70.B5)
+        shell: bash
+        run: |
+          cd desktop_app/dist-sbom
+          for f in *; do
+            gh release upload "v$(node -p "require('../src-tauri/tauri.conf.json').version")" "$f" --clobber
+          done
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

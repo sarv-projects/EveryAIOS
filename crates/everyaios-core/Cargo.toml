@@ -45,6 +45,10 @@ everyaios-browser = { path = "../everyaios-browser" }
 # P69.D31 — dev-only: CDP is a backend under `BrowserService`, never an
 # agent-facing or production dependency of the kernel.
 everyaios-cdp = { path = "../everyaios-cdp" }
+# P70.C5 — the upgrade-evidence acceptance harness writes temp data dirs
+tempfile = "3"
+# P70.C5 — the harness seals/verifies store bytes and returns Result
+anyhow = "1"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

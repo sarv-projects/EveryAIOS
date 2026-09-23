@@ -280,8 +280,13 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Syn
         sync_cmds::node_attach,
         sync_cmds::sync_fingerprint,
         // P8.8: auto-updater check + install/relaunch.
+        // P70.C2–C4: channel selection, background download, restart.
         updater_cmds::updater_check,
         updater_cmds::updater_install,
+        updater_cmds::updater_channel_get,
+        updater_cmds::updater_channel_set,
+        updater_cmds::updater_download,
+        updater_cmds::updater_restart,
         // P11.5.3: real FS / shell / CDP-browser / memory views.
         fs_cmds::fs_home,
         fs_cmds::fs_list_dir,
