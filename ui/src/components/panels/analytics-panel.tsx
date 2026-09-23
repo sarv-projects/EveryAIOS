@@ -11,7 +11,12 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { inTauri } from '@/lib/tauri'
-import { usageSnapshot, sessionTotals, chiefSpendWarning } from '@/lib/spend'
+import {
+  costReadout,
+  sessionTotals,
+  unreportedOwners,
+  usageSnapshot,
+} from '@/lib/spend'
 import { ChartCard, ModelLeaderboard, SessionsTable, AgentBreakdown } from './analytics-sections'
 
 const KPIS = [
@@ -51,7 +56,18 @@ const TOOLTIP_STYLE = {
 
 export default function AnalyticsPanel() {
   const notify = useAppStore((s) => s.notify)
-  const [live, setLive] = useState<{ spent: number; tokens: number; sessions: number; warnNotDelegating?: boolean } | null>(null)
+  const [live, setLive] = useState<{
+    spent: number
+    /** P71.4 — whether `spent` is a producer's report or our price estimate. */
+    costKind: 'reported' | 'estimated' | 'unknown'
+    tokens: number
+    sessions: number
+    warnNotDelegating?: boolean
+    /** Owners whose turns produced no usage report (I15 — absent, not zero). */
+    unreported: Array<[string, number]>
+    /** Agreed reporters, labelled. */
+    reporters: string[]
+  } | null>(null)
   const [liveError, setLiveError] = useState<string | null>(null)
   const [exporting, setExporting] = useState(false)
   useEffect(() => {
@@ -60,12 +76,20 @@ export default function AnalyticsPanel() {
     setLiveError(null)
     Promise.all([usageSnapshot(), sessionTotals()]).then(([snapshot, totals]) => {
       if (active) {
-        const spend = snapshot.chiefSpend ?? chiefSpendWarning(0, snapshot.total.tokensIn + snapshot.total.tokensOut)
+        // P71.4 — the primary/worker split exists only when the turn path
+        // attributed a primary agent; `null` renders as "not attributed",
+        // never as a 0% share. The old fallback invented a share from the
+        // totals, which is exactly what this row removes (I15).
+        const spend = snapshot.primarySpend ?? null
+        const cost = costReadout(snapshot)
         setLive({
-          spent: snapshot.byKey.reduce((sum, row) => sum + (row.costUsd ?? 0), 0),
+          spent: cost.usd ?? 0,
+          costKind: cost.kind,
           tokens: snapshot.total.tokensIn + snapshot.total.tokensOut,
           sessions: totals.length,
-          warnNotDelegating: spend.warnNotDelegating,
+          warnNotDelegating: spend?.warnNotDelegating,
+          unreported: unreportedOwners(snapshot),
+          reporters: Object.keys(snapshot.observations?.by_source ?? {}),
         })
       }
     }).catch((e) => { if (active) { setLive(null); setLiveError(e instanceof Error ? e.message : String(e)) } })
@@ -103,7 +127,19 @@ export default function AnalyticsPanel() {
 
   const kpis = live
     ? [
-        { label: 'Total spent', value: `$${live.spent.toFixed(2)}`, icon: DollarSign, tone: 'text-brand' },
+        {
+          label:
+            live.costKind === 'reported'
+              ? 'Total spent (reported)'
+              : live.costKind === 'estimated'
+                ? 'Total spent (estimated)'
+                : 'Total spent',
+          // P71.4 — an agent that reported no cost gets an honest dash, never a
+          // plausible number built from a price table (I15).
+          value: live.costKind === 'unknown' ? '—' : `$${live.spent.toFixed(2)}`,
+          icon: DollarSign,
+          tone: 'text-brand',
+        },
         { label: 'Tokens used', value: live.tokens >= 1_000_000 ? `${(live.tokens / 1_000_000).toFixed(1)}M` : `${Math.round(live.tokens / 1000)}K`, icon: Cpu, tone: 'text-sky-300' },
         { label: 'Chats', value: String(live.sessions), icon: Layers, tone: 'text-foreground' },
         { label: 'Avg cost/chat', value: live.sessions > 0 ? `$${(live.spent / live.sessions).toFixed(2)}` : '—', icon: Timer, tone: 'text-emerald-300' },
@@ -122,7 +158,24 @@ export default function AnalyticsPanel() {
               <>
                 <Badge className="bg-emerald-500/15 text-[9px] text-emerald-300">live ledger</Badge>
                 {live.warnNotDelegating && (
-                  <Badge className="bg-warning/15 text-[9px] text-warning">Chief is not delegating</Badge>
+                  <Badge className="bg-warning/15 text-[9px] text-warning">Primary agent is not delegating</Badge>
+                )}
+                {live.costKind === 'estimated' && (
+                  <Badge className="bg-muted text-[9px] text-muted-foreground"
+                    title="No producer reported a cost — this is EveryAIOS's estimate from configured prices">
+                    cost estimated
+                  </Badge>
+                )}
+                {live.costKind === 'unknown' && (
+                  <Badge className="bg-muted text-[9px] text-muted-foreground"
+                    title="Nothing has reported tokens or cost yet — absent is not zero">
+                    no usage reported
+                  </Badge>
+                )}
+                {live.reporters.length > 0 && (
+                  <Badge className="bg-muted text-[9px] text-muted-foreground">
+                    reported by {live.reporters.join(', ')}
+                  </Badge>
                 )}
               </>
             ) : liveError ? (
@@ -139,6 +192,21 @@ export default function AnalyticsPanel() {
           {inTauri() && !live && (
             <div className="rounded-lg border border-dashed border-border bg-card p-4 text-xs text-muted-foreground">
               {liveError ? `Live ledger unavailable — ${liveError}` : 'Loading live analytics from the encrypted usage ledger…'}
+            </div>
+          )}
+          {/* P71.4 — the honest gap: turns that finished with no usage report.
+              Shown as a fact about the ledger, not as zero spending. */}
+          {live && live.unreported.length > 0 && (
+            <div className="rounded-lg border border-warning/30 bg-warning/5 px-4 py-3 text-[11px] text-warning">
+              <div className="font-medium">Some turns reported no usage</div>
+              <p className="mt-0.5 text-muted-foreground">
+                {live.unreported
+                  .slice(0, 4)
+                  .map(([owner, turns]) => `${owner} ×${turns}`)
+                  .join(' · ')}
+                {live.unreported.length > 4 ? ` · +${live.unreported.length - 4} more` : ''}
+                {' '}— those turns are absent from these totals, not zero.
+              </p>
             </div>
           )}
           {/* KPI cards — live ledger in the shell, labeled sample data in preview */}

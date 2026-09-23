@@ -266,4 +266,19 @@ tell at a glance whether their morning job ran.
 - The `automations-panel` / `automation-editor` / `schedules-section` surfaces keep their UX; what changes is
   what they are allowed to be an authority over — nothing (`UI.md` §1).
 
+---
+
+## Repo-comparison additions (briefs 01–19)
+
+> Delta-analysis items re-homed into this contract (each entry: brief item ID · disposition tag ·
+> SOURCE repo + evidence path under `REPO-COMPARE/clone2|clone3/` · one-sentence LOGIC · target §).
+> Arrows to files not owned here are annotations only.
+
+- **RTE-9** · [ADD] · SOURCE: `clone2/litellm` (provider/deployment/tag budget model) — LOGIC: budget gates (provider/deployment/tag budgets, one batched spend read, fail-closed when no budget remains, remaining-budget gauges) scope to Work/session budgets on a single-operator desktop — no tenancy — target: §2 (`budget_policy`) → `CORE.md` §8.4 CostLedger + Guard (annotations).
+- **CON-3** · [ADD] · SOURCE: `clone2/nango` (signed-webhook pipeline; ELv2 pattern-mining only, never linked) — LOGIC: a signed inbound webhook pipeline (HMAC-SHA256, bounded retries with backoff, timeout, circuit breaker, trusted-setter-only URL override, throttled inbound dispatch queue) moves event triggers honestly up the §4 ladder — polling → app-running listener → user-hosted ingress (`deploy/BYO-HOST.md`), no hosted relay — target: §4 (Guard egress annotation).
+- **WRK-11** · [IMPROVE] · SOURCE: `clone2/openclaw` (event-conditioned standing intents) — LOGIC: standing intents get fire budgets, cooldown and authenticated-owner-only creation so budgets bound autonomous firing and owner-only creation prevents an agent from arming itself, all still counted as occurrences — target: §4.
+- **12-5** · [IMPROVE] · SOURCE: `clone2/openwork` (`docs/features/automations-desktop-runner/README.md` — desktop-runner claim protocol) — LOGIC: the scheduler/runner split claims each occurrence atomically under lock with heartbeats and terminates every missed/unavailable occurrence as an explicit receipt instead of a silent skip — target: §§4–7.
+- **WRK-3** · [IMPROVE] · SOURCE: `clone2/openclaw` (`heartbeat-monitor.ts`; restart-catchup / recovery-identity / overdue test templates verified by brief 17) — LOGIC: cron operational rules — reschedule-overdue-never-replay at startup, reconcile by exact run identity (never coincident start times), grace windows, hard-kill escalation, supervisor auto-disable with visible enabled/disabled state — make the `P71.3d` trigger-plane repair verifiable, trigger-plane only — target: §7/§9.
+- **11-6** · **Not adopted (recorded)** · SOURCE: `clone2/AIOS` (`aios/scheduler/fifo_scheduler.py`, `rr_scheduler.py`, `aios/syscall/syscall.py`) — LOGIC: a thread FIFO/RR scheduler-as-kernel carries no authorization, no durability and no effect ledger, so the Work factory + scheduler boundary (§5, §9) and the WORK.md §7 reduction rule stay authoritative — this pattern stays rejected — target: §5/§9 (+ [WORK.md](WORK.md) §7).
+
 

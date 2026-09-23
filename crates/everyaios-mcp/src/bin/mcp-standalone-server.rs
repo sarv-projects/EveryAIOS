@@ -1,7 +1,10 @@
 //! Standalone EveryAIOS MCP server binary (P6.7 external-client E2E fixture).
 //!
-//! Serves the REAL native catalog — 51 tools: browser 37 + office 4 +
-//! memory 3 + search 2 + storage 5 (`everyaios_mcp::all_tools()`) — over
+//! Advertises the shared-plane façades (`everyaios_mcp::SHARED_FACADES`) —
+//! the task-shaped surface an external agent actually receives — with the
+//! kernel catalogue they fan out to (51 tools: browser 37 + office 4 +
+//! memory 3 + search 2 + storage 5, `everyaios_mcp::all_tools()`) still
+//! callable by name but never advertised, over
 //! newline-delimited stdio (default) or a one-shot loopback HTTP listener
 //! (`--http <port>`, optional `--bearer <token>` — the same origin/bearer/body
 //! gates the production host enforces).

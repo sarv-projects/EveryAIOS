@@ -79,10 +79,29 @@ fn main() {
                     }
                 });
                 let _ = writeln!(stdout, "{notif}");
+                // P71.4 — the prompt result carries the agent's **own** usage
+                // report. This is the observation the ledger records with
+                // `UsageSource::AgentReport`; a prompt naming `no-usage` (see
+                // below) omits the block so the unreported path is drivable
+                // too — absence must not read as a measured zero.
+                let result = if text.contains("no-usage") {
+                    serde_json::json!({ "stopReason": "end_turn" })
+                } else {
+                    serde_json::json!({
+                        "stopReason": "end_turn",
+                        "usage": {
+                            "inputTokens": 1200,
+                            "outputTokens": 180,
+                            "cachedReadTokens": 900,
+                            "cachedWriteTokens": 40,
+                            "costUsd": 0.0125
+                        }
+                    })
+                };
                 let resp = serde_json::json!({
                     "jsonrpc": "2.0",
                     "id": id,
-                    "result": { "stopReason": "end_turn" }
+                    "result": result
                 });
                 let _ = writeln!(stdout, "{resp}");
             }

@@ -140,7 +140,7 @@ pub use summary::{
     answer_over_summaries, index_summaries, summarize_directory, summarize_file, FileSummary,
 };
 pub use taste::{TasteRule, TasteStore};
-pub use usage::{AgentSessionMetrics, UsageLedger, UsageRecord};
+pub use usage::{AgentSessionMetrics, UsageLedger, UsageObservations, UsageRecord, UsageSource};
 
 use thiserror::Error;
 

@@ -120,6 +120,11 @@
   --font-geist-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', monospace;
   --radius: 0.5rem;
 
+  /* Native chrome follows the theme: scrollbars, select popups, date pickers
+     and autofill all render from `color-scheme`. Without this the dark theme
+     keeps light scrollbars and form controls (P66.5 follow-up). */
+  color-scheme: light;
+
   /* Brand accent — cool-blue semantic accent token (v3.78, UI-DESIGN-PROMPT.md §2.1).
      Default cool blue #2563EB (221 83% 53%); selectable accents support. */
   --brand: 221 83% 53%;
@@ -162,7 +167,10 @@
   --border: 38 17% 89%;               /* #E8E5E0 warm hairline */
   --input: 38 10% 82%;                /* #D4D1CC */
   --ring: 221 83% 53%;
-  --chart-1: 221 83% 53%;
+  /* Chart series 1 tracks the chosen accent, so a themed dashboard is themed
+     end to end. `var()` resolves against the *accent-overridden* `--brand` on
+     the same element, so this needs no per-accent duplication. */
+  --chart-1: var(--brand);
   --chart-2: 199 89% 48%;
   --chart-3: 142 76% 36%;
   --chart-4: 41 96% 40%;
@@ -178,6 +186,7 @@
 }
 
 .dark {
+  color-scheme: dark;
   --surface-0: 60 3% 10%;             /* #1A1917 */
   --surface-1: 60 3% 13%;             /* #232220 */
   --surface-2: 60 4% 17%;             /* #2D2C29 */
@@ -217,7 +226,7 @@
   --border: 60 4% 20%;
   --input: 60 4% 20%;
   --ring: 217 91% 67%;
-  --chart-1: 217 91% 67%;
+  --chart-1: var(--brand);
   --chart-2: 199 89% 55%;
   --chart-3: 142 76% 45%;
   --chart-4: 41 96% 50%;
@@ -310,6 +319,44 @@
   --ring: 41 96% 41%;
   --sidebar-primary: 41 96% 41%;
   --sidebar-ring: 41 96% 41%;
+}
+
+[data-accent="rose"] {
+  --brand: 350 70% 40%;
+  --brand-hover: 350 70% 33%;
+  --brand-soft: 350 70% 40% / 0.1;
+  --primary: 350 70% 40%;
+  --ring: 350 70% 40%;
+  --sidebar-primary: 350 70% 40%;
+  --sidebar-ring: 350 70% 40%;
+}
+.dark[data-accent="rose"], [data-accent="rose"] .dark {
+  --brand: 350 90% 70%;
+  --brand-hover: 350 90% 78%;
+  --brand-soft: 350 90% 70% / 0.15;
+  --primary: 350 90% 70%;
+  --ring: 350 90% 70%;
+  --sidebar-primary: 350 90% 70%;
+  --sidebar-ring: 350 90% 70%;
+}
+
+[data-accent="teal"] {
+  --brand: 180 75% 26%;
+  --brand-hover: 180 75% 20%;
+  --brand-soft: 180 75% 26% / 0.1;
+  --primary: 180 75% 26%;
+  --ring: 180 75% 26%;
+  --sidebar-primary: 180 75% 26%;
+  --sidebar-ring: 180 75% 26%;
+}
+.dark[data-accent="teal"], [data-accent="teal"] .dark {
+  --brand: 180 70% 62%;
+  --brand-hover: 180 70% 70%;
+  --brand-soft: 180 70% 62% / 0.15;
+  --primary: 180 70% 62%;
+  --ring: 180 70% 62%;
+  --sidebar-primary: 180 70% 62%;
+  --sidebar-ring: 180 70% 62%;
 }
 
 @layer base {
@@ -772,6 +819,18 @@ html.high-contrast .text-muted-foreground {
 html.font-scale-sm { font-size: 13px; }
 html.font-scale-md { font-size: 15px; }
 html.font-scale-lg { font-size: 17px; }
+
+/* Density — `html[data-density=compact|comfortable|spacious]`.
+
+   Tailwind v4 derives every padding, margin, gap and size utility from the one
+   `--spacing` token (`p-4` is `calc(var(--spacing) * 4)`), so re-declaring it
+   here retunes the whole spacing rhythm at once instead of rewriting hundreds
+   of call sites. These rules are unlayered, so they win over Tailwind's
+   `@layer theme` defaults regardless of source order; `--spacing` is otherwise
+   untouched (`0.25rem`), which is what `comfortable` states explicitly. */
+html[data-density='compact'] { --spacing: 0.21875rem; }
+html[data-density='comfortable'] { --spacing: 0.25rem; }
+html[data-density='spacious'] { --spacing: 0.2875rem; }
 
 /* RTL (P11.3) — logical-property pass for layout primitives that hardcoded
    physical sides. Panels that use flex + gap are already direction-agnostic;

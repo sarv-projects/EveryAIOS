@@ -183,6 +183,18 @@ pub trait DoctorProbe {
     fn mcp_server_count(&self) -> usize;
     /// Does the audit/database directory exist and is it writable?
     fn database_writable(&self) -> Result<PathBuf, String>;
+    /// P70.D3 — is the packaged coordinator sidecar binary present (the
+    /// bundled resource, `EVERYAIOS_COORDINATOR_BIN`, or a dev build)?
+    /// `None` = the probe cannot know (e.g. the headless CLI has no
+    /// resource dir) — the check is then skipped, not failed.
+    fn sidecar_binary(&self) -> Option<Result<PathBuf, String>> {
+        None
+    }
+    /// P70.D3 — the host OS the report is running on ("windows", "linux",
+    /// "macos", …). Doctor flags hosts outside the published matrix.
+    fn platform(&self) -> String {
+        std::env::consts::OS.to_string()
+    }
 }
 
 /// Disk-free warning floor (matches storage `health` threshold intent).
@@ -297,6 +309,52 @@ pub fn run_doctor(version: &str, probe: &dyn DoctorProbe) -> DoctorReport {
         "MCP",
         format!("{mcp} server(s) installed; 42-tool inbuilt catalog always available"),
     ));
+
+    // P70.D3 — the coordinator sidecar binary (the live agent-work path).
+    // The desktop shell's chat/delegation surfaces are dead without it, so a
+    // missing bundle is a FAIL with the remedy named, not a soft warn.
+    match probe.sidecar_binary() {
+        Some(Ok(p)) => checks.push(Check::ok(
+            "Sidecar",
+            format!("coordinator binary present ({})", p.display()),
+        )),
+        Some(Err(e)) => checks.push(Check::fail(
+            "Sidecar",
+            format!("coordinator binary not found: {e}"),
+            if probe.platform() == "windows" {
+                "the install is broken or incomplete — reinstall EveryAIOS"
+            } else {
+                "build it with `pnpm --filter @everyaios/coordinator build` (or set EVERYAIOS_COORDINATOR_BIN)"
+            },
+        )),
+        // Headless CLI has no resource dir to probe — skip, don't guess.
+        None => {}
+    }
+
+    // P70.D5 — the host platform, checked against the published matrix. Out
+    // of scope is stated where the user is, never silently assumed away.
+    let platform = probe.platform();
+    match platform.as_str() {
+        "windows" => checks.push(Check::ok(
+            "Platform",
+            "Windows — a shipped v1 platform (SUPPORT-MATRIX.md)".to_string(),
+        )),
+        "linux" => checks.push(Check::warn(
+            "Platform",
+            "native Linux desktop is out of v1 scope",
+            "WSL2 is supported as an AGENT host; the cockpit ships for Windows (SUPPORT-MATRIX.md §1)",
+        )),
+        "macos" => checks.push(Check::warn(
+            "Platform",
+            "macOS is out of v1 scope",
+            "no macOS artifact is published; the local harness still builds here (SUPPORT-MATRIX.md §1)",
+        )),
+        other => checks.push(Check::warn(
+            "Platform",
+            format!("unknown host OS: {other}"),
+            "not in the published support matrix (SUPPORT-MATRIX.md §1)",
+        )),
+    }
 
     // Browser engine crate is compiled in (always true in a real build); this
     // line reports the *engine* readiness separate from a live CDP session.
@@ -428,6 +486,43 @@ impl DoctorProbe for LiveProbe {
         let _ = std::fs::remove_file(&probe);
         Ok(self.data_dir.clone())
     }
+
+    /// P70.D3 — the sidecar as far as the headless probe can see: the
+    /// `EVERYAIOS_COORDINATOR_BIN` override, then the workspace dev build
+    /// paths relative to the current directory. The *packaged resource dir*
+    /// needs the running app handle, so the desktop shell layers its own
+    /// `DoctorProbe` on top of this one for the full picture; from the CLI
+    /// this is the honest subset.
+    fn sidecar_binary(&self) -> Option<Result<PathBuf, String>> {
+        if let Ok(p) = std::env::var("EVERYAIOS_COORDINATOR_BIN") {
+            let p = PathBuf::from(p);
+            return Some(if p.is_file() {
+                Ok(p)
+            } else {
+                Err(format!("EVERYAIOS_COORDINATOR_BIN points at a missing file: {}", p.display()))
+            });
+        }
+        let exe_suffix = if cfg!(windows) { ".exe" } else { "" };
+        let cwd = std::env::current_dir().ok()?;
+        for rel in [
+            "packages/coordinator/dist/coordinator",
+            "../packages/coordinator/dist/coordinator",
+        ] {
+            let mut p = cwd.join(rel);
+            p.set_extension(exe_suffix.trim_start_matches('.'));
+            if p.is_file() {
+                return Some(Ok(p));
+            }
+            // Also try the unsuffixed name (the compile output on unix).
+            let bare = cwd.join(rel);
+            if bare.is_file() {
+                return Some(Ok(bare));
+            }
+        }
+        Some(Err(
+            "not in EVERYAIOS_COORDINATOR_BIN or the workspace build output".to_string()
+        ))
+    }
 }
 
 #[cfg(test)]
@@ -443,6 +538,9 @@ mod tests {
         creds: usize,
         mcp: usize,
         db: Result<PathBuf, String>,
+        /// `None` = the probe cannot know (check skipped, like the CLI).
+        sidecar: Option<Result<PathBuf, String>>,
+        platform: String,
     }
 
     impl Default for FakeProbe {
@@ -456,6 +554,8 @@ mod tests {
                 creds: 2,
                 mcp: 1,
                 db: Ok(PathBuf::from("/tmp/x")),
+                sidecar: Some(Ok(PathBuf::from("/opt/everyaios/bin/coordinator"))),
+                platform: "windows".into(),
             }
         }
     }
@@ -482,6 +582,12 @@ mod tests {
         fn database_writable(&self) -> Result<PathBuf, String> {
             self.db.clone()
         }
+        fn sidecar_binary(&self) -> Option<Result<PathBuf, String>> {
+            self.sidecar.clone()
+        }
+        fn platform(&self) -> String {
+            self.platform.clone()
+        }
     }
 
     #[test]
@@ -489,9 +595,42 @@ mod tests {
         let r = run_doctor("v-test", &FakeProbe::default());
         assert_eq!(r.overall, Status::Ok);
         assert_eq!(r.exit_code(), 0);
-        // Core + Vault + Database + Disk + Chrome + Local + Credentials + MCP + Browser
-        assert_eq!(r.checks.len(), 9);
+        // Core + Vault + Database + Disk + Chrome + Local + Credentials + MCP
+        // + Sidecar + Platform + Browser
+        assert_eq!(r.checks.len(), 11);
         assert!(r.checks.iter().all(|c| c.status == Status::Ok));
+    }
+
+    /// P70.D3 — a missing sidecar binary is a FAIL naming the remedy, and on
+    /// Windows the remedy is "reinstall" (a broken install), not a build tip.
+    #[test]
+    fn missing_sidecar_fails_with_the_reinstall_remedy_on_windows() {
+        let probe = FakeProbe {
+            sidecar: Some(Err("bundle resource absent".into())),
+            ..Default::default()
+        };
+        let r = run_doctor("v", &probe);
+        let sidecar = r.checks.iter().find(|c| c.name == "Sidecar").unwrap();
+        assert_eq!(sidecar.status, Status::Fail);
+        assert!(sidecar.hint.as_deref().unwrap().contains("reinstall"));
+        assert_eq!(r.overall, Status::Fail);
+    }
+
+    /// P70.D5 — an out-of-scope host is a stated WARN with the matrix
+    /// pointer, never a silent pass and never a fabricated FAIL.
+    #[test]
+    fn out_of_scope_platform_warns_with_the_matrix_pointer() {
+        for os in ["linux", "macos", "freebsd"] {
+            let probe = FakeProbe {
+                platform: os.into(),
+                ..Default::default()
+            };
+            let r = run_doctor("v", &probe);
+            let platform = r.checks.iter().find(|c| c.name == "Platform").unwrap();
+            assert_eq!(platform.status, Status::Warn, "os={os}");
+            assert!(platform.hint.as_deref().unwrap().contains("SUPPORT-MATRIX.md"));
+            assert_eq!(r.overall, Status::Warn);
+        }
     }
 
     #[test]

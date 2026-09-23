@@ -17,16 +17,57 @@
   </head>
   <body>
     <div id="root"></div>
-    <!-- P55.12 — apply the stored theme before the bundle paints, so a saved
-         choice never flashes the default. Same key + owner as ThemeProvider. -->
+    <!-- P55.12 / P70 — apply the whole stored appearance before the bundle
+         paints, so a saved choice never flashes the default. Keys, encoding
+         and attributes mirror `theme-provider.tsx` exactly (values are stored
+         JSON-encoded so `"system"` and `true` round-trip); the provider
+         re-applies the same snapshot on mount, so the two cannot disagree.
+         The settings-prefixed key is a legacy fallback for installs that saved
+         before the appearance keys were moved to their own names. -->
     <script>
-      try {
-        var t = localStorage.getItem('everyaios.theme')
-        if (t === 'light' || t === 'dark') {
-          document.documentElement.classList.remove('light', 'dark')
-          document.documentElement.classList.add(t)
+      (function () {
+        var d = document.documentElement
+        var P = 'everyaios.settings.'
+        function read(key) {
+          var raw = null
+          try {
+            raw = localStorage.getItem(key)
+            if (raw === null) raw = localStorage.getItem(P + key)
+          } catch (e) { return null }
+          if (raw === null || raw === '') return null
+          // Values are plain text; the quoted form is the JSON era, still read
+          // so a choice saved before the encoding change survives.
+          if (raw.charAt(0) === '"') {
+            try { return JSON.parse(raw) } catch (e) { return null }
+          }
+          return raw
         }
-      } catch (e) { /* storage unavailable — keep the markup default */ }
+        try {
+          var mode = read('everyaios.theme')
+          if (mode !== 'light' && mode !== 'dark' && mode !== 'system') mode = 'system'
+          var dark = mode === 'dark'
+          if (mode === 'system') {
+            try { dark = window.matchMedia('(prefers-color-scheme: dark)').matches }
+            catch (e) { dark = true }
+          }
+          d.classList.remove('light', 'dark')
+          d.classList.add(dark ? 'dark' : 'light')
+
+          var accents = ['blue', 'sky', 'emerald', 'violet', 'amber', 'rose', 'teal']
+          var accent = read('everyaios.accent')
+          d.setAttribute('data-accent', accents.indexOf(accent) >= 0 ? accent : 'blue')
+
+          var scale = read(P + 'fontScale')
+          d.classList.add('font-scale-' + (scale === 'sm' || scale === 'lg' ? scale : 'md'))
+
+          var hc = read(P + 'highContrast')
+          if (hc === 'true' || hc === '1' || hc === true) d.classList.add('high-contrast')
+
+          var density = read(P + 'density')
+          if (density !== 'compact' && density !== 'spacious') density = 'comfortable'
+          d.setAttribute('data-density', density)
+        } catch (e) { /* storage unavailable — keep the markup default */ }
+      })()
     </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>

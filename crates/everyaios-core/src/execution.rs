@@ -419,6 +419,13 @@ impl ExecutionKernel {
     }
 
     /// Number of live work records (drives the fork/replay surface + tests).
+    /// P71.9e — read-only iteration over every Work record (the automations
+    /// run surface reads the ledger's scheduler-triggered rows back). No
+    /// mutation escapes this accessor.
+    pub fn all(&self) -> impl Iterator<Item = &Work> {
+        self.executions.values()
+    }
+
     pub fn len(&self) -> usize {
         self.executions.len()
     }
@@ -773,17 +780,17 @@ impl ExecutionKernel {
                     .iter_mut()
                     .find(|n| n.id == node_id)
                     .ok_or_else(|| format!("unknown CUA node {node_id}"))?;
-                let out = crate::apply_worker_act(node, verify_ok);
-                if out == crate::WorkerOutcome::Halt {
+                let out = crate::apply_delegation_act(node, verify_ok);
+                if out == crate::DelegationOutcome::Halt {
                     crate::append_replan_log(dir, dag.replan_seq, "identical-fail-halt")?;
                 }
                 crate::persist_dag(dir, &dag)?;
                 Ok(json!({
-                    "ok": out == crate::WorkerOutcome::Verified,
+                    "ok": out == crate::DelegationOutcome::Verified,
                     "outcome": match out {
-                        crate::WorkerOutcome::Verified => "verified",
-                        crate::WorkerOutcome::Mismatch => "mismatch",
-                        crate::WorkerOutcome::Halt => "halt",
+                        crate::DelegationOutcome::Verified => "verified",
+                        crate::DelegationOutcome::Mismatch => "mismatch",
+                        crate::DelegationOutcome::Halt => "halt",
                     },
                     "status": format!("{:?}", dag.nodes.iter().find(|n| n.id == node_id).map(|n| n.status)),
                 }))
@@ -844,7 +851,7 @@ impl ExecutionKernel {
                 let role = params
                     .get("role")
                     .and_then(Value::as_str)
-                    .and_then(crate::AgentRole::parse);
+                    .and_then(crate::DelegationRole::parse);
                 let chief = params
                     .get("chief")
                     .and_then(Value::as_str)
@@ -901,7 +908,7 @@ impl ExecutionKernel {
                     .get("workerTokens")
                     .and_then(Value::as_u64)
                     .unwrap_or(0);
-                let split = crate::split_chief_spend(chief, worker);
+                let split = crate::split_primary_spend(chief, worker);
                 Ok(json!({ "ok": true, "spend": split }))
             }
             "execution/cua_fabric" => {

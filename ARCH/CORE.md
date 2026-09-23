@@ -546,7 +546,7 @@ owner and an action in `../TODO.md`.
 
 **Status 2026-09-21 (implemented, not verified).** The P69.D wave collapsed the ones with a landed row:
 agent registries and `AgentDefinition`s (**D1/D15/D23**) · the TS permission/trust-ladder engine
-(**D3/D5/D6** — policy is advisory in `core-engine`; Guard is the only decider) · the duplicate provider
+(**D3/D5/D6** — the advisory policy classifiers were archived with the engine on 2026-09-22, `P71.2c`; Guard is the only decider) · the duplicate provider
 vault (**C4**) · tool schema universes (**D2/D17/D18**) · prompt/context managers (**D7**) · search/RAG
 (**D9/D10**) · event stores and the Work model (**D11**). UI Work/session state is **classified, not
 deleted** (**D24** — verified classification). Still partial per their rows: D1/D2/D9/D24/D25 (named

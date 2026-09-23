@@ -51,8 +51,9 @@ pub use messages::{
     ConfigOptionCapabilities, ConfigOptionValue, ContentBlock, EmbeddedResource, FsCapabilities,
     InitializeParams, InitializeResult, Location, McpServer, PermissionDecision, PermissionOption,
     PermissionOptionKind, PermissionOutcome, PermissionRequestParams, PermissionResult, Position,
-    PromptCapabilities, PromptContent, SessionCapabilities, SessionNewParams, SessionNewResult,
-    SessionPromptParams, SessionPromptResult, SessionUpdate, SetConfigOptionParams,
+    PromptCapabilities, PromptContent, PromptUsage, SessionCapabilities, SessionNewParams,
+    SessionNewResult, SessionPromptParams, SessionPromptResult, SessionUpdate,
+    SetConfigOptionParams,
     SetConfigOptionResult, StopReason, TextRange, ToolCall, ToolKind, ToolStatus, PROTOCOL_VERSION,
 };
 pub use registry::{

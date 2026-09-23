@@ -1,369 +1,367 @@
 'use client'
 
 /**
- * P50.4.1/4.9 — First-run provider setup gate.
+ * P71.6a / P71.9b — First-run gate: **bind an agent, because v1 has no engine.**
  *
- * Completes the casual-user path: no provider configured → choose a path
- * (BYOK cloud key or local model) → validate/apply → first real response.
- * No generic "agent error": if the user tries to chat without a model this
- * gate opens instead (via `sendUserMessage`'s guard and the chat empty
- * state). Privacy/network destinations are stated explicitly (P50.4.9):
- * keys live in the local SQLCipher vault; chat traffic goes only to the
- * chosen provider's API; model downloads come from huggingface.co; local
- * inference never leaves the machine.
+ * The old gate completed a "zero-install" path: paste a cloud key or start a
+ * local runtime, and chat worked because EveryAIOS ran the model itself. `P71.2c`
+ * removed that loop and `P71.2d` removed the inference path, so the honest
+ * first-run step is now the one that was previously optional: install or pick an
+ * **external agent** and bind it. Zero-install returns with the post-v1 governed
+ * baseline binding (`P71.7`).
+ *
+ * What this gate must never do is imply chat will work without an agent. The
+ * key vault (`Settings → Providers`) and the local-runtime catalogue
+ * (`Settings → Local models`) are still real surfaces, but they are
+ * **observation**: keys are handed to the agent you bind, and EveryAIOS makes no
+ * model call of its own.
  */
 
-import { useEffect, useState } from 'react'
-import {
-  ArrowRight,
-  Check,
-  CheckCircle2,
-  Cpu,
-  Download,
-  KeyRound,
-  Loader2,
-  Plug,
-  ShieldCheck,
-  Sparkles,
-} from 'lucide-react'
+import { useCallback, useEffect, useState } from 'react'
+import { ArrowRight, Check, CheckCircle2, Loader2, Lock, ShieldCheck, Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
-import { useAppStore } from '@/lib/store'
-import { inTauri, invoke } from '@/lib/tauri'
-import { listLocalModels, type LocalModelRow } from '@/lib/local-models'
+import { useAppStore, type SettingsSectionId } from '@/lib/store'
+import { inTauri } from '@/lib/tauri'
+import {
+  acpIdFor,
+  governanceLabel,
+  isAgentReady,
+  readinessLabel,
+  type AgentReadiness,
+} from '@/lib/acp'
+import { refreshAgentCatalog } from '@/lib/bridge'
+import { AGENTS, type AgentRuntime } from '@/lib/agents'
 import { cn } from '@/lib/utils'
 
-const CLOUD_PROVIDERS = [
-  'openai',
-  'anthropic',
-  'deepseek',
-  'groq',
-  'nvidia',
-  'openrouter',
-  'google',
-]
+function readinessTone(r: AgentReadiness | undefined): string {
+  if (isAgentReady(r as AgentReadiness)) return 'text-emerald-400'
+  if (r === 'auth_required' || r === 'authenticating' || r === 'launchable') return 'text-warning'
+  return 'text-muted-foreground'
+}
 
 export function SetupGate() {
   const setupOpen = useAppStore((s) => s.setupOpen)
   const closeSetup = useAppStore((s) => s.closeSetup)
-  const setProviderKeysConfigured = useAppStore((s) => s.setProviderKeysConfigured)
-  const setLocalRuntime = useAppStore((s) => s.setLocalRuntime)
   const setCenterScreen = useAppStore((s) => s.setCenterScreen)
   const setSettingsSection = useAppStore((s) => s.setSettingsSection)
   const setComposerValue = useAppStore((s) => s.setComposerValue)
   const notify = useAppStore((s) => s.notify)
 
-  const [mode, setMode] = useState<'choose' | 'cloud' | 'local'>('choose')
-  const [provider, setProvider] = useState('openai')
-  const [keyId, setKeyId] = useState('default')
-  const [secret, setSecret] = useState('')
-  const [busy, setBusy] = useState(false)
+  const [rows, setRows] = useState<AgentRuntime[]>([])
+  const [discovering, setDiscovering] = useState(false)
+  const [busyId, setBusyId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [done, setDone] = useState(false)
-  const [runtimes, setRuntimes] = useState<LocalModelRow[]>([])
-  const [connecting, setConnecting] = useState(false)
+  const [bound, setBound] = useState<AgentRuntime | null>(null)
   const [probeError, setProbeError] = useState<string | null>(null)
 
-  // Probe installed local runtimes (Ollama/llamafile) whenever the gate opens.
-  // A failed probe is surfaced, never silently rendered as "no Ollama".
-  useEffect(() => {
-    if (!setupOpen) return
-    setMode('choose')
-    setError(null)
+  const inShell = inTauri()
+
+  const discover = useCallback(async () => {
+    setDiscovering(true)
     setProbeError(null)
-    setDone(false)
-    void listLocalModels()
-      .then((r) => {
-        setRuntimes(r.models ?? [])
-        setProbeError(null)
-      })
-      .catch((e) => {
-        setRuntimes([])
-        setProbeError(
-          e instanceof Error
-            ? `Local runtime probe failed: ${e.message}`
-            : 'Local runtime probe failed — the local-model service did not respond',
-        )
-      })
-  }, [setupOpen])
-
-  const saveKey = async () => {
-    if (!secret.trim()) {
-      setError('Paste your API key first — it never leaves this device except to the provider you choose.')
-      return
-    }
-    setBusy(true)
-    setError(null)
     try {
-      // The key is written into the SQLCipher vault (opaque handle only in
-      // the UI); the routing feed picks the provider up from the vault key
-      // set (P50.3.6 credential gate).
-      await invoke('vault_key_add', { provider, keyId, value: secret })
-      setProviderKeysConfigured(true)
-      setSecret('')
-      setDone(true)
+      await refreshAgentCatalog()
+      // Read the republished list: the merge (seed + registry + install records)
+      // is owned by `bridge`, so this screen never composes its own catalog.
+      setRows(useAppStore.getState().liveAgents)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'The vault rejected the key')
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const connectOllama = async () => {
-    setConnecting(true)
-    setError(null)
-    try {
-      const { invoke: inv } = await import('@/lib/tauri')
-      await inv('local_ensure', { runtime: 'ollama', model: null })
-      const r = await listLocalModels()
-      setRuntimes(r.models ?? [])
-      notify('Ollama is connected — pick a model below to start.')
-      setMode('local')
-    } catch (e) {
-      setError(
+      setRows([])
+      setProbeError(
         e instanceof Error
-          ? `${e.message} — install Ollama or download a model from Hugging Face instead.`
-          : 'Ollama could not be started',
+          ? `Agent discovery failed: ${e.message}`
+          : 'Agent discovery failed — the shell did not answer.',
       )
     } finally {
-      setConnecting(false)
+      setDiscovering(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!setupOpen) return
+    setError(null)
+    setBound(null)
+    void discover()
+  }, [setupOpen, discover])
+
+  const bind = async (row: AgentRuntime) => {
+    setBusyId(row.id)
+    setError(null)
+    try {
+      const binding = acpIdFor(row.id)
+      // The shell refuses an unknown/uninstalled id fail-closed (never a silent
+      // fallback to a built-in engine that does not exist).
+      const { chiefDefaultSet } = await import('@/lib/acp')
+      await chiefDefaultSet(binding)
+      useAppStore.getState().setSelectedAgent(row.id)
+      useAppStore.getState().setUserDefaultChief(binding)
+      setBound(row)
+      notify(`${row.name} bound — this chat runs under that agent`)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not bind that agent')
+    } finally {
+      setBusyId(null)
     }
   }
 
-  const useLocal = (row: LocalModelRow) => {
-    setLocalRuntime(row.runtime, row.contextWindow)
-    setDone(true)
+  // F8 / P69.C12 — plan-before-touch install with the same Guard-2 handshake the
+  // picker uses: request (ticket or auto-allow) → consent in the Guard window →
+  // commit. Nothing is downloaded before the commit.
+  const install = async (row: AgentRuntime) => {
+    setBusyId(row.id)
+    setError(null)
+    try {
+      const { acpInstallRequest, acpInstallCommit, acpInstallAwait } = await import('@/lib/acp')
+      const rid = acpIdFor(row.id)
+      const req = await acpInstallRequest(rid)
+      const licenseNote = req.license ? ` · license: ${req.license}` : ''
+      const cmd = (req.exactCommand ?? []).join(' ')
+      if (req.consentRequired && cmd) {
+        const ok = window.confirm(
+          `SEP-1024 exact-command consent\n\nInstall ${row.name}?${licenseNote}\n\n${cmd}${req.preferNative ? '\n\nPrefer verified native artifact.' : ''}`,
+        )
+        if (!ok) return
+      }
+      if (req.action !== 'allow') {
+        notify(
+          `Consent needed${licenseNote} — ${req.reason ?? 'proprietary agent'}; approve the Guard-2 card #${req.ticketId.slice(0, 8)}`,
+        )
+        const { approved, reason } = await acpInstallAwait(req.ticketId)
+        if (!approved) {
+          setError(reason ?? 'Install was not approved')
+          return
+        }
+      }
+      await acpInstallCommit(rid, req.ticketId)
+      notify(`${row.name} installed — bind it to start`)
+      await discover()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Install failed')
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  // The agent owns its sign-in. Launch it, and if it advertises a URL-based
+  // method, open that page; the user finishes there and the row flips to `ready`
+  // on the next probe. Nothing here copies a credential into EveryAIOS.
+  const signIn = async (row: AgentRuntime) => {
+    setBusyId(row.id)
+    setError(null)
+    try {
+      const { acpLaunch, acpAuthenticate } = await import('@/lib/acp')
+      const info = await acpLaunch(acpIdFor(row.id), '~')
+      if (!info.authRequired || info.authMethods.length === 0) {
+        notify(`${row.name} is connected — bind it to start`)
+        await discover()
+        return
+      }
+      const method = info.authMethods[0]
+      if (!method) {
+        setError(`${row.name} asks for sign-in but advertises no method`)
+        return
+      }
+      const res = await acpAuthenticate(info.handle, method.id)
+      if (res.pending && res.url) {
+        window.open(res.url, '_blank')
+        notify('Opened the sign-in page — approve there, then re-check.')
+      } else if (res.ok || res.sessionId) {
+        notify(`${row.name} is signed in — bind it to start`)
+      } else {
+        notify(`Waiting for ${row.name}'s own login to complete…`)
+      }
+      await discover()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : `${row.name} could not be launched`)
+    } finally {
+      setBusyId(null)
+    }
   }
 
   const startChatting = () => {
     closeSetup()
     setCenterScreen('chat')
     setComposerValue('')
-    if (done) notify('Provider configured — say hello to your first model.')
   }
 
-  const startWithLocalSetup = () => {
+  const openSettings = (section: SettingsSectionId) => {
     closeSetup()
-    setSettingsSection('local')
+    setSettingsSection(section)
     setCenterScreen('settings')
   }
 
   if (!setupOpen) return null
 
+  // In the shell an empty list means discovery has not answered — not "nothing is
+  // installed" — so the seed is never painted as occupancy. The browser preview
+  // has no shell to ask and keeps the labelled fixture.
+  const catalog = rows.length > 0 ? rows : inShell ? [] : AGENTS
+
   return (
     <Dialog open onOpenChange={() => closeSetup()}>
       <DialogContent className="max-w-md gap-0 p-0">
         <div className="flex flex-col gap-3 p-6">
-          {done ? (
+          {bound ? (
             <>
               <div className="flex items-center gap-2">
                 <CheckCircle2 className="h-5 w-5 text-emerald-400" />
-                <h2 className="text-sm font-semibold">You&apos;re set up</h2>
+                <h2 className="text-sm font-semibold">{bound.name} is bound</h2>
               </div>
               <p className="text-xs leading-relaxed text-muted-foreground">
-                Your model is configured. The next message goes to a real provider through the
-                Guard-2 ticket path — no demo, no seeded reply.
+                Your messages now run under that agent — it does the reasoning, and EveryAIOS
+                governs what it may touch. There is no demo reply and no EveryAIOS-owned model
+                in front of it.
               </p>
-              <Button className="mt-2 h-8 w-full bg-brand text-xs text-black hover:bg-brand" onClick={startChatting}>
+              <Button
+                className="mt-2 h-8 w-full bg-brand text-xs text-black hover:bg-brand"
+                onClick={startChatting}
+              >
                 <Sparkles className="mr-1 h-3.5 w-3.5" />
                 Start chatting
               </Button>
-            </>
-          ) : mode === 'choose' ? (
-            <>
-              <div className="flex items-center gap-2">
-                <KeyRound className="h-5 w-5 text-brand" />
-                <h2 className="text-sm font-semibold">Set up your first model</h2>
-              </div>
-              <p className="text-xs leading-relaxed text-muted-foreground">
-                Everything runs locally or through a provider you own. There is no EveryAIOS
-                server — you stay in control of where your data goes.
-              </p>
-              <div className="mt-1 space-y-2">
-                <button
-                  type="button"
-                  onClick={() => setMode('cloud')}
-                  className="w-full rounded-lg border border-border bg-background px-3 py-3 text-left text-xs transition-colors hover:border-brand/40 hover:bg-accent"
-                >
-                  <span className="flex items-center justify-between">
-                    <span>
-                      <span className="flex items-center gap-1.5 font-medium text-foreground">
-                        <KeyRound className="h-3.5 w-3.5 text-brand" />
-                        Cloud provider (bring your own key)
-                      </span>
-                      <span className="mt-0.5 block text-muted-foreground">
-                        OpenAI · Anthropic · DeepSeek · NVIDIA … — key stored encrypted in the local
-                        vault; chat traffic goes only to that provider&apos;s API.
-                      </span>
-                    </span>
-                    <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground" />
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setMode('local')}
-                  className="w-full rounded-lg border border-border bg-background px-3 py-3 text-left text-xs transition-colors hover:border-brand/40 hover:bg-accent"
-                >
-                  <span className="flex items-center justify-between">
-                    <span>
-                      <span className="flex items-center gap-1.5 font-medium text-foreground">
-                        <Cpu className="h-3.5 w-3.5 text-brand" />
-                        Local model (fully offline)
-                      </span>
-                      <span className="mt-0.5 block text-muted-foreground">
-                        Download from Hugging Face or connect Ollama — inference never leaves this
-                        machine.
-                      </span>
-                    </span>
-                    <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground" />
-                  </span>
-                </button>
-              </div>
-              <div className="mt-3 flex items-start gap-1.5 rounded border border-dashed border-border/60 px-2 py-1.5 text-[10px] text-muted-foreground">
-                <ShieldCheck className="mt-0.5 h-3 w-3 shrink-0 text-emerald-400" />
-                <span>
-                  No demo data, no founder server. Until a provider is configured, sending a chat
-                  message opens this screen instead of failing with a generic agent error.
-                </span>
-              </div>
-              <div className="mt-2 flex justify-end">
-                <Button variant="ghost" size="sm" onClick={() => closeSetup()}>
-                  Explore first
-                </Button>
-              </div>
-            </>
-          ) : mode === 'cloud' ? (
-            <>
-              <div className="flex items-center gap-2">
-                <KeyRound className="h-5 w-5 text-brand" />
-                <h2 className="text-sm font-semibold">Add a provider key</h2>
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                {CLOUD_PROVIDERS.map((p) => (
-                  <button
-                    key={p}
-                    type="button"
-                    onClick={() => setProvider(p)}
-                    className={cn(
-                      'rounded border px-2 py-1 font-mono text-[10px]',
-                      provider === p
-                        ? 'border-brand/60 bg-brand/10 text-brand'
-                        : 'border-border/60 text-muted-foreground hover:text-foreground',
-                    )}
-                  >
-                    {p}
-                  </button>
-                ))}
-              </div>
-              <input
-                className="h-8 w-full rounded-md border border-border bg-background px-2 font-mono text-[11px]"
-                value={keyId}
-                onChange={(e) => setKeyId(e.target.value)}
-                placeholder="key id (default)"
-              />
-              <input
-                type="password"
-                className="h-8 w-full rounded-md border border-border bg-background px-2 font-mono text-[11px]"
-                value={secret}
-                onChange={(e) => setSecret(e.target.value)}
-                placeholder="sk-…"
-                autoFocus
-              />
-              {error && <p className="text-[11px] text-red-400">{error}</p>}
-              <p className="text-[10px] leading-relaxed text-muted-foreground">
-                The key is encrypted at rest in the SQLCipher vault and only ever sent to{' '}
-                <span className="font-mono text-foreground/80">api.{provider}.com</span>-class
-                endpoints you configure. It never reaches the coordinator as plaintext.
-              </p>
-              <div className="mt-1 flex items-center justify-between">
-                <Button variant="ghost" size="sm" onClick={() => setMode('choose')}>
-                  Back
-                </Button>
-                <Button
-                  className="h-8 bg-brand text-xs text-black hover:bg-brand"
-                  disabled={busy}
-                  onClick={() => void saveKey()}
-                >
-                  {busy ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Check className="mr-1 h-3 w-3" />}
-                  Save key
-                </Button>
-              </div>
+              <button
+                type="button"
+                onClick={() => openSettings('agents')}
+                className="text-[10px] text-muted-foreground underline-offset-2 hover:text-brand hover:underline"
+              >
+                Review agent settings
+              </button>
             </>
           ) : (
             <>
               <div className="flex items-center gap-2">
-                <Cpu className="h-5 w-5 text-brand" />
-                <h2 className="text-sm font-semibold">Local Offline Models</h2>
+                <Sparkles className="h-5 w-5 text-brand" />
+                <h2 className="text-sm font-semibold">Give it an agent to think with</h2>
               </div>
-              <p className="text-xs text-muted-foreground">
-                Run 100% locally on your hardware. Inference never leaves this device.
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                EveryAIOS ships no built-in engine in v1 — the agent you bind does the reasoning and
+                holds its own model and credentials, while EveryAIOS keeps the workspace, the memory
+                and the permission gate. Install or pick one to send your first message.
               </p>
 
-              {runtimes.length > 0 ? (
-                <div className="space-y-1.5">
-                  <p className="text-[10px] text-muted-foreground font-medium">
-                    Detected existing Ollama / llamafile models on this machine:
-                  </p>
-                  {runtimes.map((row) => (
-                    <button
-                      key={`${row.runtime}:${row.name}`}
-                      type="button"
-                      onClick={() => useLocal(row)}
-                      className="w-full rounded-md border border-border/60 bg-background/40 px-3 py-2 text-left text-xs hover:border-brand/40"
-                    >
-                      <span className="flex items-center justify-between">
-                        <span className="font-medium text-foreground">{row.name}</span>
-                        <span
-                          className={cn(
-                            'rounded px-1 font-mono text-[9px]',
-                            row.fits ? 'bg-emerald-500/15 text-emerald-300' : 'bg-red-500/15 text-red-300',
-                          )}
-                        >
-                          {row.fits ? 'fits' : 'too big'}
-                        </span>
-                      </span>
-                      <span className="font-mono text-[10px] text-muted-foreground">
-                        {row.runtime} · {row.sizeBytes ? `${(row.sizeBytes / 1e9).toFixed(1)} GB` : '—'} · ctx{' '}
-                        {row.contextWindow.toLocaleString()}
-                      </span>
-                    </button>
-                  ))}
+              {discovering && (
+                <div className="flex items-center gap-1.5 px-1 font-mono text-[10px] text-muted-foreground">
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  looking for agents on this machine…
                 </div>
-              ) : (
-                <div className="rounded-lg border border-border/60 bg-card/40 p-3 text-xs text-muted-foreground">
-                  No active local models currently detected. You can connect a running Ollama instance or download any GGUF model directly from Hugging Face Hub.
+              )}
+
+              <div className="max-h-64 space-y-1.5 overflow-y-auto">
+                {catalog.map((row) => {
+                  const readiness = row.readiness
+                  const usable = isAgentReady(readiness as AgentReadiness)
+                  const needsAuth = readiness === 'auth_required' || readiness === 'authenticating'
+                  const busy = busyId === row.id
+                  return (
+                    <div
+                      key={row.id}
+                      data-agent-id={row.id}
+                      className="rounded-lg border border-border bg-background px-3 py-2.5 text-xs"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <span className="truncate font-medium text-foreground">{row.name}</span>
+                            <span className={cn('font-mono text-[9px]', readinessTone(readiness))}>
+                              {readinessLabel(readiness)}
+                            </span>
+                          </div>
+                          <div className="mt-0.5 truncate text-[10px] text-muted-foreground">
+                            {row.tagline || row.note}
+                          </div>
+                          {row.version && (
+                            <div className="truncate font-mono text-[9px] text-muted-foreground/70">
+                              {row.vendor} · v{row.version}
+                              {row.location ? ` · ${row.location.kind}` : ''}
+                            </div>
+                          )}
+                          {row.governance && (
+                            <div
+                              className={cn(
+                                'mt-0.5 truncate text-[9px] font-medium',
+                                row.governance.class === 'GovernedMediated'
+                                  ? 'text-emerald-400/90'
+                                  : row.governance.class === 'SelfContained'
+                                    ? 'text-warning/90'
+                                    : 'text-red-400/90',
+                              )}
+                              title={row.governance.note}
+                            >
+                              {governanceLabel(row.governance)}
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex shrink-0 items-center gap-1">
+                          {usable ? (
+                            <Button
+                              size="sm"
+                              className="h-6 bg-brand px-2 text-[10px] text-black hover:bg-brand"
+                              disabled={busy}
+                              onClick={() => void bind(row)}
+                            >
+                              {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                              Use
+                            </Button>
+                          ) : needsAuth ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-6 px-2 text-[10px]"
+                              disabled={busy}
+                              onClick={() => void signIn(row)}
+                            >
+                              {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Lock className="h-3 w-3" />}
+                              Sign in
+                            </Button>
+                          ) : (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-6 px-2 text-[10px]"
+                              disabled={busy}
+                              onClick={() => void install(row)}
+                            >
+                              {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <ArrowRight className="h-3 w-3" />}
+                              Install
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+
+              {catalog.length === 0 && !discovering && (
+                <div className="rounded-lg border border-dashed border-border/60 bg-card/40 p-3 text-xs text-muted-foreground">
+                  {inShell
+                    ? 'No agent discovered yet. Nothing can run a turn until one is installed — EveryAIOS has no built-in engine to fall back to.'
+                    : 'Preview mode — run inside the desktop shell to discover agents on this machine.'}
                 </div>
               )}
 
               {probeError && <p className="text-[11px] text-warning">{probeError}</p>}
               {error && <p className="text-[11px] text-red-400">{error}</p>}
 
-              <div className="space-y-1.5 pt-1">
-                <Button
-                  className="h-8 w-full bg-brand text-black hover:bg-brand/90 text-xs font-semibold"
-                  disabled={connecting}
-                  onClick={() => void connectOllama()}
-                >
-                  {connecting ? (
-                    <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                  ) : (
-                    <Plug className="mr-1 h-3 w-3" />
-                  )}
-                  Connect Ollama (`ollama serve`)
-                </Button>
-                <Button
-                  variant="outline"
-                  className="h-8 w-full text-xs"
-                  onClick={startWithLocalSetup}
-                >
-                  <Download className="mr-1 h-3 w-3" />
-                  Browse &amp; Download from Hugging Face Hub
-                </Button>
+              <div className="mt-1 flex items-start gap-1.5 rounded border border-dashed border-border/60 px-2 py-1.5 text-[10px] text-muted-foreground">
+                <ShieldCheck className="mt-0.5 h-3 w-3 shrink-0 text-emerald-400" />
+                <span>
+                  No API-key step here: provider keys live in your local vault and are handed to the
+                  agent you bind — EveryAIOS makes no model call of its own. Providers and Local
+                  models in Settings are catalogue, vault and usage surfaces.
+                </span>
               </div>
 
-              <div className="mt-1 flex justify-start">
-                <Button variant="ghost" size="sm" onClick={() => setMode('choose')}>
-                  Back
+              <div className="mt-1 flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={() => openSettings('agents')}
+                  className="text-[10px] text-muted-foreground underline-offset-2 hover:text-brand hover:underline"
+                >
+                  Manage agents in settings
+                </button>
+                <Button variant="ghost" size="sm" onClick={() => closeSetup()}>
+                  Explore first
                 </Button>
               </div>
             </>

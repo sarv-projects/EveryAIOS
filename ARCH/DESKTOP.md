@@ -73,15 +73,40 @@ structure is empty or untrustworthy. Vision-shaped input requires the configured
 
 ## 6. Honest platform status
 
+### 6.1 v1 platform scope (decided 2026-09-22)
+
+**v1 ships for Windows, and the Linux half ships as WSL.** macOS and native Linux desktop are **out of v1
+scope** — not "unsupported as a claim", but out of the qualification matrix, so no v1 artifact is published
+for them and no v1 acceptance pass is claimed. `SUPPORT-MATRIX.md` at the repository root is the published
+form of this decision; this section is its architectural half.
+
+The reason is evidence, not preference. Desktop control is the one capability whose correctness depends on
+the host OS, and the only host this project can verify is Linux — the platform v1 is not shipping. Windows is
+where the product will actually run, so Windows is where the acceptance work belongs; WSL is the supported
+way to run Linux-native agents (and the Linux ACP binaries) from that same machine, which is what makes the
+Linux tooling reachable without shipping a Linux desktop build.
+
+| Platform | v1 artifact | Desktop control | Notes |
+|---|---|---|---|
+| Windows 10 22H2 / 11 (x64, arm64) | **shipped** (`.msi` WiX + `.exe` NSIS) | UIA (invoke-first) and Graphics Capture — **acceptance pass required before the row closes** | The v1 target. |
+| Windows via WSL2 (Ubuntu 22.04/24.04) | **supported host for agents**, no separate artifact | n/a — WSL runs *agents*, not the cockpit | Linux-native agent binaries + their ACP entrypoints run here; paths resolve through the named distro and never enter a native Windows spawn (`P66.1`). |
+| macOS | **out of v1** | not claimed | Blocked by the same evidence rule; no signing/notarization work is in v1 scope. |
+| Native Linux desktop | **out of v1** | verified on this host, and that is the point — the verified platform is not the shipped one | The verification runs here; the artifact is not published. |
+
+### 6.2 Recorded gaps
+
 | Platform | Status |
 |---|---|
-| Linux | verified on this host |
+| Linux | verified on this host — the acceptance host, not a v1 artifact (§6.1) |
 | Windows capture (Graphics Capture) | **not implemented/verified — never run on a Windows host** |
 | Windows UI Automation (invoke/hit-testing halves) | **not verified on Windows** |
+| Windows ConPTY (terminal plane) | **not verified on Windows** (`P68.7`) |
 
 These are recorded gaps, not hidden ones. A document may not describe Windows desktop control as working
 until a real Windows acceptance pass exists (I15). The see-pane contract — show the user what the agent
-sees, with an escape hatch — applies whenever desktop control is active.
+sees, with an escape hatch — applies whenever desktop control is active. Shipping a Windows-first v1 with
+these open is allowed only because `SUPPORT-MATRIX.md` and the installer state them, never because they were
+quietly dropped (`P70.D6`).
 
 ---
 
@@ -103,3 +128,39 @@ Policy hardening around allow-lists and risky classes is already partly landed; 
 the **separation from browser**, the strict observe/act/invalidate loop as a written contract, and the
 explicit admission that the Windows halves are unverified. Desktop-as-agent-tool attachment and the
 computer-use DAG live in the existing implementation; this contract bounds them.
+
+---
+
+## Repo-comparison additions (briefs 01–19)
+
+> Delta group: *"ARCH/08-BROWSER-LAYER.md + ARCH/DESKTOP.md (+ E9)"* (`REPO-COMPARE/DELTA-ANALYSIS.md` §3).
+> Evidence paths are repo-relative under `/home/sarvesh/business_Dev/REPO-COMPARE/clone2/`.
+> Dispositions are the briefs' tags; arrows into files not owned here carry `→ <file> §…` and are
+> cross-domain deferred. Readiness wording below follows the frozen contract: Windows-first and
+> **evidence-gated** — a mock, unit-only run, or browser-preview result is never acceptance evidence.
+
+- **15-4/7/8** · `add` — SOURCE: open-computer-use (Apache-2.0), open-codex-computer-use (MIT) · evidence: `open-computer-use/os_computer_use/grounding.py`; `open-codex-computer-use/ComputerUseService.swift` (semantic → process-directed → gated-global click ladder, no silent fallback), `AppDiscovery.swift:555-563` (credential-manager denylist), `MCPServer.swift` + `ToolDefinitions.swift` (`turn-ended` clears overlays and requires `get_app_state` before the next action) — LOGIC: the desktop action discipline hardens into four rules — dedicated grounding-model fallback when the a11y tree is empty, credential-manager app class hard-deny, fail-closed escalation ladder (semantic → targeted → gated global; the ladder *proposes*, Guard *decides*), and a turn-ended session lifecycle that forces re-observe/invalidate. → target §3 (turn-ended re-observe), §4 (escalation + hard-deny classes), §5 (grounding fallback); disposable-sandbox backend as a Guard-selected posture → SECURITY.md (sandbox-is-mechanism) + 06-SECURITY-GUARDRAILS §6.1 cross-domain deferred; E9 rows → 09-FEATURE-MATRIX (not owned here).
+- **15-4/7/8** · `add` (acceptance harness) — SOURCE: open-codex-computer-use (MIT) · evidence: `open-codex-computer-use/apps/OpenComputerUseFixture`, `apps/OpenComputerUseSmokeSuite` (`docs/ARCHITECTURE.md:147-160`) — LOGIC: a deterministic fixture app + headless smoke suite driving the real tool surface end-to-end is the repeatable **Windows acceptance harness** whose records are the only thing that closes a §6.2 recorded-gap row (fixture + smoke = harness; the acceptance pass on a real Windows host = evidence). → target §6 (evidence gating per SUPPORT-MATRIX; I15); SUPPORT-MATRIX/00-INDEX publication notes not owned here.
+- **15-2/6/10/11** · `improve` — SOURCE: UI-TARS-desktop (Apache-2.0), open-computer-use (Apache-2.0), open-codex-computer-use (MIT) · evidence: `UI-TARS-desktop/packages/ui-tars/sdk/src/GUIAgent.ts` (typed `GUIAgentError`/`ErrorStatusEnum` taxonomy, per-stage retry budgets, token/time totals in `finally`), `open-computer-use/main.py` + `logging.py` (per-run output dirs with screenshots), `open-codex-computer-use/docs/ARCHITECTURE.md` (snapshot budgets 1200 nodes / depth 64 / 500-char text, ≤900 KB/≤1280 px bounded screenshots, `:76,:94` px→window→global mapping with explicit scaleFactor) — LOGIC: the desktop loop adopts a typed retry/error taxonomy with per-stage budgets and token/time accounting, per-run evidence capture (timestamped screenshots + structured action log per run id), hard snapshot/screenshot budgets, and explicit coordinate-space mapping so pixel fallbacks stay verifiable. → target §3 (budgets + coordinate discipline on the observation contract), §6 (per-run evidence); accounting half → 05-TOKEN-ECONOMY, audit/evidence half → SECURITY.md (audit), result shape → 08-BROWSER-LAYER §8.11 (TC-4.1) — cross-domain deferred except §8.11 (owned here).
+- **11-1** · `improve` — SOURCE: eliza (MIT) · evidence: `eliza/contracts/computer-use.ts`, `eliza/packages/core/README.md` ("Computer-use adapter contract": leases, host-issued grants, confirmation previews bound to a SHA-256 digest, `UNCERTAIN_EFFECT`, canonical `EffectReceipt`) — LOGIC: the CUA effect vocabulary gains `UNCERTAIN_EFFECT` for unprovable mutations, a lease-conflict vs stale-observation split, and digest-bound confirmation previews so §2's Effect → Receipt path stays honest when an effect cannot be proven. → target §2–§3 (receipt vocabulary + invalidate loop); ticket-lifecycle half → SECURITY.md §3 cross-domain deferred; see-pane half cross-noted in 12-UI-SPEC (the brief's `08 §8.3` arrow names the browser loop, whose non-goal rule keeps desktop effects out of that façade — one rule, two surfaces, this document owns the CUA wording).
+- **11-15** · `improve` — SOURCE: raya (MIT) · evidence: `raya/raya/tree/` (UI Automation tree walker), `raya/raya/agent/service.py` (a11y-first initial observation) — LOGIC: the OS accessibility tree becomes the primary CUA observation with `interactive`/`informative`/`scrollable` classification, visibility/enabled filters and per-app scoping, screenshot as the secondary channel — the direct OS analogue of snapshot→act. → target §3 (observation contract) + §5 (structure first, pixels when the tree is empty); brief also names 08-BROWSER-LAYER §8.3 (same non-goal routing as 11-1) + → CAPABILITIES.md §7 cross-domain deferred.
+
+## 9. Windows 4-Tier Click Ladder & Fallback Hierarchy (Open-Codex Pattern)
+
+To operate with maximum speed and minimum disruption to the human user, desktop input dispatches through an escalating 4-tier ladder:
+
+| Tier | Mechanism | Cursor Theft? | Focus Required? | Escalation Gate |
+|---|---|---|---|---|
+| **Tier 1: UIA Invoke** | `IUIAutomationInvokePattern::Invoke` or `SetValue` | **No** (0ms) | No | Automatic (Default) |
+| **Tier 2: Win32 Message** | `PostMessage(hwnd, WM_LBUTTONDOWN/UP)` to specific PID | **No** | No | Automatic on Tier 1 failure |
+| **Tier 3: Direct Composition** | Window-scoped injection via Graphics Capture bounds | **No** | No | Automatic on Tier 2 failure |
+| **Tier 4: Gated SendInput** | Win32 `SendInput` physical mouse/keyboard events | **Yes** (moves mouse) | **Yes** (foreground) | **Requires Guard-2 Approval Card** |
+
+- The system *proposes* escalation; Guard *decides* whether Tier 4 cursor hijacking is authorized.
+
+## 10. Patch-Aligned Coordinate Quantization & VLM Formatting (UI-TARS Pattern)
+
+When falling back to vision-based VLM grounding:
+- **Patch Alignment (`IMAGE_FACTOR = 28`):** Screenshot dimensions and bounding boxes are quantized to multiples of 28 pixels, matching visual encoder patch tokens (UI-TARS / Qwen2-VL) to prevent visual aliasing and sub-pixel coordinate misalignments.
+- **Scale Factor Normalization:** High-DPI Windows displays (`scaleFactor = 1.25, 1.5, 2.0`) are normalized to physical pixel coordinates before `SendInput` execution.
+- **Bounding Box Budgets:** Screenshots are clamped to `<= 1280px` max dimension and `<= 900KB` payload size before entering context.

@@ -37,7 +37,7 @@ function demoReport(): DoctorReport {
       { name: 'Chrome/CDP', status: 'ok', detail: 'a Chromium binary is discoverable' },
       { name: 'Local runtimes', status: 'warn', detail: 'no Ollama / llamafile detected', hint: 'install Ollama or drop a llamafile (optional)' },
       { name: 'Credentials', status: 'warn', detail: 'no provider keys configured', hint: 'add a key in Settings → Providers' },
-      { name: 'MCP', status: 'ok', detail: '0 server(s) installed; 42-tool inbuilt catalog always available' },
+      { name: 'MCP', status: 'ok', detail: '0 server(s) attached; the bundled catalog is discovery data — attach one to expose tools' },
       { name: 'Browser', status: 'ok', detail: 'engine compiled in; live session attaches on first use' },
     ],
   }

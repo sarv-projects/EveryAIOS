@@ -4,8 +4,8 @@
 //! This is the non-credential-gated companion to `external_client.rs` (which
 //! drives the REAL `@modelcontextprotocol/inspector` CLI). Here a Rust test
 //! acts as the external client over the real stdio transport of the
-//! standalone server binary: handshake, catalog listing, and a snapshot tool
-//! call. No node, no network, no credentials — runs in CI.
+//! standalone server binary: handshake, shared-plane façade listing, and a
+//! façade tool call. No node, no network, no credentials — runs in CI.
 
 use std::io::{BufRead, BufReader, Write};
 use std::process::{Child, Command, Stdio};
@@ -68,7 +68,7 @@ impl Drop for ExternalClient {
 }
 
 #[test]
-fn server_serves_external_client_snapshot_call() {
+fn server_serves_external_client_shared_plane() {
     let mut client = ExternalClient::connect();
 
     // Handshake: initialize with a requested protocol version.
@@ -80,29 +80,51 @@ fn server_serves_external_client_snapshot_call() {
     assert_eq!(init["result"]["protocolVersion"], "2026-07-28");
     assert_eq!(init["result"]["serverInfo"]["name"], "everyaios-mcp");
 
-    // tools/list: the real native catalog is served over the wire (the tool
-    // count grows as tools land — assert a healthy floor + key members, not a
-    // brittle exact count).
+    // tools/list: an external client sees the SHARED PLANE, never the internal
+    // catalogue (ARCH/EXTERNAL-AGENTS.md §3, `P71.2f`). The floor is the
+    // façade table; the point of the assertions is that every family is
+    // represented and that no raw primitive leaked into the advertised list.
     let list = client.rpc(2, "tools/list", serde_json::json!({}));
     let tools = list["result"]["tools"].as_array().expect("tools array");
     assert!(
-        tools.len() >= 40,
-        "real native catalog served to external client"
+        tools.len() >= 19,
+        "shared-plane façades served to external client (got {})",
+        tools.len()
     );
-    for expected in ["snapshot", "search_web", "office_edit", "memory_retrieve"] {
+    for expected in [
+        "work.create",
+        "delegate.spawn",
+        "workspace.map",
+        "browser.extract",
+        "office.edit",
+        "computer_use.see",
+    ] {
         assert!(
             tools.iter().any(|t| t["name"] == expected),
-            "{expected} tool present"
+            "{expected} façade present"
+        );
+    }
+    // The internal 51-tool catalogue stays callable by name but is never
+    // advertised — an external agent must not receive a flat dump of
+    // primitives (`tool_list_shared_plane` in `everyaios-mcp::server`).
+    for leaked in ["snapshot", "search_web", "office_edit", "memory_retrieve"] {
+        assert!(
+            !tools.iter().any(|t| t["name"] == leaked),
+            "internal primitive {leaked} leaked into the external list"
         );
     }
 
-    // tools/call snapshot: the server answers through its test harness.
+    // tools/call through a façade: the invocation is accepted and answered
+    // through the standalone binary's deterministic test harness.
     let call = client.rpc(
         3,
         "tools/call",
-        serde_json::json!({ "name": "snapshot", "arguments": {} }),
+        serde_json::json!({ "name": "browser.extract", "arguments": {} }),
     );
-    assert_eq!(call["result"]["structuredContent"]["tool"], "snapshot");
+    assert_eq!(
+        call["result"]["structuredContent"]["tool"],
+        "browser.extract"
+    );
     assert!(
         call["result"]["structuredContent"].is_object(),
         "structuredContent carried: {}",
@@ -112,11 +134,13 @@ fn server_serves_external_client_snapshot_call() {
         call["result"]["structuredContent"]["mode"],
         "standalone-test-harness"
     );
+    // `catalog_size` still reports the kernel-side catalogue the façades fan
+    // out to (37 browser + 4 office + 3 memory + 2 search + 5 storage).
     assert!(
         call["result"]["structuredContent"]["catalog_size"]
             .as_u64()
             .unwrap_or(0)
             >= 40,
-        "catalog_size reflects the real native catalog"
+        "catalog_size reflects the kernel catalogue behind the façades"
     );
 }

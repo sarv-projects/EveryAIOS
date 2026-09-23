@@ -5,6 +5,8 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   Check,
   Clock,
+  Copy,
+  Download,
   History,
   LayoutTemplate,
   Pause,
@@ -21,8 +23,10 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   schedulerCreate,
   schedulerDelete,
+  schedulerDuplicate,
   schedulerDoctor,
   schedulerEnable,
+  schedulerExport,
   schedulerIncidentAck,
   schedulerIncidents,
   schedulerList,
@@ -30,12 +34,15 @@ import {
   schedulerPause,
   schedulerResume,
   schedulerRunNow,
+  schedulerRuns,
+  type AutomationRun,
   type SchedulerIncident,
   type SchedulerJob,
   triggerLabel,
 } from '@/lib/scheduler'
 import { Stethoscope, NotebookPen, AlertTriangle } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { isRetiredBinding } from '@/lib/acp'
 import { useAppStore } from '@/lib/store'
 import { inTauri } from '@/lib/tauri'
 import AutomationEditor from './automation-editor'
@@ -66,9 +73,28 @@ const TEMPLATES = [
 ]
 
 /**
- * P71.3d — the scheduler is a trigger plane, so it keeps **no run history**
- * (the Event Log owns that, `I3`; `AUTOMATION.md` §9). The History tab points
- * at the owning surface instead of showing a fake ledger.
+ * P71.9e — the §11 "bound agent" column: the session's pin → the user's
+ * default, with retired built-in spellings resolving to nothing (`ADR-0005`).
+ * Returns `null` when no agent is bound — shown as "none bound", never a
+ * substitute engine.
+ */
+function sessionAgentLabel(sessionId: string): string | null {
+  const st = useAppStore.getState()
+  const isAgentBinding = (id?: string): id is string =>
+    typeof id === 'string' && id.trim() !== '' && !isRetiredBinding(id.trim())
+  const pin = st.sessionChiefs[sessionId]
+  const userDefault = st.userDefaultChief
+  if (isAgentBinding(pin)) return pin
+  if (isAgentBinding(userDefault)) return userDefault
+  return null
+}
+
+/**
+ * P71.3d + P71.9e — the scheduler is a trigger plane and keeps **no run
+ * history** itself (the ExecutionLedger owns that, `I3`; `AUTOMATION.md` §9).
+ * The History tab reads that ledger back (`scheduler_runs`) and shows each
+ * run's own phase — running · completed · failed · **waiting for approval** —
+ * never a fabricated success.
  *
  * P71.8c — each firing's Work lives in an **automation** Session with no Chat
  * (`ADR-0006`); this panel is the surface that owns it. A run is opened by
@@ -76,12 +102,106 @@ const TEMPLATES = [
  * holds again for that Session. Nothing here fabricates a hidden Chat per run.
  */
 function LiveRuns() {
+  const [runs, setRuns] = useState<AutomationRun[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [reload, setReload] = useState(0)
+
+  useEffect(() => {
+    let alive = true
+    schedulerRuns('')
+      .then((out) => {
+        if (alive) {
+          setRuns(out.runs)
+          setError(null)
+        }
+      })
+      .catch((cause) => alive && setError(cause instanceof Error ? cause.message : 'run history unavailable'))
+    return () => {
+      alive = false
+    }
+  }, [reload])
+
+  /** P71.9f — ADR-0006 §7: opening a run gives its Session a Chat **on demand**.
+   * This list stays the surface that owns headless work; nothing here ever
+   * fabricates a hidden Chat per firing. */
+  const openRun = (run: AutomationRun) => {
+    useAppStore.getState().openAutomationRun({
+      id: run.id,
+      sessionId: run.sessionId,
+      objective: run.objective,
+    })
+  }
+
+  const phaseStyle = (run: AutomationRun): string => {
+    if (run.waitingApproval) return 'border-warning/40 bg-warning/10 text-warning'
+    switch (run.phase) {
+      case 'running':
+        return 'border-sky-500/40 bg-sky-500/10 text-sky-300'
+      case 'completed':
+        return 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300'
+      case 'failed':
+      case 'cancelled':
+        return 'border-rose-500/40 bg-rose-500/10 text-rose-300'
+      default:
+        return 'border-border bg-muted/40 text-muted-foreground'
+    }
+  }
+
   return (
-    <div className="rounded-lg border border-dashed border-border px-4 py-8 text-center text-xs text-muted-foreground">
-      Run history lives in the Event Log and the Activity timeline — the
-      scheduler records trigger firings only (when a trigger fired and why),
-      never run outcomes. Each run's Work is owned by an automation Session
-      (no Chat); open one to inspect or continue it.
+    <div className="space-y-3">
+      {error && (
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-red-500/30 bg-red-500/5 px-4 py-3 text-xs text-red-300">
+          <span>{error}</span>
+          <Button size="sm" variant="outline" className="h-7 shrink-0 text-[10px]" onClick={() => setReload((v) => v + 1)}>
+            Retry
+          </Button>
+        </div>
+      )}
+      {!error && runs === null && (
+        <div className="rounded-lg border border-dashed border-border px-4 py-8 text-center text-xs text-muted-foreground">
+          Loading run history…
+        </div>
+      )}
+      {!error && runs !== null && runs.length === 0 && (
+        <div className="rounded-lg border border-dashed border-border px-4 py-8 text-center text-xs text-muted-foreground">
+          No runs recorded yet — fire an automation (Run now or its trigger) and
+          its Work appears here with the ledger's own status.
+        </div>
+      )}
+      {(runs ?? []).map((run) => (
+        <div key={run.id} className="rounded-lg border border-border bg-card px-4 py-3">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="truncate text-xs font-medium text-foreground">{run.objective}</span>
+                <Badge variant="outline" className={cn('shrink-0 text-[9px]', phaseStyle(run))}>
+                  {run.waitingApproval ? 'waiting for approval' : run.phase}
+                </Badge>
+              </div>
+              <p className="mt-0.5 font-mono text-[10px] text-muted-foreground">
+                {run.id} · automation · {new Date(run.createdAtMs).toLocaleString()}
+              </p>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 shrink-0 gap-1 text-[10px]"
+              title="Open this run as a chat — it continues the run's own session"
+              onClick={() => openRun(run)}
+            >
+              <Play className="h-3 w-3" />
+              Open
+            </Button>
+          </div>
+        </div>
+      ))}
+      {runs !== null && runs.length > 0 && (
+        <p className="text-[10px] text-muted-foreground">
+          Statuses are the ExecutionLedger's own phases — never a fabricated
+          success. Awaiting-approval runs surface the §11 state; full step
+          detail stays behind the Work/Event surfaces.
+        </p>
+      )}
     </div>
   )
 }
@@ -395,6 +515,28 @@ export default function AutomationsPanel() {
     void schedulerDelete(id)
       .then(() => setAutomations((prev) => prev.filter((a) => a.id !== id)))
       .catch((error) => reportActionError('Deleting automation', error))
+  // P71.9e — §11 duplicate: same definition, new id, starts disabled (never
+  // silently armed). The list reloads so the copy appears with its real state.
+  const duplicateJob = (id: string) =>
+    void schedulerDuplicate(id)
+      .then(() => setReload((v) => v + 1))
+      .catch((error) => reportActionError('Duplicating automation', error))
+  // P71.9e — §11 export: download the `*.automation.json` definition (no
+  // secrets — vault credentials never ride the file).
+  const exportJob = async (id: string) => {
+    try {
+      const body = await schedulerExport(id)
+      const blob = new Blob([JSON.stringify(body, null, 2)], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${id}.automation.json`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (error) {
+      reportActionError('Exporting automation', error)
+    }
+  }
 
   const selected = automations.find((a) => a.id === selectedId) ?? null
 
@@ -516,10 +658,10 @@ export default function AutomationsPanel() {
             {automations.map((a) => {
               const Trigger = TRIGGER_ICON[a.trigger.type]
               const Icon = Trigger.icon
-              // P71.3d — the scheduler is a trigger plane: only a pause flag
-              // and firing records exist here. Run-level status (running /
-              // failed / waiting for approval) belongs to the Work/Event
-              // surfaces, not to the schedule.
+              // P71.3d — the schedule itself is a trigger plane: only a pause
+              // flag and firing records live on the row. Run-level status
+              // (running / failed / waiting for approval) is the ledger's —
+              // the History tab reads it (`scheduler_runs`).
               const paused = a.paused
               return (
                 <div
@@ -550,7 +692,8 @@ export default function AutomationsPanel() {
                         {triggerLabel(a.trigger)}
                       </p>
                       <p className="mt-0.5 text-xs text-foreground/70">
-                        {a.steps.length} step(s) · session {a.sessionId}
+                        {a.steps.length} step(s) · agent{' '}
+                        {sessionAgentLabel(a.sessionId) ?? 'none bound'}
                       </p>
                     </div>
                     <div className="flex shrink-0 items-center gap-1">
@@ -575,6 +718,28 @@ export default function AutomationsPanel() {
                         title={paused ? 'Resume' : 'Pause'}
                       >
                         <Pause className="h-3 w-3" />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          duplicateJob(a.id)
+                        }}
+                        className="flex size-6 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:border-brand/40 hover:text-brand"
+                        aria-label="Duplicate automation"
+                        title="Duplicate"
+                      >
+                        <Copy className="h-3 w-3" />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          void exportJob(a.id)
+                        }}
+                        className="flex size-6 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:border-sky-500/40 hover:text-sky-300"
+                        aria-label="Export automation"
+                        title="Export as *.automation.json"
+                      >
+                        <Download className="h-3 w-3" />
                       </button>
                       <button
                         onClick={(e) => {

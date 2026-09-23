@@ -251,6 +251,64 @@ export async function schedulerIncidentAck(id: string): Promise<boolean> {
   });
 }
 
+// ---- P71.9e — the §11 run surface (runs · duplicate · export) --------------
+
+/** One automation run's honest status, straight from the ExecutionLedger
+ * (`scheduler_fire.rs` writes it; this is the read-back). `waitingApproval`
+ * is the §11 "waiting for approval" state. */
+export interface AutomationRun {
+  id: string;
+  sessionId: string;
+  objective: string;
+  phase: string;
+  waitingApproval: boolean;
+  createdAtMs: number;
+  context?: string;
+}
+
+/** Recent runs for one automation (or all, when `jobId` is empty). The
+ * scheduler keeps no run history (I3) — this reads the ledger that owns it. */
+export async function schedulerRuns(jobId = ""): Promise<{ runs: AutomationRun[]; count: number }> {
+  return bridgeCall({
+    operation: 'automation runs',
+    live: () => invoke<{ runs: AutomationRun[]; count: number }>('scheduler_runs', { jobId }),
+    preview: () => ({ runs: [], count: 0 }),
+  });
+}
+
+/** Duplicate an automation (same definition, new id, starts disabled). */
+export async function schedulerDuplicate(id: string): Promise<string> {
+  return bridgeCall({
+    operation: 'automation duplicate',
+    live: () => invoke<string>('scheduler_duplicate', { id }),
+    preview: () => `${id}-copy`,
+  });
+}
+
+/** The `*.automation.json` export body — the definition + session binding
+ * only; no secrets ever ride this file (`AUTOMATION.md` §11). */
+export interface AutomationExport {
+  kind: "everyaios.automation";
+  version: number;
+  automation: {
+    name: string;
+    sessionId: string;
+    boundAgent: string | null;
+    trigger: SchedulerTrigger;
+    steps: unknown[];
+    policy: SchedulerJob["policy"];
+  };
+}
+
+/** Export an automation definition. */
+export async function schedulerExport(id: string): Promise<AutomationExport> {
+  return bridgeCall({
+    operation: 'automation export',
+    live: () => invoke<AutomationExport>('scheduler_export', { id }),
+    preview: () => ({ kind: "everyaios.automation", version: 1, automation: { name: "", sessionId: "", boundAgent: null, trigger: { type: "cron", expr: "0 9 * * *" }, steps: [], policy: { suppressOnBattery: true } } }),
+  });
+}
+
 /** P51.32f — read-only trigger-plane health (missed schedule fires, registry depth). */
 export async function schedulerDoctor(): Promise<Record<string, unknown>> {
   return bridgeCall({

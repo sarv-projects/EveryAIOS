@@ -377,7 +377,7 @@ impl<H: ToolCallHandler> McpServer<H> {
                             "name": "everyaios-mcp",
                             "version": env!("CARGO_PKG_VERSION")
                         },
-                        "instructions": "EveryAIOS native tool catalog (37 browser + 5 storage). Stateless: no session is created."
+                        "instructions": "EveryAIOS shared-plane façades (task-shaped, one per capability family). Stateless: no session is created."
                     }),
                 ))
                 .unwrap_or_else(|_| rpc_error(Value::Null, -32603, "serialization failed"))

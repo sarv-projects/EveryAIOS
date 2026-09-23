@@ -46,7 +46,8 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { useAppStore, streamElapsedMs, sessionTranscriptMarkdown, type ProgressStep, type Session } from '@/lib/store'
-import { inTauri, invoke } from '@/lib/tauri'
+import { inTauri } from '@/lib/tauri'
+import { currentBinding } from '@/lib/acp'
 import { AGENT_MAP, MODEL_MAP } from '@/lib/agents'
 import {
   schedulerNudges,
@@ -739,9 +740,9 @@ export default function ChatPanel() {
       {isEmpty ? (
         <div className="flex min-h-0 flex-1 flex-col">
           <div className="flex-1" />
-          {/* P50.4.9 — no provider configured: explain setup instead of
+          {/* P71.6a — nothing bound: send the user to agent discovery instead of
               letting the first message die with a generic agent error. */}
-          <NoProviderCard />
+          <NoAgentCard />
           <EmptyState onPick={(p) => setComposerValue(p)} />
           <div className={cn(col, 'pb-6 pt-2')}>
             {store.streamStats.tokensPerSec > 0 && (
@@ -869,47 +870,46 @@ export default function ChatPanel() {
 }
 
 /**
- * P50.4.9 — No-provider/offline empty state. Shown when the vault has no
- * BYOK keys and no local runtime is picked: explains exactly what is
- * missing, where data would go (privacy note), and offers setup / local
- * download / re-check actions. Never a generic "agent error".
+ * P71.6a / P71.9b — the **unbound** empty state.
+ *
+ * The old card here was the zero-install path's blocker: "no provider key
+ * configured". That is no longer what stops a turn. In v1 EveryAIOS makes no
+ * model call of its own, so the blocker is that **no agent is bound** and there
+ * is no built-in engine to fall back to (`ADR-0005` §1). This card names that
+ * state and points at the one action that changes it.
+ *
+ * Keys and local runtimes are still real surfaces, but they are *observation* —
+ * a key is handed to the agent you bind — so they are a secondary note, never
+ * presented as the way to make chat work.
  */
-function NoProviderCard() {
-  const providerKeysConfigured = useAppStore((s) => s.providerKeysConfigured)
-  const localRuntime = useAppStore((s) => s.localRuntime)
+function NoAgentCard() {
+  const selectedAgentId = useAppStore((s) => s.selectedAgentId)
+  const sessionChiefs = useAppStore((s) => s.sessionChiefs)
+  const activeSessionId = useAppStore((s) => s.activeSessionId)
+  const userDefaultChief = useAppStore((s) => s.userDefaultChief)
   const openSetup = useAppStore((s) => s.openSetup)
-  const setProviderKeysConfigured = useAppStore((s) => s.setProviderKeysConfigured)
   const setSettingsSection = useAppStore((s) => s.setSettingsSection)
   const setCenterScreen = useAppStore((s) => s.setCenterScreen)
-  const [checking, setChecking] = useState(false)
 
   if (!inTauri()) return null
-  // Unknown (null) or configured → the normal empty state applies.
-  if (providerKeysConfigured !== false) return null
-  if (localRuntime) return null
-
-  const recheck = async () => {
-    setChecking(true)
-    try {
-      const r = await invoke<{ keys?: unknown[] }>('vault_keys_list')
-      setProviderKeysConfigured((r?.keys?.length ?? 0) > 0)
-    } catch {
-      /* vault still locked — stays false/unknown */
-    } finally {
-      setChecking(false)
-    }
-  }
+  // Retired built-in spellings resolve to nothing (`currentBinding`), so a stale
+  // `primary_chief` cannot make this card claim an agent is bound.
+  const bound =
+    currentBinding(sessionChiefs[activeSessionId]) ??
+    currentBinding(userDefaultChief) ??
+    currentBinding(selectedAgentId)
+  if (bound) return null
 
   return (
     <div className="fade-up mx-auto w-full max-w-md rounded-xl border border-warning/30 bg-warning/5 px-4 py-3">
       <div className="flex items-center gap-2">
         <KeyRound className="h-4 w-4 text-warning" />
-        <div className="text-[12px] font-semibold text-foreground">No model provider configured</div>
+        <div className="text-[12px] font-semibold text-foreground">No agent bound</div>
       </div>
       <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
-        Add a bring-your-own-key provider or use a local model — until then there is no model to
-        answer with. Your key is stored encrypted in the local vault and only sent to the provider
-        you choose; local models run entirely on this machine.
+        Nothing can answer yet: v1 runs your messages through an agent you install or pick, and
+        EveryAIOS ships no built-in engine. The agent does the reasoning and holds its own model and
+        credentials; EveryAIOS keeps the workspace, the memory and the permission gate.
       </p>
       <div className="mt-2 flex flex-wrap items-center gap-1.5">
         <Button
@@ -918,29 +918,30 @@ function NoProviderCard() {
           onClick={() => openSetup()}
         >
           <KeyRound className="mr-1 h-3 w-3" />
-          Set up a provider
+          Choose an agent
         </Button>
         <Button
           size="sm"
           variant="outline"
           className="h-7 text-[10px]"
           onClick={() => {
-            setSettingsSection('local')
+            setSettingsSection('agents')
             setCenterScreen('settings')
           }}
         >
-          <Download className="mr-1 h-3 w-3" />
-          Download a local model
+          <Sparkles className="mr-1 h-3 w-3" />
+          Agent runtimes
         </Button>
         <Button
           size="sm"
           variant="ghost"
           className="h-7 text-[10px] text-muted-foreground"
-          disabled={checking}
-          onClick={() => void recheck()}
+          onClick={() => {
+            setSettingsSection('apikeys')
+            setCenterScreen('settings')
+          }}
         >
-          {checking ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <RotateCw className="mr-1 h-3 w-3" />}
-          Check again
+          Provider keys &amp; local models
         </Button>
       </div>
     </div>

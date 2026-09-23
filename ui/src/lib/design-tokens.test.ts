@@ -150,7 +150,7 @@ describe('P66.5 — semantic token contrast (WCAG 2.2 AA)', () => {
   })
 
   test('every selectable accent is legible as text, in both themes', () => {
-    for (const accent of ['sky', 'emerald', 'violet', 'amber']) {
+    for (const accent of ['sky', 'emerald', 'violet', 'amber', 'rose', 'teal']) {
       const light = { ...root, ...block(`[data-accent="${accent}"]`) }
       const night = {
         ...root,
@@ -175,7 +175,7 @@ describe('P66.5 — semantic token contrast (WCAG 2.2 AA)', () => {
   test('every selectable accent keeps its own label legible', () => {
     // The label flips to the dark ink in dark mode, because the dark accent is
     // deliberately bright. Both halves are asserted so neither can drift alone.
-    for (const accent of ['sky', 'emerald', 'violet', 'amber']) {
+    for (const accent of ['sky', 'emerald', 'violet', 'amber', 'rose', 'teal']) {
       const light = { ...root, ...block(`[data-accent="${accent}"]`) }
       const night = {
         ...root,

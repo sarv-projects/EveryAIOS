@@ -1,19 +1,20 @@
-// P60 — the model surface belongs to the EveryAIOS Native agent.
+// P71.2a/P71.2d — Settings renders one agent surface, and every row is external.
 //
 // The product contract is one primary Settings surface for agent/runtime
-// management (ARCH/12 + the 2026-09-12 model-ownership decision): "Native
-// models" must not be a peer tab next to Runtimes, because outside Native that
-// table governs nothing. These tests pin the layout: two tabs (Runtimes /
-// Routing), and the Native catalog rendered *inside* the runtimes surface.
+// management (ARCH/12): there is no "Native models" peer tab, no built-in runtime
+// card, and no "EveryAIOS Native model catalog" disclosure — because EveryAIOS
+// owns no model surface at all and ships no built-in agent in v1 (ADR-0005 §1).
 
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
 import type { ReactElement } from 'react'
-import { click, installShell, mount, registerDom, removeShell, unregisterDom, waitFor, withAct, type Mounted } from '@/test/dom-harness'
+import { installShell, mount, registerDom, removeShell, unregisterDom, waitFor, withAct, type Mounted } from '@/test/dom-harness'
 import { useAppStore } from '@/lib/store'
 import { AGENTS } from '@/lib/agents'
 
 let Section: () => ReactElement
 let mounted: Mounted
+
+const EXTERNAL = AGENTS.find((a) => a.id === 'claude-code')!
 
 beforeAll(async () => {
   registerDom()
@@ -29,25 +30,25 @@ beforeEach(async () => {
   // the harness answers `{}` — which is a partial row, and must render, not throw.
   installShell({
     settings_agent_get: () => ({
-      agentId: 'everyaios-native',
+      agentId: 'claude-code',
       installed: true,
-      protocol: 'inbuilt',
+      protocol: 'acp',
       authMode: 'subscription',
       nativeCapabilities: ['chat', 'tools'],
       sharedCapabilities: [],
-      modelOwner: 'native',
+      modelOwner: 'agent',
       configOptions: [],
       readiness: 'ready',
-      location: { kind: 'managed', executable: 'everyaios', installRoot: '/opt/everyaios', version: '1.0.0' },
+      location: { kind: 'path', source: 'path', executable: 'claude', version: '1.2.3' },
       sessionLoadout: [],
     }),
   })
   await withAct(() =>
     useAppStore.setState({
-      selectedAgentId: 'everyaios-native',
-      selectedModelId: 'claude-sonnet-4.5',
+      selectedAgentId: 'claude-code',
+      selectedModelId: '',
       selectedModelProvider: undefined,
-      liveAgents: [AGENTS.find((a) => a.id === 'everyaios-native')!],
+      liveAgents: [{ ...EXTERNAL, status: 'installed', version: '1.2.3' }],
       acpConfigOptions: {},
     }),
   )
@@ -60,7 +61,7 @@ afterEach(() => {
   removeShell()
 })
 
-describe('P60 — Settings renders one agent surface', () => {
+describe('P71.2a — Settings renders one agent surface with no built-in row', () => {
   test('the only peer tabs are Runtimes and Routing', async () => {
     await waitFor(() => mounted.container.querySelector('[role="tablist"]') !== null)
 
@@ -68,8 +69,12 @@ describe('P60 — Settings renders one agent surface', () => {
       (t) => (t.textContent ?? '').trim(),
     )
     expect(tabs).toEqual(['Runtimes', 'Routing'])
-    // The old peer "Native models" tab is gone.
+    // Neither the old peer "Native models" tab nor a built-in runtime card
+    // exists in v1.
     expect(tabs).not.toContain('Native models')
+    const body = mounted.container.textContent ?? ''
+    expect(body).not.toContain('EveryAIOS Native')
+    expect(body).not.toContain('native-catalog-toggle')
   })
 
   test('a partial capability row renders instead of throwing', async () => {
@@ -81,36 +86,20 @@ describe('P60 — Settings renders one agent surface', () => {
     mounted = await mount(<Section />)
 
     await waitFor(() => mounted.container.querySelector('[role="tablist"]') !== null)
-    expect((mounted.container.textContent ?? '').includes('Native capabilities')).toBe(true)
+    expect((mounted.container.textContent ?? '').includes('Agent capabilities')).toBe(true)
   })
 
-  test('the Native model catalog is a disclosure on the Native card', async () => {
-    await waitFor(() => mounted.container.querySelector('[data-testid="native-catalog-toggle"]') !== null)
-    const toggle = mounted.container.querySelector<HTMLButtonElement>(
-      '[data-testid="native-catalog-toggle"]',
-    )
-    expect(toggle).not.toBeNull()
-    expect(toggle?.getAttribute('aria-expanded')).toBe('false')
-    // Collapsed by default: no model table until the user asks for it.
-    expect(mounted.container.querySelector('th')).toBeNull()
+  test('an undiscovered machine says nothing can run, rather than offering a built-in', async () => {
+    mounted.unmount()
+    await withAct(() => useAppStore.setState({ liveAgents: [] }))
+    mounted = await mount(<Section />)
 
-    if (!toggle) return
-    await click(toggle)
-
-    const ok = await waitFor(() =>
-      (mounted.container.textContent ?? '').includes('the only runtime this table governs'),
-    )
-    expect(ok).toBe(true)
-    expect(toggle.getAttribute('aria-expanded')).toBe('true')
-    const headers = Array.from(mounted.container.querySelectorAll('th')).map((th) =>
-      (th.textContent ?? '').trim(),
-    )
-    expect(headers).toContain('Model')
-    expect(headers).toContain('In / 1M')
-
-    // …and it collapses again.
-    await click(toggle)
-    await waitFor(() => mounted.container.querySelector('th') === null)
-    expect(mounted.container.querySelector('th')).toBeNull()
+    await waitFor(() => mounted.container.querySelector('[role="tablist"]') !== null)
+    const body = mounted.container.textContent ?? ''
+    // The discovery warning is explicit that an empty list is not occupancy…
+    expect(body).toContain('not occupancy')
+    // …and nothing is painted as an always-available runtime.
+    expect(body).not.toContain('EveryAIOS Native')
+    expect(body).not.toContain('always live')
   })
 })

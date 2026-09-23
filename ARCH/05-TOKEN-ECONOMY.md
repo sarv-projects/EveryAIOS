@@ -12,6 +12,8 @@
 > **The user's #1 goal:** *"tokens minimizing, yet greater, more powerful, capable outputs — so control the inputs basically."* This is the entire doc. Doctrine from doc 32 (tokenmining): **retrieve instead of preload · compress instead of repeat · structure instead of narrate · spend tokens where reasoning actually matters.** Knobs from Reasonix (doc 05 §6), BrowserOS (doc 33 §7.2), Janus (doc 31), context-mode (doc 32), rtk (doc 23), Hermes budgets (doc 16).
 > **Ownership ([`CORE.md`](CORE.md) §4, §8):** split by owner. The `token_usage` ledger and per-key budgets are **shared execution-kernel telemetry**; context selection and assembly belong to **EveryAIOS context engineering** ([`CONTEXT.md`](CONTEXT.md)) and cost/routing strategy to [`ROUTING.md`](ROUTING.md). An external agent's own token spend is its own; EveryAIOS does not claim to account for it.
 > **Where this file sits:** everything in §§5.1–5.10 below is a **strategy** — a replaceable mechanism that plugs in behind the contracts in §5.0. Strategies never become architecture (I19–I22 live in CORE, not here).
+>
+> **P71.4 — what the ledger is, and is not.** With the built-in engine deferred ([`ADR/0005`](ADR/0005-external-agents-are-the-v1-engines.md)) the provider broker is deleted, so nothing of ours sits in a turn to *measure* it. Usage therefore arrives as a **report**, and the ledger's one recording door requires the reporter: `everyaios_memory::UsageSource` is `agent_report` · `acp_event` · `provider_report` · `capability_call` (`ARCH/ROUTING.md` §5). Three consequences are enforced in code, not convention: a turn the agent reported nothing for increments an **unreported** counter rather than adding zero tokens; prompt-cache **writes** are recorded apart from reads because they are billed differently; and a producer's `reported_cost_usd` is never summed with our price-based `est_cost_usd` — the two are different facts and a surface must label which one it is showing. The primary/worker share is computed from the **agent** dimension only and is `null` when no primary agent was attributed, because the old key-name heuristic produced a share from a guess.
 
 ## 5.0 The architecture: six contracts + the optimization order (from [`CONTEXT.md`](CONTEXT.md))
 
@@ -66,7 +68,7 @@ Compaction pipeline (triggered at thresholds; runs in the sidecar; every step ke
 - **`run`/script-eval** (08): one call does multi-step loops (`Promise.all` fan-out, pagination, bulk extraction) — 1×`run` replaces N×`snapshot+act` round-trips. BrowserOS instruction block is the template (doc 33 §6.3).
 - **Deterministic planner** (04): spreadsheet/doc operations via DSL, not prose.
 - **Crystallization** (v2.0 §P7, built in `everyaios-blueprint` — `crystallize.rs`; consolidated from the `core-automations` package to Rust, Tier 2d): successful multi-step workflows compile non-cognitive steps (waits, triggers, static transforms, notifications) into a native deterministic loop — **0 tokens on re-runs**.
-- **Grammar-enforced extraction** (v2.0 §P3, core-engine): weak models call tools via ```text``` code blocks; no fragile JSON.
+- **Grammar-enforced extraction** (v2.0 §P3): weak models call tools via ```text``` code blocks; no fragile JSON. *Deferred with the built-in engine (`P71.2c`, `ARCH/archive/core-engine/`): v1 makes no model call of its own, so extraction belongs to the bound agent. The local-runtime GBNF passthrough (B5) remains a property of the vault broker's local endpoint.*
 - **Tool-result discipline**: results returned as structured types, not prose; images binary-flagged; errors as compact error objects.
 
 ### Rule 4 — Spend where reasoning matters
@@ -185,3 +187,55 @@ Before feeding tool results to the LLM, apply **command-specific parsers** that 
 **Relation to existing compaction pipeline (5.2):** RTK compression operates at the *tool-result injection* stage (before content enters the context window), while the 6-stage compaction pipeline operates on *accumulated conversation history*. They are complementary, not competing.
 
 > **Production composition (doc 59):** OmniRoute stacks **RTK + Caveman (DarwinCaveman, doc 31)** as 12 pluggable engines and quotes 15–95% / ~89% avg token savings — the first production proof that the two layers compose. Cite as the implementation reference for §5.10 + §5.2; token-% stays vendor until we measure. Its **`cache-optimized` routing** (rendezvous-hash the prompt prefix back to the connection holding the cache) is the missing half of our A9 prefix-cache economics (§5.3) — pin *which key serves* by cache affinity, not just *track* cache_read/cache_write.
+
+## 5.11 Live-Zone Byte Surgery & Exact Prefix-Cache Pinning (MEM-14 / Headroom Pattern)
+
+To achieve mathematical 100% prompt cache hit rates across Anthropic, DeepSeek, and OpenAI endpoints, the prompt assembly pipeline employs the Headroom `compute_frozen_count` algorithm:
+1. **7-Segment Assembly:** Segments 1 through 7 (System Identity, Core Principles, Tool Definitions, Project Rules, Taste Profile, Blueprint Skeleton, Frozen Memory Snapshot) are serialized into an immutable, byte-exact UTF-8 array.
+2. **Byte-Exact Cache Breakpoint:** The cache barrier is pinned at the exact byte offset separating Segment 7 from the dynamic conversation tail. Volatile items (current timestamps, turn counters, memory candidate updates) are forbidden in Segments 1–7 and injected strictly into the dynamic tail (e.g. within `<system-reminder>` wrappers in the first user turn).
+3. **No Mid-Session Re-ordering:** Tool definition ordering and system prompt clauses maintain static, deterministic sorting across all turns.
+
+## 5.12 Content-Addressed Blob Spooling (CCR / MEM-15 Pattern)
+
+When tool executions produce bulk outputs exceeding `TOOL_OUTPUT_SERIALIZE_CAP = 2_000` tokens:
+- **Disk Spooling:** Full raw outputs are spooled to `~/.everyaios/spool/{sha256}.blob` with 7-day retention.
+- **Model Projection:** The context receives a compact reference handle:
+  ```xml
+  <tool_output_ref hash="e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" bytes="48291" lines="1240">
+    [Bounded preview: first 20 lines and last 20 lines]
+  </tool_output_ref>
+  ```
+- **On-Demand Drilldown:** The model can inspect arbitrary slices via `retrieve_original(hash, offset, limit)` without polluting conversation history.
+
+## 5.13 Middle-Slice Atomic Trajectory Compaction (Hermes Pattern)
+
+When conversation history reaches compaction thresholds (`PRUNE_PROTECT = 40_000` tokens, `PRUNE_MINIMUM = 20_000` tokens):
+- **Atomic Tool Pair Invariant:** Trajectory slicing operates strictly on whole turn boundaries; `<tool_call>` and matching `<tool_response>` blocks are never decoupled or sliced mid-sequence.
+- **Middle Turn Compression:** Oldest non-essential tool results in middle conversation turns have their verbose payloads replaced with structured summaries, while recent `tail_turns` (default 2–5 turns, `2_000`–`15_000` tokens) remain 100% verbatim.
+
+## 5.14 Non-Destructive Tombstone Truncation (Nooa Pattern)
+
+When historical turns must be evicted to prevent window exhaustion:
+- **Tombstone Structuring:** Instead of deleting turns from the context array, the engine installs a typed tombstone:
+  ```json
+  {
+    "type": "context_tombstone",
+    "evicted_turns": [12, 13, 14, 15],
+    "tokens_reclaimed": 14200,
+    "summary": "Agent ran unit tests for auth module, identified 2 failures in token expiry, and patched src/auth/token.rs.",
+    "files_touched": ["src/auth/token.rs", "tests/auth_test.rs"]
+  }
+  ```
+- This preserves causal reasoning continuity while reclaiming thousands of tokens.
+
+## 5.15 Fault Recovery Nudges & Doom Loop Detection (OpenCode & Cline Patterns)
+
+- **`MAX_TOKENS_RECOVERY_NUDGE`:** When an LLM turn halts abruptly with `finish_reason: length`, the coordinator immediately injects a high-priority 3x conciseness recovery nudge: `[System Note: Your previous response hit the token limit. Provide a concise summary or complete the remaining code concisely without repeating earlier output.]`
+- **`DOOM_LOOP_THRESHOLD = 3`:** The execution engine monitors tool calls. If an agent issues identical tool calls with identical parameter hashes 3 consecutive times with failure or repeating output, the coordinator triggers a circuit-break, freezes the DAG, and renders a structured user guidance card.
+
+## 5.16 Mid-Turn Context Precheck (OpenClaw Pattern)
+
+Before dispatching an LLM request:
+1. The engine computes `projected_tokens = current_tokens + reserve_output_budget`.
+2. If `projected_tokens > model.context_window - 5000`, the engine fires `MidTurnPrecheckSignal`.
+3. Deterministic reduction (blob spooling, tombstone compaction, RTK filtering) runs *before* the network call, preventing wasteful HTTP 400 `ContextWindowExceeded` failures.

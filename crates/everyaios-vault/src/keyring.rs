@@ -1271,25 +1271,46 @@ mod tests {
         ring.add_key(spec("p", "k", "a")).unwrap();
         let handle = ring.list("p").unwrap()[0].opaque_handle.clone();
 
+        // A recorded cooldown is anchored on an internal `now_ms()` that is
+        // unknowable from outside — but it always lands inside the window
+        // bracketing the call that recorded it. Bracketing each call and
+        // deriving the range from those windows keeps the assertion exact,
+        // instead of leaning on a fixed slack that a loaded parallel test run
+        // can outrun.
+        let b1 = now_ms();
         ring.report_failure(&handle, true).unwrap();
         let first = ring.get("p", "k").unwrap().cooldown_until;
-        // base × 2^0 = 5s (tolerant of clock drift between the internal
-        // timestamp and our post-call now_ms() — typically ≤2ms, up to ~10ms
-        // under load).
-        assert!((first - now_ms() - 5000).abs() <= 10);
+        let a1 = now_ms();
+        // base × 2^0 = 5s, anchored somewhere in `b1..=a1`.
+        assert!(
+            (b1 + 5000..=a1 + 5000).contains(&first),
+            "first cooldown: {first} (window {b1}..={a1})"
+        );
 
+        let b2 = now_ms();
         ring.report_failure(&handle, true).unwrap();
         let second = ring.get("p", "k").unwrap().cooldown_until;
-        // base × 2^1 = 10s → delta 5s (tolerant of the ms elapsed between
-        // the two internal now_ms() stamps under load).
-        assert!((second - first - 5000).abs() <= 10);
+        let a2 = now_ms();
+        // base × 2^1 = 10s → the gap between the two anchors is 5s. The
+        // anchors are independently bounded, so the gap's range spans the
+        // extremes of both windows.
+        assert!(
+            (5000 + b2 - a1..=5000 + a2 - b1).contains(&(second - first)),
+            "second cooldown gap: {} (windows {b1}..={a1}, {b2}..={a2})",
+            second - first
+        );
 
         // 7 failures: 5 × 2^6 = 320s → capped at 300s (5 min).
+        let b3 = now_ms();
         for _ in 0..5 {
             ring.report_failure(&handle, true).unwrap();
         }
         let capped = ring.get("p", "k").unwrap().cooldown_until;
-        assert!((capped - now_ms() - 300_000).abs() <= 10);
+        let a3 = now_ms();
+        assert!(
+            (b3 + 300_000..=a3 + 300_000).contains(&capped),
+            "capped cooldown: {capped} (window {b3}..={a3})"
+        );
     }
 
     /// P56.8 — a provider-supplied `Retry-After` wins over the exponential

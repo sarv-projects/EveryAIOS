@@ -877,7 +877,7 @@ export default function ShellView() {
                 onClick={() => splitActive('col')}
                 aria-label="Split right"
                 aria-pressed={splitDir === 'col'}
-                title="Split right — show a second session beside this one"
+                title="Split right — show a second chat beside this one"
                 className={cn(
                   'rounded border border-border px-2 py-0.5 text-[10px] text-muted-foreground hover:text-foreground',
                   splitDir === 'col' && 'border-primary/40 text-foreground',
@@ -890,7 +890,7 @@ export default function ShellView() {
                 onClick={() => splitActive('row')}
                 aria-label="Split down"
                 aria-pressed={splitDir === 'row'}
-                title="Split down — show a second session below this one"
+                title="Split down — show a second chat below this one"
                 className={cn(
                   'rounded border border-border px-2 py-0.5 text-[10px] text-muted-foreground hover:text-foreground',
                   splitDir === 'row' && 'border-primary/40 text-foreground',
@@ -903,7 +903,7 @@ export default function ShellView() {
                   type="button"
                   onClick={unsplit}
                   aria-label="Unsplit panes"
-                  title="Unsplit — both sessions keep running"
+                  title="Unsplit — both chats keep running"
                   className="rounded border border-border px-2 py-0.5 text-[10px] text-muted-foreground hover:text-foreground"
                 >
                   <Minimize2 className="h-3 w-3" />
@@ -1053,7 +1053,7 @@ export default function ShellView() {
       <footer className="flex items-center gap-3 border-t border-border px-3 py-1 font-mono text-[10px] text-muted-foreground">
         {active ? (
           <>
-            <span>{originLabel(active.origin)} session</span>
+            <span>{originLabel(active.origin)} terminal</span>
             <span>·</span>
             <span>
               integration:{' '}
@@ -1089,7 +1089,7 @@ export default function ShellView() {
             </button>
           </>
         ) : (
-          <span>no session</span>
+          <span>no terminal</span>
         )}
       </footer>
     </div>

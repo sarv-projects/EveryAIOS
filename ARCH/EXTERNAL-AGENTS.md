@@ -207,6 +207,14 @@ new_session() · load_session()  (ACP v1) · resume_session()  (ACP v2) · close
 - Version differences (`load` vs `resume`) live inside the adapter.
 - A capability the agent negotiates as absent must degrade, never throw.
 
+> **GAP (D2, recorded 2026-09-22).** The lifecycle above is contract-not-code on the wire: the
+> production ACP client (`crates/everyaios-acp/src/client.rs`) implements `initialize` · `authenticate` ·
+> `session/new` · `session/prompt` · `session/cancel` · `session/request_permission` ·
+> `session/set_config_option` · `update` — but has **no `session/load` and no `session/resume`**. The
+> only `session/load` in the tree is the test fixture `crates/everyaios-acp/src/bin/mock-agent.rs`.
+> Resume promises in this section are therefore currently unexecutable; implementation is queued in
+> TODO as the **H4 vehicle (session-resume wire)**.
+
 ---
 
 ## 8. What EveryAIOS must never do
@@ -241,3 +249,64 @@ not verified); the descriptions still may not claim guarded/primary mediation un
 - The bridge requires the binding record first ([AGENT.md](AGENT.md) §3) — order is binding → bridge → scope.
 - Multi-platform confinement honesty is unchanged: a confined launch fails closed, and a non-Linux posture
   reports what it actually achieved rather than claiming confinement.
+
+---
+
+## Repo-comparison additions (briefs 01–19)
+
+Verified delta items from `REPO-COMPARE/DELTA-ANALYSIS.md` §3 whose target is this document. Each entry:
+brief tag · disposition · SOURCE repo + evidence path (under `REPO-COMPARE/clone2|clone3/`) ·
+one-sentence logic → target §. Halves owned by other lanes are named as cross-domain deferred.
+
+- **COO-3** · `[improve]` · SOURCE `clone2/codex/codex-rs/app-server` (+ `app-server-protocol`) — The
+  Codex engine contract is the app-server **v2 thread/turn/item** JSON-RPC surface (not v1 events),
+  already carrying approval/sandbox knobs per thread that the adapter translates into Guard tickets
+  (native plane stays engine-governed; capability plane mints — I14 / One Invariant). → §7.
+- **19-7** · `[add]` · SOURCE `clone3/agent-control/ccmanager` (include-file semantics; brief 19 rec 7 +
+  cross-repo synthesis #4) — `.worktreeinclude` interop (same filename + gitignore semantics as Claude
+  Code/Conductor/Codex, git-actually-ignored check only) is honored when minting worktree workspaces so
+  `workspace.map` reports the include-aware tree. → §3 (`workspace.map`); *cross-domain deferred:* WORK
+  workspace-creation half → WORK lane.
+- **11-3** · `[add · annotation]` · SOURCE `clone2/eliza/packages/core/README.md` (room entitlement
+  evaluated inside the storage adapter before rows/counts/ranking return; CAS role changes;
+  fail-closed for unresolved identities) — Entitlement is checked fail-closed in the read path before
+  any data returns, so the bridge/adapter never returns store rows without the entitlement verdict — the
+  bridge still forwards, never authorizes (§2.2). → annotation here; *cross-domain deferred:*
+  15-CONNECT-STORE + SECURITY §2 → store/security lanes.
+- **11-10** · `[add · annotation]` · SOURCE `clone2/openfang/docs/architecture.md` ("Agent Lifecycle" —
+  spawn validates capability inheritance before grants) — A child's capability set may never exceed its
+  parent's at spawn, enforced before any grant, so delegation through the bridge cannot widen scope.
+  → annotation here; *cross-domain deferred:* WORK §8 + SECURITY §2 → work/security lanes.
+- **11-13** · `[add]` · SOURCE `clone2/deepseek-harness/docs/capability_seams.md` — The three-role seam
+  rule (definition + provider + consumer all required; a provider swap must move every dependent
+  together) is the extension test for capability packs bound through this bridge. → §7; *cross-domain
+  deferred:* brief 11-13's checkpoint-wrapping half → RECOVERY §7 (recovery lane).
+- **19-17** · `[upgrade]` · SOURCE `clone3/agent-control/agent-client-protocol`
+  (`docs/rfds/session-fork.mdx`, `docs/rfds/session-resume.mdx`) — Adopt the ACP `session/fork` +
+  `session/resume|list|delete` RFDs into the binding lifecycle (fork-at-message, capability-gated)
+  instead of adapter-invented equivalents. → §7 + AGENT.md §6.
+- **13-8** · `[add]` · SOURCE `clone2/claude-mem/docs/architecture-overview.md` ("Graceful Degradation")
+  — In the host-facing hook contract, transport/worker failures queue and exit clean and **never block
+  the host session**, while client-contract bugs may block. → §7 + `everyaios-acp`.
+- **MCPM-1** · `[add · annotation]` · SOURCE `clone3/mcp-plugins-skills-connectors/mcpm.sh/src/mcpm/clients/base.py`
+  (abstract `ClientManager`) — A harness-adapter emitter turns one internal MCP-server descriptor into
+  per-client config stanzas (native-first: emit config, never wrap native tools) while preserving §4's
+  rule that adding an agent is a registry entry, never a code change. → §4 annotation; *cross-domain
+  deferred:* primary 15-CONNECT §4 → store lane.
+- **MCPM-3** · `[improve · annotation]` · SOURCE `clone3/mcp-plugins-skills-connectors/mcpm.sh/src/mcpm/core/schema.py:42-60`
+  — `${VAR}` env indirection in emitted configs resolves **only from vault references at emit time**
+  (plaintext-resolution fallback forbidden), reinforcing §4's "`manifest.env` is functional" rule with
+  I10 custody. → §4 annotation + `→ 03-BYOK` (BYOK lane owns the custody file).
+- **19-18** · `[improve]` · SOURCE `clone3/agent-control/agentapi` (`conversation.go`; negative evidence
+  `acpio.go`) — The two-transport AgentIO seam (structured preferred, PTY fallback behind one
+  Conversation interface) must handle methods capability-honestly: unimplemented ACP methods negotiate
+  absent, never stubbed or auto-allowed. → §§5/7 (+ AGENT.md §5 matrix cross-ref).
+- **14-14** · `[add]` · SOURCE `clone2/harnessrouter/protocol/schema/`, `clone2/harnessrouter/protocol/conformance/`
+  — UHP conformance-suite *discipline* — a versioned machine-readable schema plus runnable conformance
+  tests per harness/adapter façade, shaped on the ACP/MCP/Work-Gateway trichotomy of §1 — **UHP is not
+  adopted as a fourth protocol**. → §§1–2 (+ ADR-0005 reference; ADR not edited here).
+- **03/05 §3 #14** · **Not adopted (recorded)** · SOURCE `clone2/opencode` (`permission/index.ts`
+  wildcard grammar; V1 loop) + `clone2/codex` (V1-deprecated patterns) — No V1-deprecated surface
+  mirroring: a deprecated v1 surface (fs/terminal mediation, wildcard permission grammar) may be
+  supported only as declining compatibility per §5.1, never mirrored as a durable API, grammar, or
+  design once v2 parity exists. → §5.1 (and §8).

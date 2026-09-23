@@ -212,7 +212,15 @@ fn smoke_all_algorithms() {
     // 21. usage (P8)
     let mut ul = crate::usage::UsageLedger::new();
     ul.set_active("s", "k");
-    ul.record(100, 10, true, 50);
+    ul.record_observed(
+        crate::usage::UsageSource::AgentReport,
+        100,
+        10,
+        true,
+        50,
+        0,
+        0.0,
+    );
     ul.clear_active();
     assert_eq!(ul.total().total_tokens(), 110);
 

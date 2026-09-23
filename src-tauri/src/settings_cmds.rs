@@ -1553,50 +1553,44 @@ mod tests {
         assert!(validate_default_model("anthropic", "anything", &known, None).is_ok());
     }
 
+    /// P71.2a — the built-in engine is retired (ADR-0005 §2), so an agent's
+    /// model surface is never attributed to the host: the column reports
+    /// `managed` when EveryAIOS holds a verified binding for it and `agent`
+    /// otherwise. The old `native` branch existed only for the built-in row.
     #[test]
     fn model_owner_rule() {
-        assert_eq!(model_owner_for(true, false), "native");
-        assert_eq!(model_owner_for(true, true), "native");
-        assert_eq!(model_owner_for(false, false), "agent");
-        assert_eq!(model_owner_for(false, true), "managed");
+        assert_eq!(model_owner_for(true), "managed");
+        assert_eq!(model_owner_for(false), "agent");
     }
 
+    /// P71.2a — the rule no longer takes an `is_builtin` argument: the built-in
+    /// engine is retired (ADR-0005 §2), so every row is judged on install
+    /// occupancy, the live handshake and the auth mode alone.
     #[test]
     fn readiness_never_claims_ready_without_occupancy() {
         assert_eq!(
-            agent_readiness(false, false, "api_key", false, false, true),
+            agent_readiness(false, "api_key", false, false, true),
             "not_installed"
         );
+        assert_eq!(agent_readiness(true, "keyless", false, false, true), "ready");
         assert_eq!(
-            agent_readiness(true, true, "keyless", false, false, true),
-            "ready"
-        );
-        assert_eq!(
-            agent_readiness(true, false, "subscription", false, false, false),
+            agent_readiness(true, "subscription", false, false, false),
             "sign_in_required"
         );
         assert_eq!(
-            agent_readiness(true, false, "api_key", false, false, false),
+            agent_readiness(true, "api_key", false, false, false),
             "api_key_required"
         );
+        assert_eq!(agent_readiness(true, "api_key", false, false, true), "ready");
+        assert_eq!(agent_readiness(true, "local", false, false, false), "local_cli");
+        // A live handle outranks install facts (P71.3f).
         assert_eq!(
-            agent_readiness(true, false, "api_key", false, false, true),
-            "ready"
-        );
-        assert_eq!(
-            agent_readiness(true, false, "local", false, false, false),
-            "local_cli"
-        );
-        assert_eq!(
-            agent_readiness(true, false, "api_key", true, true, true),
+            agent_readiness(true, "api_key", true, true, true),
             "sign_in_required"
         );
+        assert_eq!(agent_readiness(true, "api_key", true, false, true), "ready");
         assert_eq!(
-            agent_readiness(true, false, "api_key", true, false, true),
-            "ready"
-        );
-        assert_eq!(
-            agent_readiness(true, false, "mystery", false, false, false),
+            agent_readiness(true, "mystery", false, false, false),
             "unavailable"
         );
     }
@@ -1773,9 +1767,11 @@ mod tests {
         assert_ne!(config_hash_of("a"), config_hash_of("b"));
     }
 
+    /// P71.2a — the loadout row no longer takes an `is_builtin` flag: every
+    /// row's native side is the **bound agent's** own surface (ADR-0005 §2).
     #[test]
     fn loadout_rows_apply_from_next_turn() {
-        let rows = session_loadout_for(false, true, "ready");
+        let rows = session_loadout_for(true, "ready");
         assert!(!rows.is_empty());
         assert!(rows.iter().all(|r| r.applies_from == "next-turn"));
         assert!(rows.iter().any(|r| r.native_or_shared == "native"));

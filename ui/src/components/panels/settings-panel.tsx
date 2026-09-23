@@ -69,7 +69,6 @@ import {
   BetaSection,
   BrowserNetworkSection,
   ChatAutoRunSection,
-  CommandsSection,
   ComputerUseSection,
   SearchEnginesSection,
   ExpertsSection,
@@ -107,7 +106,7 @@ const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
     title: 'Workspace',
     items: [
       { id: 'general', label: 'General', icon: SettingsIcon, keywords: ['preferences', 'startup', 'defaults'] },
-      { id: 'appearance', label: 'Appearance', icon: Palette, keywords: ['theme', 'dark', 'light', 'accent', 'density'] },
+      { id: 'appearance', label: 'Appearance', icon: Palette, keywords: ['theme', 'dark', 'light', 'system', 'accent', 'colour', 'color', 'density', 'compact', 'contrast', 'text size'] },
       { id: 'notifications', label: 'Notifications', icon: Bell, keywords: ['alerts', 'toast', 'sounds'] },
       { id: 'privacy', label: 'Privacy', icon: Shield, keywords: ['data', 'telemetry', 'vault', 'collect', 'local'] },
       { id: 'keyboard', label: 'Keyboard', icon: Keyboard, keywords: ['shortcuts', 'hotkeys', 'keybindings'] },
@@ -126,9 +125,10 @@ const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
       // searx.space public opt-in second).
       { id: 'search', label: 'Search', icon: Search, keywords: ['searx', 'searxng', 'ddg', 'duckduckgo', 'web search', 'instances', 'public'] },
       { id: 'apikeys', label: 'Providers / BYOK', icon: KeyRound, keywords: ['key', 'api', 'provider', 'openai', 'anthropic', 'nvidia', 'token', 'billing', 'credential'] },
-      // P58.3 — the two rows are now named for what they are: inbuilt persona
+      // P58.3 — the two rows are now named for what they are: bundled persona
       // roles vs installed agent CLIs. They were both "Experts"-flavoured, which
-      // duplicated the B3 delegation story.
+      // duplicated the B3 delegation story. (The roles are B9 bundles, not an
+      // engine — `P71.9g`.)
       { id: 'experts', label: 'Built-in roles', icon: Users, keywords: ['persona', 'role', 'built-in', 'researcher', 'reviewer'] },
       { id: 'subagents', label: 'Subagents', icon: Users, keywords: ['delegate', 'installed', 'discover', 'cli'] },
       { id: 'tool-log', label: 'Tool log', icon: Activity, keywords: ['acp', 'observability', 'metrics', 'tools'] },
@@ -150,7 +150,7 @@ const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
     title: 'Runtime',
     items: [
       { id: 'launch', label: 'Launch CLI', icon: Terminal, keywords: ['command line', 'shell'] },
-      { id: 'runtime', label: 'Session runtime', icon: Layers, keywords: ['session', 'process', 'sidecar', 'logs'] },
+      { id: 'runtime', label: 'Runtime processes', icon: Layers, keywords: ['session', 'process', 'sidecar', 'logs'] },
       // P65.4 — Schedules lives in Settings (compact surface over the shared
       // scheduler lib); full editing stays in the Automations center.
       { id: 'schedules', label: 'Schedules', icon: CalendarClock, keywords: ['cron', 'schedule', 'automation', 'task', 'run', 'interval', 'webhook'] },
@@ -169,7 +169,6 @@ const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
       { id: 'browser', label: 'Browser & Network', icon: Globe, keywords: ['web', 'proxy', 'cdp', 'http', 'download'] },
       { id: 'indexing', label: 'Indexing & LSP', icon: ScanSearch, keywords: ['search', 'files', 'lsp', 'language server'] },
       { id: 'hooks', label: 'Hooks', icon: Wrench, keywords: ['webhook', 'events', 'script'] },
-      { id: 'commands', label: 'Commands', icon: Command, keywords: ['slash', 'shortcuts', 'palette'] },
     ],
   },
   {
@@ -236,8 +235,6 @@ function SectionBody({ section }: { section: SectionId }) {
       return <MarketplaceSection />
     case 'skills':
       return <SkillsPanel />
-    case 'commands':
-      return <CommandsSection />
     case 'hooks':
       return <HooksSection />
     case 'worktree':

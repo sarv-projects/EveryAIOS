@@ -121,26 +121,30 @@ pub use challenge::{
     ChallengeHandler, ChallengeKind, ChallengeResolution, GroundingChoice, GroundingOption,
     HumanChallenge, SolverHttp, UreqHttp, VisualGroundingRequest,
 };
-pub use chat::{ChatRelay, ChatRelayError, ChatStreamParams, ChatWireEvent, UserDocument};
+pub use chat::{ChatRelay, ChatRelayError, ChatWireEvent};
 pub use config::{Config, ConfigError};
 pub use cua::{
     append_replan_log, apply_fabric, apply_five_part_brief, apply_manager_replan,
-    apply_mechanical_verify, apply_node_stop, apply_worker_act, bind_runtime,
+    apply_mechanical_verify, apply_node_stop, apply_delegation_act, bind_runtime,
     classify_harness_model_case, cua_skill_from_verified, cua_skill_to_blueprint,
     fabric_is_perception, fabric_letter, filter_tools_for_role, fuse_perception, load_dag,
     mechanical_verify, node_contract_legal, parse_remaining_nodes, persist_cua_skill, persist_dag,
     pick_combo, refuse_cli_named_subagent, remaining_payload_skips_guard, route_work_surface,
-    screen_text_is_untrusted, split_chief_spend, stop_is_blocked, verifier_accepts_worker_claim,
-    vision_gate, worker_step, AgentRole, ChiefSpend, ComputerUseDag, CuaNode, CuaNodeStatus,
+    screen_text_is_untrusted, split_primary_spend, stop_is_blocked, verifier_accepts_worker_claim,
+    vision_gate, delegation_step, DelegationRole, PrimarySpend, ComputerUseDag, CuaNode, CuaNodeStatus,
     CuaSkillDraft, EvidenceKind, FivePartBrief, HarnessModelCase, ManagerReplanReason,
     ManagerReplanResult, MechanicalEvidence, MechanicalVerdict, ModelTier, PerceptionLayers,
-    RuntimeBinding, RuntimePlane, SceneGraph, VisionGateError, WorkSurface, WorkerOutcome,
-    CHIEF_SPEND_WARN, CLOSE_READ_MAX, CUA_REQUIRES_VISION, FAILED_RECLAIM_AFTER,
+    RuntimeBinding, RuntimePlane, SceneGraph, VisionGateError, WorkSurface, DelegationOutcome,
+    PRIMARY_SPEND_WARN, CLOSE_READ_MAX, CUA_REQUIRES_VISION, FAILED_RECLAIM_AFTER,
     IDENTICAL_FAIL_HALT, RUNTIME_PLANES, SCOUT_ALLOWED_TOOLS,
 };
+pub use config::SubagentPolicy;
 pub use doctor::{run_doctor, Check, DoctorProbe, DoctorReport, LiveProbe, Status as DoctorStatus};
 pub use eval_service::EvalService;
 pub use everyaios_mcp::ExternalTool;
+// P71.4 — the usage ledger's observation model, re-exported so the shell can
+// name a usage source without depending on `everyaios-memory` directly.
+pub use everyaios_memory::{UsageObservations, UsageSource};
 // P69.D21 — the `Execution` ↔ `Work` back-compat alias is gone (P47.4 renamed
 // the struct; the alias was kept "until safe" and nothing outside this crate
 // ever referenced it). One term per concept: the durable unit is `Work`.

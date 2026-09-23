@@ -1,6 +1,10 @@
 //! Algorithm #8 — Evidence Grounding Score (v3.59 rename of "Hallucination
-//! Risk Compass", port of risk-compass.ts — the score is an *evidence
-//! grounding* score, not a claim about the model's inner state).
+//! Risk Compass", port of the archived `risk-compass.ts` at
+//! `ARCH/archive/core-engine/` — the score is an *evidence grounding* score, not
+//! a claim about the model's inner state).
+//!
+//! Nothing in v1 calls this: EveryAIOS scores no turns of its own (`P71.2c`). It
+//! stays as the pure witness `P69.D27` keeps for the post-v1 binding (`P71.7`).
 //!
 //! The TS version's score contract, mirrored exactly so the port is diffable:
 //!   base = 0.15

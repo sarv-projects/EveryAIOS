@@ -30,7 +30,10 @@ export type ShellHandler = (args?: Record<string, unknown>) => unknown
 /** Commands the picker/status bar always touch. `{}` for anything else keeps an
  * unrelated effect from rejecting for the wrong reason. */
 const NEUTRAL: Record<string, ShellHandler> = {
-  chief_default_get: () => ({ primaryChief: 'inbuilt', known: ['inbuilt'] }),
+  // P71.9g — the neutral default is **unbound**: v1 has no built-in agent, so a
+  // fixture that answered `'inbuilt'` made every DOM test start from a binding
+  // no install can produce (`ADR-0005` §1).
+  chief_default_get: () => ({ primaryChief: '', known: [] }),
   local_models: () => ({ models: [], ctxFloor: 15_000, ctxSoft: 20_000 }),
   local_hardware: () => null,
   runtime_status: () => ({ vault: 'ready', sidecar: true, persistence: 'durable' }),

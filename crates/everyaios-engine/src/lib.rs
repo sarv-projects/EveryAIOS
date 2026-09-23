@@ -1,15 +1,16 @@
-//! `everyaios-engine` — Rust port slice of the TS `ConversationEngine`
-//! (packages/core-engine/src/*).
+//! `everyaios-engine` — the **pure policy** slice of the retired composite engine.
 //!
-//! Item-6 scope, stated honestly: the full engine is 542 LOC of TS but it
-//! drives an async streaming loop (yield → provider calls → tool execution)
-//! that the coordinator overrides with its own local `StreamSession`. Porting
-//! that *loop* faithfully (and keeping 302 coordinator tests green) is a
-//! separate multi-thousand-line effort, not something to bolt on blindly.
+//! The TS reference — `packages/core-engine/src/*` (`ConversationEngine`, its
+//! three stages, the prompt compiler, the risk compass) — was **archived
+//! 2026-09-22 (`P71.2c`)** to `ARCH/archive/core-engine/` when [ADR-0005]
+//! made external agents the v1 engines. This crate is not that engine and never
+//! was its runtime: `P69.D27` keeps it deliberately as *pure policy with no IO
+//! and no runtime* (`PURITY-2` fails the build if IO appears here), so the
+//! contract/gate/risk/plan shapes stay diffable against the archived reference
+//! for the post-v1 governed baseline binding (`P71.7`).
 //!
-//! What **is** ported here — and is fully deterministic + LLM-free — is the
-//! **pure stage pipeline** the engine runs *around* the stream:
-//!   - [`contract`] — `defaultContract(surface)` (surface-contract.ts)
+//! What is ported here — deterministic, idempotent, and LLM-free:
+//!   - [`default_contract`] — `defaultContract(surface)` (surface-contract.ts)
 //!   - [`plan`]     — RetrievalPlanner + ToolPlanner (stages/)
 //!   - [`risk`]     — Algorithm #8 Evidence Grounding Score (v3.59 rename of
 //!     "Hallucination Risk Compass", risk-compass.ts), score contract exactly
@@ -17,8 +18,11 @@
 //!   - [`gate`]     — PermissionGate (`evaluatePermissionGate`, Algorithm #12) + the
 //!     per-session approval map.
 //!
-//! Everything here is idempotent, unit-testable without a model, and matches
-//! the TS scoring so the port can be diffed against the reference.
+//! The live gate in v1 is `everyaios-guard` (the ticket funnel the shell mounts);
+//! nothing here executes. Keeping the shapes pure is what makes this crate
+//! useful as a witness rather than a second authority.
+//!
+//! [ADR-0005]: ../../ARCH/ADR/0005-external-agents-are-the-v1-engines.md
 
 use serde::Serialize;
 
@@ -28,7 +32,7 @@ pub mod plan;
 pub mod risk;
 
 // ---------------------------------------------------------------------------
-// Surfaces + contracts (mirrors packages/core-engine/src/surface-contract.ts)
+// Surfaces + contracts (mirrors the archived surface-contract.ts)
 // ---------------------------------------------------------------------------
 
 /// Surface kinds the engine serves.

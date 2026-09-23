@@ -67,9 +67,10 @@ fn is_agent_id(id: &str) -> bool {
 }
 
 /// The agent a firing runs under: the session's resolved binding (the sidecar
-/// still owns the session pins until `P71.5b` retires the Chief vocabulary),
-/// else the configured default. A retired built-in spelling resolves to
-/// nothing, so the firing refuses by name rather than substituting an engine.
+/// still owns the session pins; `P71.5b` renamed the vocabulary to
+/// primary-agent), else the configured default. A retired built-in spelling
+/// resolves to nothing, so the firing refuses by name rather than substituting
+/// an engine.
 fn bound_agent(state: &State<'_, AppState>, session_id: &str) -> Option<String> {
     let resolved = {
         let relay = state.chat_relay.lock().ok()?;
@@ -249,7 +250,12 @@ fn fire_job(state: &State<'_, AppState>, job: &Value, _now: u64) -> Result<(), S
     };
 
     let prompt = prompt_for(&name, &session_id, &job_id, job.get("monitor").is_some());
-    match crate::acp_cmds::acp_prompt(state.clone(), handle, prompt, None, None) {
+    // P71.2c — the firing's turns are gated like any other: the agent must be
+    // `Ready` and the automation Session must be inside its budget, checked at
+    // the turn boundary (`acp_prompt`) now that the `start_stream` dispatch is
+    // deleted. Passing the Session id is what makes the J11 refusal name the
+    // right ledger.
+    match crate::acp_cmds::acp_prompt(state.clone(), handle, prompt, None, None, Some(session_id.clone())) {
         Ok(out) => {
             if job.get("monitor").is_some() {
                 let text = out

@@ -86,15 +86,18 @@ Responsibilities are each crate's own module doc (`crates/*/src/lib.rs`):
   belongs to the selected agent binding (CORE §7.1).
 - **`core-domain`** — shared domain types; the single most-imported file in the
   graph (`src/index.ts`, in-degree 98, out 0 — a pure type barrel).
-- **`core-ai`** (13 tests), **`core-engine`** (4), **`core-memory`** (8),
+- **`core-ai`** (13 tests), **`core-memory`** (8),
   **`core-search`** (7), **`core-providers`** (6), **`core-connectors`** (5),
   **`core-tools`**, **`core-security`**, **`core-agents`**.
 - **Post-thaw consolidation (P69.D) — landed in code 2026-09-20/21, implemented-not-verified.**
   Provider-credential custody left `core-providers` for the Rust vault alone (defect V4 → `P69.C4`;
   `vault.ts` is now a handle-only façade); `core-security` is reduced to a crypto/vault-support utility
-  (D5); `core-tools` keeps model-facing definitions only (D6, policy moved to `core-engine`); `core-engine`
-  keeps policies/helpers (D8). Partial rows with named remainders: D1/D2/D9/D15/D24/D25; D19/D20 are
-  `SCOPED` shrink plans (`TODO.md`).
+  (D5); `core-tools` keeps facade-facing definitions only (D6). Partial rows with named remainders:
+  D1/D2/D9/D15/D24/D25; D19/D20 are `SCOPED` shrink plans (`TODO.md`).
+- **Engine archived (P71.2c, 2026-09-22).** `core-engine` (D8's "policies/helpers only") left the workspace
+  entirely: the package is `ARCH/archive/core-engine/` and the coordinator loop is
+  `ARCH/archive/coordinator-loop/`, because `ADR-0005` defers the built-in engine to post-v1 and the loop
+  belongs to the bound agent. `LAYER-1` now asserts neither returns. Current package count: **10** (was 11).
 - **Namespace unified (P69.D23, landed 2026-09-20):** all eleven packages publish as `@everyaios/*` —
   manifests, imports, `pnpm-workspace.yaml`, lockfile and the CI vendored-package guard moved in one pass.
   Imports resolve to each package's `src/index.ts` (not the gitignored `dist/`).

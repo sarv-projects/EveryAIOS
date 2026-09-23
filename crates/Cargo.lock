@@ -1259,6 +1259,7 @@ name = "everyaios-acp"
 version = "0.1.0"
 dependencies = [
  "everyaios-guard",
+ "everyaios-memory",
  "everyaios-types",
  "flate2",
  "serde",

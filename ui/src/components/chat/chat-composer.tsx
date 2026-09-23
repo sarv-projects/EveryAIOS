@@ -21,15 +21,9 @@ import { splitAtRefs } from '@/lib/at-refs'
 import AgentModelPicker from './agent-model-picker'
 import PendingQueueChips from './pending-queue-chips'
 import { sendUserMessage } from '@/lib/bridge'
+import { currentBinding } from '@/lib/acp'
 import { getModelsForAgent } from '@/lib/agents'
-import { readPref } from '@/lib/ui-prefs'
 import { PLAIN_AUTONOMY_ORDER, toPlainAutonomy } from '@/lib/plain-language'
-import {
-  INBUILT_SLASH_COMMANDS,
-  SLASH_DISABLED_KEY,
-  disabledSlashSet,
-  enabledSlashCommands,
-} from '@/lib/slash-commands'
 import { inTauri } from '@/lib/tauri'
 import { captureUtterance, voiceProcessUtterance } from '@/lib/voice'
 
@@ -40,12 +34,6 @@ const WORK_MODES: { id: ChatMode; emoji: string; label: string; hint: string }[]
   { id: 'build', emoji: '🔨', label: 'Build', hint: 'Execute and verify — files, browser, Office, terminal live here' },
   { id: 'research', emoji: '🔎', label: 'Research', hint: 'Investigate and cite — read-only, then you can switch to Build' },
 ]
-
-// P58.4 — the inbuilt slash table has one owner (`@/lib/slash-commands`);
-// Settings → Commands renders the same table, so the advertised list can never
-// drift from the dispatcher below. Commands the user switched off are not
-// intercepted (the text falls through to the model like any unknown `/word`).
-const SLASH_COMMANDS = INBUILT_SLASH_COMMANDS
 
 const MACROS: { cmd: string; desc: string; expand: string }[] = [
   { cmd: '!deploy', desc: 'Append the prod deploy checklist instruction', expand: '(follow the production deploy checklist: verify, stage, confirm before each irreversible step)' },
@@ -291,15 +279,14 @@ export default function ChatComposer({ budget, centered }: Props) {
   const externalChief = useAppStore((s) => {
     const sid = s.activeSessionId
     // P71.2c — there is no built-in engine, so an unbound session names no
-    // agent at all. The retired built-in spellings are not bindings.
-    const chief = s.sessionChiefs[sid] ?? s.userDefaultChief ?? ''
-    return chief !== 'inbuilt' && chief !== 'everyaios-native' && chief !== 'everyaios' && chief !== ''
-      ? chief
-      : null
+    // agent at all. The retired built-in spellings are not bindings
+    // (`currentBinding` is the single predicate, shared with the turn path).
+    return currentBinding(s.sessionChiefs[sid] ?? s.userDefaultChief)
   })
   const [liveSlash, setLiveSlash] = useState<{ name: string; description: string }[]>([])
   useEffect(() => {
-    // Only fetch while external — inbuilt keeps the static table.
+    // P71.9c — only the bound agent's own command vocabulary is fetched; there
+    // is no local table to fall back to (every binding is an external agent).
     if (!externalChief) {
       setLiveSlash([])
       return
@@ -335,13 +322,7 @@ export default function ChatComposer({ budget, centered }: Props) {
           items: fuzzyRank(q, live, (c) => c.cmd).map((c) => ({ ...c, color: 'text-emerald-300' })),
         }
       }
-      const enabled = enabledSlashCommands(readPref<string[]>(SLASH_DISABLED_KEY, []))
-      if (enabled.length === 0) return null
-      return {
-        title: 'Slash commands',
-        items: fuzzyRank(q, enabled, (c) => c.cmd)
-          .map((c) => ({ ...c, color: 'text-brand' })),
-      }
+      return null
     }
     if (hint.kind === 'macro')
       return {
@@ -401,123 +382,6 @@ export default function ChatComposer({ budget, centered }: Props) {
     reader.readAsText(file)
   }
 
-  const runSlash = (text: string, busy?: boolean): boolean => {
-    const st = useAppStore.getState()
-    // P53.2 — Chief-dependent slash intercept: while an external Chief is
-    // pinned, EveryAIOS `/help /mode /model /undo /compact /clear /export`
-    // must NOT steal the agent's `/` (e.g. Claude Code `/compact`). Return
-    // false so the text goes to the ACP channel as `session/prompt` text.
-    const effChief = st.sessionChiefs[st.activeSessionId] ?? st.userDefaultChief ?? ''
-    const externalPinned =
-      effChief !== 'inbuilt' && effChief !== 'everyaios-native' && effChief !== 'everyaios' && effChief !== ''
-    if (externalPinned) return false
-    const [head, ...rest] = text.trim().split(/\s+/)
-    const arg = rest.join(' ')
-    // P58.4 — Settings → Commands drives the inbuilt intercept: a command the
-    // user switched off is no longer claimed here, so it flows to the model as
-    // ordinary text instead of silently doing something the UI no longer lists.
-    const off = disabledSlashSet(readPref<string[]>(SLASH_DISABLED_KEY, []))
-    if (off.has(head)) return false
-    switch (head) {
-      case '/help':
-        setComposerValue('/')
-        return true
-      case '/mode': {
-        const order: ChatMode[] = ['auto', 'plan', 'build', 'research']
-        const next = order[(order.indexOf(st.composerMode) + 1) % order.length]
-        st.setComposerMode(next)
-        notify(`Work mode → ${next}`)
-        setComposerValue(arg)
-        return true
-      }
-      case '/model':
-        st.setCenterScreen('settings')
-        st.setSettingsSection('agents')
-        notify('Pick the runtime and model in Agents & Models')
-        setComposerValue(arg)
-        return true
-      case '/undo':
-        // Session-mutating: never run mid-turn (would desync the live stream)
-        // and never queue as an ask — consume with an honest refusal.
-        if (busy) {
-          notify('/undo waits for the current turn — pause or let it finish.', 'error')
-          setComposerValue(arg)
-          return true
-        }
-        void (async () => {
-          try {
-            const { agentUndo } = await import('@/lib/tauri')
-            await agentUndo(st.activeSessionId)
-            notify('Undo requested on the control channel')
-          } catch (e) {
-            notify(e instanceof Error ? e.message : 'Undo failed', 'error')
-          }
-        })()
-        setComposerValue(arg)
-        return true
-      case '/compact':
-        // Session-mutating: never run mid-turn (same desync rule as /undo).
-        if (busy) {
-          notify('/compact waits for the current turn — pause or let it finish.', 'error')
-          setComposerValue(arg)
-          return true
-        }
-        void (async () => {
-          try {
-            const sess = useAppStore.getState().sessions.find((s) => s.id === st.activeSessionId)
-            const turns = (sess?.messages ?? []).map((m) => m.content).filter((c) => c?.trim())
-            if (turns.length === 0) {
-              notify('Nothing to compact — the transcript is empty', 'error')
-              return
-            }
-            const { memoryRequest } = await import('@/lib/memory')
-            const verdict = (await memoryRequest('memory/compact', {
-              turns,
-            })) as { keptFrom: number; marker: string | null }
-            const sid = useAppStore.getState().activeSessionId
-            useAppStore.getState().compactSessionMessages(sid, verdict.keptFrom, verdict.marker)
-            const kept = sess?.messages.length ?? 0
-            notify(
-              kept - verdict.keptFrom > 0
-                ? `Compacted ${kept - verdict.keptFrom} older message(s) — tail kept`
-                : 'Transcript already fits — nothing pruned',
-            )
-          } catch (e) {
-            notify(e instanceof Error ? e.message : 'Compact failed', 'error')
-          }
-        })()
-        setComposerValue(arg)
-        return true
-      case '/clear':
-        if (busy) {
-          notify('/clear waits for the current turn — pause or let it finish.', 'error')
-          setComposerValue('')
-          return true
-        }
-        st.clearSessionMessages(st.activeSessionId)
-        setComposerValue('')
-        return true
-      case '/export': {
-        const sess = st.sessions.find((s) => s.id === st.activeSessionId)
-        if (!sess) {
-          notify('No active chat to export', 'error')
-          return true
-        }
-        const blob = new Blob([sessionTranscriptMarkdown(sess)], { type: 'text/markdown' })
-        const url = URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url
-        a.download = `${sess.title.replace(/[^\w\- ]+/g, '').trim() || 'session'}.md`
-        a.click()
-        URL.revokeObjectURL(url)
-        notify('Transcript exported as Markdown')
-        setComposerValue(arg)
-        return true
-      }
-      default:
-        return false
-    }
-  }
 
   const send = () => {
     if (!canSend) return
@@ -526,14 +390,6 @@ export default function ChatComposer({ budget, centered }: Props) {
       const cur = st.sessions.find((x) => x.id === st.activeSessionId)
       if (cur && cur.messages.length > 0) st.newSession()
       st.setCenterScreen('chat')
-    }
-    // A slash command is *control*, not an ask: it executes locally before
-    // the queue branch so /help, /mode, /model, /export never queue behind a
-    // running turn. Mutating commands (/undo, /clear) refuse while busy
-    // rather than desyncing the live stream (handled inside runSlash).
-    if (composerValue.trimStart().startsWith('/') && runSlash(composerValue, agentBusy)) {
-      setAttachment(null)
-      return
     }
     // P51.5 — when already generating, the send key queues the ask instead of
     // silently dropping it (the queue shows as pending chips and auto-fires).
@@ -571,7 +427,7 @@ export default function ChatComposer({ budget, centered }: Props) {
           const live = ptys.filter((p) => p.running)
           const target = live.find((p) => p.origin === 'human') ?? live[0]
           if (!target) {
-            notify('No live terminal session — open one in the Terminal view first', 'error')
+            notify('No live terminal — open one in the Terminal view first', 'error')
             return
           }
           const block = await terminalLastCommandContext(target.ptyId)

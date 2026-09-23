@@ -16,8 +16,10 @@
 ## LLM providers (BYOK)
 
 - **Credential custody:** SQLCipher key-ring in `crates/everyaios-vault`
-  (ARCH/03, J8). The sidecar never holds keys; streams are brokered over the
-  `provider/stream` seam (see [flows.md](flows.md) F3). The former TS-side custody
+  (ARCH/03, J8). The sidecar never holds keys. *The `provider/stream` broker seam was **deleted 2026-09-22**
+  with the built-in engine (`P71.2c`, `ADR-0005` §2/§6): in v1 the **bound external agent owns its own
+  credentials and transport**, EveryAIOS holds only its own keys (connectors, capability secrets) in the
+  vault, and `flows.md` F3 now describes the retired path as history.* The former TS-side custody
   (`packages/core-providers/src/vault.ts`) was confirmed defect V4 against CORE I10 (`ARCH/CORE.md` §11);
   **repaired in code 2026-09-21** (`P69.C4` — handle-only façade, custody Rust-side; implemented, not
   verified), guarded by CRED-1/2/3 in `scripts/check-arch-invariants.mjs`.

@@ -31,11 +31,6 @@ import { useAppStore } from '@/lib/store'
 import { inTauri } from '@/lib/tauri'
 import { type PermissionMode, usePref } from '@/lib/ui-prefs'
 import {
-  INBUILT_SLASH_COMMANDS,
-  SLASH_DISABLED_KEY,
-  disabledSlashSet,
-} from '@/lib/slash-commands'
-import {
   addBlockReason,
   backgroundInputView,
   interactionCopy,
@@ -254,7 +249,7 @@ export function VoiceSection() {
           </SelectContent>
         </Select>
       </Row>
-      <Row label="Voiceprint recognition" desc="Prefer your voice in live sessions">
+      <Row label="Voiceprint recognition" desc="Prefer your voice in live calls">
         <Switch checked={print} onCheckedChange={setPrint} />
       </Row>
       <Row label="Read replies aloud">
@@ -276,7 +271,7 @@ export function MobileSection() {
   // surface: the pairing preview stays visible as a forward-looking cue, but
   // no persisted dead switches pretend remote pairing works today.
   return (
-    <SectionShell title="Mobile" desc="Pair a phone to resume a session on the LAN">
+    <SectionShell title="Mobile" desc="Pair a phone to resume a chat on the LAN">
       <Honest>
         Remote session handoff + mobile companion is post-v1 (H18) — not built. This preview shows the intended
         pairing flow; no toggle below is live yet.
@@ -300,7 +295,7 @@ export function MobileSection() {
           </div>
         </div>
       </div>
-      <Row label="Allow remote sessions" desc="Post-v1 (H18) — phone view/continue is not built; switch inert">
+      <Row label="Allow remote chats" desc="Post-v1 (H18) — phone view/continue is not built; switch inert">
         <Switch disabled />
       </Row>
       <Row label="Allow phone to control this device" desc="Post-v1 (H18) — control is not built; switch inert">
@@ -484,14 +479,14 @@ export function BrowserNetworkSection() {
         </div>
       )}
 
-      <Row label="Headless Session" desc="Run browser in background without showing a window">
+      <Row label="Headless browser" desc="Run browser in background without showing a window">
         <Switch
           checked={browserConfig.headless}
           onCheckedChange={(v) => updateConfig({ headless: v })}
         />
       </Row>
 
-      <Row label="Profile Isolation" desc="Isolate session per channel in EveryAIOS data directory">
+      <Row label="Profile Isolation" desc="Isolate a profile per channel in the EveryAIOS data directory">
         <Select
           value={browserConfig.profile_mode}
           onValueChange={(v) => updateConfig({ profile_mode: v as 'isolated' | 'paired' })}
@@ -801,16 +796,16 @@ export function ToolLogSection() {
   }
   useEffect(load, [sessionId])
   return (
-    <SectionShell title="Tool log" desc="ACP session observability — metrics only, never added to chat context.">
-      <Honest>External agents keep their private tool history outside the transcript. This view shows the sanitized per-session turn log written by the ACP bridge.</Honest>
-      {!inTauri() ? <p className="text-xs text-muted-foreground">Tool logs are available in the desktop shell.</p> : !sessionId ? <p className="text-xs text-muted-foreground">Open a session to inspect its tool log.</p> : (
+    <SectionShell title="Tool log" desc="ACP activity observability — metrics only, never added to chat context.">
+      <Honest>External agents keep their private tool history outside the transcript. This view shows the sanitized per-turn log written by the ACP bridge.</Honest>
+      {!inTauri() ? <p className="text-xs text-muted-foreground">Tool logs are available in the desktop shell.</p> : !sessionId ? <p className="text-xs text-muted-foreground">Open a chat to inspect its tool log.</p> : (
         <>
           <div className="flex items-center justify-between">
             <span className="text-xs text-muted-foreground">{rows === null ? 'Not loaded' : `${rows.length} turn${rows.length === 1 ? '' : 's'}`}</span>
             <Button size="sm" variant="outline" className="h-7 text-[10px]" onClick={load} disabled={loading}><FileSearch className="mr-1 h-3 w-3" />{loading ? 'Loading…' : 'Refresh'}</Button>
           </div>
           {error && <p className="text-[10px] text-red-300">Could not load tool log: {error}</p>}
-          {rows !== null && rows.length === 0 && !error && <p className="rounded-md border border-dashed border-border/60 px-3 py-5 text-center text-[10px] text-muted-foreground">No ACP turns recorded for this session.</p>}
+          {rows !== null && rows.length === 0 && !error && <p className="rounded-md border border-dashed border-border/60 px-3 py-5 text-center text-[10px] text-muted-foreground">No ACP turns recorded for this chat.</p>}
           {rows && rows.length > 0 && <ScrollArea className="max-h-[28rem] rounded-md border border-border/50"><div className="space-y-2 p-2">
             {rows.map((row, i) => <div key={`${row.tsMs}-${i}`} className="rounded border border-border/40 bg-background/30 p-2 text-[10px]">
               <div className="flex justify-between gap-2 font-mono text-muted-foreground"><span>{new Date(row.tsMs).toLocaleString()}</span><span>{row.stopReason}</span></div>
@@ -831,6 +826,9 @@ export function SubagentsSection() {
   const [error, setError] = useState<string | null>(null)
   const [editing, setEditing] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
+  // P71.9d — which row's delegation profile is expanded, and its draft.
+  const [policyFor, setPolicyFor] = useState<string | null>(null)
+  const [policyDraft, setPolicyDraft] = useState<import('@/lib/acp').SubagentProfile | null>(null)
   const load = () => {
     if (!inTauri()) return
     void import('@/lib/acp').then(({ chiefSubagents }) => chiefSubagents())
@@ -839,7 +837,7 @@ export function SubagentsSection() {
   }
   useEffect(load, [])
   return (
-    <SectionShell title="Subagents" desc="Installed agent CLIs the Chief may delegate to, plus EveryAIOS Native (always available). Inbuilt prompt profiles live under Built-in roles.">
+    <SectionShell title="Subagents" desc="Installed agent CLIs the primary agent may delegate to (P71.5b: the retired \u2018Chief\u2019 name). Each row carries its when-to-use note.">
       <Honest>B3 delegation is bounded at depth ≤2 and concurrency ≤6. Only installed/discovered CLIs appear here — EveryAIOS Native is always present as the default candidate, and a registry entry with no binary on this machine is never selectable. Enable a row to include it in the delegation mix; the shipped when-to-use text is editable.</Honest>
       <div className="flex items-center justify-between">
         <span className="text-xs font-medium">Installed delegation candidates {rows === null ? '…' : `(${rows.length})`}</span>
@@ -867,12 +865,108 @@ export function SubagentsSection() {
                 } catch (e) { notify(e instanceof Error ? e.message : 'Could not update delegation mix', 'error') }
               })()} aria-label={`Delegate to ${r.name}`} />
             </div>
-            <div className="mt-1.5 flex gap-2">
+            {/* P71.9d — per-agent delegation profile: role · model policy ·
+                may-spawn · depth/concurrency/children caps · workspace ·
+                budget. Saved through `chief_subagent_set_policy`; absent
+                fields mean the spec default, never zero. */}
+            <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+              <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px]" onClick={() => {
+                if (policyFor === r.agentId) { setPolicyFor(null); return }
+                setPolicyFor(r.agentId)
+                setPolicyDraft({
+                  modelPolicy: 'agent-default',
+                  role: '',
+                  maySpawn: false,
+                  maxChildren: 6,
+                  maxDepth: 2,
+                  maxConcurrency: 6,
+                  workspace: 'shared',
+                  budget: 0,
+                })
+              }}>
+                {policyFor === r.agentId ? 'Hide profile' : 'Delegation profile'}
+              </Button>
               {editing === r.agentId ? <>
                 <Button size="sm" className="h-6 bg-brand px-2 text-[10px] text-black" onClick={() => void (async () => { try { const { chiefSubagentSetNote, chiefSubagents } = await import('@/lib/acp'); await chiefSubagentSetNote(r.agentId, draft); setRows(await chiefSubagents()); setEditing(null) } catch (e) { notify(e instanceof Error ? e.message : 'Save failed', 'error') } })()}>Save</Button>
                 <Button size="sm" variant="outline" className="h-6 px-2 text-[10px]" onClick={() => setEditing(null)}>Cancel</Button>
               </> : <Button size="sm" variant="outline" className="h-6 px-2 text-[10px]" onClick={() => { setEditing(r.agentId); setDraft(r.customized ? r.whenToUse : '') }}>Edit when-to-use</Button>}
             </div>
+            {policyFor === r.agentId && policyDraft && (
+              <div className="mt-2 grid grid-cols-2 gap-2 rounded-md border border-border/50 bg-background/50 p-2 sm:grid-cols-3">
+                <label className="text-[10px] text-muted-foreground">
+                  Role
+                  <input
+                    value={policyDraft.role}
+                    onChange={(e) => setPolicyDraft({ ...policyDraft, role: e.target.value })}
+                    placeholder="e.g. researcher"
+                    className="mt-0.5 h-6 w-full rounded border border-border bg-background px-1.5 font-mono text-[10px] text-foreground"
+                  />
+                </label>
+                <label className="text-[10px] text-muted-foreground">
+                  Model policy
+                  <select
+                    value={policyDraft.modelPolicy}
+                    onChange={(e) => setPolicyDraft({ ...policyDraft, modelPolicy: e.target.value })}
+                    className="mt-0.5 h-6 w-full rounded border border-border bg-background px-1 font-mono text-[10px] text-foreground"
+                  >
+                    <option value="agent-default">agent default</option>
+                    <option value="inherit">inherit primary</option>
+                  </select>
+                </label>
+                <label className="text-[10px] text-muted-foreground">
+                  Workspace
+                  <select
+                    value={policyDraft.workspace}
+                    onChange={(e) => setPolicyDraft({ ...policyDraft, workspace: e.target.value as 'shared' | 'isolated' })}
+                    className="mt-0.5 h-6 w-full rounded border border-border bg-background px-1 font-mono text-[10px] text-foreground"
+                  >
+                    <option value="shared">shared</option>
+                    <option value="isolated">isolated</option>
+                  </select>
+                </label>
+                <label className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                  <Switch
+                    checked={policyDraft.maySpawn}
+                    onCheckedChange={(v) => setPolicyDraft({ ...policyDraft, maySpawn: v })}
+                    aria-label="May spawn children"
+                  />
+                  May spawn children
+                </label>
+                {(['maxChildren', 'maxDepth', 'maxConcurrency', 'budget'] as const).map((k) => (
+                  <label key={k} className="text-[10px] text-muted-foreground">
+                    {k === 'maxChildren' ? 'Max children' : k === 'maxDepth' ? 'Max depth' : k === 'maxConcurrency' ? 'Max concurrency' : 'Budget (tokens)'}
+                    <input
+                      type="number"
+                      min={k === 'budget' ? 0 : 1}
+                      value={policyDraft[k]}
+                      onChange={(e) => setPolicyDraft({ ...policyDraft, [k]: Math.max(0, Number(e.target.value) || 0) })}
+                      className="mt-0.5 h-6 w-full rounded border border-border bg-background px-1.5 font-mono text-[10px] text-foreground"
+                    />
+                  </label>
+                ))}
+                <div className="col-span-2 flex items-center gap-2 sm:col-span-3">
+                  <Button
+                    size="sm"
+                    className="h-6 bg-brand px-2 text-[10px] text-black"
+                    onClick={() => void (async () => {
+                      try {
+                        const { chiefSubagentSetPolicy } = await import('@/lib/acp')
+                        await chiefSubagentSetPolicy(r.agentId, policyDraft)
+                        notify(`Delegation profile saved for ${r.name}`)
+                        setPolicyFor(null)
+                      } catch (e) {
+                        notify(e instanceof Error ? e.message : 'Save failed', 'error')
+                      }
+                    })()}
+                  >
+                    Save profile
+                  </Button>
+                  <span className="text-[9px] text-muted-foreground">
+                    Depth ≤2 / concurrency ≤6 are the B3 chain caps — the Work gateway's live gauge stays the admission authority.
+                  </span>
+                </div>
+              </div>
+            )}
           </li>
         ))}
       </ul>
@@ -887,7 +981,7 @@ export function ExpertsSection() {
     Object.fromEntries(EXPERTS.map((e) => [e.id, e.id !== 'ui'])),
   )
   // P53.6 — Settings → Subagents: installed CLIs only (same `agent_installed`
-  // predicate Chief occupancy uses) + user-editable when-to-use per row.
+  // predicate primary-agent occupancy uses) + user-editable when-to-use per row.
   const [subs, setSubs] = useState<{ agentId: string; name: string; defaultWhenToUse: string; whenToUse: string; customized: boolean; enabled: boolean }[] | null>(null)
   const [subsErr, setSubsErr] = useState<string | null>(null)
   const [editing, setEditing] = useState<string | null>(null)
@@ -928,8 +1022,8 @@ export function ExpertsSection() {
       }
     })()
   return (
-    <SectionShell title="Built-in roles" desc="Inbuilt persona roles the Chief may delegate to. These ship with EveryAIOS and need no install — installed agent CLIs are configured under Subagents.">
-      <Honest>B3 subagents are specified (depth ≤2, concurrency ≤6). A built-in role is a prompt profile inside the native engine, not a separate CLI; installed agent CLIs are listed under Subagents, where each row carries its shipped when-to-use (editable — the Chief reads it at delegate time).</Honest>
+    <SectionShell title="Delegation roles" desc="v1 ships no in-app role profiles (the built-in engine is deferred, ADR-0005) — installed agent CLIs are configured under Subagents.">
+      <Honest>B3 subagents are specified (depth ≤2, concurrency ≤6). Installed agent CLIs are listed under Subagents, where each row carries its shipped when-to-use (editable — the primary agent reads it at delegate time). v1 ships no in-app role profiles (ADR-0005).</Honest>
       {inTauri() && (
         <div className="space-y-1.5">
           <div className="text-xs font-medium">Installed subagent CLIs {subs === null ? '…' : `(${subs.length})`}</div>
@@ -1090,58 +1184,6 @@ export function LaunchCliSection() {
   )
 }
 
-export function CommandsSection() {
-  // P58.4 — Settings renders the same table the composer executes (one owner,
-  // `@/lib/slash-commands`). The list is a switch per real command, not a free
-  // text field that could advertise a `/name` with no handler.
-  const [disabled, setDisabled] = usePref<string[]>(SLASH_DISABLED_KEY, [])
-  const off = disabledSlashSet(disabled)
-  const toggle = (cmd: string, on: boolean) => {
-    setDisabled(on ? disabled.filter((d) => d !== cmd) : [...disabled, cmd])
-  }
-  return (
-    <SectionShell
-      title="Commands"
-      desc="The inbuilt slash commands the composer intercepts. While an external agent is Chief, that agent's own advertised commands are used instead."
-    >
-      <ul className="divide-y divide-border/40 rounded-md border border-border/50">
-        {INBUILT_SLASH_COMMANDS.map((c) => (
-          <li key={c.cmd} className="flex items-center justify-between gap-3 px-3 py-2">
-            <div className="min-w-0">
-              <div className={cn('font-mono text-[11px]', off.has(c.cmd) ? 'text-muted-foreground line-through' : 'text-foreground')}>
-                {c.cmd}
-              </div>
-              <div className="text-[10px] text-muted-foreground">
-                {c.desc}
-                {c.mutating ? ' · refuses mid-turn' : ''}
-              </div>
-            </div>
-            <Switch
-              checked={!off.has(c.cmd)}
-              onCheckedChange={(v) => toggle(c.cmd, v)}
-              aria-label={`${off.has(c.cmd) ? 'Enable' : 'Disable'} ${c.cmd}`}
-            />
-          </li>
-        ))}
-      </ul>
-      <Honest>
-        Switching a command off stops the composer intercepting it — the text is then sent to the model like any other message. Neither switch affects an
-        external agent: Claude Code, Codex and friends always use the commands they advertise over ACP.
-      </Honest>
-      <Row label="CUE / tray shortcuts" desc="Tab to accept, import, rename">
-        <Button
-          size="sm"
-          variant="outline"
-          className="h-7 text-[10px]"
-          disabled
-          title="Tray shortcut editing lands with the OS-tray runner — not wired yet"
-        >
-          Edit tray
-        </Button>
-      </Row>
-    </SectionShell>
-  )
-}
 
 export function HooksSection() {
   const [name, setName] = useState('')
@@ -1162,7 +1204,7 @@ export function HooksSection() {
         </Button>
       }
     >
-      <Honest>Empty hooks is the default. Changes apply to new sessions.</Honest>
+      <Honest>Empty hooks is the default. Changes apply to new chats.</Honest>
       <Row label="Event">
         <Select value={event} onValueChange={setEvent}>
           <SelectTrigger className="h-8 w-48 text-xs"><SelectValue /></SelectTrigger>

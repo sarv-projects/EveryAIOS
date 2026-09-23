@@ -93,7 +93,14 @@ export interface SessionLoadoutRow {
   appliesFrom: string
 }
 
-export type AgentProtocol = 'inbuilt' | 'acp' | 'mcp'
+/** P71.9g — the **canonical** `AgentProtocol` union, mirroring
+ * `everyaios_types::AgentProtocol` (`Acp` · `ModelOnly`). The previous spelling
+ * (`'inbuilt' | 'acp' | 'mcp'`) was a hand-maintained duplicate that agreed
+ * with neither serializer and named a built-in engine v1 does not ship
+ * (`ADR-0005`); `model_only` is the variant the shell actually emits
+ * (`settings_cmds::protocol_for`, `agent_cmds::entry_json`). One canonical
+ * spelling per variant (P69.C11 / I4). */
+export type AgentProtocol = 'acp' | 'model_only'
 /** P69.C11 — the auth-mode contract has exactly one declaration: the
  * canonical `AuthMode` union in `./acp` (a projection of
  * `everyaios_types::AuthMode`). This name is kept for call sites. */
@@ -313,7 +320,11 @@ export function nativeSurfaceNotReplaced(
     sharedCapabilities?: string[]
   },
 ): boolean {
-  if (row.protocol === 'acp' || row.protocol === 'mcp') {
+  // Only an **external agent** has a native surface another grant could
+  // replace. A `model_only` bundle has no external agent (its model is pinned
+  // by the user in the bundle), and the retired `'mcp'` spelling was never a
+  // value any serializer emitted (P71.9g).
+  if (row.protocol === 'acp') {
     if (row.modelOwner === 'managed' || row.modelOwner === 'native') return false
     if (row.backendBinding?.writesToAgentConfig) return false
   }

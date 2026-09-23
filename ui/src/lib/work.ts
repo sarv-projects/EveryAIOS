@@ -27,6 +27,18 @@ export function sessionOwnerSurface(
   }
 }
 
+/** P71.9f — the **user-facing** label for a Work's owning Session, in the
+ * cockpit's own vocabulary (`ARCH/UI.md` §5): the container word is Chat, and
+ * a kind is never shown as the word "Session". An automation run reads as an
+ * automation, a child of an out-of-session delegation as delegated. */
+export function sessionKindLabel(kind: WorkAddress['sessionKind']): string {
+  switch (kind) {
+    case 'automation': return 'automation'
+    case 'delegated': return 'delegated'
+    default: return 'chat'
+  }
+}
+
 export interface WorkPresence {
   workId: string
   activeClients: string[]
@@ -458,4 +470,18 @@ export async function workAgentOp(workId: string, agentSessionId: string, op: 'a
 export async function workAgentSessions(workId: string): Promise<AgentSession[]> {
   if (!inTauri()) return []
   return nativeCall('work agent sessions', () => invoke<AgentSession[]>('work_agent_sessions', { workId }))
+}
+
+/** P71.9d — child Works below one Work (the delegation tree), read-only. */
+export interface ChildWork {
+  workId: string
+  parentWorkId?: string
+  sessionId?: string
+  sessionKind?: 'interactive' | 'automation' | 'delegated'
+  currentRunId?: string
+  version: number
+}
+export async function workChildren(workId: string): Promise<ChildWork[]> {
+  if (!inTauri()) return []
+  return nativeCall('work children', () => invoke<ChildWork[]>('work_children', { workId }))
 }

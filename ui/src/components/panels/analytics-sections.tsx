@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/table'
 import { cn } from '@/lib/utils'
 import { inTauri } from '@/lib/tauri'
-import { AGENTS, AGENT_MAP, CAPABILITY_LABELS } from '@/lib/agents'
+import { AGENT_MAP } from '@/lib/agents'
 import { sessionTotals, type SessionTotal } from '@/lib/spend'
 
 const SESSIONS = [
@@ -198,7 +198,6 @@ export function ModelLeaderboard() {
 
 const AGENT_STATS = [
   { id: 'claude-code', sessions: 6, tokens: '412K', cost: '$3.78', successRate: 95, avgLatency: '1.8s' },
-  { id: 'everyaios-native', sessions: 4, tokens: '324K', cost: '$2.64', successRate: 100, avgLatency: '2.1s' },
   { id: 'codex-cli', sessions: 3, tokens: '196K', cost: '$1.41', successRate: 92, avgLatency: '1.5s' },
   { id: 'grok-build', sessions: 2, tokens: '158K', cost: '$0.92', successRate: 100, avgLatency: '1.2s' },
   { id: 'gemini-cli', sessions: 1, tokens: '88K', cost: '$0.45', successRate: 100, avgLatency: '2.8s' },

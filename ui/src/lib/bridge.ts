@@ -5,12 +5,7 @@
 // converted into preview data or synthetic success.
 
 import { useAppStore, sanitizeSessionRows, mergeHydratedSessions, type LiveBudget } from "./store";
-import {
-  inTauri,
-  onChatEvent,
-  planExecute,
-  type ChatWireEvent,
-} from "./tauri";
+import { inTauri, onChatEvent, type ChatWireEvent } from "./tauri";
 import {
   acpAgents,
   acpIdFor,
@@ -18,6 +13,7 @@ import {
   acpLaunch,
   acpPrompt,
   agentDirectoryList,
+  isRetiredBinding,
   type AgentDirectoryEntry,
   type HarnessManifest,
   type InstallState,
@@ -151,7 +147,7 @@ export function registerTurnDispatcher(): void {
 /**
  * P69.D1 — merge the canonical agent directory (`agent_directory_list`) into
  * the picker catalog. The directory is the composition point: it is the only
- * place local `agent.toml` bundles and inbuilt/discovered rows appear, so a
+ * place local `agent.toml` bundles and discovered rows appear, so a
  * user-authored agent is choosable without the UI keeping an agent list of
  * its own. Entries the ACP merge already produced are only annotated (never
  * duplicated); bundle rows are joined by their bundle slug.
@@ -486,8 +482,10 @@ export function handleChatEvent(e: ChatWireEvent): void {
       break;
     }
     // P6.3 Stage-0: the plan executor's circuit breaker tripped — render the
-    // H2 cockpit MCQ card. The card's choice goes back via planRespond
-    // (store.respondMcq routes by kind === 'mcq').
+    // H2 cockpit MCQ card. P71.2c deleted the plan executor with the built-in
+    // engine, so nothing emits this today; the arm is kept because the card is
+    // the honest surface for an interrupt whenever one arrives (the agent's own
+    // permission prompts come through the ACP path instead).
     case "interrupt":
       st.pushMcq(
         {
@@ -575,7 +573,20 @@ async function startBridge(): Promise<BridgeDisposer> {
         markVaultLocked();
       } else if (!status.sidecar) {
         wasSidecarReady = false;
-        markSidecarOffline();
+        // P70.A2 — ask the shell WHY the sidecar is down. A missing bundled
+        // binary is a broken install and must say so (with the remedy), not
+        // masquerade as a transient "connecting" state.
+        try {
+          const { sidecarProbe } = await import('./tauri');
+          const probe = await sidecarProbe();
+          markSidecarOffline(
+            probe.state === 'missing'
+              ? probe.detail
+              : 'The coordinator sidecar is not available.',
+          );
+        } catch {
+          markSidecarOffline();
+        }
       } else {
         // A supervisor restart is a new live session. Rehydrate native
         // projections and discard transient errors from the old relay.
@@ -809,15 +820,8 @@ async function startBridge(): Promise<BridgeDisposer> {
 }
 
 // Single source of truth for catalog→registry id translation lives in
-// `./acp` (`acpIdFor`); do not re-introduce a second map here.
-/**
- * P71.2c — the retired built-in binding spellings (ADR-0005 §1). They are not
- * agents: resolving them to something else would substitute an engine the user
- * never chose, so they resolve to *nothing* and the turn refuses by name.
- */
-function isRetiredBinding(agentId: string): boolean {
-  return agentId === "everyaios-native" || agentId === "everyaios" || agentId === "inbuilt";
-}
+// `./acp` (`acpIdFor`), and the retired-binding predicate lives there too
+// (`isRetiredBinding`, P71.2c); do not re-introduce either map here.
 
 /**
  * Send a user turn: live chat_stream when in the shell, demo toast otherwise.
@@ -970,7 +974,7 @@ export async function sendUserMessage(
       const promptText = effectiveContext
         ? `${trimmed}\n\nDocument in scope — ${effectiveContext.title}:\n${effectiveContext.content}`
         : trimmed;
-      const result = await acpPrompt(handle, promptText, handoff, refPaths);
+      const result = await acpPrompt(handle, promptText, handoff, refPaths, sessionId);
       // P53.5 — visible assistant text folds into the compacted session;
       // tool history stays in the per-session observability file (never
       // imported into chat context). Refresh the cached live slash vocab

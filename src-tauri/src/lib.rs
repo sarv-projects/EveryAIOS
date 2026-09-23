@@ -65,7 +65,6 @@ pub use state::AppState;
 
 use everyaios_core::GuardService;
 use everyaios_guard::prescan::guard as compiled_guard;
-use everyaios_vault::KeyRing;
 use everyaios_vault::Vault;
 
 pub mod xlsx_cmds;
@@ -312,7 +311,11 @@ fn scan_text(state: State<'_, AppState>, text: String) -> Result<bool, String> {
     Ok(state.guard.is_blocked(&text))
 }
 
-#[tauri::command]
+/// P71.2c — usage is an **observation** ledger (ADR-0005 §2,
+/// `ARCH/ROUTING.md` §5): the durable `token_usage` rows plus the in-process
+/// memory ledger. It no longer reflects an EveryAIOS-owned call, because
+/// EveryAIOS makes none; the surfaces read what was observed and say so when
+/// nothing was (`I15`).
 #[tauri::command]
 fn usage_snapshot(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
     // P5.9: the token/cost dashboard data source — per-key/per-session usage,
@@ -498,6 +501,72 @@ fn locate_coordinator_bin(app: &AppHandle) -> Option<PathBuf> {
         }
     }
     None
+}
+
+/// P70.A2 — why is the sidecar not connected? Distinguishes the two very
+/// different cases the UI must not conflate:
+///
+/// - `connecting` — the binary exists; the supervisor is still warming up or
+///   restarting (transient; the normal boot path).
+/// - `missing` — the **bundled binary itself is absent**. In a packaged app
+///   this is unrecoverable (a broken install): the error names the remedy
+///   (reinstall) instead of leaving the user with a generic "offline" chip.
+///   In a dev checkout it points at building the sidecar first.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SidecarProbe {
+    connected: bool,
+    /// `connected` · `connecting` · `missing`
+    state: &'static str,
+    detail: String,
+}
+
+#[tauri::command]
+fn sidecar_probe(app: AppHandle, state: State<'_, AppState>) -> SidecarProbe {
+    let relay_live = state
+        .chat_relay
+        .lock()
+        .map(|relay| relay.is_some())
+        .unwrap_or(false)
+        && state
+            .sidecar_activity_ms
+            .lock()
+            .ok()
+            .and_then(|clock| clock.as_ref().cloned())
+            .map(|clock| {
+                let last = clock.load(Ordering::Relaxed);
+                last > 0 && now_ms().saturating_sub(last) <= 30_000
+            })
+            .unwrap_or(false);
+    if relay_live {
+        return SidecarProbe {
+            connected: true,
+            state: "connected",
+            detail: "coordinator link is live".into(),
+        };
+    }
+    match locate_coordinator_bin(&app) {
+        Some(bin) => SidecarProbe {
+            connected: false,
+            state: "connecting",
+            detail: format!(
+                "sidecar binary found at {} — waiting for the supervisor to connect",
+                bin.display()
+            ),
+        },
+        None => {
+            let packaged = app.path().resource_dir().is_ok();
+            SidecarProbe {
+                connected: false,
+                state: "missing",
+                detail: if packaged {
+                    "The coordinator sidecar was not found in this installation — the install is broken or incomplete. Reinstall EveryAIOS to restore live agent work.".into()
+                } else {
+                    "The coordinator sidecar is not built. Run `pnpm --filter @everyaios/coordinator build` (or set EVERYAIOS_COORDINATOR_BIN) and restart.".into()
+                },
+            }
+        }
+    }
 }
 
 /// J16: pre-spawn the coordinator sidecar at boot (hidden — the app window

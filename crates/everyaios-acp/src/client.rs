@@ -199,6 +199,10 @@ impl AcpTransport for ProcessTransport {
 #[derive(Debug, Clone, Default)]
 pub struct PromptOutcome {
     pub stop_reason: StopReason,
+    /// P71.4 — the agent's own token/cost report for this turn, exactly as it
+    /// sent it. `None` = the agent reported no usage; the ledger records that
+    /// as an unreported turn rather than a measured zero (`ARCH/ROUTING.md` §5).
+    pub usage: Option<PromptUsage>,
     /// `session/update` notifications collected during the turn.
     pub updates: Vec<SessionUpdate>,
     /// Permission requests the agent made (audit + Guard-2 trail).
@@ -586,6 +590,8 @@ impl<T: AcpTransport> AcpSession<T> {
                     serde_json::from_value(v.get("result").cloned().unwrap_or(Value::Null))
                         .map_err(|e| AcpError::Malformed(e.to_string()))?;
                 outcome.stop_reason = result.stop_reason;
+                // P71.4 — carry the agent's usage report through untouched.
+                outcome.usage = result.usage;
                 return Ok(outcome);
             }
 

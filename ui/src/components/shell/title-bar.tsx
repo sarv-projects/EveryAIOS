@@ -144,8 +144,8 @@ export function TitleBar() {
           type="button"
           onClick={() => setPaletteOpen(true)}
           className="no-drag hover:bg-accent rounded-md px-2 py-0.5 flex items-center gap-1 hover:text-foreground transition-colors"
-          aria-label="Switch session (opens the command palette)"
-          title="Switch session — opens the command palette"
+          aria-label="Switch chat (opens the command palette)"
+          title="Switch chat — opens the command palette"
         >
           <span className="font-medium text-foreground">everyaios</span>
           <span className="text-muted-foreground/60">/</span>
@@ -261,18 +261,27 @@ export function TitleBar() {
 
         <Tooltip>
           <TooltipTrigger asChild>
+            {/* Icon-only control: the glyph alone gives no accessible name, so
+                the button names the *result* (what the click will do) rather
+                than its current state, and the icons stay out of the
+                accessibility tree. */}
             <button
+              type="button"
               onClick={toggle}
+              aria-label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+              title="Toggle theme"
               className="no-drag grid h-7 w-7 place-items-center rounded-md hover:bg-accent transition-colors"
             >
               {theme === 'dark' ? (
-                <Sun className="h-3.5 w-3.5" />
+                <Sun aria-hidden className="h-3.5 w-3.5" />
               ) : (
-                <Moon className="h-3.5 w-3.5" />
+                <Moon aria-hidden className="h-3.5 w-3.5" />
               )}
             </button>
           </TooltipTrigger>
-          <TooltipContent side="bottom">Toggle theme</TooltipContent>
+          <TooltipContent side="bottom">
+            {theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+          </TooltipContent>
         </Tooltip>
 
         <NotificationsPopover />
@@ -280,13 +289,16 @@ export function TitleBar() {
         <Tooltip>
           <TooltipTrigger asChild>
             <button
+              type="button"
               onClick={toggleSidebar}
+              aria-label={sidebarCollapsed ? 'Show sidebar' : 'Hide sidebar'}
+              title="Toggle sidebar (Cmd+B)"
               className="no-drag grid h-7 w-7 place-items-center rounded-md hover:bg-accent transition-colors"
             >
               {sidebarCollapsed ? (
-                <PanelLeft className="h-3.5 w-3.5" />
+                <PanelLeft aria-hidden className="h-3.5 w-3.5" />
               ) : (
-                <PanelLeftClose className="h-3.5 w-3.5" />
+                <PanelLeftClose aria-hidden className="h-3.5 w-3.5" />
               )}
             </button>
           </TooltipTrigger>

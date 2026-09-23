@@ -303,6 +303,36 @@ impl Vault {
         let conn = Connection::open(path)?;
         conn.pragma_update(None, "key", key)?;
         conn.pragma_update(None, "cipher_page_size", 4096)?;
+        // P70.C6 — a forward-only migration path has a sharp edge: an older
+        // binary opening a newer database would run `INIT_SQL` against schema
+        // it does not know and then **stamp the version backwards**, silently
+        // claiming a downgrade succeeded. Read the stamp first and refuse
+        // before any migration touches the file. (A fresh file has no
+        // `schema_meta` yet — that is the create path, not a downgrade.)
+        let has_meta: bool = conn
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type = 'table' AND name = 'schema_meta'",
+                [],
+                |r| r.get(0),
+            )
+            .optional()?
+            .unwrap_or(false);
+        let recorded: Option<i64> = if has_meta {
+            conn.query_row(
+                "SELECT value FROM schema_meta WHERE key = 'schema_version'",
+                [],
+                |r| r.get::<_, String>(0).and_then(|s| s.parse().map(Some).map_err(|e| rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, Box::new(e)))),
+            )
+            .optional()?
+            .flatten()
+        } else {
+            None
+        };
+        if let Some(db) = recorded {
+            if db > SCHEMA_VERSION {
+                return Err(VaultError::NewerSchema { db, app: SCHEMA_VERSION });
+            }
+        }
         ensure_token_usage_scope_columns(&conn)?;
         conn.execute_batch(INIT_SQL)?;
         conn.execute(
@@ -783,6 +813,14 @@ pub enum VaultError {
     Io(#[from] std::io::Error),
     #[error("sqlite error: {0}")]
     Sqlite(#[from] rusqlite::Error),
+    /// P70.C6 — the database was written by a **newer** schema than this
+    /// binary understands. Opening it would run the forward-only migrations
+    /// backwards (and stamp the version down), so the open refuses. The
+    /// remedy is to upgrade the app, never to "just open it anyway".
+    #[error(
+        "vault was written by a newer schema (db v{db}, app v{app}) — upgrade the app to open it (downgrade is refused)",
+    )]
+    NewerSchema { db: i64, app: i64 },
 }
 
 #[cfg(test)]
@@ -1058,6 +1096,62 @@ mod tests {
             let vault = Vault::open(&path, "test-key").expect("reopen");
             assert!(vault.status().contains("schema v8"));
             assert!(vault.ledger_count().unwrap() == 0);
+        }
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// P70.C6 — an older binary must **refuse** to open a newer database
+    /// rather than silently stamping the version down (a downgrade that would
+    /// then claim every later migration ran). The file must be untouched
+    /// afterwards so an upgraded app can still open it.
+    #[test]
+    fn newer_schema_refuses_open_and_leaves_the_file_untouched() {
+        let dir =
+            std::env::temp_dir().join(format!("everyaios-vault-downgrade-{}", std::process::id()));
+        let path = dir.join("vault.db");
+        let _ = std::fs::remove_dir_all(&dir);
+
+        // Create a real vault, then simulate a FUTURE schema stamp.
+        {
+            let vault = Vault::open(&path, "test-key").expect("open");
+            vault
+                .conn
+                .execute(
+                    "UPDATE schema_meta SET value = '999' WHERE key = 'schema_version'",
+                    [],
+                )
+                .unwrap();
+        }
+        // An "older" binary (this one) must refuse, naming both versions.
+        {
+            let err = match Vault::open(&path, "test-key") {
+                Err(e) => e,
+                Ok(_) => panic!("older binary opened a newer database — downgrade not refused"),
+            };
+            match err {
+                VaultError::NewerSchema { db, app } => {
+                    assert_eq!(db, 999);
+                    assert_eq!(app, SCHEMA_VERSION);
+                }
+                other => panic!("expected NewerSchema, got {other}"),
+            }
+        }
+        // The refusal must not have written anything: the stamp is still 999
+        // (re-opening refuses with the SAME db version — a downgrade would
+        // have re-stamped it to 8 and this open would now succeed). An app
+        // that understands schema 999 would therefore still find its data
+        // exactly as it left it.
+        {
+            let second = match Vault::open(&path, "test-key") {
+                Err(e @ VaultError::NewerSchema { db, .. }) => {
+                    assert_eq!(db, 999);
+                    e
+                }
+                Ok(_) => panic!("stamp was rewritten — the refused open mutated the file"),
+                Err(e) => panic!("unexpected error: {e}"),
+            };
+            let _ = second;
         }
 
         let _ = std::fs::remove_dir_all(&dir);

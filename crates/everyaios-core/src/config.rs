@@ -34,8 +34,9 @@ pub struct Config {
     /// P38 (v3.45) — the session's top brain: `inbuilt` | any installed
     /// registry agent id (P53.3 — occupancy is the installed set, never a
     /// hardcoded trio). Read at session start; resolution = explicit session
-    /// value → this default → `inbuilt`. Unknown/uninstalled ids fail closed
-    /// (never a silent fallback to inbuilt).
+    /// value → this default → none (P71.5b: the retired \u201cChief\u201d name; there
+    /// is no built-in fallback per ADR-0005). Unknown/uninstalled ids fail
+    /// closed.
     #[serde(default = "default_primary_chief")]
     pub primary_chief: String,
     /// P53.6 — user-edited when-to-use notes per installed subagent CLI
@@ -43,15 +44,64 @@ pub struct Config {
     /// default; exposed to the Chief at delegate time. Empty = use default.
     #[serde(default)]
     pub subagent_notes: std::collections::HashMap<String, String>,
-    /// P53.6 — installed subagent CLIs enabled for Chief delegation.
+    /// P53.6 — installed subagent CLIs enabled for delegation.
     /// Missing entries default to enabled for backwards-compatible config.
     #[serde(default)]
     pub subagent_enabled: std::collections::HashMap<String, bool>,
+    /// P71.9d — per-agent delegation profile (P53.6 extended). Keyed by agent
+    /// id; missing fields fall back to the spec defaults (B3: depth ≤2,
+    /// concurrency ≤6). The gateway's `delegation_gauge` stays the authority
+    /// for live admission; this is the user-editable policy surface.
+    #[serde(default)]
+    pub subagent_policy: std::collections::HashMap<String, SubagentPolicy>,
     /// H36 (P54) — integrated terminal profile registry (`terminal.*`):
     /// profiles / defaultProfile / automationProfile / useWslProfiles /
     /// unsafeConfirmed. One owner for detection + PTY backends.
     #[serde(default)]
     pub terminal: crate::terminal::TerminalConfig,
+}
+
+/// P71.9d — one agent's delegation profile (Settings → Subagents). Every
+/// field is optional: an absent field means "spec default" (`B3`), never a
+/// silent zero.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct SubagentPolicy {
+    /// Model policy: the agent's own default, inherited from the primary
+    /// agent, or an explicit model id.
+    pub model_policy: String,
+    /// Delegation role label the primary agent sees at delegate time.
+    pub role: String,
+    /// Whether this agent may itself spawn children (grandchildren).
+    pub may_spawn: bool,
+    /// Agent ids this agent may be given as children (empty = unrestricted).
+    pub allowed_children: Vec<String>,
+    /// Max live children (spec default 6).
+    pub max_children: u32,
+    /// Max chain depth this agent's children may reach (spec default 2).
+    pub max_depth: u32,
+    /// Max concurrent children (spec default 6).
+    pub max_concurrency: u32,
+    /// Workspace exposure: shared with the primary agent or isolated.
+    pub workspace: String,
+    /// Token budget for the agent's subtree (0 = unbounded at the chain cap).
+    pub budget: u64,
+}
+
+impl Default for SubagentPolicy {
+    fn default() -> Self {
+        Self {
+            model_policy: "agent-default".to_string(),
+            role: String::new(),
+            may_spawn: false,
+            allowed_children: Vec::new(),
+            max_children: 6,
+            max_depth: 2,
+            max_concurrency: 6,
+            workspace: "shared".to_string(),
+            budget: 0,
+        }
+    }
 }
 
 fn default_primary_chief() -> String {
@@ -72,6 +122,7 @@ impl Default for Config {
             primary_chief: default_primary_chief(),
             subagent_notes: std::collections::HashMap::new(),
             subagent_enabled: std::collections::HashMap::new(),
+            subagent_policy: std::collections::HashMap::new(),
             terminal: crate::terminal::TerminalConfig::default(),
         }
     }

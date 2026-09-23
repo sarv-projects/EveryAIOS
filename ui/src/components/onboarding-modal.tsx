@@ -26,9 +26,19 @@ import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { useAppStore } from '@/lib/store'
-import { useTheme, type Accent } from '@/components/theme-provider'
+import { ACCENT_PRESETS, useTheme } from '@/components/theme-provider'
 import { inTauri, invoke } from '@/lib/tauri'
-import { acpInstallStatus, acpInstallRequest, acpInstallCommit, acpIdFor } from '@/lib/acp'
+import {
+  acpInstallStatus,
+  acpInstallRequest,
+  acpInstallCommit,
+  acpInstallAwait,
+  acpIdFor,
+  chiefDefaultSet,
+  isAgentReady,
+  readinessLabel,
+  type AgentReadiness,
+} from '@/lib/acp'
 import { AGENTS } from '@/lib/agents'
 import { cn } from '@/lib/utils'
 
@@ -86,13 +96,10 @@ const CAPABILITIES = [
   },
 ]
 
-const ACCENT_OPTIONS: { id: Accent; label: string; bg: string }[] = [
-  { id: 'blue', label: 'Cool Blue', bg: 'bg-blue-500' },
-  { id: 'sky', label: 'Electric Sky', bg: 'bg-sky-400' },
-  { id: 'emerald', label: 'Emerald', bg: 'bg-emerald-500' },
-  { id: 'violet', label: 'Violet', bg: 'bg-violet-500' },
-  { id: 'amber', label: 'Amber Gold', bg: 'bg-amber-500' },
-]
+// P70 — the accent dots read the shared preset list instead of keeping a
+// second copy. The duplicate had drifted two presets behind the picker in
+// Settings, so half the selectable accents were unreachable from here and
+// nothing caught it: the two lists were never compared.
 
 export function OnboardingModal() {
   const onboardingDone = useAppStore((s) => s.onboardingDone)
@@ -103,10 +110,15 @@ export function OnboardingModal() {
   const [step, setStep] = useState(0)
   const [brandIndex, setBrandIndex] = useState(0)
 
-  // Agent auto-detection state
-  const [detectedAgents, setDetectedAgents] = useState<Record<string, boolean>>({
-    'everyaios-native': true, // Always ready
-  })
+  // Agent auto-detection state. P71.2a — nothing is pre-marked ready: v1 ships
+  // no built-in agent, so an empty map is the honest starting state and only a
+  // real discovery result may fill it.
+  const [detectedAgents, setDetectedAgents] = useState<Record<string, boolean>>({})
+  // P71.6a — discovery is not binding. A detected CLI cannot serve a turn until
+  // the user binds it, so this step tracks the binding, not the detection.
+  const [boundId, setBoundId] = useState<string | null>(null)
+  const [bindingAgent, setBindingAgent] = useState<string | null>(null)
+  const liveAgents = useAppStore((s) => s.liveAgents)
   const [scanning, setScanning] = useState(false)
   const [installingAgent, setInstallingAgent] = useState<string | null>(null)
 
@@ -128,9 +140,8 @@ export function OnboardingModal() {
   // Real-time Agent Auto-Detection via ACP Harness
   const scanAgents = async () => {
     setScanning(true)
-    const detected: Record<string, boolean> = {
-      'everyaios-native': true,
-    }
+    // Never seeded: every entry below is evidence from the shell's discovery.
+    const detected: Record<string, boolean> = {}
 
     if (inTauri()) {
       try {
@@ -165,25 +176,61 @@ export function OnboardingModal() {
 
   const finish = () => {
     setOnboardingDone(true)
-    notify('Welcome to EveryAIOS! Ready to get real work done.')
+    notify(
+      boundId
+        ? 'Welcome to EveryAIOS — your agent is bound and ready.'
+        : 'Welcome to EveryAIOS. No agent is bound yet, so the first message will ask you to pick one.',
+    )
   }
 
+  // F8 / P69.C12 — the same plan-before-touch handshake the picker and the
+  // first-run gate use: request (ticket or auto-allow) → consent in the Guard
+  // window → commit. Onboarding must not be a privileged install path that
+  // skips the approval card.
   const handleInstallAgent = async (agentId: string) => {
     setInstallingAgent(agentId)
     try {
       if (inTauri()) {
         const acpId = acpIdFor(agentId)
         const req = await acpInstallRequest(acpId)
-        if (req.ticketId) {
-          await acpInstallCommit(acpId, req.ticketId)
+        if (req.action !== 'allow') {
+          const { approved } = await acpInstallAwait(req.ticketId)
+          if (!approved) {
+            notify('Install was not approved — nothing was downloaded.')
+            return
+          }
         }
+        await acpInstallCommit(acpId, req.ticketId)
+        const { refreshAgentCatalog } = await import('@/lib/bridge')
+        await refreshAgentCatalog().catch(() => {})
       }
       setDetectedAgents((prev) => ({ ...prev, [agentId]: true }))
-      notify(`Agent ${agentId} installed and ready.`)
+      // "Installed" is not "bound": the row still has to be chosen, because an
+      // agent is never adopted on the user's behalf (`P71.2a`).
+      notify(`${agentId} installed — choose it as your agent to start.`)
     } catch (e) {
       notify(e instanceof Error ? e.message : `Install note: install CLI globally via terminal, or use auto-detected path.`)
     } finally {
       setInstallingAgent(null)
+    }
+  }
+
+  // P71.6a — binding is the v1 replacement for "the built-in engine is always
+  // there". The shell refuses an unknown/uninstalled id fail-closed, so a
+  // refusal surfaces instead of silently leaving no agent bound.
+  const handleBindAgent = async (agentId: string) => {
+    setBindingAgent(agentId)
+    try {
+      const binding = acpIdFor(agentId)
+      await chiefDefaultSet(binding)
+      useAppStore.getState().setSelectedAgent(agentId)
+      useAppStore.getState().setUserDefaultChief(binding)
+      setBoundId(binding)
+      notify(`${agentId} bound — your messages will run under it.`)
+    } catch (e) {
+      notify(e instanceof Error ? e.message : `Could not bind ${agentId}`)
+    } finally {
+      setBindingAgent(null)
     }
   }
 
@@ -358,18 +405,24 @@ export function OnboardingModal() {
                         </button>
                       </div>
 
-                      {/* Accent color dots */}
-                      <div className="flex items-center gap-1.5">
-                        {ACCENT_OPTIONS.map((acc) => (
+                      {/* Accent color dots — the swatch is icon-only, so each
+                          button carries an accessible name and announces its
+                          pressed state; the ring (not the hue) marks the pick. */}
+                      <div className="flex items-center gap-1.5" role="group" aria-label="Accent color">
+                        {ACCENT_PRESETS.map((acc) => (
                           <button
                             key={acc.id}
                             type="button"
                             onClick={() => setAccent(acc.id)}
                             title={acc.label}
+                            aria-label={acc.label}
+                            aria-pressed={accent === acc.id}
                             className={cn(
-                              'h-5 w-5 rounded-full transition-transform',
-                              acc.bg,
-                              accent === acc.id ? 'scale-125 ring-2 ring-foreground/40 ring-offset-1 ring-offset-background' : 'opacity-70 hover:opacity-100',
+                              'size-6 rounded-full transition-transform',
+                              acc.swatch,
+                              accent === acc.id
+                                ? 'scale-110 ring-2 ring-foreground/40 ring-offset-1 ring-offset-background'
+                                : 'opacity-70 hover:opacity-100',
                             )}
                           />
                         ))}
@@ -392,8 +445,11 @@ export function OnboardingModal() {
               >
                 <div className="flex items-center justify-between">
                   <div>
-                    <h2 className="text-xl font-bold tracking-tight text-foreground">Agent Auto-Detection & Swarm</h2>
-                    <p className="text-xs text-muted-foreground">EveryAIOS discovers installed CLI agents automatically or drives its native engine.</p>
+                    <h2 className="text-xl font-bold tracking-tight text-foreground">Pick the agent that will do the thinking</h2>
+                    <p className="text-xs text-muted-foreground">
+                      EveryAIOS ships no built-in engine: it discovers the agent CLIs on this machine,
+                      and the one you bind runs your messages. Detection is evidence, not readiness.
+                    </p>
                   </div>
                   <Button
                     size="sm"
@@ -407,10 +463,28 @@ export function OnboardingModal() {
                   </Button>
                 </div>
 
+                {/* P71.6a — the honest finish condition: nothing is bound, so no
+                    turn can run yet. Finishing is allowed (the app is still
+                    usable), but the consequence is stated here, not discovered
+                    as a refusal on the first message. */}
+                {!boundId && (
+                  <div className="rounded-lg border border-dashed border-border/60 bg-card/40 px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">
+                    No agent is bound yet — nothing can answer until one is. You can finish and pick
+                    one later; the first message will ask instead of failing.
+                  </div>
+                )}
+
                 <div className="max-h-[260px] space-y-2 overflow-y-auto pr-1">
                   {AGENTS.map((ag) => {
-                    const isDetected = detectedAgents[ag.id] || ag.status === 'installed'
-                    const isBusy = installingAgent === ag.id
+                    // P58.6/P71.3f — the live catalog is the only source of
+                    // occupancy and readiness; the static seed is a fixture and
+                    // never paints a runtime as installed or ready.
+                    const live = liveAgents.find((a) => a.id === ag.id)
+                    const isDetected = detectedAgents[ag.id] || live !== undefined
+                    const readiness = live?.readiness as AgentReadiness | undefined
+                    const ready = isAgentReady(readiness as AgentReadiness)
+                    const isBound = boundId === acpIdFor(ag.id)
+                    const isBusy = installingAgent === ag.id || bindingAgent === ag.id
 
                     return (
                       <div
@@ -435,16 +509,36 @@ export function OnboardingModal() {
                           </div>
                         </div>
 
-                        <div>
-                          {isDetected ? (
+                        <div className="flex items-center gap-2">
+                          {isDetected && (
+                            <span
+                              className={cn(
+                                'text-[10px] font-mono',
+                                ready ? 'text-emerald-400' : 'text-muted-foreground',
+                              )}
+                            >
+                              {readinessLabel(readiness)}
+                            </span>
+                          )}
+                          {isBound ? (
                             <Badge className="bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 text-[10px]">
-                              <CheckCircle2 className="mr-1 h-3 w-3" /> Auto-Detected & Ready
+                              <CheckCircle2 className="mr-1 h-3 w-3" /> Your agent
                             </Badge>
+                          ) : ready ? (
+                            <Button
+                              size="sm"
+                              onClick={() => void handleBindAgent(ag.id)}
+                              disabled={isBusy}
+                              className="h-7 bg-brand text-[11px] text-black hover:bg-brand"
+                            >
+                              <Check className="mr-1 h-3 w-3" />
+                              {isBusy ? 'Binding…' : 'Use this agent'}
+                            </Button>
                           ) : (
                             <Button
                               size="sm"
                               variant="outline"
-                              onClick={() => handleInstallAgent(ag.id)}
+                              onClick={() => void handleInstallAgent(ag.id)}
                               disabled={isBusy}
                               className="h-7 text-[11px]"
                             >

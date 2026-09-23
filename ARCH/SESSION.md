@@ -175,3 +175,14 @@ the container that makes a Work reachable; it is **not** a second durability mec
   chats into it; a chat with no project stays standalone (`project_id = null`).
 - Nothing here authorizes a schema change by itself — the durable-store schema version bump and its
   migration are `P70.C5`.
+
+---
+
+## Repo-comparison additions (briefs 01–19)
+
+> Delta group: *"ARCH/12-UI-SPEC.md + ARCH/UI.md + ARCH/SESSION.md"* (`REPO-COMPARE/DELTA-ANALYSIS.md` §3).
+> Evidence paths are repo-relative under `/home/sarvesh/business_Dev/REPO-COMPARE/clone2/`. Dispositions are
+> the briefs' tags; arrows into files not owned here carry `→ <file> §…` and are cross-domain deferred.
+
+- **12-4** · `add` — SOURCE: openwork (MIT) · evidence: `openwork/apps/server/src/workspaces.ts` (deterministic ids: `ws_` + sha256 of path, `remote::baseUrl::dir`, `openwork::host::workspaceId`; local/remote/sandbox origin types), `apps/server/src/routes/workspaces.ts` + `workspace-activate.e2e.test.ts` (activation re-syncs runtime MCPs without engine restart) — LOGIC: a deterministic workspace identity (hash of path / remote key / origin+id) plus activation that re-syncs runtime connectors without an engine restart keeps Workspace identity stable across local/remote/sandbox origins. → target §2 (Workspace vocabulary row gains an identity key) + §3 (hierarchy: identity keying on the Workspace node; connector re-sync is an activation effect through the normal gateway, never a store edit the UI performs).
+- **10-6** · `improve` — SOURCE: ECC · evidence: `ECC/scripts/lib/session-adapters/canonical-session.js`, `ECC/docs/architecture/session-adapter-contract.md` (`ecc.session.v1`: schemaVersion, adapterId, session, workers[] with state/health/runtime/intent/artifacts + aggregates) — LOGIC: one canonical session-snapshot contract (`ecc.session.v1` shape as candidate schema) lets UI and automation consume a single projection keyed to the session kinds named in **ADR-0006** (referenced by name only — ADRs are historical and never edited here), while the event log remains the truth source and the snapshot stays a projection (I4). → target §2 (vocabulary: the snapshot rides the Session; kinds per ADR-0006) + §6 (lifecycle: Resume/Open rows consume the snapshot contract, never model memory).

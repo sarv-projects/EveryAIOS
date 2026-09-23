@@ -130,7 +130,11 @@ impl AgentDirectory {
     /// Insert or replace an entry, keyed by the canonical agent id.
     pub fn upsert(&mut self, entry: AgentDirectoryEntry) -> Option<AgentDirectoryEntry> {
         let key = entry.definition.id.as_str().to_string();
-        self.entries.insert(key, entry)
+        self.entries.insert(key.clone(), entry);
+        // The stored row, not the replaced one: `None` means the entry was
+        // rejected upstream, never "this was a fresh key" — a caller cannot
+        // tell those apart from the old value.
+        self.entries.get(&key).cloned()
     }
 
     /// Insert a definition with default facts for its source.

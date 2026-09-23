@@ -61,10 +61,10 @@ export function UxMetricsSection() {
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `everyaios-session-recording-${Date.now()}.json`
+      a.download = `everyaios-activity-recording-${Date.now()}.json`
       a.click()
       URL.revokeObjectURL(url)
-      notify('Session recording exported (JSON)')
+      notify('Activity recording exported (JSON)')
     } catch {
       notify('Export failed', 'error')
     }
@@ -73,7 +73,7 @@ export function UxMetricsSection() {
   return (
     <SectionShell
       title="UX metrics & recording"
-      desc="Local-only product metrics and the opt-in session recorder. Counters and click/nav events stay on this device — nothing is sent anywhere."
+      desc="Local-only product metrics and the opt-in activity recorder. Counters and click/nav events stay on this device — nothing is sent anywhere."
     >
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         {[
@@ -97,14 +97,14 @@ export function UxMetricsSection() {
         Reset metrics
       </Button>
 
-      <Row label="Opt-in session recording" desc="Records clicks and view navigation only — never message content, tool payloads, or provider data">
+      <Row label="Opt-in activity recording" desc="Records clicks and view navigation only — never message content, tool payloads, or provider data">
         <Switch
           checked={recording}
           onCheckedChange={(v) => {
             setRecording(v)
             setSessionRecording(v)
             refresh()
-            notify(v ? 'Session recording on (clicks/navigation only)' : 'Session recording off')
+            notify(v ? 'Activity recording on (clicks/navigation only)' : 'Activity recording off')
           }}
         />
       </Row>

@@ -1,14 +1,17 @@
-// P58.7 — DOM proof that the agent/model picker renders the LIVE models.dev
-// catalog rows (not the curated seed) and pins a provider-qualified selection.
+// P71.9a/P71.9c — DOM proof for the composer picker in v1.
 //
-// The pure mapper rules live in `src/lib/catalog-models.test.ts`. This file
-// proves the *rendering* and the *pin*, which pure tests cannot: the real
-// component, the real store, the real `catalogProviders`/`catalogProviderModels`
-// shells, against a faked `window.__TAURI_INTERNALS__` (see `@/test/dom-harness`).
+// The picker used to render EveryAIOS's own models.dev catalog and a "Curated
+// seed · EveryAIOS Native" list for the built-in engine. There is no built-in
+// engine any more (ADR-0005 §1), EveryAIOS owns no model surface (P71.2d), and
+// the retired built-in spellings resolve to *nothing*. What this file proves is
+// the v1 contract instead:
 //
-// The fixture is deliberately mixed — one keyed provider, one keyless provider,
-// one plain provider with no key, and rows with an omitted price — because those
-// are exactly the honesty edges the picker must honour.
+//   1. agent rows come from the shell's discovery result — never from the static
+//      seed pretending to be occupancy;
+//   2. an undiscovered machine says so and offers **no** substitute runtime;
+//   3. the model surface shown is the **agent's own** ACP option, or an explicit
+//      statement that it exposes none;
+//   4. a retired spelling in `primary_chief` reads as "no agent bound".
 
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
 import type { ReactElement } from 'react'
@@ -32,120 +35,41 @@ import { AGENTS, type AgentRuntime } from '@/lib/agents'
 // Fixtures
 // ---------------------------------------------------------------------------
 
-/** A catalog model row as the shell would serialise it. */
-function model(row: Record<string, unknown>): Record<string, unknown> {
-  return { description: '', family: '', ...row }
+/** A runtime row as the shell's merged catalog would publish it. */
+function runtimeRow(id: string, status: AgentRuntime['status']): AgentRuntime {
+  const seed = AGENTS.find((a) => a.id === id)
+  if (!seed) throw new Error(`fixture needs a real catalog row for ${id}`)
+  return { ...seed, status, models: [], defaultModel: '' }
 }
 
-const OPENROUTER_MODELS = [
-  model({
-    id: 'anthropic/claude-sonnet-4',
-    name: 'Claude Sonnet 4',
-    context: 200_000,
-    output: 64_000,
-    priceInput: 3,
-    priceOutput: 15,
-    reasoning: true,
-    toolCall: true,
-    images: true,
-    free: false,
-  }),
-  // Price omitted by the catalog → must render `—`, never `free`.
-  model({
-    id: 'meta-llama/llama-4-scout',
-    name: 'Llama 4 Scout',
-    context: 131_072,
-    output: 8_192,
-    priceInput: null,
-    priceOutput: null,
-    free: false,
-  }),
-]
-
-const FREE_MODELS = [
-  model({ id: 'qwen3-coder', name: 'Qwen3 Coder', context: 262_144, output: 32_768, free: true }),
-]
-
-// No key, no profile, not keyless: a Settings row, not a chat target.
-const UNKEYED_MODELS = [model({ id: 'should-never-render', name: 'Unkeyed Model', free: true })]
-
-const PROVIDERS = [
-  {
-    id: 'openrouter',
-    name: 'OpenRouter',
-    baseUrl: 'https://openrouter.ai/api/v1',
-    logoUrl: '',
-    source: 'models.dev',
-    keyConfigured: true,
-    modelCount: OPENROUTER_MODELS.length,
-  },
-  {
-    id: 'opencode-free',
-    name: 'OpenCode Free',
-    baseUrl: 'https://opencode.ai/zen/v1',
-    logoUrl: '',
-    source: 'models.dev',
-    keyConfigured: false,
-    keyless: true,
-    modelCount: FREE_MODELS.length,
-  },
-  {
-    id: 'unkeyed-cloud',
-    name: 'Unkeyed Cloud',
-    baseUrl: 'https://unkeyed.example/v1',
-    logoUrl: '',
-    source: 'models.dev',
-    keyConfigured: false,
-    modelCount: UNKEYED_MODELS.length,
-  },
-]
+/** The agent's own model option, as its session config advertises it. */
+const MODEL_OPTION = {
+  id: 'model',
+  name: 'Model',
+  category: 'model',
+  type: 'select',
+  currentValue: 'claude-sonnet-4.5',
+  options: [
+    { value: 'claude-sonnet-4.5', name: 'Sonnet 4.5' },
+    { value: 'claude-opus-4.1', name: 'Opus 4.1' },
+  ],
+}
 
 interface StubOptions {
-  /** Replace the provider list (used for the no-usable-provider case). */
-  providers?: unknown[]
-  /** Providers are reachable but their model tables are empty. */
-  noModels?: boolean
-  /** Make `catalog_providers` reject, as a broken shell would. */
-  failProviders?: boolean
+  /** The shell's `primary_chief` value; `null` means the command rejects. */
+  primaryChief?: string | null
 }
 
-function catalogHandlers(opts: StubOptions = {}): Record<string, (args?: Record<string, unknown>) => unknown> {
-  const providers = opts.providers ?? PROVIDERS
+function pickerHandlers(opts: StubOptions = {}): Record<string, (args?: Record<string, unknown>) => unknown> {
   return {
-    catalog_providers: () => {
-      if (opts.failProviders) throw new Error('catalog_providers exploded')
-      return {
-        providers,
-        status: {
-          source: 'https://models.dev/api.json',
-          fetchedAt: Date.now(),
-          providers: providers.length,
-          models: 3,
-        },
-        profiles: [],
-      }
+    chief_default_get: () => {
+      if (opts.primaryChief === null) throw new Error('no chief default')
+      return { primaryChief: opts.primaryChief ?? '', known: [] }
     },
-    catalog_provider_models: (args) => {
-      const provider = String(args?.provider ?? '')
-      if (opts.noModels) {
-        return { models: [], profileModels: [], count: 0, live: true, freeSubset: null }
-      }
-      const rows =
-        provider === 'openrouter'
-          ? OPENROUTER_MODELS
-          : provider === 'opencode-free'
-            ? FREE_MODELS
-            : provider === 'unkeyed-cloud'
-              ? UNKEYED_MODELS
-              : []
-      return {
-        models: rows,
-        profileModels: [],
-        count: rows.length,
-        live: true,
-        freeSubset: provider === 'opencode-free' ? FREE_MODELS.map((m) => m.id) : null,
-      }
-    },
+    chief_default_set: () => ({ ok: true }),
+    acp_registry_status: () => null,
+    agent_directory_list: () => ({ entries: [] }),
+    acp_install_status: () => ({}),
   }
 }
 
@@ -155,7 +79,6 @@ function catalogHandlers(opts: StubOptions = {}): Record<string, (args?: Record<
 
 let Picker: (props: { compact?: boolean }) => ReactElement | null
 let mounted: Mounted
-let invoked: string[]
 
 beforeAll(async () => {
   registerDom()
@@ -167,14 +90,17 @@ afterAll(() => {
 })
 
 beforeEach(async () => {
-  invoked = installShell(catalogHandlers())
+  installShell(pickerHandlers())
   await withAct(() =>
     useAppStore.setState({
-      selectedAgentId: 'everyaios-native',
-      selectedModelId: 'claude-sonnet-4.5',
+      // Unbound is the v1 starting state: there is no built-in row to default to.
+      selectedAgentId: '',
+      selectedModelId: '',
       selectedModelProvider: undefined,
       autoRoute: false,
       liveAgents: [],
+      acpConfigOptions: {},
+      acpHandles: {},
       lastToast: undefined,
     }),
   )
@@ -190,171 +116,38 @@ function trigger(): HTMLButtonElement {
   return findButton(mounted.container, 'button[aria-label="Choose agent and model"]')
 }
 
-function rowButton(provider: string, id: string): HTMLButtonElement | null {
-  return mounted.container.querySelector<HTMLButtonElement>(
-    `button[title="Use ${provider} · ${id} for this chat"]`,
-  )
+function agentRow(id: string): HTMLButtonElement | null {
+  return mounted.container.querySelector<HTMLButtonElement>(`button[data-agent-id="${id}"]`)
 }
 
-/** Open the popover and wait for the live rows to land. */
 async function openPicker(): Promise<void> {
   await click(trigger())
-  const opened = await waitFor(() =>
-    (mounted.container.textContent ?? '').includes('Your providers · models.dev'),
-  )
-  expect(opened).toBe(true)
-  await waitFor(() => mounted.container.querySelector('button[title^="Use openrouter ·"]') !== null)
-}
-
-/** Re-install the shell after `beforeEach` mounted the picker (state tests). */
-async function restub(opts: StubOptions): Promise<void> {
-  invoked = installShell(catalogHandlers(opts))
+  await tick()
 }
 
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
-describe('P58.7 — picker renders the live models.dev catalog', () => {
-  test('renders real catalog rows for reachable providers, with real context and prices', async () => {
+describe('P71.9a — rows come from discovery, never from the seed', () => {
+  test('an empty inventory is stated and no runtime is offered in its place', async () => {
     await openPicker()
-
-    const row = rowButton('openrouter', 'anthropic/claude-sonnet-4')
-    expect(row).not.toBeNull()
-
-    const text = row?.textContent ?? ''
-    expect(text).toContain('Claude Sonnet 4')
-    expect(text).toContain('openrouter')
-    expect(text).toContain('anthropic/claude-sonnet-4')
-    expect(text).toContain('200K ctx')
-    expect(text).toContain('$3.00/in')
-    expect(text).toContain('$15.00/out')
-    expect(text).toContain('reasoning')
-    expect(text).toContain('tools')
-    expect(text).toContain('vision')
-
-    // The keyless provider is reachable too, and is labelled free.
-    const free = rowButton('opencode-free', 'qwen3-coder')
-    expect(free).not.toBeNull()
-    expect(free?.textContent ?? '').toContain('free')
-
-    // It read the payload through the real shell seam, not a curated list.
-    expect(invoked).toContain('catalog_providers')
-    expect(invoked).toContain('catalog_provider_models:openrouter')
-  })
-
-  test('never offers a provider this machine cannot reach', async () => {
-    await openPicker()
-
-    expect(mounted.container.textContent ?? '').not.toContain('should-never-render')
-    expect(rowButton('unkeyed-cloud', 'should-never-render')).toBeNull()
-    // It only asked the shell about the two reachable providers.
-    expect(invoked).not.toContain('catalog_provider_models:unkeyed-cloud')
-    expect(invoked).toContain('catalog_provider_models:openrouter')
-    expect(invoked).toContain('catalog_provider_models:opencode-free')
-  })
-
-  test('shows `—` for a price the catalog omitted, not `free`', async () => {
-    await openPicker()
-
-    const row = rowButton('openrouter', 'meta-llama/llama-4-scout')
-    expect(row).not.toBeNull()
-    const text = row?.textContent ?? ''
-    expect(text).toContain('—/in · —/out')
-    expect(text).not.toContain('free')
-  })
-
-  test('keeps the curated seed clearly labelled as not the live catalog', async () => {
-    await openPicker()
-
-    const body = mounted.container.textContent ?? ''
-    expect(body).toContain('Curated seed · EveryAIOS Native')
-    expect(body).toContain('not the live catalog')
-  })
-
-  test('pins the (provider, model) pair and names it in the trigger', async () => {
-    await openPicker()
-
-    const row = rowButton('openrouter', 'anthropic/claude-sonnet-4')
-    expect(row).not.toBeNull()
-    if (!row) return
-    await click(row)
-
-    await waitFor(() => useAppStore.getState().selectedModelProvider === 'openrouter')
-
-    // The provider travels with the model id: the broker resolves the endpoint
-    // from the catalog rather than guessing one from the id.
-    expect(useAppStore.getState().selectedModelId).toBe('anthropic/claude-sonnet-4')
-    expect(useAppStore.getState().selectedModelProvider).toBe('openrouter')
-
-    // The trigger names the exact pair sent to the broker — a catalog pin must
-    // never render as `—` (the bug the abandoned live-window run surfaced).
-    await waitFor(() =>
-      (trigger().textContent ?? '').includes('openrouter · anthropic/claude-sonnet-4'),
-    )
-    expect(trigger().textContent ?? '').toContain('openrouter · anthropic/claude-sonnet-4')
-
-    // And the row now reads as the pinned one.
-    await waitFor(() =>
-      (rowButton('openrouter', 'anthropic/claude-sonnet-4')?.textContent ?? '').includes('sticky'),
-    )
-  })
-
-  test('picking turns auto-route off so the pin is not silently ignored', async () => {
-    await withAct(() => useAppStore.setState({ autoRoute: true }))
-    await openPicker()
-
-    const row = rowButton('opencode-free', 'qwen3-coder')
-    expect(row).not.toBeNull()
-    if (!row) return
-    await click(row)
-
-    await waitFor(() => useAppStore.getState().autoRoute === false)
-    expect(useAppStore.getState().autoRoute).toBe(false)
-    expect(useAppStore.getState().selectedModelProvider).toBe('opencode-free')
-    await tick()
-  })
-})
-
-// ---------------------------------------------------------------------------
-// P55.4 / P60.14 — occupancy
-// ---------------------------------------------------------------------------
-
-/** A runtime row as the shell's merged catalog would publish it. */
-function runtimeRow(id: string, installed: boolean): AgentRuntime {
-  const seed = AGENTS.find((a) => a.id === id)!
-  return {
-    ...seed,
-    status: installed ? 'installed' : 'available',
-    models: [],
-    defaultModel: '',
-  }
-}
-
-function agentRow(id: string): HTMLButtonElement | null {
-  return mounted.container.querySelector<HTMLButtonElement>(`button[data-agent-id="${id}"]`)
-}
-
-describe('P55.4 — runtime occupancy is never painted from the static seed', () => {
-  test('an empty shell inventory is stated, and only Native is offered', async () => {
-    // `beforeEach` installs the shell with `liveAgents: []` — discovery has
-    // not reported. The curated seed must not be shown as if it had been.
-    await click(trigger())
 
     const ok = await waitFor(() =>
       (mounted.container.textContent ?? '').includes('Runtime inventory unavailable'),
     )
     expect(ok).toBe(true)
-    expect(agentRow('everyaios-native')).not.toBeNull()
+    // Nothing is substituted: no curated row, and certainly no built-in one.
     expect(agentRow('claude-code')).toBeNull()
-    expect(agentRow('opencode')).toBeNull()
+    expect(agentRow('everyaios-native')).toBeNull()
+    expect(mounted.container.textContent ?? '').not.toContain('always available')
   })
 
   test('a discovered installed runtime is listed and selectable', async () => {
     await withAct(() =>
-      useAppStore.setState({ liveAgents: [runtimeRow('everyaios-native', true), runtimeRow('claude-code', true)] }),
+      useAppStore.setState({ liveAgents: [runtimeRow('claude-code', 'installed')] }),
     )
-    await click(trigger())
+    await openPicker()
 
     const row = agentRow('claude-code')
     expect(row).not.toBeNull()
@@ -366,9 +159,11 @@ describe('P55.4 — runtime occupancy is never painted from the static seed', ()
 
   test('a registry entry with no binary reads `not installed` and is not selectable', async () => {
     await withAct(() =>
-      useAppStore.setState({ liveAgents: [runtimeRow('everyaios-native', true), runtimeRow('claude-code', false)] }),
+      useAppStore.setState({
+        liveAgents: [runtimeRow('claude-code', 'available'), runtimeRow('codex-cli', 'installed')],
+      }),
     )
-    await click(trigger())
+    await openPicker()
 
     const row = agentRow('claude-code')
     expect(row).not.toBeNull()
@@ -376,12 +171,12 @@ describe('P55.4 — runtime occupancy is never painted from the static seed', ()
     if (!row) return
     await click(row)
     // It must not become a selection the send path cannot launch.
-    expect(useAppStore.getState().selectedAgentId).toBe('everyaios-native')
+    expect(useAppStore.getState().selectedAgentId).toBe('')
   })
 
   test('outside the shell the labelled preview fixture is kept', async () => {
     removeShell()
-    await click(trigger())
+    await openPicker()
     // The browser preview has no shell to ask, so the fixture stands in — but
     // it is the only place the seed is allowed to read as a runtime list.
     expect(agentRow('claude-code')).not.toBeNull()
@@ -389,59 +184,64 @@ describe('P55.4 — runtime occupancy is never painted from the static seed', ()
   })
 })
 
-describe('P58.7 — picker states are honest when the catalog is not usable', () => {
-  test('states the reason when no provider is reachable', async () => {
-    await restub({ providers: [] })
-    await click(trigger())
-
-    const ok = await waitFor(() =>
-      (mounted.container.textContent ?? '').includes(
-        'No provider is reachable yet — add a key or a custom profile in Settings → Providers.',
-      ),
+describe('P71.9c — the model surface is the agent\u2019s own', () => {
+  test('shows the agent\u2019s ACP model option, not an EveryAIOS catalog', async () => {
+    await withAct(() =>
+      useAppStore.setState({
+        liveAgents: [runtimeRow('claude-code', 'installed')],
+        selectedAgentId: 'claude-code',
+        acpConfigOptions: { 'claude-code': [MODEL_OPTION] },
+      }),
     )
-    expect(ok).toBe(true)
-    // Never a silent fallback that reads like coverage.
-    expect(mounted.container.textContent ?? '').toContain('Curated seed · EveryAIOS Native')
+    await openPicker()
+
+    const body = mounted.container.textContent ?? ''
+    expect(body).toContain('Model: claude-sonnet-4.5')
+    // The retired surfaces must not reappear inside the picker.
+    expect(body).not.toContain('Your providers · models.dev')
+    expect(body).not.toContain('Curated seed')
   })
 
-  test('says it is preview mode when there is no shell at all', async () => {
+  test('says so when the agent exposes no model option', async () => {
+    await withAct(() =>
+      useAppStore.setState({
+        liveAgents: [runtimeRow('claude-code', 'installed')],
+        selectedAgentId: 'claude-code',
+        acpConfigOptions: {},
+      }),
+    )
+    await openPicker()
+
+    expect(mounted.container.textContent ?? '').toContain(
+      'No ACP model option is exposed. EveryAIOS will not show or inject its Native BYOK/local models here.',
+    )
+  })
+})
+
+describe('P71.2a — the slot never names a built-in engine', () => {
+  test('a retired spelling reads as unbound, not as an engine', async () => {
     removeShell()
-    await click(trigger())
+    installShell(pickerHandlers({ primaryChief: 'inbuilt' }))
+    mounted.unmount()
+    mounted = await mount(<Picker />)
+    await openPicker()
 
-    const ok = await waitFor(() =>
-      (mounted.container.textContent ?? '').includes(
-        'Preview mode — the live models.dev catalog needs the desktop shell.',
-      ),
-    )
-    expect(ok).toBe(true)
+    const body = mounted.container.textContent ?? ''
+    expect(body).toContain('no agent bound')
+    expect(body).not.toContain('inbuilt engine')
+    // Nor does it render a "swappable" badge for an engine that does not exist.
+    expect(body).not.toContain('swappable')
   })
 
-  test('says the providers are reachable but carry no model rows yet', async () => {
-    await restub({ noModels: true })
-    await click(trigger())
+  test('a real default is named as the agent it is', async () => {
+    removeShell()
+    installShell(pickerHandlers({ primaryChief: 'claude-code' }))
+    mounted.unmount()
+    mounted = await mount(<Picker />)
+    await openPicker()
 
-    const ok = await waitFor(() =>
-      (mounted.container.textContent ?? '').includes(
-        'Your providers are reachable but carry no model rows yet — refresh the catalog in Settings → Providers.',
-      ),
-    )
-    expect(ok).toBe(true)
-  })
-
-  test('names a failed shell read as a failure, never as a missing shell', async () => {
-    // `catalogProviders` collapses "no shell" and "the shell call failed" into
-    // `live: false`, so the picker asks the shell which one it is — telling a
-    // user with a running shell that it "needs the desktop shell" is a lie they
-    // cannot act on.
-    await restub({ failProviders: true })
-    await click(trigger())
-
-    const ok = await waitFor(() =>
-      (mounted.container.textContent ?? '').includes(
-        'Live provider catalog unavailable — the shell could not read it. Showing curated rows only.',
-      ),
-    )
-    expect(ok).toBe(true)
-    expect(mounted.container.textContent ?? '').not.toContain('Preview mode')
+    const body = mounted.container.textContent ?? ''
+    expect(body).toContain('claude-code')
+    expect(body).not.toContain('no agent bound')
   })
 })

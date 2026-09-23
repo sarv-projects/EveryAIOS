@@ -28,8 +28,7 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { useAppStore } from '@/lib/store'
 import * as perfLib from '@/lib/perf'
-import { MODEL_MAP, isNativeRuntime, isRuntimeUsable } from '@/lib/agents'
-import { catalogPickLabel } from '@/lib/catalog-models'
+import { isRuntimeUsable } from '@/lib/agents'
 import { CompanionChip } from './companion-chip'
 import { cn } from '@/lib/utils'
 import { useRuntimeState } from '@/lib/runtime'
@@ -183,9 +182,6 @@ export function StatusBar() {
   const hasActive = useAppStore((s) => s.sessions.some((x) => x.id === s.activeSessionId))
   const activeId = useAppStore((s) => s.activeSessionId)
   const selectedAgentId = useAppStore((s) => s.selectedAgentId)
-  const selectedModelId = useAppStore((s) => s.selectedModelId)
-  // P58.7 — set only when the composer pinned a live models.dev row.
-  const selectedModelProvider = useAppStore((s) => s.selectedModelProvider)
   const autoRoute = useAppStore((s) => s.autoRoute)
   const liveBudget = useAppStore((s) => s.liveBudget)
   const browserAttached = useAppStore((s) => s.browserAttached)
@@ -207,9 +203,8 @@ export function StatusBar() {
   // uninstalled CLI must never be painted as the active runtime.
   const liveAgents = useAppStore((s) => s.liveAgents)
   const agent = liveAgents.find((a) => a.id === selectedAgentId && isRuntimeUsable(a))
-  // P60 — model ownership. An external ACP agent owns its own model; the
-  // bar must not paint EveryAIOS's Native pin as if it governed that agent.
-  const nativeSelected = isNativeRuntime(selectedAgentId)
+  // P60 / P71.2d — model ownership. Every runtime is an external ACP agent that
+  // owns its own model, and EveryAIOS owns no model surface to paint here.
   const acpModelOption = useAppStore((s) => {
     const opts = s.acpConfigOptions[selectedAgentId]
     if (!opts?.length) return undefined
@@ -218,21 +213,14 @@ export function StatusBar() {
       opts.find((o) => o.id.toLowerCase().includes('model'))
     )
   })
-  // P58.7 — curated model rows still back this label until the provider model
-  // table (P56.7) is the picker source; do not claim catalog coverage here.
-  const model = MODEL_MAP[selectedModelId]
-  // P58.7 — a catalog pick is `provider · model-id` because that is the exact
-  // pair the broker receives; a curated row keeps its curated label. The
-  // fallback is the raw id, never '—' for a selection we can name.
-  // P60 — for an external agent the label is the agent's own ACP value, or
-  // an explicit "managed by <agent>", never a Native model name.
-  const modelLabel = nativeSelected
-    ? catalogPickLabel(selectedModelProvider, selectedModelId) ??
-      model?.label ??
-      selectedModelId
-    : acpModelOption
-      ? String(acpModelOption.currentValue)
-      : `managed by ${agent?.name ?? selectedAgentId}`
+  // P60 / P71.2d — the label is the agent's own ACP value, or an explicit
+  // "managed by <agent>". There is no desktop model pin left to name, so the
+  // bar cannot imply EveryAIOS picked the model.
+  const modelLabel = acpModelOption
+    ? String(acpModelOption.currentValue)
+    : agent?.name || selectedAgentId
+      ? `managed by ${agent?.name ?? selectedAgentId}`
+      : 'no agent bound'
   // Agent health, latency, uptime, and task counts are not available from the
   // runtime contract yet. Never invent them; show unknown until a live probe
   // supplies evidence.

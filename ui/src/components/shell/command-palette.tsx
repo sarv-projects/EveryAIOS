@@ -330,47 +330,11 @@ export function CommandPalette() {
           setOpen(false)
         },
       })),
-      // === Model switching (for current agent, live-gated) ===
-      ...getModelsForAgentLive(selectedAgentId, liveAgents).filter((m) => m.available).map((m) => ({
-        id: `model-${m.id}`,
-        label: `Use ${m.label}`,
-        hint: `${m.strengths.slice(0, 2).join(', ')} · ${m.recommendedFor ?? ''}`,
-        icon: Sparkles,
-        group: 'settings' as const,
-        keywords: `model ${m.provider} ${m.label}`,
-        onSelect: () => {
-          setSelectedModel(m.id)
-          notify(`Model → ${m.label}`)
-          setOpen(false)
-        },
-      })),
-      // === P51.3 — model variant cycle ===
-      {
-        id: 'cycle-model-next',
-        label: 'Next model variant',
-        hint: 'Pins the next available model and turns auto-route off (⌘⇧Q)',
-        icon: Route,
-        group: 'settings',
-        keywords: 'model variant cycle next switch',
-        onSelect: () => {
-          const id = cycleModelVariant(1)
-          if (id) notify(`Model → ${id} (auto-route off)`)
-          setOpen(false)
-        },
-      },
-      {
-        id: 'cycle-model-prev',
-        label: 'Previous model variant',
-        hint: 'Pins the previous available model and turns auto-route off (⇧⌘Q)',
-        icon: Route,
-        group: 'settings',
-        keywords: 'model variant cycle previous switch',
-        onSelect: () => {
-          const id = cycleModelVariant(-1)
-          if (id) notify(`Model → ${id} (auto-route off)`)
-          setOpen(false)
-        },
-      },
+      // P71.2d — no desktop model entries and no model cycle: EveryAIOS owns no
+      // model surface to switch. A bound agent's model is changed through that
+      // agent's own ACP config options, which the composer picker renders; a
+      // palette row that pinned a desktop model would name something no agent
+      // receives. The rows were removed rather than left as no-ops.
       // === Auto-route toggle ===
       {
         id: 'toggle-autoroute',

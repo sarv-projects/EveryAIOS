@@ -29,7 +29,7 @@
 //
 // Usage: node scripts/check-arch-invariants.mjs
 
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { dirname, extname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -262,29 +262,42 @@ for (const root of SCAN_ROOTS) {
   }
 }
 
-// --- LAYER-1: core-engine is policy, not a runtime ------------------------
-// P69.D8 — `packages/core-engine` becomes pure policies/helpers: model
-// execution flows coordinator → router → transport, and every effect through
-// the kernel. A provider client, a search provider or a raw `fetch` inside
-// core-engine is exactly the competing-runtime regression this guards.
+// --- LAYER-1: no second turn runtime in the TS workspace ------------------
+// P71.2c (ADR-0005 §2) — the built-in engine is deferred to post-v1, so the
+// strongest form of P69.D8's invariant is now the literal one: `packages/core-engine`
+// must **not exist**. It held the ConversationEngine, its stages and the
+// advisory policy classifiers; the engine and the coordinator loop moved to
+// `ARCH/archive/core-engine/` and `ARCH/archive/coordinator-loop/`, which are
+// outside the workspace and outside every tsconfig/build. A resurrected copy in
+// `packages/` (or a package that re-declares the engine class) is exactly the
+// competing-runtime regression this guards.
 {
   const engineSrc = join(ROOT, "packages", "core-engine", "src");
-  const forbiddenImports = /from\s+['"](@personal-ai\/core-(?:providers|search)|node:child_process)['"]/;
-  for (const file of walk(engineSrc, TS)) {
-    const src = readFileSync(file, "utf8");
-    for (const hit of matchesInCode(src, forbiddenImports)) {
-      fail(
-        "LAYER-1",
-        rel(file),
-        `core-engine must not own transport/egress at line ${hit.line}: ${hit.text}`,
-      );
-    }
-    for (const hit of matchesInCode(src, /(^|[^\w.])fetch\s*\(/)) {
-      fail(
-        "LAYER-1",
-        rel(file),
-        `raw fetch inside core-engine at line ${hit.line}: ${hit.text} — route it through the coordinator's transport`,
-      );
+  if (existsSync(engineSrc)) {
+    fail(
+      "LAYER-1",
+      "packages/core-engine/src",
+      "the built-in engine package is back in the workspace — it is deferred to post-v1 (ADR-0005 §2, P71.2c) and lives in ARCH/archive/core-engine/",
+    );
+  }
+  const engineClass = /\bclass\s+ConversationEngine\b/;
+  const loopEntry = /\brunChatStream\b\s*\(/;
+  for (const root of ["packages", "ui/src", "src-tauri/src"]) {
+    for (const file of walk(join(ROOT, root), TS)) {
+      const src = readFileSync(file, "utf8");
+      for (const [name, pattern] of [
+        ["ConversationEngine", engineClass],
+        ["runChatStream", loopEntry],
+      ]) {
+        const hits = matchesInCode(src, pattern);
+        if (hits.length) {
+          fail(
+            "LAYER-1",
+            rel(file),
+            `${name} re-declared outside ARCH/archive at line ${hits[0].line} — everyaios has no turn loop (ADR-0005 §2)`,
+          );
+        }
+      }
     }
   }
 }
@@ -382,7 +395,7 @@ function productionDeps(crateName) {
     'buildCascadeProviders',
     'fetchAndRerankSearchResults',
   ];
-  for (const root of ["packages/coordinator/src", "packages/core-engine/src"]) {
+  for (const root of ["packages/coordinator/src"]) {
     for (const file of walk(join(ROOT, root), TS)) {
       const src = readFileSync(file, "utf8");
       for (const symbol of cascadeSymbols) {

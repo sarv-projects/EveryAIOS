@@ -1,10 +1,12 @@
-//! Permission gate — port of stages/permission-gate.ts + Algorithm #12's base
-//! `evaluatePermissionGate` (core-tools/src/permission-gate.ts).
+//! Permission gate — port of the archived `stages/permission-gate.ts` +
+//! Algorithm #12's base `evaluatePermissionGate` (`ARCH/archive/core-engine/`,
+//! `P71.2c`).
 //!
-//! This is the pure, deterministic, LLM-free slice the engine runs *around*
-//! each tool call: given the agent's max risk, the surface, and the tool's
-//! risk level, it decides grant / session-first confirm / always confirm.
-//! Mirrors the TS reference so the port is diffable:
+//! This is the pure, deterministic, LLM-free slice the engine ran *around* each
+//! tool call: given the agent's max risk, the surface, and the tool's risk
+//! level, it decides grant / session-first confirm / always confirm. Mirrors the
+//! TS reference so the port stays diffable, and executes nothing — in v1 the
+//! only gate is `everyaios-guard`'s ticket funnel.
 //!
 //!   - allowlist check first (hard fail, never confirmed)
 //!   - `effectiveRisk = higherRisk(agentMax, toolRisk)`

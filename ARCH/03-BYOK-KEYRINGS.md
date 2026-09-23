@@ -122,3 +122,31 @@ OmniRoute (46.9K⭐, MIT) is the production reference for the *dynamic* selectio
 - **Dynamic scorer (A7):** 13-factor `DEFAULT_WEIGHTS` (health 0.20 / quota 0.15 / costInv 0.15 / latencyInv 0.12 / taskFit 0.08 / …) + 4 mode packs (ship-fast / cost-saver / quality-first / offline-friendly) + `auto/category:tier` model-id DSL — the *static* planner/subagent/writers roles gain a dynamic picker. **Honesty (v3.39 → v3.55):** `tier.rs` holds only the strategy vocabulary (`lkgp` parse exists) and the 13-factor OmniRoute scorer stays vocabulary-only — never a public strategy. The *consensus* scorer is live: `everyaios-core::routing::Scorer::score` (ARCH/03 weights) + `RouteDecision`/`ProviderObservation` landed, and coordinator `router.ts` ports the exact algorithm (`scorerScore`/`routeDecision`); `observations.ts` records one observation per completed/errored turn and `chat.ts` feeds `currentObservations()` into `selectModelForTask` — the live loop is `ProviderObservation` history → scorer → `RouteDecision`. **Durable (v3.55+):** the ring survives restarts — vault `recent_usage()` (`token_usage` ledger) → core `usage/recent` request → `hydrateObservations()` at coordinator boot (durable rows = successes with measured cost; live this-process keys never overwritten). Without any observations the router falls back to capability-filter + cost-sort (honest floor). Extra OmniRoute modes (round-robin/p2c/fusion/pipeline) stay internal scoring factors, not public architecture.
 - **Per-request budget (J11):** `X-OmniRoute-Budget` + `-Fallback: cheapest|strict→402` = the per-request USD ceiling our session-$-cap lacks.
 - **Catalog long-tail (A6):** ingest the MIT `PROVIDER_REFERENCE.md` (339 providers) as *data* — import API-key + local + keyless allow-list only. The 34 cookie + 25 OAuth-CLI classes are the **doc-57 reject list** (Claude Code/Codex/Copilot drive via F12/ACP, not the vault). New A4 *candidates* (each doc-57-checked): Amazon Q, GitLab Duo, Kiro ⚠️-ToS, Trae, Windsurf, Zed-hosted, Kimi Code.
+
+## 3.8 Repo-comparison additions (briefs 01–19) — secondary-target annotations (MCPM-1..3)
+
+> Provenance: `REPO-COMPARE/DELTA-ANALYSIS.md` §3 — the MCPM harness-adapter emitter group has **primary**
+> landing in [`15-CONNECT-STORE.md`](15-CONNECT-STORE.md) (store lane; MCPM-2's full record is in its
+> "Repo-comparison additions" section) + [`CAPABILITIES.md`](CAPABILITIES.md) §4 +
+> [`EXTERNAL-AGENTS.md`](EXTERNAL-AGENTS.md) §4. This file is the **secondary** target: it owns only the
+> vault/BYOK half of emitted MCP configs. Evidence paths are relative to
+> `/home/sarvesh/business_Dev/REPO-COMPARE/`. MCP-first stance (ADR-0001) unchanged.
+
+- **MCPM-1** · `[add]` · SOURCE: mcpm.sh (MIT) —
+  `clone3/mcp-plugins-skills-connectors/mcpm.sh/src/mcpm/core/schema.py` · LOGIC: one reviewed internal
+  MCP-server descriptor compiled into per-client harness config stanzas means a single source for what
+  every harness receives, with emitted stanzas referencing vault key ids only, never raw keys.
+  · TARGET (secondary): 15-CONNECT-STORE (primary) + EXTERNAL-AGENTS §4 (impl queued); vault half
+  recorded here.
+- **MCPM-2** · `[improve]` · SOURCE: mcpm.sh (MIT) —
+  `clone3/mcp-plugins-skills-connectors/mcpm.sh/src/mcpm/profile/profile_config.py` · LOGIC:
+  profiles-as-tags — capability-pack membership is a tag query on one manifest, never a duplicate
+  per-profile manifest — keeps BYOK profile switching a resolver input rather than a second config store.
+  · TARGET (secondary): 15-CONNECT-STORE (primary record) + CAPABILITIES §4 (impl queued).
+- **MCPM-3** · `[improve]` · SOURCE: mcpm.sh (MIT) —
+  `clone3/mcp-plugins-skills-connectors/mcpm.sh/src/mcpm/core/schema.py` +
+  `clone3/mcp-plugins-skills-connectors/mcpm.sh/src/mcpm/profile/profile_config.py` · LOGIC: `${VAR}` env
+  indirection in emitted configs resolves **only from vault references at emit time** — plaintext
+  resolution fallback forbidden — so harness-config output never becomes a second key store.
+  · TARGET (secondary): this file §3.4 (vault discipline) + 15-CONNECT-STORE (primary) +
+  EXTERNAL-AGENTS `manifest.env` merge rule (impl queued).

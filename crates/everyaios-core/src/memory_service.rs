@@ -575,22 +575,59 @@ impl MemoryService {
         self.ghost.apply_fs_event(event)
     }
 
-    /// P8/P5.9: record one model call into the usage ledger (the broker feeds
-    /// this from `stream_provider`; it is the per-key/per-session cost data
-    /// the dashboard renders).
-    pub fn record_usage(
+    /// P71.4 — record one **observed** usage report into the usage ledger.
+    ///
+    /// The producer must name where the figure came from ([`UsageSource`]);
+    /// there is no unlabelled door, because an unattributed number in this
+    /// ledger is the fabricated precision `ARCH/ROUTING.md` §5 forbids. Post
+    /// `P71.2c` the producers are the ACP turn (the agent's own report), ACP
+    /// events, provider reports where exposed, and EveryAIOS capability calls
+    /// — the deleted `stream_provider` broker is one of them no longer.
+    #[allow(clippy::too_many_arguments)]
+    pub fn record_usage_from(
         &mut self,
+        source: everyaios_memory::UsageSource,
+        agent: &str,
         key: &str,
         session: &str,
         tokens_in: u64,
         tokens_out: u64,
         cache_hit: bool,
-        cached_tokens: u64,
+        cached_read_tokens: u64,
+        cached_write_tokens: u64,
+        reported_cost_usd: f64,
     ) {
         self.usage.set_active(session, key);
-        self.usage
-            .record(tokens_in, tokens_out, cache_hit, cached_tokens);
+        if !agent.is_empty() {
+            self.usage.begin_session(agent);
+        }
+        self.usage.record_observed(
+            source,
+            tokens_in,
+            tokens_out,
+            cache_hit,
+            cached_read_tokens,
+            cached_write_tokens,
+            reported_cost_usd,
+        );
+        if !agent.is_empty() {
+            self.usage.clear_agent();
+        }
         self.usage.clear_active();
+    }
+
+    /// P71.4 — a turn completed and the agent reported **nothing**. Recorded
+    /// explicitly so a surface can say "no usage reported" rather than render
+    /// a plausible zero (**I15**).
+    pub fn record_usage_unreported(&mut self, owner: &str) {
+        self.usage.record_unreported(owner);
+    }
+
+    /// P71.4 — the turn path names the run's primary agent; the primary/worker
+    /// split is computed from the **agent** dimension only, never guessed from
+    /// a key name.
+    pub fn set_primary_agent(&mut self, agent_id: &str) {
+        self.usage.set_primary_agent(agent_id);
     }
 
     /// P5.9 `usage/snapshot`: the per-key / per-session / cache-hit shape the
@@ -606,10 +643,16 @@ impl MemoryService {
                     "tokensIn": r.tokens_in,
                     "tokensOut": r.tokens_out,
                     "cachedTokens": r.cached_tokens,
+                    "cachedWriteTokens": r.cached_write_tokens,
                     "cacheHits": r.cache_hits,
                     "cacheMisses": r.cache_misses,
                     "cacheHitRate": r.cache_hit_rate(),
+                    // P71.4 — `costUsd` is **our estimate** from configured
+                    // prices; `reportedCostUsd` is what the producer said. Two
+                    // different facts, never summed (I15).
                     "costUsd": self.usage.key_cost_usd(&k),
+                    "reportedCostUsd": r.reported_cost_usd,
+                    "source": self.usage.source_for_key(&k).map(|s| s.as_str()),
                 })
             })
             .collect::<Vec<_>>();
@@ -622,27 +665,32 @@ impl MemoryService {
                     "sessionId": s,
                     "tokensIn": r.tokens_in,
                     "tokensOut": r.tokens_out,
+                    "cachedTokens": r.cached_tokens,
+                    "cachedWriteTokens": r.cached_write_tokens,
                     "cacheHitRate": r.cache_hit_rate(),
+                    "reportedCostUsd": r.reported_cost_usd,
+                    "source": self.usage.source_for_session(&s).map(|s| s.as_str()),
                 })
             })
             .collect::<Vec<_>>();
-        let mut chief_tokens = 0u64;
-        let mut worker_tokens = 0u64;
-        for (k, r) in self.usage.keys() {
-            let n = r.tokens_in.saturating_add(r.tokens_out);
-            if k.to_ascii_lowercase().contains("chief") {
-                chief_tokens = chief_tokens.saturating_add(n);
-            } else {
-                worker_tokens = worker_tokens.saturating_add(n);
-            }
-        }
-        let spend = crate::split_chief_spend(chief_tokens, worker_tokens);
+        // P71.4 — the primary/worker split is computed from the **agent**
+        // dimension when the turn path attributed a primary agent. The old
+        // heuristic (a key whose name contains "chief") is gone: it named a
+        // built-in vocabulary v1 does not have and produced a share from a
+        // guess. `null` = no attribution, and a surface must render that as
+        // "not attributed" rather than 0% (I15).
+        let spend = self.usage.primary_worker_split().map(|(primary, worker)| {
+            crate::split_primary_spend(primary, worker)
+        });
         json!({
             "total": self.usage.total(),
             "cacheHitRate": self.usage.cache_hit_rate(),
             "byKey": keys,
             "bySession": sessions,
-            "chiefSpend": spend,
+            // Renamed from `chiefSpend` (P71.5b held the key until this row).
+            "primarySpend": spend,
+            // P71.4 — provenance, so every number above can name its reporter.
+            "observations": self.usage.observations(),
         })
     }
 
@@ -1213,7 +1261,18 @@ mod tests {
     fn usage_snapshot_tracks_cost_and_cache_hit_rate() {
         let mut m = MemoryService::new();
         m.usage.set_price("anthropic", 3.0, 15.0);
-        m.record_usage("anthropic", "s1", 1_000_000, 100_000, true, 800_000);
+        m.record_usage_from(
+            everyaios_memory::UsageSource::AgentReport,
+            "acme",
+            "anthropic",
+            "s1",
+            1_000_000,
+            100_000,
+            true,
+            800_000,
+            0,
+            0.0,
+        );
         let snap = m.usage_snapshot();
         let key = &snap["byKey"][0];
         assert_eq!(key["key"], "anthropic");
@@ -1618,8 +1677,30 @@ mod tests {
     #[test]
     fn context_breakdown_sums_to_snapshot_total() {
         let mut m = MemoryService::new();
-        m.record_usage("k1", "s1", 1_000, 200, false, 0);
-        m.record_usage("k1", "s2", 500, 100, true, 50);
+        m.record_usage_from(
+            everyaios_memory::UsageSource::AcpEvent,
+            "acme",
+            "k1",
+            "s1",
+            1_000,
+            200,
+            false,
+            0,
+            0,
+            0.0,
+        );
+        m.record_usage_from(
+            everyaios_memory::UsageSource::AcpEvent,
+            "acme",
+            "k1",
+            "s2",
+            500,
+            100,
+            true,
+            50,
+            0,
+            0.0,
+        );
         let snap = m.usage_snapshot();
         let total_in = snap["total"]["tokens_in"].as_u64().unwrap();
         let total_out = snap["total"]["tokens_out"].as_u64().unwrap();

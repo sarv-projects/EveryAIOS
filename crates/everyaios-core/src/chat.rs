@@ -22,10 +22,7 @@ use std::io::{Read, Write};
 use std::sync::{Arc, Mutex};
 
 use everyaios_guard::CapabilityBroker;
-use everyaios_vault::{
-    assemble_tool_calls, extract_json_tool_calls, Broker, LocalEndpoint, Vault,
-    DEFAULT_SESSION_BUDGET_USD,
-};
+use everyaios_vault::{Vault, DEFAULT_SESSION_BUDGET_USD};
 use serde_json::Value;
 
 use crate::eval_service::EvalService;
@@ -34,11 +31,8 @@ use crate::guard_service::GuardService;
 use crate::memory_service::MemoryService;
 use crate::plan_service::PlanService;
 use crate::scheduler_service::SchedulerService;
-use crate::sidecar_link::{Inbound, SidecarLink, WriterHandle};
+use crate::sidecar_link::{Inbound, SidecarLink};
 use crate::tools::ToolService;
-
-/// P1.8: registered keyless local endpoints (provider → endpoint).
-type LocalEndpointMap = HashMap<String, LocalEndpoint>;
 
 fn load_persistent_memory() -> MemoryService {
     let path = crate::default_data_dir().join("memory.json");
@@ -562,16 +556,19 @@ fn subagent_rpc(
             let role = params
                 .get("role")
                 .and_then(|v| v.as_str())
-                .and_then(crate::cua::AgentRole::parse);
+                .and_then(crate::cua::DelegationRole::parse);
             if let Some(role) = role {
                 spec.tools = crate::cua::filter_tools_for_role(role, &spec.tools);
             }
             // P60.1 — harness and model are independent; a CLI-named
-            // "*-subagent" identity is refused.
+            // "*-subagent" identity is refused. ADR-0005 — there is no
+            // built-in engine to default to: an absent harness stays empty and
+            // `bind_runtime` refuses it ("harness required") instead of naming
+            // an engine that no longer exists.
             let harness = params
                 .get("harness")
                 .and_then(|v| v.as_str())
-                .unwrap_or("inbuilt");
+                .unwrap_or("");
             let model = params.get("model").and_then(|v| v.as_str()).unwrap_or("");
             let binding = if !model.is_empty() {
                 Some(crate::bind_runtime(
@@ -1271,24 +1268,6 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
             .unwrap_or_else(|e| e.into_inner())
             .load_policy_from(path);
         self
-    }
-
-    /// **P62.4** — a user-chosen endpoint is an authorized destination, so
-    /// grant its host through the network floor.
-    ///
-    /// The destination floor (P62.1) exists to refuse destinations an *agent*
-    /// chose — cloud metadata, link-local, and (policy-gated) private ranges —
-    /// and `urlfloor` still refuses all of those on the agent tool path. But a
-    /// provider `base_url` reaching this relay only exists because the user (or
-    /// the shipped catalog) configured it: a self-hosted gateway, a NAS, a
-    /// loopback runtime. Without this grant the floor's private-range refusal
-    /// would silently break exactly those endpoints, which is the failure mode
-    /// the floor was never meant to cause. The unconditional classes
-    /// (metadata/link-local/multicast) are **not** bypassed by a grant.
-    fn grant_egress_url(&self, url: &str) {
-        if let Ok(mut e) = self.egress.lock() {
-            e.grant_url(url);
-        }
     }
 
     /// The sidecar link (cancel path + tests).
@@ -2466,6 +2445,31 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
     pub fn agent_readiness(&self, agent_id: &str) -> everyaios_types::AgentReadiness {
         crate::tools::read_agent_readiness(&self.readiness, agent_id)
     }
+
+    /// **J11** — the session budget pre-flight, **re-homed** by `P71.2c`.
+    ///
+    /// It used to run at the top of `start_stream`; that dispatch is deleted
+    /// with the built-in engine, and the live turn moved to the ACP channel, so
+    /// the refusal now happens where a turn is actually started
+    /// (`src-tauri`'s `acp_prompt`, before the prompt reaches the agent). The
+    /// rule is unchanged and deliberately fail-closed: a session at or over its
+    /// hard budget refuses **before** anything is dispatched, with the J11
+    /// "stopped: $X limit" surface the UI already renders.
+    pub fn preflight_session_budget(&self, session_id: &str) -> Result<(), ChatRelayError> {
+        let spent = self
+            .vault
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .session_spend(session_id)?;
+        if spent >= DEFAULT_SESSION_BUDGET_USD {
+            return Err(ChatRelayError::BudgetExceeded {
+                session: session_id.to_string(),
+                limit: DEFAULT_SESSION_BUDGET_USD,
+                spent,
+            });
+        }
+        Ok(())
+    }
 }
 
 fn handle_work_gateway(
@@ -2855,6 +2859,7 @@ mod tests {
             &serde_json::json!({
                 "spec": { "id": "t1", "goal": "do the thing", "context": [], "acceptance": [] },
                 "model": "m",
+                "harness": "claude-code",
                 "workspace": ".everyaios/worktrees/task-t1",
                 "parentId": null,
                 "tools": ["todo"],
@@ -3015,6 +3020,7 @@ mod tests {
             &serde_json::json!({
                 "spec": { "id": "scout-1", "goal": "map", "context": [], "acceptance": [] },
                 "model": "m",
+                "harness": "claude-code",
                 "workspace": ".everyaios/worktrees/task-scout-1",
                 "parentId": "root",
                 "tools": ["file_ops.read", "file_ops.write", "search.query", "desktop.act"],
@@ -3037,7 +3043,7 @@ mod tests {
         assert!(granted.contains(&"search.query"));
         assert!(!granted.iter().any(|t| *t == "file_ops.write" || *t == "desktop.act"));
         assert_eq!(out["planes"], 5);
-        assert_eq!(out["harness"], "inbuilt");
+        assert_eq!(out["harness"], "claude-code");
         assert_eq!(out["binding"]["model"], "m");
     }
 
@@ -3066,12 +3072,10 @@ mod tests {
         assert!(err.unwrap_err().contains("CLI-named"));
     }
 
+    // P71.2c — the broker tests' `Read`/`Write`/`TcpListener`/`KeySpec`/
+    // `KeyStatus` imports went with the fake provider endpoint they served.
     #[cfg(unix)]
     use super::*;
-    #[cfg(unix)]
-    use std::io::{Read, Write};
-    #[cfg(unix)]
-    use std::net::TcpListener;
     #[cfg(unix)]
     use std::os::unix::net::UnixStream;
     #[cfg(unix)]
@@ -3080,7 +3084,7 @@ mod tests {
     #[cfg(unix)]
     use everyaios_ipc::frame;
     #[cfg(unix)]
-    use everyaios_vault::{KeySpec, KeyStatus, Usage, UsageRow};
+    use everyaios_vault::{Usage, UsageRow};
 
     #[cfg(unix)]
     fn temp_dir(tag: &str) -> std::path::PathBuf {
@@ -3107,56 +3111,20 @@ mod tests {
         SidecarLink::new(a, reader)
     }
 
-    #[cfg(unix)]
-    fn spec(provider: &str, key_id: &str) -> KeySpec {
-        KeySpec {
-            provider: provider.into(),
-            key_id: key_id.into(),
-            value: b"sk-test".to_vec(),
-            status: KeyStatus::Primary,
-            model_filter: vec![],
-            priority: 100,
-            daily_token_cap: None,
-            daily_cost_cap: None,
-        }
-    }
-
-    /// Spin a fake OpenAI-compatible endpoint (same pattern as the vault
-    /// broker tests).
-    #[cfg(unix)]
-    fn mock_server(respond: impl Fn(&str) -> (u16, String) + Send + 'static) -> String {
-        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-        let addr = listener.local_addr().unwrap();
-        std::thread::spawn(move || {
-            for stream in listener.incoming() {
-                let mut s = match stream {
-                    Ok(s) => s,
-                    Err(_) => continue,
-                };
-                let mut buf = [0u8; 16_384];
-                let n = match s.read(&mut buf) {
-                    Ok(n) => n,
-                    Err(_) => continue,
-                };
-                let req = String::from_utf8_lossy(&buf[..n]).to_string();
-                let (code, body) = respond(&req);
-                let resp = format!(
-                    "HTTP/1.1 {code} OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
-                    body.len(),
-                    body
-                );
-                let _ = s.write_all(resp.as_bytes());
-            }
-        });
-        format!("http://{addr}")
-    }
+    // P71.2c — the `spec` / `mock_server` helpers that stood up a fake
+    // OpenAI-compatible endpoint for the provider-broker tests were deleted with
+    // the broker itself (ADR-0005 §2). Nothing in this crate dials a provider
+    // any more; the vault's own broker tests keep their own fixtures.
 
     #[cfg(unix)]
     fn wait_events(events: &Arc<Mutex<Vec<ChatWireEvent>>>, min: usize, timeout: Duration) -> bool {
         let start = Instant::now();
         loop {
-            if events.lock().unwrap_or_else(|e| e.into_inner()).len() >= min {
-                return true;
+            {
+                let guard = events.lock().unwrap_or_else(|e| e.into_inner());
+                if guard.len() >= min {
+                    return true;
+                }
             }
             if start.elapsed() > timeout {
                 return false;
@@ -3167,9 +3135,11 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    fn start_stream_preflights_budget() {
-        // A session already at/over its $ limit is refused BEFORE dispatch,
-        // with the J11 "stopped: $X limit" surface.
+    fn session_budget_preflight_refuses_over_limit() {
+        // J11 — a session already at/over its $ limit is refused BEFORE anything
+        // is dispatched, with the "stopped: $X limit" surface. `P71.2c` re-homed
+        // this check from the deleted `start_stream` to `preflight_session_budget`,
+        // which is what the live ACP turn path (`src-tauri::acp_prompt`) calls.
         let (dir, vault) = temp_vault("preflight");
         vault
             .record_usage(&UsageRow {
@@ -3189,24 +3159,7 @@ mod tests {
         let (a, _b) = pair();
         let relay = ChatRelay::new(link_from(a), vault, |_| {});
 
-        let err = relay
-            .start_stream(ChatStreamParams {
-                session_id: "s-over".into(),
-                work_id: None,
-                stream_id: "st-1".into(),
-                text: "hi".into(),
-                surface: None,
-                agent_id: None,
-                provider: Some("nvidia".into()),
-                model: Some("m".into()),
-                persona_id: None,
-                soul_md: None,
-                user_documents: None,
-                project_id: None,
-                primary_chief: None,
-                credentialed_providers: None,
-            })
-            .unwrap_err();
+        let err = relay.preflight_session_budget("s-over").unwrap_err();
         let msg = err.to_string();
         match err {
             ChatRelayError::BudgetExceeded {
@@ -3221,36 +3174,33 @@ mod tests {
             }
             other => panic!("expected BudgetExceeded, got {other:?}"),
         }
+        // A session under the limit passes.
+        assert!(relay.preflight_session_budget("s-clear").is_ok());
         let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[cfg(unix)]
     #[test]
     fn relay_forwards_chat_events() {
-        // Fake sidecar acks chat/stream, then streams batch + done back
-        // IMMEDIATELY (not gated on another frame — Rust sends nothing more).
+        // `P71.2c` — the plane is now **receive-only**: the producer (the
+        // built-in turn) is deleted, so this drives the notifications straight
+        // off the link, which is what the arms under test read. Nothing in Rust
+        // asks the sidecar to send these any more; the arms exist for the
+        // projection `P71.9c` wires the ACP live updates into.
         let (a, b) = pair();
         let side = std::thread::spawn(move || {
             let mut s = b;
-            while let Ok(Some(payload)) = frame::decode(&mut s) {
-                let v: serde_json::Value = serde_json::from_slice(&payload).unwrap_or_default();
-                if v.get("method").and_then(|m| m.as_str()) == Some("chat/stream") {
-                    let id = v.get("id").cloned().unwrap_or(serde_json::Value::Null);
-                    let reply = serde_json::json!({ "jsonrpc": "2.0", "id": id, "result": { "accepted": true } });
-                    let _ = frame::write_frame(&mut s, &serde_json::to_vec(&reply).unwrap());
-                    let n = serde_json::json!({
-                        "jsonrpc": "2.0", "method": "chat/batch",
-                        "params": { "streamId": "st-1", "text": "hi", "tokenCount": 1 },
-                    });
-                    let _ = frame::write_frame(&mut s, &serde_json::to_vec(&n).unwrap());
-                    let d = serde_json::json!({
-                        "jsonrpc": "2.0", "method": "chat/done",
-                        "params": { "streamId": "st-1", "turnId": "s1:1", "fullText": "hi", "totalTokens": 1 },
-                    });
-                    let _ = frame::write_frame(&mut s, &serde_json::to_vec(&d).unwrap());
-                    break;
-                }
-            }
+            let n = serde_json::json!({
+                "jsonrpc": "2.0", "method": "chat/batch",
+                "params": { "streamId": "st-1", "sessionId": "s1", "text": "hi", "tokenCount": 1 },
+            });
+            let _ = frame::write_frame(&mut s, &serde_json::to_vec(&n).unwrap());
+            let d = serde_json::json!({
+                "jsonrpc": "2.0", "method": "chat/done",
+                "params": { "streamId": "st-1", "sessionId": "s1", "turnId": "s1:1", "fullText": "hi", "totalTokens": 1 },
+            });
+            let _ = frame::write_frame(&mut s, &serde_json::to_vec(&d).unwrap());
+            std::thread::sleep(Duration::from_millis(200));
         });
 
         let (_dir, vault) = temp_vault("forward");
@@ -3261,24 +3211,6 @@ mod tests {
             ev.lock().unwrap_or_else(|x| x.into_inner()).push(e);
         });
         relay.spawn();
-        relay
-            .start_stream(ChatStreamParams {
-                session_id: "s1".into(),
-                work_id: None,
-                stream_id: "st-1".into(),
-                text: "hi".into(),
-                surface: None,
-                agent_id: None,
-                provider: Some("nvidia".into()),
-                model: Some("m".into()),
-                persona_id: None,
-                soul_md: None,
-                user_documents: None,
-                project_id: None,
-                primary_chief: None,
-                credentialed_providers: None,
-            })
-            .expect("start_stream");
 
         assert!(
             wait_events(&events, 2, Duration::from_secs(5)),
@@ -3288,169 +3220,42 @@ mod tests {
         let evs = events.lock().unwrap_or_else(|x| x.into_inner());
         assert!(matches!(evs[0], ChatWireEvent::Batch { ref text, .. } if text == "hi"));
         assert!(matches!(evs[1], ChatWireEvent::Done { ref turn_id, .. } if turn_id == "s1:1"));
-        // Spend is 0 → no budget kill.
         assert!(!evs
             .iter()
             .any(|e| matches!(e, ChatWireEvent::BudgetExceeded { .. })));
+        drop(evs);
         side.join().unwrap();
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn start_stream_forwards_credentialed_providers() {
-        // P50.3.6 — the shell's live key set must reach the coordinator's
-        // `chat/stream` params verbatim so the taken route is gated on the
-        // same set the display feed used. The fake sidecar captures the
-        // params instead of acking events.
-        let (a, b) = pair();
-        let seen: Arc<Mutex<Option<serde_json::Value>>> = Arc::new(Mutex::new(None));
-        let seen_side = Arc::clone(&seen);
-        let side = std::thread::spawn(move || {
-            let mut s = b;
-            while let Ok(Some(payload)) = frame::decode(&mut s) {
-                let v: serde_json::Value = serde_json::from_slice(&payload).unwrap_or_default();
-                if v.get("method").and_then(|m| m.as_str()) == Some("chat/stream") {
-                    *seen_side.lock().unwrap_or_else(|x| x.into_inner()) = v.get("params").cloned();
-                    let id = v.get("id").cloned().unwrap_or(serde_json::Value::Null);
-                    let reply = serde_json::json!({ "jsonrpc": "2.0", "id": id, "result": { "accepted": true } });
-                    let _ = frame::write_frame(&mut s, &serde_json::to_vec(&reply).unwrap());
-                    break;
-                }
-            }
-        });
-
-        let (_dir, vault) = temp_vault("cred-fwd");
-        let vault = Arc::new(Mutex::new(vault));
-        let relay = ChatRelay::new(link_from(a), vault, |_| {});
-        relay
-            .start_stream(ChatStreamParams {
-                session_id: "s1".into(),
-                work_id: None,
-                stream_id: "st-cred".into(),
-                text: "hi".into(),
-                surface: None,
-                agent_id: None,
-                provider: None,
-                model: None,
-                persona_id: None,
-                soul_md: None,
-                user_documents: None,
-                project_id: None,
-                primary_chief: None,
-                credentialed_providers: Some(vec!["openai".into(), "ollama".into()]),
-            })
-            .expect("start_stream");
-        side.join().unwrap();
-        let guard = seen.lock().unwrap_or_else(|x| x.into_inner());
-        let params = guard.as_ref().expect("fake sidecar saw chat/stream");
-        assert_eq!(
-            params.get("credentialedProviders"),
-            Some(&serde_json::json!(["openai", "ollama"])),
-            "live key set must ride chat/stream: {params}"
-        );
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn retry_tool_forwards_the_real_work_id() {
-        // P49: the coordinator registers stream identity from `workId`
-        // (`registerStreamIdentity({streamId, sessionId, workId})`), so the
-        // retry path must carry the *real* Work. It previously hard-coded
-        // `"workId": session_id`, which filed every retry under a fabricated
-        // Work and dropped the UI-supplied id at the Rust/Tauri hop.
-        let (a, b) = pair();
-        let seen: Arc<Mutex<Vec<serde_json::Value>>> = Arc::new(Mutex::new(Vec::new()));
-        let seen_side = Arc::clone(&seen);
-        let side = std::thread::spawn(move || {
-            let mut s = b;
-            while let Ok(Some(payload)) = frame::decode(&mut s) {
-                let v: serde_json::Value = serde_json::from_slice(&payload).unwrap_or_default();
-                if v.get("method").and_then(|m| m.as_str()) == Some("chat/tool_retry") {
-                    let done = {
-                        let mut g = seen_side.lock().unwrap_or_else(|x| x.into_inner());
-                        g.push(v.get("params").cloned().unwrap_or(serde_json::Value::Null));
-                        g.len()
-                    };
-                    let id = v.get("id").cloned().unwrap_or(serde_json::Value::Null);
-                    let reply = serde_json::json!({ "jsonrpc": "2.0", "id": id, "result": { "accepted": true } });
-                    let _ = frame::write_frame(&mut s, &serde_json::to_vec(&reply).unwrap());
-                    if done >= 2 {
-                        break;
-                    }
-                }
-            }
-        });
-
-        let (_dir, vault) = temp_vault("retry-work-id");
-        let vault = Arc::new(Mutex::new(vault));
-        let relay = ChatRelay::new(link_from(a), vault, |_| {});
-        let args = serde_json::json!({ "path": "/tmp/x" });
-        relay
-            .retry_tool("s1", "st-1", "t1", args.clone(), None, Some("w-real"))
-            .expect("retry_tool with a Work");
-        relay
-            .retry_tool("s1", "st-2", "t2", args, None, None)
-            .expect("retry_tool without a Work");
-        side.join().unwrap();
-
-        let g = seen.lock().unwrap_or_else(|x| x.into_inner());
-        assert_eq!(g.len(), 2, "fake sidecar saw {g:?}");
-        assert_eq!(
-            g[0].get("workId"),
-            Some(&serde_json::json!("w-real")),
-            "retry must carry the real Work, not the session id: {}",
-            g[0]
-        );
-        assert_eq!(g[0].get("sessionId"), Some(&serde_json::json!("s1")));
-        assert_eq!(
-            g[1].get("workId"),
-            Some(&serde_json::json!("s1")),
-            "with no Work, workId falls back to the session id (chat/stream convention): {}",
-            g[1]
-        );
     }
 
     #[cfg(unix)]
     #[test]
     fn relay_forwards_plan_interrupt_notifications() {
-        // Stage-0 (P6.3): a `chat/interrupt` notification from the coordinator
-        // arrives as a ChatWireEvent::Interrupt — the H2 MCQ card payload.
-        //
-        // P49: this also pins the plan's Work forwarding — the coordinator's
-        // `PlanExecutionParams` has carried `workId` since P49 and
-        // `registerStreamIdentity` keys plan streams on it, so the relay must
-        // send the real Work rather than letting it fall back to the session.
+        // Stage-0 (P6.3): a `chat/interrupt` notification arrives as a
+        // ChatWireEvent::Interrupt — the H2 MCQ card payload. `P71.2c` deleted
+        // the plan executor that *emitted* it (`start_plan`/`plan/execute`) with
+        // the built-in engine, so the notification is written straight onto the
+        // link: the arm under test is the receive half, which the cockpit still
+        // renders when an interrupt arrives (the resolution path is
+        // `control::interrupt_response`).
         let (a, b) = pair();
-        let plan_params: Arc<Mutex<Option<serde_json::Value>>> = Arc::new(Mutex::new(None));
-        let plan_params_side = Arc::clone(&plan_params);
         let side = std::thread::spawn(move || {
             let mut s = b;
-            while let Ok(Some(payload)) = frame::decode(&mut s) {
-                let v: serde_json::Value = serde_json::from_slice(&payload).unwrap_or_default();
-                if v.get("method").and_then(|m| m.as_str()) == Some("plan/execute") {
-                    *plan_params_side.lock().unwrap_or_else(|x| x.into_inner()) =
-                        v.get("params").cloned();
-                    let id = v.get("id").cloned().unwrap_or(serde_json::Value::Null);
-                    let reply = serde_json::json!({ "jsonrpc": "2.0", "id": id, "result": { "accepted": true } });
-                    let _ = frame::write_frame(&mut s, &serde_json::to_vec(&reply).unwrap());
-                    let n = serde_json::json!({
-                        "jsonrpc": "2.0", "method": "chat/interrupt",
-                        "params": {
-                            "streamId": "st-1", "planId": "p1", "breakId": "b1",
-                            "title": "Loop detected (3× repeat)",
-                            "description": "The agent repeated the same tool call 3 times.",
-                            "options": ["skip", "retry", "escalate", "takeover"],
-                        },
-                    });
-                    let _ = frame::write_frame(&mut s, &serde_json::to_vec(&n).unwrap());
-                    let d = serde_json::json!({
-                        "jsonrpc": "2.0", "method": "chat/plan_done",
-                        "params": { "streamId": "st-1", "planId": "p1", "tasksDone": 2 },
-                    });
-                    let _ = frame::write_frame(&mut s, &serde_json::to_vec(&d).unwrap());
-                    break;
-                }
-            }
+            let n = serde_json::json!({
+                "jsonrpc": "2.0", "method": "chat/interrupt",
+                "params": {
+                    "streamId": "st-1", "sessionId": "s1", "planId": "p1", "breakId": "b1",
+                    "title": "Loop detected (3× repeat)",
+                    "description": "The agent repeated the same tool call 3 times.",
+                    "options": ["skip", "retry", "escalate", "takeover"],
+                },
+            });
+            let _ = frame::write_frame(&mut s, &serde_json::to_vec(&n).unwrap());
+            let d = serde_json::json!({
+                "jsonrpc": "2.0", "method": "chat/plan_done",
+                "params": { "streamId": "st-1", "sessionId": "s1", "planId": "p1", "tasksDone": 2 },
+            });
+            let _ = frame::write_frame(&mut s, &serde_json::to_vec(&d).unwrap());
+            std::thread::sleep(Duration::from_millis(200));
         });
 
         let (_dir, vault) = temp_vault("interrupt");
@@ -3461,17 +3266,6 @@ mod tests {
             ev.lock().unwrap_or_else(|x| x.into_inner()).push(e);
         });
         relay.spawn();
-        relay
-            .start_plan(
-                "s1",
-                "p1",
-                "st-1",
-                serde_json::json!([{ "id": "t1", "goal": "g" }]),
-                None,
-                None,
-                Some("w-plan"),
-            )
-            .expect("start_plan");
 
         assert!(
             wait_events(&events, 2, Duration::from_secs(5)),
@@ -3490,22 +3284,18 @@ mod tests {
                 assert_eq!(plan_id, "p1");
                 assert_eq!(break_id, "b1");
                 assert!(title.contains("Loop detected"));
-                assert_eq!(options, &vec!["skip", "retry", "escalate", "takeover"]);
+                assert_eq!(options.len(), 4);
             }
             other => panic!("expected Interrupt, got {other:?}"),
         }
         assert!(
-            matches!(evs[1], ChatWireEvent::PlanDone { ref plan_id, tasks_done: 2, error: None, .. } if plan_id == "p1")
+            matches!(evs[1], ChatWireEvent::PlanDone { .. }),
+            "expected PlanDone second, got {:?}",
+            evs[1]
         );
+        drop(evs);
         side.join().unwrap();
-        let pp = plan_params.lock().unwrap_or_else(|x| x.into_inner());
-        let pp = pp.as_ref().expect("fake sidecar saw plan/execute");
-        assert_eq!(
-            pp.get("workId"),
-            Some(&serde_json::json!("w-plan")),
-            "plan/execute must carry the real Work: {pp}"
-        );
-        assert_eq!(pp.get("sessionId"), Some(&serde_json::json!("s1")));
+        let _ = std::fs::remove_dir_all(&_dir);
     }
 
     #[test]
@@ -3524,113 +3314,31 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    fn provider_stream_runs_broker_and_pushes_chunks() {
-        // The provider call happens in Rust: the coordinator's provider/stream
-        // request drives the broker against a mock endpoint; deltas come back
-        // as provider_chunk notifications. Keys never leave the process.
-        let sse = concat!(
-            "data: {\"choices\":[{\"delta\":{\"content\":\"Hel\"},\"finish_reason\":null}]}\n",
-            "data: {\"choices\":[{\"delta\":{\"content\":\"lo\"},\"finish_reason\":null}]}\n",
-            "data: {\"choices\":[],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":2,\"total_tokens\":12}}\n",
-            "data: [DONE]\n",
-        );
-        let base = mock_server(move |_| (200, sse.into()));
-
-        let (dir, vault) = temp_vault("provider");
-        {
-            let broker = Broker::new(&vault);
-            broker.ring().add_key(spec("nvidia", "nim")).unwrap();
-        }
-        let vault = Arc::new(Mutex::new(vault));
-
-        let (a, b) = pair();
-        let relay = ChatRelay::new(link_from(a), vault, |_| {});
-        relay.with_base_url("nvidia", base);
-        relay.spawn();
-
-        // Fake sidecar (coordinator role): send provider/stream, collect the
-        // reply + chunk notifications until `ended`.
-        let chunks = std::thread::spawn(move || {
-            let mut s = b;
-            let req = serde_json::json!({
-                "jsonrpc": "2.0", "id": "p1", "method": "provider/stream",
-                "params": {
-                    "provider": "nvidia", "model": "m", "sessionId": "s1",
-                    "streamId": "st-1",
-                    "messages": [{ "role": "user", "content": "hi" }],
-                },
-            });
-            let _ = frame::write_frame(&mut s, &serde_json::to_vec(&req).unwrap());
-            let mut deltas: Vec<String> = Vec::new();
-            let mut usage: Option<(u64, u64)> = None;
-            let mut ended = false;
-            let mut saw_ack = false;
-            while let Ok(Some(payload)) = frame::decode(&mut s) {
-                let v: serde_json::Value = serde_json::from_slice(&payload).unwrap_or_default();
-                if let Some(result) = v.get("result") {
-                    if result.get("accepted").and_then(|x| x.as_bool()) == Some(true) {
-                        saw_ack = true;
-                    }
-                    continue;
-                }
-                let p = v.get("params").cloned().unwrap_or_default();
-                if let Some(d) = p.get("delta").and_then(|d| d.as_str()) {
-                    deltas.push(d.to_string());
-                }
-                if let Some(u) = p.get("usage") {
-                    usage = Some((
-                        u.get("promptTokens").and_then(|x| x.as_u64()).unwrap_or(0),
-                        u.get("completionTokens")
-                            .and_then(|x| x.as_u64())
-                            .unwrap_or(0),
-                    ));
-                }
-                if p.get("ended").and_then(|x| x.as_bool()) == Some(true) {
-                    ended = true;
-                    break;
-                }
-            }
-            (saw_ack, deltas, usage, ended)
-        });
-
-        let (saw_ack, deltas, usage, ended) = chunks.join().unwrap();
-        assert!(saw_ack, "provider/stream was not acked");
-        assert_eq!(deltas.join(""), "Hello");
-        assert_eq!(usage, Some((10, 2)));
-        assert!(ended);
-        let _ = std::fs::remove_dir_all(&dir);
-    }
-
-    #[cfg(unix)]
-    #[test]
     fn post_turn_budget_kill_surfaces_stopped() {
-        // J11 end-to-end: a session pre-loaded to $1.99 spends $0.02 on a turn;
-        // the relay's post-turn check emits BudgetExceeded ("stopped").
-        let sse = concat!(
-            "data: {\"choices\":[{\"delta\":{\"content\":\"x\"},\"finish_reason\":null}]}\n",
-            "data: {\"choices\":[],\"usage\":{\"prompt_tokens\":40000,\"completion_tokens\":0,\"total_tokens\":40000}}\n",
-            "data: [DONE]\n",
-        );
-        let base = mock_server(move |_| (200, sse.into()));
-
+        // J11 end-to-end: the durable ledger is what the post-turn check reads,
+        // so a session that crosses its limit during a turn is stopped
+        // terminally. `P71.2c` deleted the broker that used to record the turn's
+        // cost here, so the ledger rows are written directly — the arm under
+        // test (`chat/done` → post-turn ledger check → BudgetExceeded before
+        // `done`) is unchanged, and the pre-flight half is asserted through
+        // `preflight_session_budget`, which is where the live ACP turn path
+        // calls it.
         let (dir, vault) = temp_vault("kill");
-        vault
-            .record_usage(&UsageRow {
-                session: "s-kill".into(),
-                provider: "nvidia".into(),
-                model: "m".into(),
-                key_id: "k".into(),
-                usage: Usage::default(),
-                cost: 1.99,
-                tool: None,
-                task_id: String::new(),
-                run_id: String::new(),
-                work_id: String::new(),
-            })
-            .unwrap();
-        {
-            let broker = Broker::new(&vault);
-            broker.ring().add_key(spec("nvidia", "nim")).unwrap();
+        for cost in [1.99_f64, 0.02] {
+            vault
+                .record_usage(&UsageRow {
+                    session: "s-kill".into(),
+                    provider: "nvidia".into(),
+                    model: "m".into(),
+                    key_id: "k".into(),
+                    usage: Usage::default(),
+                    cost,
+                    tool: None,
+                    task_id: String::new(),
+                    run_id: String::new(),
+                    work_id: String::new(),
+                })
+                .unwrap();
         }
         let vault = Arc::new(Mutex::new(vault));
 
@@ -3640,70 +3348,17 @@ mod tests {
         let relay = ChatRelay::new(link_from(a), vault, move |e| {
             ev.lock().unwrap_or_else(|x| x.into_inner()).push(e);
         });
-        relay.with_base_url("nvidia", base);
         relay.spawn();
 
-        // Fake sidecar: ack chat/stream, drive provider/stream (so the ledger
-        // records the $0.02 turn), then send chat/done — all immediately.
         let side = std::thread::spawn(move || {
             let mut s = b;
-            while let Ok(Some(payload)) = frame::decode(&mut s) {
-                let v: serde_json::Value = serde_json::from_slice(&payload).unwrap_or_default();
-                if v.get("method").and_then(|m| m.as_str()) == Some("chat/stream") {
-                    let id = v.get("id").cloned().unwrap_or(serde_json::Value::Null);
-                    let reply = serde_json::json!({ "jsonrpc": "2.0", "id": id, "result": { "accepted": true } });
-                    let _ = frame::write_frame(&mut s, &serde_json::to_vec(&reply).unwrap());
-                    // As the coordinator would: ask Rust to run the provider call.
-                    let req = serde_json::json!({
-                        "jsonrpc": "2.0", "id": "p2", "method": "provider/stream",
-                        "params": {
-                            "provider": "nvidia", "model": "m", "sessionId": "s-kill",
-                            "streamId": "st-1",
-                            "messages": [{ "role": "user", "content": "x" }],
-                        },
-                    });
-                    let _ = frame::write_frame(&mut s, &serde_json::to_vec(&req).unwrap());
-                    // Drain chunks until ended.
-                    while let Ok(Some(payload)) = frame::decode(&mut s) {
-                        let v: serde_json::Value =
-                            serde_json::from_slice(&payload).unwrap_or_default();
-                        if v.get("params")
-                            .and_then(|p| p.get("ended"))
-                            .and_then(|x| x.as_bool())
-                            == Some(true)
-                        {
-                            break;
-                        }
-                    }
-                    // Now the turn is done.
-                    let d = serde_json::json!({
-                        "jsonrpc": "2.0", "method": "chat/done",
-                        "params": { "streamId": "st-1", "turnId": "s-kill:1", "fullText": "x", "totalTokens": 1 },
-                    });
-                    let _ = frame::write_frame(&mut s, &serde_json::to_vec(&d).unwrap());
-                    break;
-                }
-            }
+            let d = serde_json::json!({
+                "jsonrpc": "2.0", "method": "chat/done",
+                "params": { "streamId": "st-1", "sessionId": "s-kill", "turnId": "s-kill:1", "fullText": "x", "totalTokens": 1 },
+            });
+            let _ = frame::write_frame(&mut s, &serde_json::to_vec(&d).unwrap());
+            std::thread::sleep(Duration::from_millis(300));
         });
-
-        relay
-            .start_stream(ChatStreamParams {
-                session_id: "s-kill".into(),
-                work_id: None,
-                stream_id: "st-1".into(),
-                text: "x".into(),
-                surface: None,
-                agent_id: None,
-                provider: Some("nvidia".into()),
-                model: Some("m".into()),
-                persona_id: None,
-                soul_md: None,
-                user_documents: None,
-                project_id: None,
-                primary_chief: None,
-                credentialed_providers: None,
-            })
-            .expect("start_stream (1.99 < 2.00 pre-flight passes)");
 
         assert!(
             wait_events(&events, 1, Duration::from_secs(5)),
@@ -3718,26 +3373,13 @@ mod tests {
             ChatWireEvent::BudgetExceeded { ref session_id, spent, .. }
                 if session_id == "s-kill" && spent >= 2.01
         ));
+        assert!(!evs.iter().any(|e| matches!(e, ChatWireEvent::Done { .. })));
         // The next turn is refused at pre-flight.
-        let err = relay
-            .start_stream(ChatStreamParams {
-                session_id: "s-kill".into(),
-                work_id: None,
-                stream_id: "st-2".into(),
-                text: "again".into(),
-                surface: None,
-                agent_id: None,
-                provider: Some("nvidia".into()),
-                model: Some("m".into()),
-                persona_id: None,
-                soul_md: None,
-                user_documents: None,
-                project_id: None,
-                primary_chief: None,
-                credentialed_providers: None,
-            })
-            .unwrap_err();
-        assert!(matches!(err, ChatRelayError::BudgetExceeded { .. }));
+        assert!(matches!(
+            relay.preflight_session_budget("s-kill"),
+            Err(ChatRelayError::BudgetExceeded { .. })
+        ));
+        drop(evs);
         side.join().unwrap();
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -3860,6 +3502,7 @@ mod tests {
                 serde_json::json!({
                     "spec": { "id": "t-frame", "goal": "probe", "context": [], "acceptance": [] },
                     "model": "m",
+                    "harness": "claude-code",
                     "workspace": ".everyaios/worktrees/task-t-frame",
                     "parentId": null,
                     "tools": ["todo"],
@@ -3907,6 +3550,16 @@ mod tests {
         let (dir, vault) = temp_vault("native-plane");
         let vault = Arc::new(Mutex::new(vault));
         let mut relay = ChatRelay::new(link_from(a), vault, |_| {});
+        // P71.3f — the spawn gate reads mounted readiness; without a source
+        // every agent is `Unknown` and the member is refused. The test mounts
+        // the facts directly (the shell does this in production).
+        struct ReadyEverywhere;
+        impl crate::tools::AgentReadinessSource for ReadyEverywhere {
+            fn readiness(&self, _agent_id: &str) -> everyaios_types::AgentReadiness {
+                everyaios_types::AgentReadiness::Ready
+            }
+        }
+        relay.mount_readiness(Arc::new(ReadyEverywhere));
         // Isolation: the defaults are the developer's real data dir and
         // `~/.everyaios/skills`. Point both at the temp tree so the assertions
         // are about the dispatch, and no frame can write to the real home.

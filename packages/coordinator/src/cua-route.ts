@@ -1,6 +1,6 @@
 /**
  * P59.1 / P59.11 — preference ladder in code, not a prompt.
- * Office file → office engines; http(s)/file URL → inbuilt Browse; else Desktop.
+ * Office file → office engines; http(s)/file URL → the Rust Browse engine; else Desktop.
  * Mirrors `everyaios-core::route_work_surface`.
  */
 
@@ -53,7 +53,7 @@ export function refuseDesktopIfWrongSurface(
     return {
       ok: false,
       surface,
-      error: "use inbuilt Browse CDP for this URL — CUA is last on the ladder",
+      error: "use the Browse engine's CDP for this URL — CUA is last on the ladder",
     };
   }
   return { ok: true };

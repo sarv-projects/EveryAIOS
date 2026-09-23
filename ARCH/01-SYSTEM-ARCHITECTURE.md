@@ -61,7 +61,7 @@ Every subsystem placement follows this test (derived from the ownership matrix, 
 
 ### Harness & swarm orchestration (planes 2 + 5)
 
-- **Logic**: `crates/everyaios-acp`, `crates/everyaios-core/src/multirun.rs`, `worktrees.rs`, `packages/coordinator/src/chat.ts`.
+- **Logic**: `crates/everyaios-acp`, `crates/everyaios-core/src/multirun.rs`, `worktrees.rs`, `packages/coordinator/src/chief.ts` (delegation policy). *`chat.ts` — the built-in turn loop — was **archived 2026-09-22** with the engine (`ARCH/archive/coordinator-loop/`, `P71.2c`).*
 - **Submodules & Functions**:
   - `acp_client_server`: Bidirectional stdio JSON-RPC transport driving external agents.
   - `worktree_swarm_manager`: Isolated Git worktrees (`.everyaios/worktrees/task-<id>`) with serialized queue and disk headroom reservations.
@@ -82,7 +82,7 @@ Every subsystem placement follows this test (derived from the ownership matrix, 
 
 ### Cockpit shell & context engineering (planes 1 + 2)
 
-- **Logic**: `packages/coordinator/src/prompt.ts`, `crates/everyaios-engine`, `src-tauri/src/`.
+- **Logic**: `crates/everyaios-engine`, `src-tauri/src/` (the context passport in `acp_cmds.rs` is the live projection). *`packages/coordinator/src/prompt.ts` was **archived 2026-09-22** (`ARCH/archive/coordinator-loop/`, `P71.2c`).*
 - **Submodules & Functions**:
   - `prompt_assembler`: 12-segment cache-affine prompt builder with `CACHE_BOUNDARY` markers (I16, I22: serializes Context, owns no policy).
   - `context_compaction_pipeline`: Trims volatile turns, enforces pass-by-ref handles (`refRegistry`), paginates large outputs (50KB cap) — strategies under [`CONTEXT.md`](CONTEXT.md) (I17–I20).

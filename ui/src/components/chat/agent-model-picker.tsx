@@ -6,13 +6,11 @@ import {
   ChevronDown,
   Cpu,
   Download,
-  Gauge,
   KeyRound,
   Loader2,
   RotateCw,
   Route,
   Sparkles,
-  Zap,
   FileSpreadsheet,
   Globe,
   Monitor,
@@ -33,20 +31,16 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { useAppStore } from '@/lib/store'
 import {
   AGENTS,
-  formatContext,
-  formatPrice,
-  getModelsForAgentLive,
-  isNativeRuntime,
   isRuntimeUsable,
   CAPABILITY_LABELS,
   type AgentRuntime,
 } from '@/lib/agents'
 import { cn } from '@/lib/utils'
-import { ensureLocal, listLocalModels, type LocalModelRow } from '@/lib/local-models'
 import {
   acpIdFor,
   chiefDefaultGet,
   chiefDefaultSet,
+  currentBinding,
   governanceLabel,
   acpAgentImport,
   acpAgentVerify,
@@ -57,22 +51,13 @@ import {
 import { STANDARD_SHARED_CAPABILITIES, isCapabilityEnabled } from '@/lib/capabilities'
 import { refreshAgentCatalog } from '@/lib/bridge'
 import { inTauri } from '@/lib/tauri'
-import { catalogProviderModels, catalogProviders, formatPerM } from '@/lib/providers'
-import {
-  catalogPickLabel,
-  catalogPickerModels,
-  usableCatalogProviders,
-  type CatalogPickerModel,
-} from '@/lib/catalog-models'
 
 // A stable empty list: a selector that returns a fresh `[]` on every render
 // makes `useSyncExternalStore` re-render forever under zustand v5.
 const NO_CONFIG_OPTIONS: AcpConfigOption[] = []
 
-// The one runtime EveryAIOS ships with, used as the honest fallback when the
-// shell has not reported an agent inventory. EveryAIOS Native is the only
-// runtime that can never be "not installed".
-const NATIVE_ONLY = AGENTS.filter((a) => isNativeRuntime(a.id))
+// P71.2a/2d — there is no built-in row to single out: every row in the catalog
+// is an external agent the user installed or discovered.
 
 function StatusDot({ status }: { status: AgentRuntime['status'] }) {
   const tone =
@@ -199,32 +184,25 @@ interface Props {
 export default function AgentModelPicker({ compact }: Props) {
   const [open, setOpen] = useState(false)
   const selectedAgentId = useAppStore((s) => s.selectedAgentId)
-  const selectedModelId = useAppStore((s) => s.selectedModelId)
   const setSelectedAgent = useAppStore((s) => s.setSelectedAgent)
-  const setSelectedModel = useAppStore((s) => s.setSelectedModel)
-  const autoRoute = useAppStore((s) => s.autoRoute)
-  const setAutoRoute = useAppStore((s) => s.setAutoRoute)
   const setCenterScreen = useAppStore((s) => s.setCenterScreen)
   const notify = useAppStore((s) => s.notify)
 
   const liveAgents = useAppStore((s) => s.liveAgents)
-  // P55.4 / P60.14 — occupancy is never painted from the static seed.
+  // P55.4 / P60.14 / P71.2a — occupancy is never painted from the static seed.
   // `liveAgents` is the shell's *merged* catalog (seed + ACP registry + install
   // records), so a non-empty list is the only evidence of what this machine
-  // actually has. An empty list **in the desktop shell** means discovery has
-  // not produced a result — not "nothing is installed" — so the curated seed
-  // is not shown as if it had been discovered; only EveryAIOS Native (which
-  // ships inside the app) is offered, with an honest inventory note. The
-  // plain-browser preview keeps the fixture because it has no shell to ask.
+  // actually has. An empty list **in the desktop shell** means discovery has not
+  // produced a result — not "nothing is installed" — and v1 ships no built-in
+  // agent to offer in its place, so the list stays empty behind an honest
+  // inventory note. The plain-browser preview keeps the fixture because it has
+  // no shell to ask.
   const inShell = inTauri()
   const occupancyUnknown = inShell && liveAgents.length === 0
-  const catalog = liveAgents.length > 0 ? liveAgents : inShell ? NATIVE_ONLY : AGENTS
+  const catalog = liveAgents.length > 0 ? liveAgents : inShell ? [] : AGENTS
   const [installing, setInstalling] = useState(false)
   const [connecting, setConnecting] = useState(false)
   const [connected, setConnected] = useState<string | null>(null)
-  const [localRows, setLocalRows] = useState<LocalModelRow[]>([])
-  const [localErr, setLocalErr] = useState<string | null>(null)
-  const setLocalRuntime = useAppStore((s) => s.setLocalRuntime)
 
   // P66.2 — Custom binary import & verification state
   const [customBinaryPath, setCustomBinaryPath] = useState('')
@@ -238,15 +216,6 @@ export default function AgentModelPicker({ compact }: Props) {
   const setSessionCapabilityOverride = useAppStore((s) => s.setSessionCapabilityOverride)
   const resetSessionCapabilities = useAppStore((s) => s.resetSessionCapabilities)
 
-  // P58.7 — the model rows come from the live models.dev catalog for the
-  // providers this machine can actually reach (keyed / profiled / keyless),
-  // not from the curated `MODELS` seed. `catalogNote` carries the honest
-  // reason when that list is empty — never a silent fallback that reads like
-  // coverage.
-  const [catalogRows, setCatalogRows] = useState<CatalogPickerModel[]>([])
-  const [catalogNote, setCatalogNote] = useState<string | null>(null)
-  const [catalogBusy, setCatalogBusy] = useState(false)
-  const selectedModelProvider = useAppStore((s) => s.selectedModelProvider)
   const acpConfigOptions = useAppStore(
     (s) => s.acpConfigOptions[selectedAgentId] ?? NO_CONFIG_OPTIONS,
   )
@@ -331,34 +300,32 @@ export default function AgentModelPicker({ compact }: Props) {
     AGENTS[0]
   if (!agent) return null
 
-  // P38 — the Dynamic Chief slot: which agent occupies the top brain by
-  // default (inbuilt | ACP agent id). Resolution is fail-closed upstream.
-  const [defaultChief, setDefaultChief] = useState('inbuilt')
+  // P38 — the default-agent slot: which agent occupies the top brain by
+  // default. `null` means **no default is set**, which is a real state in v1:
+  // there is no built-in engine to occupy the slot on the user's behalf, and
+  // the retired spellings (`inbuilt` / `everyaios` / `everyaios-native`) are
+  // read as "nothing set" rather than as an engine (ADR-0005 §1, P71.5b — the
+  // retired name "Chief"). Resolution is fail-closed upstream.
+  const [defaultAgent, setDefaultAgent] = useState<string | null>(null)
   useEffect(() => {
     chiefDefaultGet()
-      .then((r) => setDefaultChief(r.primaryChief))
+      .then((r) => setDefaultAgent(currentBinding(r.primaryChief)))
       .catch(() => {})
   }, [])
-  // Map the picker's runtime id onto a chief id (only chief-eligible agents).
-  // P53.3 — installed-any Chief: every registry row is chief-eligible; only
-  // the inbuilt runtime maps to `inbuilt`. Installed-ness is enforced by the
-  // shell (`chief_default_set` refuses unknown/uninstalled ids fail-closed),
-  // so the picker never gates on a hardcoded trio.
-  const chiefIdFor = (runtimeId: string): string | null =>
-    runtimeId === 'everyaios-native' || runtimeId === 'everyaios'
-      ? 'inbuilt'
-      : runtimeId
-        ? acpIdFor(runtimeId)
-        : null
-  const chiefEligibleId = chiefIdFor(agent.id)
-  const defaultChiefLabel =
-    defaultChief === 'inbuilt' ? 'inbuilt engine' : defaultChief
-  const handleSetChief = async () => {
+  // Map the picker's runtime id onto a binding id. P53.3 — installed-any: every
+  // registry row is bindable, and install truth is enforced by the shell
+  // (`chief_default_set` refuses unknown/uninstalled ids fail-closed), so the
+  // picker never gates on a hardcoded trio.
+  const acpIdForAgent = (runtimeId: string): string | null =>
+    runtimeId ? acpIdFor(runtimeId) : null
+  const chiefEligibleId = acpIdForAgent(agent.id)
+  const defaultChiefLabel = defaultAgent ?? 'no agent bound'
+  const handleSetDefaultAgent = async () => {
     if (!chiefEligibleId) return
     try {
       await chiefDefaultSet(chiefEligibleId)
-      setDefaultChief(chiefEligibleId)
-      notify(`Default chief set to ${chiefEligibleId}`)
+      setDefaultAgent(chiefEligibleId)
+      notify(`Default agent set to ${chiefEligibleId}`)
     } catch (e) {
       notify(e instanceof Error ? e.message : String(e), 'error')
     }
@@ -367,10 +334,11 @@ export default function AgentModelPicker({ compact }: Props) {
     (s) => s.sessions.find((x) => x.id === s.activeSessionId)?.folder,
   )
 
-  // P38 — per-session Chief pin: pin this agent as the Chief for the active
+  // P38 — per-session agent pin: pin this agent as the session's primary
   // session only (outranks the user default for that session's turns). The
   // pin lives in the store and the chat send path passes it as primaryChief;
-  // external pins take the ACP branch, so this never forces an inbuilt turn.
+  // every v1 binding takes the ACP branch, so a pin can only ever select an
+  // installed external agent (ADR-0005).
   const sessionPin = useAppStore((s) => s.sessionChiefs[s.activeSessionId])
   // P38 — was the active session explicitly unpinned? Persisted on the
   // Session (vault round-trip) so a restarted session that had a pin shows
@@ -380,25 +348,25 @@ export default function AgentModelPicker({ compact }: Props) {
   )
   const setSessionChiefPin = useAppStore((s) => s.setSessionChiefPin)
   const clearSessionChiefPin = useAppStore((s) => s.clearSessionChiefPin)
-  const handlePinChief = () => {
+  const handlePinAgent = () => {
     const sessionId = useAppStore.getState().activeSessionId
     if (!sessionId) {
       notify('No active chat to pin to')
       return
     }
     if (!chiefEligibleId) {
-      notify(`${agent.name} has no chief id to pin`)
+      notify(`${agent.name} has no binding id to pin`)
       return
     }
-    // P38 — clicking the already-pinned Chief unpins (surfaces the durable
+    // P38 — clicking the already-pinned agent unpins (surfaces the durable
     // pin lifecycle, not just pin-once).
     if (sessionPin === chiefEligibleId) {
       clearSessionChiefPin(sessionId)
-      notify(`Chief pin cleared for this chat — default applies again`)
+      notify(`Agent pin cleared for this chat — default applies again`)
       return
     }
     setSessionChiefPin(sessionId, chiefEligibleId)
-    notify(`Chat pinned to ${chiefEligibleId} — this chat now routes through that Chief`)
+    notify(`Chat pinned to ${chiefEligibleId} — this chat now routes through that agent`)
   }
 
   // F8 — plan-before-touch install: request (Guard-2 ticket or auto-allow),
@@ -500,134 +468,26 @@ export default function AgentModelPicker({ compact }: Props) {
       notify(err instanceof Error ? err.message : 'Sign-in failed')
     }
   }
-  // P58.7 — load the live catalog rows when the picker opens: the usable
-  // providers (a key, a profile, or keyless) and their real models.dev tables.
-  // Every failure mode is stated in the UI instead of being hidden.
-  useEffect(() => {
-    if (!open) return
-    let alive = true
-    setCatalogBusy(true)
-    setCatalogNote(null)
-    void catalogProviders()
-      .then(async (cat) => {
-        if (!alive) return
-        if (!cat.live) {
-          // Two different facts hide behind `live: false`, and saying the wrong
-          // one is a lie the user cannot act on: no shell at all (a browser
-          // preview) versus a shell whose catalog read failed. `catalogProviders`
-          // collapses both, so ask the shell directly which one this is.
-          setCatalogRows([])
-          setCatalogNote(
-            inTauri()
-              ? 'Live provider catalog unavailable — the shell could not read it. Showing curated rows only.'
-              : 'Preview mode — the live models.dev catalog needs the desktop shell.',
-          )
-          return
-        }
-        const usable = usableCatalogProviders(cat.providers)
-        if (usable.length === 0) {
-          setCatalogRows([])
-          setCatalogNote(
-            'No provider is reachable yet — add a key or a custom profile in Settings → Providers.',
-          )
-          return
-        }
-        const groups = await Promise.all(
-          usable.map((p) =>
-            catalogProviderModels(p.id)
-              .then((r) => catalogPickerModels(p.id, r.models, r.profileModels))
-              .catch(() => [] as CatalogPickerModel[]),
-          ),
-        )
-        if (!alive) return
-        const rows = groups.flat()
-        const gated = useAppStore.getState().cuaVisionGate
-        setCatalogRows(gated ? rows.filter((r) => r.images) : rows)
-        setCatalogNote(
-          rows.length === 0
-            ? 'Your providers are reachable but carry no model rows yet — refresh the catalog in Settings → Providers.'
-            : null,
-        )
-      })
-      .catch(() => {
-        // `catalogProviders` already absorbs invoke failures into `live: false`,
-        // so this only guards a genuinely unexpected rejection.
-        if (!alive) return
-        setCatalogRows([])
-        setCatalogNote(
-          inTauri()
-            ? 'Live provider catalog unavailable — the shell could not read it. Showing curated rows only.'
-            : 'Preview mode — the live models.dev catalog needs the desktop shell.',
-        )
-      })
-      .finally(() => {
-        if (alive) setCatalogBusy(false)
-      })
-    return () => {
-      alive = false
-    }
-  }, [open])
 
-  useEffect(() => {
-    if (!open) return
-    setLocalErr(null)
-    void listLocalModels()
-      .then((r) => {
-        setLocalRows(r.models ?? [])
-        setLocalErr(null)
-      })
-      .catch((e) => {
-        setLocalRows([])
-        setLocalErr(e instanceof Error ? e.message : 'Local probe failed')
-      })
-  }, [open])
-
-  // P50.3.6 — when auto-route is on, consult the live routing feed
-  // (`routing_feed_decide`) so the picker shows *why* a provider is ranked
-  // (or excluded — the decision is vault-credential gated, so an unkeyed
-  // provider lands in `excluded` with an explicit "add a key" reason).
-  const [routeFeed, setRouteFeed] = useState<{ ranked: { id: string; score: number; health: string }[]; excluded: { id: string; reason: string }[] } | null>(null)
-  useEffect(() => {
-    if (!open || !autoRoute) {
-      setRouteFeed(null)
-      return
-    }
-    let alive = true
-    void import('@/lib/discovery')
-      .then(({ routingFeedDecide }) => routingFeedDecide({}))
-      .then((d) => alive && setRouteFeed({ ranked: d.ranked ?? [], excluded: d.excluded ?? [] }))
-      .catch(() => alive && setRouteFeed(null))
-    return () => {
-      alive = false
-    }
-  }, [open, autoRoute])
-
-  const model = getModelsForAgentLive(selectedAgentId, liveAgents).find(
-    (m) => m.id === selectedModelId,
-  )
-  const models = getModelsForAgentLive(selectedAgentId, liveAgents)
-  // P58.7 — the pinned label: a catalog pick is named by the exact
-  // `provider · model-id` pair the broker will receive, a curated pick by its
-  // curated label. Without this a catalog pin rendered as `—` even though the
-  // selection was real and pinned.
-  const pinnedLabel =
-    catalogPickLabel(selectedModelProvider, selectedModelId) ?? model?.label ?? '—'
   const agentUsable = isRuntimeUsable(
     liveAgents.find((a) => a.id === selectedAgentId) ??
       catalog.find((a) => a.id === selectedAgentId),
   )
-  // P60 — model ownership. Native owns EveryAIOS's provider/model surface;
-  // every other runtime is an external ACP agent that owns its own model.
-  const external = !isNativeRuntime(agent.id)
+  // P60/P71.2d — model ownership: every runtime is an external ACP agent that
+  // owns its own model; P71.9c removed the EveryAIOS-owned branches this
+  // constant used to guard, so the agent's ACP model option is the only row.
   const externalModelOption =
     acpConfigOptions.find((o) => o.category === 'model') ??
     acpConfigOptions.find((o) => o.id.toLowerCase().includes('model'))
   const externalModelLabel = externalModelOption
     ? String(externalModelOption.currentValue)
     : null
+  // P71.9c — the trigger paints the agent-owned model value (or an explicit
+  // em dash); EveryAIOS has no model list of its own to pin.
+  const pinnedLabel = externalModelLabel ?? '—'
 
   useEffect(() => {
-    if (!open || !external || !agentUsable) return
+    if (!open || !agentUsable) return
     let alive = true
     void (async () => {
       try {
@@ -644,7 +504,7 @@ export default function AgentModelPicker({ compact }: Props) {
     return () => {
       alive = false
     }
-  }, [open, external, agentUsable, selectedAgentId, setAcpConfigOptions])
+  }, [open, agentUsable, selectedAgentId, setAcpConfigOptions])
 
   // P51.1 — is any session mid-turn right now? A model switch during a live
   // stream applies to the *next* turn, never the in-flight one; surface that
@@ -652,44 +512,6 @@ export default function AgentModelPicker({ compact }: Props) {
   const anyBusy = useAppStore((s) =>
     s.sessions.some((x) => x.status === 'running' || x.status === 'action-required'),
   )
-
-  // P51.1 — picking a cloud model while auto-route is on must not be a dead
-  // click: the send path (`resolveProviderModel`) returns undefined/undefined
-  // whenever auto-route is on, so an explicit pick that leaves auto-route on
-  // is silently ignored. Make the pick effective by turning auto-route off
-  // (the pick then wins per the documented "explicit pick wins" rule).
-  const pickCloudModel = (mId: string) => {
-    const picked = models.find((m) => m.id === mId)
-    const pickedLabel = picked?.label ?? mId
-    if (autoRoute) {
-      setAutoRoute(false)
-      setSelectedModel(mId)
-      setLocalRuntime(undefined)
-      notify(`Pinned to ${pickedLabel} — auto-route off, this model now serves the chat`)
-      return
-    }
-    setSelectedModel(mId)
-    setLocalRuntime(undefined)
-    if (anyBusy) {
-      notify(`Running turn keeps its model — ${pickedLabel} applies to the next message`)
-    }
-  }
-
-  // P58.7 — pin a live models.dev row. The provider travels with the model id
-  // so the broker resolves the endpoint from the catalog (P55.5) instead of
-  // guessing one from the id.
-  const pickCatalogModel = (m: CatalogPickerModel) => {
-    const wasAuto = autoRoute
-    if (wasAuto) setAutoRoute(false)
-    setSelectedModel(m.id, m.provider)
-    setLocalRuntime(undefined)
-    notify(
-      `Pinned to ${m.provider} · ${m.label}${wasAuto ? ' — auto-route off, this model now serves the chat' : ''}`,
-    )
-    if (!wasAuto && anyBusy) {
-      notify(`Running turn keeps its model — ${m.label} applies to the next message`)
-    }
-  }
 
   // P60 — selection is installed-only. `catalog` also carries registry rows
   // that exist as *catalog entries* but have no binary on this machine; those
@@ -724,19 +546,6 @@ export default function AgentModelPicker({ compact }: Props) {
             </>
           )}
         </span>
-        {autoRoute && !compact && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span className="ml-0.5 flex items-center gap-0.5 rounded border border-sky-500/30 bg-sky-500/10 px-1 text-[8px] text-sky-300">
-                <Route className="h-2 w-2" />
-                auto
-              </span>
-            </TooltipTrigger>
-            <TooltipContent side="bottom" className="text-[10px]">
-              Auto-route by task — best runtime picked per turn
-            </TooltipContent>
-          </Tooltip>
-        )}
         <ChevronDown
           className={cn('h-3 w-3 text-muted-foreground transition-transform', open && 'rotate-180')}
         />
@@ -755,7 +564,7 @@ export default function AgentModelPicker({ compact }: Props) {
               <div className="flex items-center gap-1.5">
                 <Cpu className="h-3 w-3 text-sky-400" />
                 <span className="text-[11px] font-semibold text-foreground">
-                  {autoRoute ? 'Auto · agent runtime & model' : 'Agent runtime & model'}
+                  Agent runtime & model
                 </span>
               </div>
               <button
@@ -770,15 +579,15 @@ export default function AgentModelPicker({ compact }: Props) {
               </button>
             </div>
 
-            {/* P38 — Dynamic Chief slot: the swappable top brain */}
+            {/* P38 — Default-agent slot: the swappable top brain (P71.5b: the retired name was \u2018Chief\u2019) */}
             <div className="flex items-center justify-between gap-2 border-b border-border bg-zinc-950/40 px-3 py-1.5">
               <div className="flex min-w-0 items-center gap-1.5">
                 <Route className="h-3 w-3 shrink-0 text-sky-400" />
                 <span className="truncate text-[10px] text-muted-foreground">
-                  Chief slot:{' '}
+                  Default agent:{' '}
                   <span className="font-mono text-sky-300">{defaultChiefLabel}</span>
                 </span>
-                {defaultChief !== 'inbuilt' && (
+                {defaultAgent && (
                   <Badge className="shrink-0 bg-emerald-500/15 px-1 text-[8px] text-emerald-300">
                     swappable
                   </Badge>
@@ -788,9 +597,9 @@ export default function AgentModelPicker({ compact }: Props) {
                 {chiefEligibleId && (
                   <button
                     type="button"
-                    onClick={handlePinChief}
+                    onClick={handlePinAgent}
                     className="shrink-0 text-[10px] text-muted-foreground underline-offset-2 hover:text-sky-300 hover:underline"
-                    title="Pin this agent as the Chief for the active chat only (outranks the user default); click again to unpin"
+                    title="Pin this agent for the active chat only (outranks the user default); click again to unpin"
                   >
                     {sessionPin
                       ? chiefEligibleId === sessionPin
@@ -802,21 +611,23 @@ export default function AgentModelPicker({ compact }: Props) {
                 {chiefEligibleId && (
                   <button
                     type="button"
-                    onClick={handleSetChief}
-                    disabled={chiefEligibleId === defaultChief}
+                    onClick={handleSetDefaultAgent}
+                    disabled={chiefEligibleId === defaultAgent}
                     className="shrink-0 text-[10px] text-muted-foreground underline-offset-2 hover:text-sky-300 hover:underline disabled:cursor-default disabled:opacity-40 disabled:hover:text-muted-foreground disabled:hover:no-underline"
                   >
-                    {chiefEligibleId === defaultChief
-                      ? 'default chief'
-                      : `Set ${agent.name} as default chief`}
+                    {chiefEligibleId === defaultAgent
+                      ? 'default agent'
+                      : `Set ${agent.name} as default agent`}
                   </button>
                 )}
               </div>
             </div>
-            {/* P38 — effective-Chief readout: shows what THIS session actually
-                routes under (pin → default → inbuilt). An explicitly unpinned
-                session shows "default applies — pin cleared" instead of
-                silence, even after a restart (the marker is vault-persisted). */}
+            {/* P38 — effective-binding readout: shows what THIS session actually
+                routes under (pin → default → **unbound**). Unbound is not a
+                silent substitution: the turn refuses and opens agent discovery
+                (`P71.6a`). An explicitly unpinned session shows "default applies
+                — pin cleared" instead of silence, even after a restart (the
+                marker is vault-persisted). */}
             {sessionPin && (
               <div className="border-b border-border bg-sky-500/5 px-3 py-1 font-mono text-[9px] text-sky-300/90">
                 Chat pinned to <span className="font-semibold">{sessionPin}</span> — outranks the user default for this chat.
@@ -837,8 +648,8 @@ export default function AgentModelPicker({ compact }: Props) {
                 {occupancyUnknown && (
                   <div className="mb-1.5 rounded-md border border-dashed border-warning/40 bg-warning/5 px-2 py-1.5 text-[10px] leading-relaxed text-warning/90">
                     Runtime inventory unavailable — the shell has not reported which agent CLIs are
-                    on this machine, so no external runtime is listed. EveryAIOS Native is always
-                    available. Re-run discovery from{' '}
+                    on this machine, so no runtime is listed and **no turn can run**: v1 ships no
+                    built-in engine to fall back to. Re-run discovery from{' '}
                     <span className="text-warning">Settings → Agent runtimes</span>.
                   </div>
                 )}
@@ -876,11 +687,7 @@ export default function AgentModelPicker({ compact }: Props) {
                             {a.name}
                           </span>
                           <StatusDot status={a.status} />
-                          {a.id === 'everyaios-native' ? (
-                            <Badge className="bg-sky-500/20 px-1 text-[8px] text-sky-300">orchestrator</Badge>
-                          ) : (
-                            <LifecycleBadge state={lifecycle} />
-                          )}
+                          <LifecycleBadge state={lifecycle} />
                         </div>
                         <div className="mt-0.5 flex flex-wrap items-center gap-1 font-mono text-[9px] text-muted-foreground">
                           <span className="truncate">{a.vendor} · v{a.version ?? '—'}</span>
@@ -919,11 +726,10 @@ export default function AgentModelPicker({ compact }: Props) {
               {/* Model & Capabilities column */}
               <div className="scroll-thin min-h-0 overflow-y-auto p-3">
                 {/* External Agent Lifecycle & Verification Header */}
-                {external && (
-                  <div className="mb-3 rounded-lg border border-border/80 bg-zinc-950/60 p-2.5">
+                <div className="mb-3 rounded-lg border border-border/80 bg-zinc-950/60 p-2.5">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-1.5">
-                        <Wrench className="h-3 w-3 text-sky-400" />
+                        <Wrench className="h-3 w-3 text-sky-4" />
                         <span className="font-mono text-[10px] font-semibold text-foreground">
                           Agent Lifecycle · {agent.name}
                         </span>
@@ -1035,7 +841,6 @@ export default function AgentModelPicker({ compact }: Props) {
                       )}
                     </div>
                   </div>
-                )}
 
                 {/* P66.4 — Session Capability Loadout Section */}
                 <div className="mb-3 rounded-lg border border-border/80 bg-zinc-950/40 p-2.5">
@@ -1120,13 +925,8 @@ export default function AgentModelPicker({ compact }: Props) {
 
                 <div className="mb-1 flex items-center justify-between px-1">
                   <div className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground/70">
-                    {external ? `Model · ${agent.name}` : `Models for ${agent.name}`}
+                    {`Model · ${agent.name}`}
                   </div>
-                  {!external && models.length > 0 && (
-                    <div className="font-mono text-[9px] text-muted-foreground/60">
-                      {models.length} available
-                    </div>
-                  )}
                 </div>
 
                 {/* Agent capabilities strip */}
@@ -1142,12 +942,10 @@ export default function AgentModelPicker({ compact }: Props) {
                   ))}
                 </div>
 
-                {/* P58.7 — live models.dev rows for the providers this machine
-                    can reach. Selection carries the provider (the broker
-                    resolves the endpoint from the catalog), and the row shows
-                    the real context/price from the catalog. */}
-                {external ? (
-                  <div className="mb-2 rounded-md border border-emerald-500/20 bg-emerald-500/5 px-2 py-2 text-[10px] leading-relaxed text-emerald-100/80">
+                {/* P60/P71.9c — the agent's own ACP config option is the only
+                    model surface here. EveryAIOS ships no model catalogue of
+                    its own to fall back to (ADR-0005 §4). */}
+                <div className="mb-2 rounded-md border border-emerald-500/20 bg-emerald-500/5 px-2 py-2 text-[10px] leading-relaxed text-emerald-100/80">
                     <div className="mb-1 flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-wider text-emerald-300/90">
                       <KeyRound className="h-2.5 w-2.5" />
                       {externalModelOption ? `Model managed by ${agent.name}` : `${agent.name} owns its model configuration`}
@@ -1179,425 +977,30 @@ export default function AgentModelPicker({ compact }: Props) {
                       <span>No ACP model option is exposed. EveryAIOS will not show or inject its Native BYOK/local models here.</span>
                     )}
                   </div>
-                ) : <div className="mb-1 flex items-center justify-between px-1">
-                  <div className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground/70">
-                    Your providers · models.dev
-                  </div>
-                  {catalogRows.length > 0 && (
-                    <div className="font-mono text-[9px] text-muted-foreground/60">
-                      {catalogRows.length} live
-                    </div>
-                  )}
-                </div>}
-                {!external && catalogBusy && (
-                  <div className="mb-1.5 flex items-center gap-1.5 px-1 font-mono text-[10px] text-muted-foreground">
-                    <Loader2 className="h-3 w-3 animate-spin" />
-                    reading the provider catalog…
-                  </div>
-                )}
-                {!external && !catalogBusy && catalogNote && (
-                  <div className="mb-1.5 rounded-md border border-dashed border-border/60 bg-background/30 px-2 py-2 text-[10px] leading-relaxed text-muted-foreground">
-                    {catalogNote}
-                  </div>
-                )}
-                {!external && <div className="space-y-1">
-                  {catalogRows.map((m) => {
-                    const isActive =
-                      !autoRoute &&
-                      selectedModelProvider === m.provider &&
-                      selectedModelId === m.id
-                    return (
-                      <button
-                        key={`${m.provider}:${m.id}`}
-                        type="button"
-                        title={`Use ${m.provider} · ${m.id} for this chat`}
-                        onClick={() => pickCatalogModel(m)}
-                        className={cn(
-                          'flex w-full items-center gap-2 rounded-md border px-2 py-1.5 text-left transition-colors',
-                          isActive
-                            ? 'border-sky-500/60 bg-sky-500/10'
-                            : 'border-transparent hover:border-border hover:bg-accent/40',
-                        )}
-                      >
-                        <span className="flex h-6 w-6 items-center justify-center rounded bg-sky-500/15 text-[9px] font-bold text-sky-300">
-                          {m.label.charAt(0).toUpperCase()}
-                        </span>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-1.5">
-                            <span
-                              className={cn(
-                                'truncate text-[11px] font-medium',
-                                isActive ? 'text-sky-200' : 'text-foreground',
-                              )}
-                            >
-                              {m.label}
-                            </span>
-                            {isActive && (
-                              <Badge className="bg-sky-500/15 px-1 text-[8px] text-sky-300">
-                                sticky
-                              </Badge>
-                            )}
-                            {m.free && (
-                              <Badge className="bg-emerald-500/15 px-1 text-[8px] text-emerald-300">
-                                free
-                              </Badge>
-                            )}
-                            {m.profile && (
-                              <Badge className="bg-zinc-500/15 px-1 text-[8px] text-zinc-300">
-                                profile
-                              </Badge>
-                            )}
-                          </div>
-                          <div className="mt-0.5 flex flex-wrap items-center gap-1 font-mono text-[9px] text-muted-foreground">
-                            <span className="text-sky-300/80">{m.provider}</span>
-                            <span className="text-muted-foreground/30">|</span>
-                            <span className="truncate text-muted-foreground/70">{m.id}</span>
-                          </div>
-                          <div className="mt-0.5 flex flex-wrap items-center gap-1 font-mono text-[9px] text-muted-foreground">
-                            <span className="flex items-center gap-0.5">
-                              <Gauge className="h-2.5 w-2.5" />
-                              {m.context > 0 ? formatContext(m.context) : 'ctx —'}
-                            </span>
-                            <span className="text-muted-foreground/30">|</span>
-                            <span className="flex items-center gap-0.5">
-                              <Zap className="h-2.5 w-2.5 text-sky-400" />
-                              {formatPerM(m.inputPrice, m.free)}/in ·{' '}
-                              {formatPerM(m.outputPrice, m.free)}/out
-                            </span>
-                            {m.reasoning && (
-                              <Badge variant="secondary" className="bg-violet-500/15 px-1 text-[7px] font-normal text-violet-300">
-                                reasoning
-                              </Badge>
-                            )}
-                            {m.toolCall && (
-                              <Badge variant="secondary" className="bg-sky-500/15 px-1 text-[7px] font-normal text-sky-300">
-                                tools
-                              </Badge>
-                            )}
-                            {m.images && (
-                              <Badge variant="secondary" className="bg-emerald-500/15 px-1 text-[7px] font-normal text-emerald-300">
-                                vision
-                              </Badge>
-                            )}
-                          </div>
-                        </div>
-                        {isActive && <Check className="h-3.5 w-3.5 shrink-0 text-sky-400" />}
-                      </button>
-                    )
-                  })}
-                </div>}
 
-                {/* Curated seed rows — this runtime's own mapping, labelled as
-                    such so it is never mistaken for catalog coverage. */}
-                {models.length > 0 && (
-                  <div className="mt-2 border-t border-border/60 pt-2">
-                    <div className="mb-1 flex items-center justify-between px-1">
-                      <div className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground/70">
-                        Curated seed · {agent.name}
-                      </div>
-                      <div className="font-mono text-[9px] text-muted-foreground/50">
-                        not the live catalog
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {!external && catalogRows.length === 0 && models.length === 0 && agentUsable && (
-                  <div className="rounded-md border border-dashed border-border/60 bg-background/30 px-2 py-2 text-[10px] leading-relaxed text-muted-foreground">
-                    No catalog rows and no curated list for this runtime — {agent.name} drives its
-                    own models internally. Turn on <span className="text-sky-300">Auto-route by task</span>{' '}
-                    (below) and EveryAIOS picks the best provider per turn.
-                  </div>
-                )}
-
-                {!external && catalogRows.length === 0 && models.length === 0 && !agentUsable && (
-                  <div className="rounded-md border border-dashed border-border/60 bg-background/30 px-2 py-2 text-[10px] leading-relaxed text-muted-foreground">
-                    {agent.name} is not installed — its model list loads live after
-                    install. Use <span className="text-sky-300">Install</span> below,
-                    then pick a model.
-                  </div>
-                )}
-
-                {!external && autoRoute && (models.length > 0 || catalogRows.length > 0) && (
-                  <div className="mb-1.5 rounded-md border border-sky-500/20 bg-sky-500/5 px-2 py-1 font-mono text-[9px] leading-relaxed text-sky-200/80">
-                    Auto-route is on — the router picks the best model per turn.
-                    Click any model to pin it (auto-route turns off for this chat).
-                  </div>
-                )}
-
-                <div className="space-y-1">
-                  {models.map((m) => {
-                    // P51.1 — under auto-route no row is the active pick (the
-                    // live router decides per turn); a row is active only when
-                    // auto-route is off and this is the pinned model. This
-                    // kills the misleading "highlighted yet ignored" state.
-                    const isActive = !autoRoute && m.id === selectedModelId
-                    const disabled = !m.available
-                    // P52.9 — sticky-vs-default readout: under auto-route the
-                    // router's per-task default is the effective pick (rows
-                    // show the *default* tag on the agent's model); turning
-                    // auto-route off by pinning makes the row explicitly
-                    // sticky. Both are honest state, never a styling guess.
-                    const isAgentDefault = m.id === agent?.defaultModel
-                    const isSticky = isActive
-                    // P52.9 — mid-switch cost honesty: when an explicit pick
-                    // replaces a different explicit pick, name the $/1M delta
-                    // (input side) so the switch is never silent about cost.
-                    const activeModel = models.find((x) => x.id === selectedModelId)
-                    const costDelta =
-                      !isSticky && !autoRoute && activeModel && m.id !== activeModel.id
-                        ? m.inputPrice - (activeModel.inputPrice ?? 0)
-                        : 0
-                    return (
-                      <button
-                        key={m.id}
-                        type="button"
-                        disabled={disabled}
-                        title={
-                          autoRoute
-                            ? `Auto-route is on — clicking pins ${m.label} and turns auto-route off`
-                            : `Use ${m.label} for this chat`
-                        }
-                        onClick={() => {
-                          if (disabled) return
-                          pickCloudModel(m.id)
-                        }}
-                        className={cn(
-                          'flex w-full items-center gap-2 rounded-md border px-2 py-1.5 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-40',
-                          isActive
-                            ? 'border-sky-500/60 bg-sky-500/10'
-                            : 'border-transparent hover:border-border hover:bg-accent/40',
-                        )}
-                      >
-                        <span className={cn('flex h-6 w-6 items-center justify-center rounded text-[9px] font-bold', m.tone)}>
-                          {m.label.charAt(0)}
-                        </span>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-1.5">
-                            <span className={cn('text-[11px] font-medium', isActive ? 'text-sky-200' : 'text-foreground')}>
-                              {m.label}
-                            </span>
-                            {/* P52.9 — sticky (pinned, auto-route off) vs
-                                default (auto-route's per-agent fallback). */}
-                            {isSticky && (
-                              <Badge className="bg-sky-500/15 px-1 text-[8px] text-sky-300">
-                                sticky
-                              </Badge>
-                            )}
-                            {!isSticky && autoRoute && isAgentDefault && (
-                              <Badge className="bg-zinc-500/15 px-1 text-[8px] text-zinc-300">
-                                default
-                              </Badge>
-                            )}
-                            {m.recommendedFor && (
-                              <span className="truncate font-mono text-[9px] text-muted-foreground/60">
-                                · {m.recommendedFor}
-                              </span>
-                            )}
-                          </div>
-                          {costDelta !== 0 && (
-                            <div
-                              className={cn(
-                                'font-mono text-[8px]',
-                                costDelta > 0 ? 'text-warning/90' : 'text-emerald-400/90',
-                              )}
-                            >
-                              {costDelta > 0 ? '+' : '−'}${(Math.abs(costDelta)).toFixed(0)}/1M in vs {activeModel?.label}
-                            </div>
-                          )}
-                          <div className="mt-0.5 flex flex-wrap items-center gap-1 font-mono text-[9px] text-muted-foreground">
-                            <span className="flex items-center gap-0.5">
-                              <Gauge className="h-2.5 w-2.5" />
-                              {formatContext(m.context)}
-                            </span>
-                            <span className="text-muted-foreground/30">|</span>
-                            <span className="flex items-center gap-0.5">
-                              <Zap className="h-2.5 w-2.5 text-sky-400" />
-                              {formatPrice(m.inputPrice)}/in · {formatPrice(m.outputPrice)}/out
-                            </span>
-                            {!m.available && (
-                              <Badge variant="secondary" className="ml-1 bg-zinc-700 text-[7px] text-zinc-300">
-                                gated
-                              </Badge>
-                            )}
-                          </div>
-                        </div>
-                        {isActive && <Check className="h-3.5 w-3.5 shrink-0 text-sky-400" />}
-                      </button>
-                    )
-                  })}
-                </div>
-
-                <div className="mt-2 border-t border-border/60 pt-2">
-                    <div className="mb-1 flex items-center justify-between px-1">
-                      <div className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground/70">
-                        Local
-                      </div>
-                      <button
-                        type="button"
-                        className="font-mono text-[9px] text-sky-300 underline-offset-2 hover:underline"
-                        onClick={() => {
-                          setOpen(false)
-                          useAppStore.getState().setSettingsSection('local')
-                          setCenterScreen('settings')
-                        }}
-                      >
-                        Discover · download · hardware
-                      </button>
-                    </div>
-                {localRows.length > 0 && (
-                  <>
-                    <div className="space-y-1">
-                      {localRows.map((row) => {
-                        const isActive = selectedModelId === row.name && useAppStore.getState().localRuntime === row.runtime
-                        return (
-                          <button
-                            key={`${row.runtime}:${row.name}`}
-                            type="button"
-                            onClick={() => {
-                              setSelectedAgent('everyaios-native')
-                              setSelectedModel(row.name)
-                              setLocalRuntime(row.runtime, row.contextWindow)
-                              void ensureLocal(row.runtime, row.name).catch((e) =>
-                                notify(e instanceof Error ? e.message : 'Local load failed'),
-                              )
-                            }}
-                            className={cn(
-                              'flex w-full items-center gap-2 rounded-md border px-2 py-1.5 text-left',
-                              isActive
-                                ? 'border-sky-500/60 bg-sky-500/10'
-                                : 'border-transparent hover:border-border hover:bg-accent/40',
-                              !row.fits && 'opacity-60',
-                            )}
-                          >
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-center gap-1.5">
-                                <span className="text-[11px] font-medium text-foreground">{row.name}</span>
-                                <Badge
-                                  className={cn(
-                                    'px-1 text-[8px]',
-                                    row.fits ? 'bg-emerald-500/20 text-emerald-300' : 'bg-red-500/20 text-red-300',
-                                  )}
-                                >
-                                  {row.fits ? 'fits' : 'too big'}
-                                </Badge>
-                                {row.warnCtx && (
-                                  <Badge className="bg-warning/20 px-1 text-[8px] text-warning">
-                                    &lt;15K ctx
-                                  </Badge>
-                                )}
-                              </div>
-                              <div className="font-mono text-[9px] text-muted-foreground">
-                                {row.runtime} · {(row.sizeBytes / 1e9).toFixed(1)}GB · {formatContext(row.contextWindow)} · score {row.score.toFixed(2)}
-                              </div>
-                            </div>
-                          </button>
-                        )
-                      })}
-                    </div>
-                  </>
-                )}
-                    {localErr && localRows.length === 0 && (
-                      <p className="px-1 pb-1 text-[9px] text-warning">
-                        Local probe failed: {localErr}
-                      </p>
-                    )}
-                    {localRows.length === 0 && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setOpen(false)
-                          useAppStore.getState().setSettingsSection('local')
-                          setCenterScreen('settings')
-                        }}
-                        className="w-full rounded-md border border-dashed border-border/60 px-2 py-2 text-left font-mono text-[10px] text-muted-foreground hover:border-sky-500/40 hover:text-sky-300"
-                      >
-                        No local models yet — open Discover (search, downloads, quant, GPU offload).
-                      </button>
-                    )}
-                </div>
-
-                {/* Auto-route toggle */}
-                <div className="mt-3 flex items-center justify-between rounded-md border border-border/60 bg-background/40 px-2 py-1.5">
-                  <div className="flex items-center gap-1.5">
-                    <Route className="h-3 w-3 text-sky-400" />
-                    <div>
-                      <div className="text-[10px] font-medium text-foreground">Auto-route by task</div>
-                      <div className="text-[9px] text-muted-foreground">
-                        Override per turn — code→Claude Code, research→Grok, long-context→Gemini
-                      </div>
-                    </div>
-                  </div>
-                  <Switch checked={autoRoute} onCheckedChange={setAutoRoute} className="scale-75" />
-                </div>
-
-                {/* P50.3.6 — live routing decision when auto-route is on:
-                    ranked providers from `routing_feed_decide` (health +
-                    verified capabilities); the send path feeds the same feed
-                    into the per-turn router. No feed ⇒ no ranked claim. When
-                    the ranked list is empty the excluded reasons ARE the
-                    message (unkeyed providers explain where to add a key). */}
-                {!external && autoRoute && routeFeed && (
-                  <div className="mt-1.5 space-y-1 rounded-md border border-sky-500/20 bg-sky-500/5 px-2 py-1.5">
-                    <div className="font-mono text-[8px] uppercase tracking-wider text-sky-300/80">
-                      Live route feed
-                    </div>
-                    {routeFeed.ranked.length > 0 ? (
-                      routeFeed.ranked.slice(0, 3).map((r, i) => (
-                        <div key={r.id} className="flex items-center gap-1.5 font-mono text-[9px] text-muted-foreground">
-                          <span className="text-sky-300">#{i + 1}</span>
-                          <span className="flex-1 truncate text-foreground/80">{r.id}</span>
-                          <span className="text-muted-foreground/60">{r.score.toFixed(2)}</span>
-                          <span className={cn('truncate', r.health === 'healthy' ? 'text-emerald-400/80' : 'text-warning/80')}>
-                            {r.health}
-                          </span>
-                        </div>
-                      ))
-                    ) : (
-                      <div className="space-y-1">
-                        <div className="font-mono text-[9px] text-warning/90">
-                          No usable route yet
-                        </div>
-                        {routeFeed.excluded.slice(0, 3).map((e) => (
-                          <div key={e.id} className="truncate font-mono text-[9px] text-muted-foreground">
-                            <span className="text-foreground/70">{e.id}</span> — {e.reason}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
 
                 <div className="mt-1.5 flex items-center gap-1 px-1 font-mono text-[9px] text-muted-foreground/60">
                   <Sparkles className="h-2.5 w-2.5" />
                   Selected: {agent.name} ·{' '}
                   {!agentUsable
                     ? 'not installed'
-                    : external
-                      ? externalModelOption
-                        ? `agent-owned · ${externalModelLabel}`
-                        : `managed by ${agent.name}`
-                    : pinnedLabel !== '—'
-                      ? pinnedLabel
-                      : models.length === 0
-                        ? 'auto (runtime-driven)'
-                        : '—'}
+                    : externalModelOption
+                      ? `agent-owned · ${externalModelLabel}`
+                      : `managed by ${agent.name}`}
                 </div>
 
                 {/* Install + connect (F8/J17) — one click, then use */}
                 <div className="mt-2 space-y-1.5 border-t border-border/60 pt-2">
-                  {agentUsable || agent.id === 'everyaios-native' ? (
+                  {agentUsable ? (
                     <div className="flex items-center justify-between px-1">
                       <span className="flex items-center gap-1 font-mono text-[9px] text-emerald-400">
                         <Check className="h-2.5 w-2.5" />
                         {agent.status === 'discovered' ? 'discovered · launchable' : 'installed'}
                         {agent.version ? ` · v${agent.version}` : ''}
                       </span>
-                      {agent.id !== 'everyaios-native' && (
-                        <span className="font-mono text-[9px] text-muted-foreground/60">
-                          {agent.vendor}
-                        </span>
-                      )}
+                      <span className="font-mono text-[9px] text-muted-foreground/60">
+                        {agent.vendor}
+                      </span>
                     </div>
                   ) : (
                     <div className="flex items-center gap-1.5">
@@ -1630,8 +1033,7 @@ export default function AgentModelPicker({ compact }: Props) {
                     </div>
                   )}
 
-                  {agent.id !== 'everyaios-native' && (
-                      connected ? (
+                  {connected ? (
                         <div className="flex items-center gap-1.5 px-1">
                           <span className="flex items-center gap-1 font-mono text-[9px] text-emerald-400">
                             <Check className="h-2.5 w-2.5" />
@@ -1695,8 +1097,7 @@ export default function AgentModelPicker({ compact }: Props) {
                             subscription · api key · local
                           </span>
                         </div>
-                      )
-                    )}
+                      )}
                 </div>
               </div>
             </div>

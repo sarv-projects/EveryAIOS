@@ -1,11 +1,22 @@
 /**
  * P36 / P0-5 — live provider observation ledger.
  *
- * `runChatStream` records one observation per completed or errored turn
- * (`provider:model`); `selectModelForTask` feeds `currentObservations()` into
+ * `runChatStream` recorded one observation per completed or errored turn
+ * (`provider:model`); `selectModelForTask` fed `currentObservations()` into
  * the deterministic RouteDecision consensus scorer (the `Scorer::score` port
- * in `router.ts`) so the *next* turn ranks by observed health/cost/latency
+ * in `router.ts`) so the *next* turn ranked by observed health/cost/latency
  * instead of static cost-sort alone.
+ *
+ * **P71.2c status — the producer is gone.** `runChatStream` was archived with
+ * the built-in engine (ADR-0005 §2), so nothing in v1 writes a live turn
+ * observation: EveryAIOS makes no provider call to observe. The durable half
+ * (`hydrateObservations` from the vault's `token_usage` ledger) still loads and
+ * the scorer still consumes it. `P71.4` owns the decision — re-home the
+ * observation onto **agent reports** (`ARCH/ROUTING.md` §5: tokens and cost are
+ * observations sourced from agent/ACP events, and where an agent reports
+ * nothing the surface says so rather than inventing a number) or retire the
+ * module with the router. Nothing may read a stale in-process observation as if
+ * it described a v1 turn.
  *
  * Honest ceiling: health is outcome-derived (recent success ratio over a
  * 5-turn ring), quota is unknown (treated as unconstrained), and cost is the

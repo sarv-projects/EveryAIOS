@@ -63,15 +63,20 @@ export async function routingFeedDecide(req: {
 }
 
 function demoInventory(): DiscoveryInventory {
+  // P71.9g — no built-in agent row. v1's agents are **discovered external
+  // agents only** (`ADR-0005`): the demo fallback used to seed an
+  // `id: 'inbuilt'` EveryAIOS card with `capabilitiesVerified: true` and
+  // `status: 'healthy'`, i.e. a browser preview advertised a runnable engine
+  // that no install can produce (I15). It is gone; an empty agent count is the
+  // honest preview state.
   const cards: ResourceCard[] = [
-    { kind: 'agent', id: 'inbuilt', name: 'EveryAIOS', version: '0.1.0', source: 'builtin', auth: 'none', capabilities: ['chat', 'tools', 'plan'], capabilitiesVerified: true, governance: 'inbuilt', status: 'healthy' },
     { kind: 'provider', id: 'openai', name: 'OpenAI', version: 'catalog', source: 'models.dev', auth: 'api_key_env:OPENAI_API_KEY', capabilities: ['tools', 'vision'], capabilitiesVerified: false, governance: '', status: 'inventoried' },
     { kind: 'provider', id: 'anthropic', name: 'Anthropic', version: 'catalog', source: 'models.dev', auth: 'api_key_env:ANTHROPIC_API_KEY', capabilities: ['tools'], capabilitiesVerified: false, governance: '', status: 'inventoried' },
     { kind: 'model', id: 'ollama/llama3', name: 'llama3', version: '', source: 'local_runtime', auth: 'keyless', capabilities: ['ctx:8192'], capabilitiesVerified: true, governance: 'local', status: 'healthy' },
     { kind: 'browser', id: 'chromium', name: 'chromium', version: '', source: 'system', auth: 'none', capabilities: ['cdp'], capabilitiesVerified: true, governance: '', status: 'healthy' },
   ]
   return {
-    counts: { agents: 1, models: 1, providers: 2, mcp: 0, skills: 0, browsers: 1 },
+    counts: { agents: 0, models: 1, providers: 2, mcp: 0, skills: 0, browsers: 1 },
     cards,
     generation: 1,
   }

@@ -358,32 +358,9 @@ export function formatPrice(price: number): string {
 // plain-browser UI never pretends a CLI exists on this machine.
 
 export const AGENTS: AgentRuntime[] = [
-  {
-    id: 'everyaios-native',
-    name: 'EveryAIOS Native',
-    vendor: 'EveryAIOS',
-    tagline: 'Built-in orchestrator — can shell out to any other runtime',
-    status: 'installed',
-    path: 'internal://everyaios/agent',
-    mark: 'E',
-    accent: 'bg-sky-500 text-black',
-    capabilities: ['code', 'plan', 'research', 'browser', 'shell', 'office', 'tools', 'parallel'],
-    models: [
-      'claude-opus-4.1',
-      'claude-sonnet-4.5',
-      'claude-haiku-4.5',
-      'gpt-5',
-      'gpt-5-codex',
-      'gpt-5-mini',
-      'grok-4',
-      'gemini-2.5-pro',
-      'deepseek-v3.1',
-    ],
-    defaultModel: 'claude-sonnet-4.5',
-    headless: true,
-    sandbox: 'strict',
-    note: 'Routes to the best runtime per task — see Routing tab.',
-  },
+  // P71.2a (ADR-0005 §1) — there is **no** built-in agent row. Every entry here
+  // is an external agent the user installs or binds; nothing is force-shown as
+  // installed and nothing is "always ready".
   {
     id: 'claude-code',
     name: 'Claude Code',
@@ -511,22 +488,15 @@ export function getModelsForAgent(agentId: string): AgentModel[] {
   return a.models.map((id) => MODEL_MAP[id]).filter(Boolean) as AgentModel[]
 }
 
-/** The built-in Native runtime id. Native is the **only** runtime that owns
- * EveryAIOS's own provider/model surface (models.dev catalog, BYOK keys,
- * custom providers, OpenCode Zen/Go/Free, NVIDIA/NIM, local runtimes). */
-export const NATIVE_AGENT_ID = 'everyaios-native'
+/** Model ownership boundary (P60, tightened by P71.2d): **no** runtime owns an
+ * EveryAIOS model surface any more. Every agent here is an external ACP agent
+ * that owns its own model, credentials and routing; the desktop's catalogue,
+ * key vault and usage ledger are *observation*, never a control over an agent.
+ * The UI must never present a provider/model list as something it can push
+ * into an agent. There is no built-in runtime id to single out. */
 
-/** Model ownership boundary (P60): Native owns EveryAIOS's provider catalog;
- * every other runtime is an external ACP agent that owns its own model,
- * authentication, and routing. The UI must never present Native's
- * provider/model list as a control over an external agent. */
-export function isNativeRuntime(agentId: string | undefined): boolean {
-  return agentId === NATIVE_AGENT_ID
-}
-
-/** A runtime is usable when it is the inbuilt orchestrator (always live) or
- * its install was verified on this machine. Anything else must not present
- * models — the model list loads live only after install.
+/** A runtime is usable when its install was verified on this machine. Anything
+ * else must not present models — the model list loads live only after install.
  *
  * P71.3f — when the canonical readiness is present it decides: installable is
  * not usable (`launchable` only means the process can start, not that it can
@@ -535,13 +505,15 @@ export function isNativeRuntime(agentId: string | undefined): boolean {
  * predate the directory read. */
 export function isRuntimeUsable(a: AgentRuntime | undefined): boolean {
   if (!a) return false
-  if (a.id === NATIVE_AGENT_ID) return true
   if (a.readiness !== undefined) return isAgentReady(a.readiness)
   if (a.launchable !== undefined) return a.launchable
   return a.status === 'installed' || a.status === 'updating'
 }
 
 /** P71.3f — project the one readiness state onto the UI's interaction status.
+ * A runtime's curated seed never describes an installed runtime; readiness (or
+ * the install probe) is the only source of that claim.
+ *
  * `disabled` (user policy) and `updating` (install activity) are preserved:
  * they are not readiness states, so readiness must not overwrite them. */
 export function readinessToInstallStatus(
@@ -562,42 +534,21 @@ export function readinessToInstallStatus(
   return 'discovered'
 }
 
-/** Model rows this runtime is allowed to display.
+/** Model rows this runtime is allowed to display — **`[]` for every runtime**
+ * (`P71.2d`, ADR-0005 §2).
  *
- * * **Native** — the curated seed (an installed, usable runtime with a known
- *   mapping). The live models.dev rows are added separately by the picker.
- * * **External ACP agent** — `[]`. Its models are whatever the agent itself
- *   exposes over ACP `configOptions` (`category: "model"`); the curated seed
- *   describes a provider catalog that agent never receives, so rendering it
- *   would claim control EveryAIOS does not have.
- * * **Not installed** — `[]` with an honest empty state. */
-export function getModelsForAgentLive(
-  agentId: string,
-  live?: AgentRuntime[],
-): AgentModel[] {
-  if (!isNativeRuntime(agentId)) return []
-  const row = live?.find((a) => a.id === agentId) ?? AGENT_MAP[agentId]
-  if (!isRuntimeUsable(row)) return []
-  return getModelsForAgent(agentId)
-}
-
-/** Union of models owned by the usable **Native** runtime (deduped, stable
- * order). Drives the Native model catalog surface — external runtimes own
- * their own model lists, so their curated seed is never aggregated here, and
- * an uninstalled runtime contributes nothing. */
-export function modelsForUsableRuntimes(runtimes: AgentRuntime[]): AgentModel[] {
-  const seen = new Set<string>()
-  const out: AgentModel[] = []
-  for (const r of runtimes) {
-    if (!isNativeRuntime(r.id) || !isRuntimeUsable(r)) continue
-    for (const m of getModelsForAgent(r.id)) {
-      if (!seen.has(m.id)) {
-        seen.add(m.id)
-        out.push(m)
-      }
-    }
-  }
-  return out
+ * No runtime's model surface is EveryAIOS's to draw any more: an external ACP
+ * agent's models are whatever the agent itself exposes over ACP `configOptions`
+ * (`category: "model"`), and the desktop's models.dev catalogue is
+ * *observation* (Providers / Local models), never a list this agent receives.
+ * The curated seed describes a provider catalog no agent gets, so rendering it
+ * would claim control EveryAIOS does not have.
+ *
+ * Kept as the single choke point the picker, the palette and the settings panel
+ * all route through: if a model-owning runtime ever returns (the post-v1
+ * governed binding, `P71.7`), this is the one function that has to change. */
+export function getModelsForAgentLive(_agentId: string, _live?: AgentRuntime[]): AgentModel[] {
+  return []
 }
 
 export function getDefaultModelForAgent(agentId: string): string {
@@ -628,16 +579,24 @@ export const TASK_LABELS: Record<TaskKind, string> = {
   'long-context': 'Long-context (>200K)',
 }
 
+/** Task-kind → agent table. **Empty is the v1 default and it is meaningful:**
+ * an empty row means "run this task under the session's bound agent" — v1 has
+ * no built-in engine to fall back to, so EveryAIOS cannot name a default agent
+ * on the user's behalf (ADR-0005 §2). A non-empty value is a choice the user
+ * made in Settings. */
 export const DEFAULT_ROUTING: Record<TaskKind, string> = {
-  code: 'claude-code',
-  plan: 'everyaios-native',
-  research: 'grok-build',
-  browser: 'everyaios-native',
-  shell: 'codex-cli',
-  office: 'everyaios-native',
-  diff: 'claude-code',
-  'long-context': 'gemini-cli',
+  code: '',
+  plan: '',
+  research: '',
+  browser: '',
+  shell: '',
+  office: '',
+  diff: '',
+  'long-context': '',
 }
+
+/** Label for an unset routing row ("follow the bound agent"). */
+export const ROUTING_BOUND_AGENT = 'follow the bound agent'
 
 export const CAPABILITY_LABELS: Record<AgentCapability, string> = {
   code: 'Code',

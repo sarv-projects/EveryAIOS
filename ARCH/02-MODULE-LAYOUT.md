@@ -23,21 +23,21 @@
 
 | Module | Rust Crates (`crates/`) | TS Sidecar Packages (`packages/`) | Frontend Cockpit Surfaces (`ui/src/`) |
 | :--- | :--- | :--- | :--- |
-| **Harness & swarm orchestration (planes 2 + 5)** | `everyaios-acp`, `everyaios-core` (`multirun.rs`, `worktrees.rs`), `everyaios-blueprint` (`subagent.rs`), `everyaios-agents` | `coordinator` (`chat.ts`), `core-agents` | `screens/AgentsScreen.tsx`, `screens/ChatScreen.tsx` (agent picker), right-rail `diff` viewport |
+| **Harness & swarm orchestration (planes 2 + 5)** | `everyaios-acp`, `everyaios-core` (`multirun.rs`, `worktrees.rs`), `everyaios-blueprint` (`subagent.rs`), `everyaios-agents` | `coordinator` (`primary-agent.ts` — bound-agent owner, the live rename of `chief.ts`, which is archived with the loop at `ARCH/archive/coordinator-loop/` — 2026-09-22), `core-agents` | `screens/AgentsScreen.tsx`, `screens/ChatScreen.tsx` (agent picker), right-rail `diff` viewport |
 | **Module 2: Agent Registry, Discovery, Binding & the Encrypted Vault** *(ex-“Model Gateway”, re-scoped by [`ADR/0005`](ADR/0005-external-agents-are-the-v1-engines.md))* | `everyaios-vault`, `everyaios-catalog`, `everyaios-agents` | `core-providers` (catalogue + usage metadata only), `core-ai` | `settings` **Agents** + Providers & Keys tabs, `guard.html` unlock modal |
-| **Module 3: Unified Cockpit Shell & Context Compactor** | `everyaios-engine`, `everyaios-ipc`, `src-tauri` (40 command modules) | `coordinator` (`prompt.ts`, `tools.ts`), `core-engine` | `App.tsx`, `Layout.tsx`, multi-control composer, 19 right-rail viewports |
+| **Module 3: Unified Cockpit Shell & Context Compactor** | `everyaios-engine` (dead — zero dependents, deletion queued 2026-09-22), `everyaios-ipc`, `src-tauri` (40 command modules) | `coordinator` (services the turn calls into: memory/guard/work/skills/MCP/connectors) | `App.tsx`, `Layout.tsx`, multi-control composer, 19 right-rail viewports |
 | **Module 4: Governed MCP & Capability Marketplace** | `everyaios-mcp` | `core-connectors` (`connector_hub`) | `screens/ConnectorsScreen.tsx`, per-agent tool scoping drawer |
 | **Module 5: Work-Native Primitives (Office, Browser, CUA)** | `everyaios-office` (IronCalc 0.8.3, OOXML), `everyaios-browser`, `everyaios-cdp`, `everyaios-desktop` (CUA) | `coordinator` (`tools/browser.ts`, `tools/office.ts`) | Right-rails: `office-xlsx`, `office-docx`, `office-pdf`, `browse`, `desktop` |
 | **Module 6: Durable Work & Cognitive Memory (four classes)** | `everyaios-memory` (ACT-R), `everyaios-storage`, `everyaios-codeintel` | `core-memory` | `screens/MemoryScreen.tsx`, `screens/ProjectsScreen.tsx`, `screens/FilesScreen.tsx`, right-rail `graph` |
 | **Module 7: Executive Automations & Calendar Daemon** | `everyaios-core` (`automation_runtime.rs`), `everyaios-blueprint` (`crystallize.rs`) | `coordinator` (`scheduler.ts`) — the engine is Rust (`Tier 2d`) | `screens/AutomationsScreen.tsx`, `screens/CalendarScreen.tsx`, right-rail `terminal` |
-| **Module 8: Security Guard-2 & Merkle Audit Membrane** | `everyaios-guard` (`netfloor.rs`, `pathfloor.rs`), `everyaios-audit`, `everyaios-script` (rquickjs) | `core-engine` (`trust-ladder` — advisory policy, moved out of `core-tools` by `P69.D5`/`D6`) | `screens/GuardScreen.tsx`, `screens/ActivityScreen.tsx`, Guard approval diff cards |
+| **Module 8: Security Guard-2 & Merkle Audit Membrane** | `everyaios-guard` (`netfloor.rs`, `pathfloor.rs`), `everyaios-audit`, `everyaios-script` (rquickjs) | — (the advisory `trust-ladder`/`permission-gate` classifiers are archived with the engine; Guard is the decider) | `screens/GuardScreen.tsx`, `screens/ActivityScreen.tsx`, Guard approval diff cards |
 
 ## 2.2 Workspace Directory Structure
 
 ```
 desktop_app/
 ├── ARCH/                        ← Architecture specifications (00-INDEX through 15 + the subsystem contracts + DIAGRAMS; 16/17 archived under ARCH/archive/)
-├── crates/                      ← Rust workspace (22 crates)
+├── crates/                      ← Rust workspace: 22 members per crates/Cargo.toml (incl. everyaios-engine — dead, no dependents, deletion queued; 2026-09-22)
 │   ├── everyaios-core/          ← Process lifecycle, worktree manager, multirun fanout, automation runtime
 │   ├── everyaios-acp/           ← ACP stdio JSON-RPC bridge (external agent harness)
 │   ├── everyaios-vault/         ← SQLCipher encrypted vault, keyring pools, 429 auto-failover, broker
@@ -54,14 +54,14 @@ desktop_app/
 │   ├── everyaios-blueprint/     ← Task DAG state machine, checkpoint/resume, skill store (.everyaios/skills/)
 │   ├── everyaios-search/        ← Search cascade (SearXNG + DDG circuit-breaker), deep research tree
 │   ├── everyaios-catalog/       ← 4-hour models.dev catalog sync, capability probes
-│   ├── everyaios-engine/        ← Pure Rust stages: permission gate, evidence grounding, risk scoring
+│   ├── everyaios-engine/        ← DEAD (zero dependents since P71.2c) — deletion queued 2026-09-22 (TODO P72); post-v1 return vehicle P71.7; no new code
 │   ├── everyaios-agents/        ← Custom agent bundle schemas (agent.toml)
 │   ├── everyaios-eval/          ← Deterministic verifier, completion eval, adversarial test suite
 │   ├── everyaios-script/        ← rquickjs sandboxed JavaScript evaluation
 │   ├── everyaios-ipc/           ← stdio JSON-RPC framing and Tauri glue
 │   └── everyaios-types/         ← Shared domain types and ID primitives
 ├── packages/                    ← TypeScript workspace (11 packages)
-│   ├── coordinator/             ← Master agent loop, 12-segment prompt assembler, token compaction, scheduler
+│   ├── coordinator/             ← Turn coordination + scheduler (the loop, 12-segment prompt assembler and friends archived to ARCH/archive/coordinator-loop/ 2026-09-22)
 │   └── core-*/                  ← Reused domain engines (agents, ai, connectors, domain, engine, memory, providers, search, security, tools)
 ├── src-tauri/                   ← Tauri 2 desktop shell (40 command modules)
 └── ui/                          ← React 19 + Zustand 5 + Tailwind 4 cockpit SPA
@@ -96,7 +96,7 @@ me** (`subagent.rs` `DelegationPolicy` — fresh-context `SubAgentSpec` + `DELEG
 
 | Domain | Package (exists) | New work |
 |---|---|---|
-| Agent loop (pi-style) | `core-engine` (stages, risk-compass) | length-guard (fail truncated tool calls), model-swap hook, cost ledger wiring |
+| Agent loop (pi-style) | **archived** — `ARCH/archive/core-engine/` + `ARCH/archive/coordinator-loop/` (`P71.2c`) | the loop belongs to the bound agent (`AGENT.md` §1); post-v1 return as the governed baseline binding (`P71.7`) |
 | Blueprint/spec loader | `core-agents` (registry) | `.md` parser → AgentConfig[]; continuous re-write of status blocks |
 | Memory + RAG | `core-memory`; vectorless FTS5/BM25 + embeddings + chunking live in Rust (`everyaios-memory::bm25`, `everyaios-storage`) — `core-files` was consolidated away (Tier 2c) | multi-signal retrieval fusion (mem0 pattern), procedural memory, Letta-style paging hooks |
 | Connector hub | `core-connectors` (orchestrator, 27+ adapters, composio) | routing engine per doc 13; usage meters; Auth Bridge |
@@ -104,7 +104,7 @@ me** (`subagent.rs` `DelegationPolicy` — fresh-context `SubAgentSpec` + `DELEG
 | Search/research | `core-search` (cascade, bm25, research-tiers) | deep-research tree runner (doc 07); **tiered cascade + SQLite result cache (G8, Algorithm #33, doc 52)** — cached instant tier → WebSurfx → SearXNG → fallback; parallel top-N fetch cascade. *Not the desktop implementation: the Rust kernel owns desktop search (`P69.D9`/`D10`); `LAYER-3` fails if the cascade is wired into the turn loop.* |
 | Automations | `coordinator` (`scheduler.ts`) — engine/crystallization is Rust (`everyaios-blueprint::crystallize`, Tier 2d) | scheduler UI, nudge sentinels |
 | Providers/BYOK | `core-providers`, `core-ai` (clients, router, vault) | **key-ring client** (03): multiple keys/provider, fallback rotation |
-| Security | `core-engine` (trust-ladder, permission-gate — advisory policy; moved out of `core-tools` by `P69.D5`/`D6`) | keep; GuardRail enforcement delegated to Rust everyaios-guard; Guard is the only decider |
+| Security | **archived** with the engine (`P71.2c`) — the advisory `trust-ladder`/`permission-gate` classifiers | Guard (`everyaios-guard`) is the only decider; `D3/D5/D6` held then and hold now |
 
 **Division of trust:** the sidecar proposes; the Rust core disposes. **Execution model:** the sidecar runs the reused `core-*` engine in-process (files, connectors, search — that's the asset being reused), but every **mutating** call must present a valid **everyaios-guard authorization ticket**: Rust performs the regex scan + path resolution + permission decision first and issues a short-lived ticket; the sidecar's tool runtime rejects un-ticketed mutations. The sidecar's own *unguarded* OS access is confined to its data dir (its stdio pipe is the only unrestricted handle). Browser control, script-eval, OAuth-token use, and shell outside the granted workspace always execute in Rust regardless of ticket.
 
@@ -138,7 +138,7 @@ me** (`subagent.rs` `DelegationPolicy` — fresh-context `SubAgentSpec` + `DELEG
 | `everyaios-guard` | 3 Runtime kernel | permissions | **Canonical security authority** | the only allow/deny/ask decider |
 | `everyaios-vault` | 3 Runtime kernel | credentials | **Canonical credential authority** | the only holder of key material |
 | `everyaios-audit` | 3 Runtime kernel | events (evidence) | **Canonical evidence authority** | append-only log + receipts |
-| `everyaios-engine` | 2 Agent plane | — (pure policy) | **Keep, pure policy only** | policies and helpers, never a runtime |
+| `everyaios-engine` | 2 Agent plane | — (pure policy) | **Dead — deletion queued (2026-09-22)** | zero dependents since `P71.2c`; dead weight that must not become a second engine. Post-v1 return vehicle is `P71.7`; deletion queued in `../TODO.md` P72. Today's workspace count (22 members) includes this dead row; no new code may land here |
 | `everyaios-agents` | 2 Agent plane | agents | **Canonical `AgentRegistry`** | one `AgentDefinition`, one registry |
 | `everyaios-blueprint` | 2 Agent plane | — (declarative plans) | **Shrink to declarative planning** | plans, dependencies, acceptance; no execution |
 | `everyaios-acp` | 5 External agents | — (adapter + bridge) | **Keep — becomes the adapter + AgentBridge** | lifecycle protocol; never a second kernel |
@@ -159,9 +159,9 @@ me** (`subagent.rs` `DelegationPolicy` — fresh-context `SubAgentSpec` + `DELEG
 
 | Component | Plane (CORE §13) | Ownership question (CORE §4) | Final action | Why |
 |---|---|---|---|---|
-| `coordinator` | 2 Agent plane | — (turn coordination) | **Rewrite into turn coordination** | owns orchestration, not reasoning and not execution. The loop owner is the selected agent ([AGENT.md](AGENT.md)) |
+| `coordinator` | 2 Agent plane | — (turn coordination) | **Rewrite into turn coordination — loop references removed 2026-09-22** | owns orchestration, not reasoning and not execution. The turn loop (`chat.ts` · `plan.ts` · `tools.ts` · `prompt.ts` · `chief.ts`) is archived at `ARCH/archive/coordinator-loop/` (`P71.2c`) and is **not** part of the rewrite target: coordination now runs via Work/AUTOMATION + the bound agents, and the loop owner is the selected agent ([AGENT.md](AGENT.md)) |
 | `core-ai` | 2 Agent plane | — (generation contracts) | **Keep / shrink** | context · prompt · generation contracts |
-| `core-engine` | 2 Agent plane | — | **Collapse into pure policy + helpers** | it is currently a competing conversation runtime |
+| `core-engine` | 2 Agent plane | — | **Archived (`P71.2c`, 2026-09-22)** | it was a competing conversation runtime; the loop belongs to the bound agent (ADR-0005 §2). Lives in `ARCH/archive/core-engine/` for the post-v1 governed binding; `LAYER-1` fails the build if it returns to `packages/` |
 | `core-agents` | 2 Agent plane | agents (facade) | **Thin facade** | query the canonical registry; own nothing |
 | `core-memory` | 2 Agent plane | memory (reasoning) | **Shrink drastically** | memory *reasoning* only — no storage |
 | `core-providers` | 2 Agent plane | — (metadata/handles) | **Shrink; no vault** | metadata and handle queries; **no credential custody** |

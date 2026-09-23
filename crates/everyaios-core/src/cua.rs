@@ -226,7 +226,7 @@ pub fn load_dag(dir: &Path) -> Result<ComputerUseDag, String> {
 /// P59.6 / P59.14 — one Worker step: observe → **one** act → verify.
 /// Two identical fails → Halt (not another click).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum WorkerOutcome {
+pub enum DelegationOutcome {
     Verified,
     Mismatch,
     Halt,
@@ -234,30 +234,30 @@ pub enum WorkerOutcome {
 
 pub const IDENTICAL_FAIL_HALT: u32 = 2;
 
-pub fn worker_step(verify_ok: bool, identical_fail_count: u32) -> WorkerOutcome {
+pub fn delegation_step(verify_ok: bool, identical_fail_count: u32) -> DelegationOutcome {
     if verify_ok {
-        return WorkerOutcome::Verified;
+        return DelegationOutcome::Verified;
     }
     if identical_fail_count.saturating_add(1) >= IDENTICAL_FAIL_HALT {
-        return WorkerOutcome::Halt;
+        return DelegationOutcome::Halt;
     }
-    WorkerOutcome::Mismatch
+    DelegationOutcome::Mismatch
 }
 
 /// P59.6 / P59.14 — apply one Worker outcome onto the node. Halt is a status,
 /// never a success. OpenAdapt: do not summarize halt as VERIFIED.
-pub fn apply_worker_act(node: &mut CuaNode, verify_ok: bool) -> WorkerOutcome {
-    let out = worker_step(verify_ok, node.identical_fail_count);
+pub fn apply_delegation_act(node: &mut CuaNode, verify_ok: bool) -> DelegationOutcome {
+    let out = delegation_step(verify_ok, node.identical_fail_count);
     match out {
-        WorkerOutcome::Verified => {
+        DelegationOutcome::Verified => {
             node.status = CuaNodeStatus::Verified;
             node.identical_fail_count = 0;
         }
-        WorkerOutcome::Mismatch => {
+        DelegationOutcome::Mismatch => {
             node.identical_fail_count = node.identical_fail_count.saturating_add(1);
             node.status = CuaNodeStatus::Running;
         }
-        WorkerOutcome::Halt => {
+        DelegationOutcome::Halt => {
             node.identical_fail_count = node.identical_fail_count.saturating_add(1);
             node.status = CuaNodeStatus::Halted;
         }
@@ -532,13 +532,13 @@ pub fn screen_text_is_untrusted(_text: &str) -> bool {
 /// “I already succeeded” as proof.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
-pub enum AgentRole {
+pub enum DelegationRole {
     Scout,
     Worker,
     Verifier,
 }
 
-impl AgentRole {
+impl DelegationRole {
     pub fn parse(raw: &str) -> Option<Self> {
         match raw.trim().to_ascii_lowercase().as_str() {
             "scout" => Some(Self::Scout),
@@ -586,7 +586,7 @@ impl FivePartBrief {
     }
 }
 
-/// P60.5 — Chief writes the brief onto the node. A transcript dump is not a brief.
+/// P60.5 — the primary agent writes the brief onto the node. A transcript dump is not a brief.
 pub fn apply_five_part_brief(node: &mut CuaNode, brief: FivePartBrief) -> Result<(), String> {
     if !brief.is_complete() {
         return Err("five-part brief incomplete — Worker does not inherit the transcript".into());
@@ -610,10 +610,10 @@ pub const SCOUT_ALLOWED_TOOLS: &[&str] = &[
     "desktop.snapshot",
 ];
 
-pub fn filter_tools_for_role(role: AgentRole, tools: &[String]) -> Vec<String> {
+pub fn filter_tools_for_role(role: DelegationRole, tools: &[String]) -> Vec<String> {
     match role {
-        AgentRole::Worker => tools.to_vec(),
-        AgentRole::Scout | AgentRole::Verifier => tools
+        DelegationRole::Worker => tools.to_vec(),
+        DelegationRole::Scout | DelegationRole::Verifier => tools
             .iter()
             .filter(|t| SCOUT_ALLOWED_TOOLS.contains(&t.as_str()))
             .cloned()
@@ -740,10 +740,10 @@ pub fn apply_mechanical_verify(
     let verdict = mechanical_verify(worker_claimed_success, evidence);
     match verdict {
         MechanicalVerdict::Verified => {
-            let _ = apply_worker_act(node, true);
+            let _ = apply_delegation_act(node, true);
         }
         MechanicalVerdict::Refuted => {
-            let _ = apply_worker_act(node, false);
+            let _ = apply_delegation_act(node, false);
         }
         MechanicalVerdict::Sampled => {
             // Disk did not speak. Do not mark Verified. Do not increment fails.
@@ -753,7 +753,7 @@ pub fn apply_mechanical_verify(
 }
 
 /// P60.7 — BLOCKED ≠ FAILED. Missing permission/info does not burn the
-/// fail budget. FAILED ×3 → Chief reclaims the node.
+/// fail budget. FAILED ×3 → the primary agent reclaims the node.
 pub const FAILED_RECLAIM_AFTER: u32 = 3;
 
 pub fn stop_is_blocked(reason: &str) -> bool {
@@ -763,7 +763,7 @@ pub fn stop_is_blocked(reason: &str) -> bool {
     )
 }
 
-/// Returns whether the Chief must reclaim (do the work or replan).
+/// Returns whether the primary agent must reclaim (do the work or replan).
 pub fn apply_node_stop(node: &mut CuaNode, reason: &str) -> bool {
     if stop_is_blocked(reason) {
         node.status = CuaNodeStatus::Blocked;
@@ -780,14 +780,14 @@ pub fn apply_node_stop(node: &mut CuaNode, reason: &str) -> bool {
 }
 
 /// P60.1 — five planes that must stay distinct (spec §4.2.5b).
-/// Governance is code, not a prompt. Chief is not the workhorse.
+/// Governance is code, not a prompt. The primary agent is not the workhorse.
 /// Orchestrator is the Rust DAG. Subagent is a role, not a CLI name.
 /// Harness and model swap independently. No “claude-subagent” type.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum RuntimePlane {
     Governance,
-    Chief,
+    Primary,
     Orchestrator,
     Subagent,
     HarnessModel,
@@ -795,7 +795,7 @@ pub enum RuntimePlane {
 
 pub const RUNTIME_PLANES: [RuntimePlane; 5] = [
     RuntimePlane::Governance,
-    RuntimePlane::Chief,
+    RuntimePlane::Primary,
     RuntimePlane::Orchestrator,
     RuntimePlane::Subagent,
     RuntimePlane::HarnessModel,
@@ -807,7 +807,7 @@ pub struct RuntimeBinding {
     pub harness: String,
     pub model: String,
     #[serde(default)]
-    pub role: Option<AgentRole>,
+    pub role: Option<DelegationRole>,
     #[serde(default)]
     pub chief: Option<String>,
 }
@@ -828,7 +828,7 @@ pub fn refuse_cli_named_subagent(label: &str) -> Result<(), String> {
 pub fn bind_runtime(
     harness: &str,
     model: &str,
-    role: Option<AgentRole>,
+    role: Option<DelegationRole>,
     chief: Option<String>,
 ) -> Result<RuntimeBinding, String> {
     refuse_cli_named_subagent(harness)?;
@@ -944,28 +944,28 @@ pub fn pick_combo(needs_vision: bool, verify_failed: bool, current: ModelTier) -
     t
 }
 
-/// P60.8 — Case A/B/C. Occupancy stays the Chief (F8); workers may differ.
+/// P60.8 — Case A/B/C. Occupancy stays the primary agent (F8); workers may differ.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum HarnessModelCase {
-    /// Different harness and different model from the Chief.
+    /// Different harness and different model from the primary agent.
     A,
-    /// Same harness and same model as the Chief.
+    /// Same harness and same model as the primary agent.
     B,
     /// Same harness, different model.
     C,
 }
 
 pub fn classify_harness_model_case(
-    chief_harness: &str,
-    chief_model: &str,
+    primary_harness: &str,
+    primary_model: &str,
     worker_harness: &str,
     worker_model: &str,
 ) -> HarnessModelCase {
-    let same_h = chief_harness
+    let same_h = primary_harness
         .trim()
         .eq_ignore_ascii_case(worker_harness.trim());
-    let same_m = chief_model.trim().eq_ignore_ascii_case(worker_model.trim());
+    let same_m = primary_model.trim().eq_ignore_ascii_case(worker_model.trim());
     match (same_h, same_m) {
         (false, _) => HarnessModelCase::A,
         (true, true) => HarnessModelCase::B,
@@ -973,30 +973,30 @@ pub fn classify_harness_model_case(
     }
 }
 
-/// P60.9 — Chief share of run spend. Target < 20%; warn, do not abort.
-pub const CHIEF_SPEND_WARN: f64 = 0.20;
+/// P60.9 — primary-agent share of run spend. Target < 20%; warn, do not abort.
+pub const PRIMARY_SPEND_WARN: f64 = 0.20;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ChiefSpend {
-    pub chief_tokens: u64,
+pub struct PrimarySpend {
+    pub primary_tokens: u64,
     pub worker_tokens: u64,
     pub share: f64,
     pub warn_not_delegating: bool,
 }
 
-pub fn split_chief_spend(chief_tokens: u64, worker_tokens: u64) -> ChiefSpend {
-    let total = chief_tokens.saturating_add(worker_tokens);
+pub fn split_primary_spend(primary_tokens: u64, worker_tokens: u64) -> PrimarySpend {
+    let total = primary_tokens.saturating_add(worker_tokens);
     let share = if total == 0 {
         0.0
     } else {
-        chief_tokens as f64 / total as f64
+        primary_tokens as f64 / total as f64
     };
-    ChiefSpend {
-        chief_tokens,
+    PrimarySpend {
+        primary_tokens,
         worker_tokens,
         share,
-        warn_not_delegating: total > 0 && share > CHIEF_SPEND_WARN,
+        warn_not_delegating: total > 0 && share > PRIMARY_SPEND_WARN,
     }
 }
 
@@ -1046,9 +1046,9 @@ mod tests {
 
     #[test]
     fn p59_worker_halts_after_two_identical_fails() {
-        assert_eq!(worker_step(true, 0), WorkerOutcome::Verified);
-        assert_eq!(worker_step(false, 0), WorkerOutcome::Mismatch);
-        assert_eq!(worker_step(false, 1), WorkerOutcome::Halt);
+        assert_eq!(delegation_step(true, 0), DelegationOutcome::Verified);
+        assert_eq!(delegation_step(false, 0), DelegationOutcome::Mismatch);
+        assert_eq!(delegation_step(false, 1), DelegationOutcome::Halt);
     }
 
     #[test]
@@ -1134,13 +1134,13 @@ mod tests {
             "desktop.act".into(),
             "search.query".into(),
         ];
-        let scout = filter_tools_for_role(AgentRole::Scout, &tools);
+        let scout = filter_tools_for_role(DelegationRole::Scout, &tools);
         assert!(scout.contains(&"file_ops.read".into()));
         assert!(scout.contains(&"search.query".into()));
         assert!(!scout
             .iter()
             .any(|t| t.contains("write") || t == "desktop.act"));
-        let worker = filter_tools_for_role(AgentRole::Worker, &tools);
+        let worker = filter_tools_for_role(DelegationRole::Worker, &tools);
         assert!(worker.contains(&"file_ops.write".into()));
     }
 
@@ -1157,9 +1157,9 @@ mod tests {
             "no writes",
         );
         assert!(brief.is_complete());
-        assert_eq!(AgentRole::parse("SCOUT"), Some(AgentRole::Scout));
-        assert_eq!(AgentRole::parse("verify"), Some(AgentRole::Verifier));
-        assert_eq!(AgentRole::parse("nope"), None);
+        assert_eq!(DelegationRole::parse("SCOUT"), Some(DelegationRole::Scout));
+        assert_eq!(DelegationRole::parse("verify"), Some(DelegationRole::Verifier));
+        assert_eq!(DelegationRole::parse("nope"), None);
         let mut node = CuaNode {
             id: "w".into(),
             postconditions: vec!["file list returned".into()],
@@ -1243,9 +1243,9 @@ mod tests {
             ..Default::default()
         };
         assert!(node_contract_legal(&n));
-        assert_eq!(apply_worker_act(&mut n, false), WorkerOutcome::Mismatch);
+        assert_eq!(apply_delegation_act(&mut n, false), DelegationOutcome::Mismatch);
         assert_eq!(n.status, CuaNodeStatus::Running);
-        assert_eq!(apply_worker_act(&mut n, false), WorkerOutcome::Halt);
+        assert_eq!(apply_delegation_act(&mut n, false), DelegationOutcome::Halt);
         assert_eq!(n.status, CuaNodeStatus::Halted);
         assert_ne!(n.status, CuaNodeStatus::Verified);
         let empty = CuaNode::default();
@@ -1407,16 +1407,16 @@ mod tests {
         let b = bind_runtime(
             "inbuilt",
             "local-vl",
-            Some(AgentRole::Worker),
+            Some(DelegationRole::Worker),
             Some("inbuilt".into()),
         )
         .unwrap();
         assert_eq!(b.harness, "inbuilt");
         assert_eq!(b.model, "local-vl");
-        assert_eq!(b.role, Some(AgentRole::Worker));
+        assert_eq!(b.role, Some(DelegationRole::Worker));
         assert!(bind_runtime("claude-subagent", "opus", None, None).is_err());
-        let a = bind_runtime("inbuilt", "cheap", Some(AgentRole::Scout), None).unwrap();
-        let c = bind_runtime("acp:other", "frontier", Some(AgentRole::Worker), None).unwrap();
+        let a = bind_runtime("inbuilt", "cheap", Some(DelegationRole::Scout), None).unwrap();
+        let c = bind_runtime("acp:other", "frontier", Some(DelegationRole::Worker), None).unwrap();
         assert_ne!(a.harness, c.harness);
         assert_ne!(a.model, c.model);
     }
@@ -1488,12 +1488,12 @@ mod tests {
 
     #[test]
     fn p60_chief_spend_warns_above_twenty_percent() {
-        let ok = split_chief_spend(10, 90);
+        let ok = split_primary_spend(10, 90);
         assert!((ok.share - 0.10).abs() < 1e-9);
         assert!(!ok.warn_not_delegating);
-        let warn = split_chief_spend(30, 70);
+        let warn = split_primary_spend(30, 70);
         assert!(warn.warn_not_delegating);
-        assert!(!split_chief_spend(0, 0).warn_not_delegating);
+        assert!(!split_primary_spend(0, 0).warn_not_delegating);
     }
 
     #[test]

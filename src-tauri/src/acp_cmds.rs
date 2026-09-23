@@ -1598,6 +1598,66 @@ pub fn chief_subagent_set_enabled(agent_id: String, enabled: bool) -> Result<boo
     Ok(enabled)
 }
 
+/// P71.9d — persist one installed agent's delegation profile
+/// (Settings → Subagents). Refuses unknown/uninstalled ids; fields absent from
+/// the payload keep their spec defaults, and the gateway's live
+/// `delegation_gauge` remains the admission authority.
+#[tauri::command]
+pub fn chief_subagent_set_policy(
+    agent_id: String,
+    model_policy: Option<String>,
+    role: Option<String>,
+    may_spawn: Option<bool>,
+    max_children: Option<u32>,
+    max_depth: Option<u32>,
+    max_concurrency: Option<u32>,
+    workspace: Option<String>,
+    budget: Option<u64>,
+) -> Result<serde_json::Value, String> {
+    if launch_registry().get(&agent_id).is_none() {
+        return Err(format!("unknown agent id: {agent_id}"));
+    }
+    if !agent_installed(&agent_id) {
+        return Err(format!("agent {agent_id} is not installed"));
+    }
+    let path = Config::config_path().map_err(|e| e.to_string())?;
+    let mut cfg = Config::load().map_err(|e| e.to_string())?;
+    let policy = cfg
+        .subagent_policy
+        .entry(agent_id.clone())
+        .or_insert_with(everyaios_core::SubagentPolicy::default);
+    if let Some(v) = model_policy {
+        policy.model_policy = v;
+    }
+    if let Some(v) = role {
+        policy.role = v;
+    }
+    if let Some(v) = may_spawn {
+        policy.may_spawn = v;
+    }
+    if let Some(v) = max_children {
+        policy.max_children = v;
+    }
+    if let Some(v) = max_depth {
+        policy.max_depth = v;
+    }
+    if let Some(v) = max_concurrency {
+        policy.max_concurrency = v;
+    }
+    if let Some(v) = workspace {
+        if v != "shared" && v != "isolated" {
+            return Err(format!("workspace must be \"shared\" or \"isolated\", got {v:?}"));
+        }
+        policy.workspace = v;
+    }
+    if let Some(v) = budget {
+        policy.budget = v;
+    }
+    let saved = policy.clone();
+    cfg.save(&path).map_err(|e| e.to_string())?;
+    serde_json::to_value(saved).map_err(|e| e.to_string())
+}
+
 /// P53.6 — the current enabled delegation mix, consumed by Chief handoff.
 #[tauri::command]
 pub fn chief_subagent_mix() -> Result<Vec<serde_json::Value>, String> {
@@ -1706,6 +1766,7 @@ pub fn acp_prompt(
     text: String,
     handoff: Option<String>,
     refs: Option<Vec<String>>,
+    session_id: Option<String>,
 ) -> Result<serde_json::Value, String> {
     let mut sessions = state.acp_sessions.lock().map_err(|e| e.to_string())?;
     let entry = sessions
@@ -1717,6 +1778,36 @@ pub fn acp_prompt(
     }
 
     let agent_id = entry.agent_id.clone();
+    // P71.2c — the **turn gates** live here now, because this is the one path a
+    // v1 turn takes (the `start_stream` dispatch they used to guard is deleted
+    // with the built-in engine, ADR-0005 §2).
+    //
+    // (1) P71.3f readiness: a turn runs only for a `Ready` agent; otherwise it
+    //     fails closed **with the state named** (the run-level failure record
+    //     `ARCH/AUTOMATION.md` §9 requires), never a generic engine error. The
+    //     live handle is the strongest available evidence — it exists only after
+    //     `initialize` negotiated — and a handle without a session is
+    //     `ProtocolCompatible`, which is not yet a runnable turn.
+    let readiness = agent_readiness_with_live(&agent_id, Some(live_facts(entry)));
+    if !readiness.is_ready() {
+        return Err(format!(
+            "agent '{agent_id}' is not ready: {readiness} — {}",
+            readiness.summary()
+        ));
+    }
+    // (2) J11 session budget: refusing here is the same guarantee the deleted
+    //     pre-flight gave — nothing is dispatched once a session is at its
+    //     limit. A caller that names no session (a bare `acpx run` style turn)
+    //     has no session ledger to consult and is not gated.
+    if let Some(sid) = session_id.as_deref().filter(|s| !s.is_empty()) {
+        if let Ok(relay) = state.chat_relay.lock() {
+            if let Some(relay) = relay.as_ref() {
+                relay
+                    .preflight_session_budget(sid)
+                    .map_err(|e| e.to_string())?;
+            }
+        }
+    }
     let session_id = entry.session.session_id().unwrap_or("acp").to_string();
     let guard = Arc::clone(&state.guard_service);
     drop(sessions);
@@ -1862,6 +1953,45 @@ pub fn acp_prompt(
             }
         }
         append_acp_tool_log(&session_id, &handle, &agent_id, &text, &outcome);
+    }
+
+    // P71.4 — the turn's usage is an **observation**. The agent's own report is
+    // recorded with its source named; an agent that reports nothing is counted
+    // as *unreported*, never rendered as a measured zero. Nothing here
+    // estimates tokens from prompt length — that would be invented precision
+    // (`ARCH/ROUTING.md` §5, I15).
+    // Clone the `Arc` out of the relay so the memory lock outlives the relay
+    // borrow (the same pattern `memory_cmds::memory_arc` uses).
+    let memory_arc = state
+        .chat_relay
+        .lock()
+        .ok()
+        .and_then(|relay| relay.as_ref().map(|r| r.memory()));
+    if let Some(mem) = memory_arc {
+        {
+            if let Ok(mut m) = mem.lock() {
+                // The run's primary agent is whoever drove this turn — the one
+                // fact only the turn path knows.
+                m.set_primary_agent(&agent_id);
+                match outcome.usage {
+                    Some(u) if u.reported() => m.record_usage_from(
+                        everyaios_core::UsageSource::AgentReport,
+                        &agent_id,
+                        // The agent owns its own credential, so the turn is
+                        // billed to the agent rather than to one of our keys.
+                        &agent_id,
+                        &session_id,
+                        u.input_tokens,
+                        u.output_tokens,
+                        u.cached_read_tokens > 0,
+                        u.cached_read_tokens,
+                        u.cached_write_tokens,
+                        u.cost_usd.unwrap_or(0.0),
+                    ),
+                    _ => m.record_usage_unreported(&agent_id),
+                }
+            }
+        }
     }
 
     if let Some(ref eid) = exec_id {

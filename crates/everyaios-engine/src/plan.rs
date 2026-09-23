@@ -1,8 +1,10 @@
-//! Planner stages — port of stages/retrieval-planner.ts + tool-planner.ts.
+//! Planner stages — port of the archived `stages/retrieval-planner.ts` +
+//! `stages/tool-planner.ts` (`ARCH/archive/core-engine/`, `P71.2c`).
 //!
 //! Both are pure: given a surface contract + per-turn input (+ optional agent
 //! sandbox overrides), they produce the retrieval plan and the allowed-tool
-//! plan the engine feeds to the model. No IO, LLM-free.
+//! plan the engine fed to the model. No IO, LLM-free, and — since no engine runs
+//! in v1 — nothing calls them outside their own tests (`P69.D27`, `P71.7`).
 
 use crate::{Scope, SurfaceContract, ToolFamily};
 

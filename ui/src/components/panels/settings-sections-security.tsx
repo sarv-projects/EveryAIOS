@@ -33,7 +33,13 @@ import {
   type MatrixCell,
   type PolicyRule,
 } from '@/lib/guard'
-import { usageSnapshot, type UsageSnapshot } from '@/lib/spend'
+import {
+  costReadout,
+  unreportedOwners,
+  usageSnapshot,
+  usageSourceLabel,
+  type UsageSnapshot,
+} from '@/lib/spend'
 import { SessionsTable } from './analytics-sections'
 import { Row, SectionShell } from './settings-shared'
 
@@ -385,29 +391,47 @@ export function UsageSection() {
     }
   }, [])
 
-  const spent = snapshot?.byKey.reduce((sum, k) => sum + (k.costUsd ?? 0), 0)
+  // P71.4 — every figure here is an **observation**. Cost is shown as reported
+  // when a producer priced its own turns, as our estimate from configured
+  // prices when it did not, and as an honest dash when neither exists.
+  const cost = snapshot ? costReadout(snapshot) : null
   const tokens = snapshot ? snapshot.total.tokensIn + snapshot.total.tokensOut : null
+  const gaps = snapshot ? unreportedOwners(snapshot) : []
 
   return (
     <SectionShell
       title="Usage"
-      desc="Live token and spend figures from the encrypted usage ledger (usage_snapshot + session_totals)."
+      desc="Token and spend observations read from the encrypted usage ledger — each figure names who reported it (wire: usage_snapshot)."
     >
       {error && (
         <div className="rounded-md border border-red-500/30 bg-red-500/5 px-3 py-2 text-[11px] text-red-300">
           Usage ledger is unavailable. {error}
         </div>
       )}
-      <Row label="Total spent" desc="Sum of per-key cost in the ledger">
+      <Row
+        label={cost?.kind === 'reported' ? 'Total spent (reported)' : cost?.kind === 'estimated' ? 'Total spent (estimated)' : 'Total spent'}
+        desc="Reported when an agent priced its own turns; otherwise EveryAIOS's estimate from configured prices — never the two blended"
+      >
         <span className="font-mono text-xs text-brand">
-          {loading ? '…' : spent != null ? `$${spent.toFixed(4)}` : '—'}
+          {loading ? '…' : cost?.usd != null ? `$${cost.usd.toFixed(4)}` : '—'}
         </span>
       </Row>
-      <Row label="Tokens" desc="Input + output across every recorded key">
+      <Row label="Tokens" desc="Input + output reported across every recorded key">
         <span className="font-mono text-xs text-foreground/80">
           {loading ? '…' : tokens != null ? tokens.toLocaleString() : '—'}
         </span>
       </Row>
+      {!loading && gaps.length > 0 && (
+        <Row
+          label="Turns with no usage report"
+          desc="These turns are absent from the totals above — absent is not zero"
+        >
+          <span className="font-mono text-xs text-warning">
+            {gaps.slice(0, 3).map(([owner, n]) => `${owner} ×${n}`).join(' · ')}
+            {gaps.length > 3 ? ` · +${gaps.length - 3}` : ''}
+          </span>
+        </Row>
+      )}
       <Row label="Prompt cache hit rate" desc="Cached / (cached + uncached) prompt tokens">
         <span className="font-mono text-xs text-foreground/80">
           {loading
@@ -429,10 +453,27 @@ export function UsageSection() {
           <div className="space-y-1">
             {snapshot.byKey.map((k) => (
               <div key={k.key} className="flex items-center justify-between gap-3 font-mono text-[10px]">
-                <span className="truncate text-muted-foreground">{k.key}</span>
+                <span className="truncate text-muted-foreground">
+                  {k.key}
+                  <span className="ml-1 text-muted-foreground/60">
+                    · {usageSourceLabel(k.source)}
+                  </span>
+                </span>
                 <span className="shrink-0 text-foreground/80">
                   {(k.tokensIn + k.tokensOut).toLocaleString()} tok
-                  {k.costUsd != null ? ` · $${k.costUsd.toFixed(4)}` : ''}
+                  {/* read/write cache split, labelled as reported — a read and a
+                      write are billed differently and are never merged */}
+                  {(k.cachedTokens > 0 || k.cachedWriteTokens > 0) && (
+                    <span className="text-muted-foreground/70">
+                      {' '}· cache {k.cachedTokens.toLocaleString()}
+                      {k.cachedWriteTokens > 0 ? `+${k.cachedWriteTokens.toLocaleString()}w` : ''}
+                    </span>
+                  )}
+                  {k.reportedCostUsd > 0
+                    ? ` · $${k.reportedCostUsd.toFixed(4)} reported`
+                    : k.costUsd != null
+                      ? ` · $${k.costUsd.toFixed(4)} est`
+                      : ''}
                 </span>
               </div>
             ))}

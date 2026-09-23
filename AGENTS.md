@@ -55,6 +55,8 @@ Before introducing a new dependency:
 
 Do not modify generated files manually unless the repository explicitly requires it; update the source/template and regenerate them.
 
+- **Archive rule (2026-09-22):** no new work may land in `ARCH/archive/` paths or name archived modules as owners (e.g. the coordinator loop under `ARCH/archive/coordinator-loop/`) — re-home to the live owner instead: the Rust context passport (`src-tauri/src/acp_cmds.rs`) for prompt/context work, `everyaios-acp` for per-agent behavior, `everyaios-mcp` for tool-surface work, and Work/AUTOMATION + the bound agent for coordination.
+
 ## 6. Validation
 
 After changes:
@@ -111,6 +113,11 @@ The same rule applies to future tools with the same role: keep the repository hi
 When a reusable workflow exists, prefer the corresponding skill instead of recreating the procedure from scratch.
 
 The `skill-creator` skill is the standard workflow for creating or evolving reusable skills. Keep reusable skills portable, versioned, and independent of a particular model or coding client.
+
+### Store process entries (2026-09-22)
+
+- **Dual-license pattern for the skill store:** skill-store **code** (scripts, tool definitions, executable parts of a skill) is MIT; skill-store **content** (`SKILL.md` prose, examples, reference material) is CC0. Contributions to the store follow this split and declare it in the skill's manifest.
+- **Lazy-consensus window for store governance:** proposals that change the skill store (new or changed skills, registry schema, admission rules) are adopted by lazy consensus — the written proposal must be visible in the repository for a **7-day** review window before merge; no blocking objection inside the window counts as consensus, and any objection forces explicit resolution before adoption.
 
 ## 9. Communication
 
@@ -196,7 +203,8 @@ skill's routing contract.
 ## 12. File Structure
 
 ```
-crates/                          # 22 Rust crates (the kernel)
+crates/                          # 22 workspace members (the kernel) — incl. everyaios-engine:
+                                 #   dead (no dependents), deletion queued (2026-09-22; TODO P72)
   everyaios-core/                #   Orchestrator: supervisor, worktrees, CUA, tools
   everyaios-guard/               #   Guard-1/2: netfloor, pathfloor, tickets, sandboxes
   everyaios-memory/              #   RRF fusion, ACT-R, compaction, graph

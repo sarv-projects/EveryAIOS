@@ -370,10 +370,50 @@ pub struct SessionPromptParams {
     pub prompt: Vec<PromptContent>,
 }
 
+/// Token usage an agent **reported** for one prompt turn (P71.4).
+///
+/// This is an *observation*, never a computation: every field is what the agent
+/// said, and an absent field is unknown rather than zero (`ARCH/ROUTING.md` §5,
+/// **I15**). `cached_read_tokens` and `cached_write_tokens` stay separate
+/// because they are billed differently — collapsing them would invent
+/// precision the agent did not report.
+#[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct PromptUsage {
+    /// Prompt (input) tokens the agent charged this turn.
+    pub input_tokens: u64,
+    /// Completion (output) tokens the agent produced.
+    pub output_tokens: u64,
+    /// Prompt-cache **reads** — a subset of the input the agent billed cheaper.
+    pub cached_read_tokens: u64,
+    /// Prompt-cache **writes** — billed separately from a read.
+    pub cached_write_tokens: u64,
+    /// The turn's own cost in USD when the agent prices its turns. `None` means
+    /// the agent reported no cost; it is never estimated here.
+    pub cost_usd: Option<f64>,
+}
+
+impl PromptUsage {
+    /// Whether the agent reported any token count at all. A turn whose usage
+    /// was entirely absent must not read as a measured zero.
+    pub fn reported(&self) -> bool {
+        self.input_tokens > 0
+            || self.output_tokens > 0
+            || self.cached_read_tokens > 0
+            || self.cached_write_tokens > 0
+            || self.cost_usd.is_some()
+    }
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct SessionPromptResult {
     pub stop_reason: StopReason,
+    /// P71.4 — the agent's own usage report for this turn, when it sends one.
+    /// Absent is the normal case for agents that report nothing; the ledger
+    /// records that as *unreported*, never as zero tokens.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub usage: Option<PromptUsage>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]

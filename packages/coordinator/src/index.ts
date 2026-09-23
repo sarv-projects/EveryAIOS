@@ -31,35 +31,28 @@ import {
   type Request,
   type Response,
 } from "./message";
-import {
-  cancelChatStream,
-  FrameProviderBridge,
-  runChatStream,
-  runToolRetry,
-  type ChatEvent,
-  type ChatStreamParams,
-  type ProviderChunk,
-} from "./chat";
-import {
-  cancelPlan,
-  respondToBreak,
-  runPlanExecution,
-  type PlanChoice,
-  type PlanExecutionParams,
-  type PlanTask,
-} from "./plan";
+// P71.2c — the coordinator no longer owns a turn loop: `chat.ts`, `plan.ts` and
+// the native tool catalogue (`tools.ts`) moved to
+// `ARCH/archive/coordinator-loop/` with the built-in engine (ADR-0005 §2), and
+// `@everyaios/core-engine` moved to `ARCH/archive/core-engine/`. A turn is
+// driven by the bound external agent on the ACP channel
+// (`acp_launch` → `acp_prompt`, in the shell), so the `chat/*` and `plan/*`
+// arms below are gone with their producers. What this process still owns is the
+// **shared plane**: memory/context, guard, work, skills, delegation, scheduler
+// ingress, connectors, MCP, catalog and readiness — the services a turn calls
+// into, never the reasoning that decides what to call.
 import { startWebhookIngress } from "./scheduler";
-import { envelopeEvent, type RunIdentity } from "./run-identity";
 import { hydrateObservations, type DurableUsageRow } from "./observations";
 import { connectorCatalog, queryConnectors } from "./connector-bridge";
 import { searchExternalMcp } from "./mcp-bridge";
 import {
-  chiefRegistry,
   governanceBadge,
-  resolveChiefId,
-  resolveSessionChief,
+  isRetiredAgentId,
+  primaryAgentRegistry,
+  resolvePrimaryAgentId,
+  resolveSessionPrimaryAgent,
   type GovernanceMode,
-} from "./chief";
+} from "./primary-agent";
 
 /** Must stay in lock-step with `everyaios_ipc::PROTOCOL_VERSION` (Rust, = 1). */
 export const PROTOCOL_VERSION = 1;
@@ -77,38 +70,11 @@ export const DEFAULT_CAPABILITIES: Capabilities = {
   passByReference: true,
 };
 
-/**
- * The production provider bridge: Rust pushes `chat/provider_chunk`
- * notifications into our stdin (the broker in Rust holds the keys); the
- * engine's streamProvider consumes them through this bridge.
- *
- * The bridge also asks Rust to run provider calls (`provider/stream` — the
- * compiled prompt lives here but the keys live there).
- */
-const frameBridge = new FrameProviderBridge(sendRequest);
-
-/** streamId → session/work/execution identity for notification enrichment. */
-type StreamIdentity = RunIdentity & { plan?: boolean };
-const streamSessions = new Map<string, StreamIdentity>();
-
-function registerStreamIdentity(params: StreamIdentity): void {
-  streamSessions.set(params.streamId, params);
-}
-
-function emitChatEvent(e: ChatEvent): void {
-  const identity = streamSessions.get(e.streamId);
-  if (!identity) return;
-  const enriched = envelopeEvent(e, identity);
-  notify(`chat/${e.type}`, enriched as unknown as Record<string, unknown>);
-  if (
-    e.type === "error" ||
-    e.type === "cancelled" ||
-    e.type === "plan_done" ||
-    (e.type === "done" && !identity?.plan)
-  ) {
-    streamSessions.delete(e.streamId);
-  }
-}
+// P71.2c — the provider bridge, the `chat/*` notification envelope and the
+// `streamId → identity` registry are gone with the loop that used them: the
+// sidecar no longer asks Rust to run a provider call and no longer emits turn
+// events (ADR-0005 §2). `RunIdentity`/`envelopeEvent` remain exported for the
+// **Work-event** plane, which is a different producer (the work gateway).
 
 /** Outbound request correlation: id → pending promise (sidecar → Rust). */
 const pending = new Map<
@@ -183,8 +149,10 @@ export function handleRequest(req: Request): Response | null {
 
     case "chief/resolve": {
       // P38 — the dispatcher resolves `primary_chief` (explicit session value
-      // → user default → inbuilt) and records the session's Chief so Work
-      // survives Chief death (same intent→plan→checkpoints→receipts chain).
+      // → user default → none) and records the session's primary agent so Work
+      // survives agent death (same intent→plan→checkpoints→receipts chain).
+      // P71.5b — retired built-in spellings name no agent, so `chiefId` may be
+      // null: the response says `null` instead of inventing an engine.
       const p = (req.params ?? {}) as {
         explicit?: string;
         userDefault?: string;
@@ -192,17 +160,17 @@ export function handleRequest(req: Request): Response | null {
         governance?: GovernanceMode;
       };
       try {
-        const chiefId = resolveChiefId(p.explicit, p.userDefault);
+        const chiefId = resolvePrimaryAgentId(p.explicit, p.userDefault);
         // Bugfix — the response badge used to be hardcoded `not_governed`,
         // ignoring the governance this call resolves/records. Reflect the
         // actual mode (or stay honestly not_governed when none is supplied —
         // there is no governance signal to report then).
         const governance: GovernanceMode = p.governance ?? { kind: "not_governed" };
-        if (typeof p.sessionId === "string") {
-          const prev = chiefRegistry.get(p.sessionId);
-          chiefRegistry.record({
+        if (typeof p.sessionId === "string" && chiefId !== null) {
+          const prev = primaryAgentRegistry.get(p.sessionId);
+          primaryAgentRegistry.record({
             sessionId: p.sessionId,
-            chiefId,
+            agentId: chiefId,
             governance,
             lastCompletedTurn: prev?.lastCompletedTurn ?? 0,
             configHash: prev?.configHash ?? "",
@@ -220,21 +188,18 @@ export function handleRequest(req: Request): Response | null {
     }
 
     case "chief/set_session": {
-      // P38 — pin a session to a Chief (per-session override). Fail-closed:
-      // unknown ids refuse; the resolved pin is returned so the caller can
-      // confirm the effective Chief for the session.
+      // P38 — pin a session to an agent (per-session override). Fail-closed:
+      // empty and retired built-in ids refuse (P71.5b); the resolved pin is
+      // returned so the caller can confirm the effective agent for the session.
       const p = (req.params ?? {}) as { sessionId?: string; chiefId?: string };
       if (typeof p.sessionId !== "string" || p.sessionId === "" || typeof p.chiefId !== "string") {
         response = err(id, ERROR_CODES.INVALID_REQUEST, "chief/set_session requires sessionId and chiefId");
         break;
       }
       try {
-        const chiefId = chiefRegistry.setSessionPin(p.sessionId, p.chiefId);
-        const governance: GovernanceMode =
-          chiefId === "inbuilt"
-            ? { kind: "mediated", fs: true, terminal: true }
-            : { kind: "self_contained", channelB: true };
-        response = ok(id, { sessionId: p.sessionId, chiefId, badge: governanceBadge(governance) });
+        const agentId = primaryAgentRegistry.setSessionPin(p.sessionId, p.chiefId);
+        const governance: GovernanceMode = { kind: "self_contained", channelB: true };
+        response = ok(id, { sessionId: p.sessionId, chiefId: agentId, badge: governanceBadge(governance) });
       } catch (e) {
         response = err(
           id,
@@ -246,25 +211,29 @@ export function handleRequest(req: Request): Response | null {
     }
 
     case "chief/resolve_session": {
-      // P38 — the dispatcher-side read: what Chief does THIS session run
-      // under right now? Session pin → user default → inbuilt. Used by the
-      // chat path as the single dispatch decision and by the UI to show the
-      // effective Chief per session.
+      // P38 — the dispatcher-side read: what agent does THIS session run
+      // under right now? Session pin → user default → none (P71.5b — there is
+      // no built-in engine to fall back to, and a retired spelling resolves
+      // to `null`, which the turn path refuses by name). Used by the chat
+      // path as the single dispatch decision and by the firing path
+      // (`scheduler_fire.rs`) as the automation binding.
       const p = (req.params ?? {}) as { sessionId?: string; userDefault?: string };
       if (typeof p.sessionId !== "string" || p.sessionId === "") {
         response = err(id, ERROR_CODES.INVALID_REQUEST, "chief/resolve_session requires sessionId");
         break;
       }
       try {
-        const pin = chiefRegistry.sessionPin(p.sessionId);
-        const chiefId = resolveSessionChief({
+        const pin = primaryAgentRegistry.sessionPin(p.sessionId);
+        const chiefId = resolveSessionPrimaryAgent({
           ...(pin !== undefined ? { sessionPin: pin } : {}),
-          ...(typeof p.userDefault === "string" && p.userDefault !== "" ? { userDefault: p.userDefault } : {}),
+          ...(typeof p.userDefault === "string" && !isRetiredAgentId(p.userDefault)
+            ? { userDefault: p.userDefault }
+            : {}),
         });
         response = ok(id, {
           sessionId: p.sessionId,
           chiefId,
-          source: pin ? "session-pin" : p.userDefault ? "user-default" : "inbuilt",
+          source: pin ? "session-pin" : chiefId !== null ? "user-default" : "none",
         });
       } catch (e) {
         response = err(
@@ -281,186 +250,13 @@ export function handleRequest(req: Request): Response | null {
       break;
     }
 
-    case "chat/stream": {
-      // P1.4: run one turn through the reused ConversationEngine (detached).
-      // The reply is immediate ({accepted}); all streaming arrives as
-      // `chat/ttft|batch|done|error|cancelled` notifications.
-      const p = (req.params ?? {}) as Partial<ChatStreamParams>;
-      if (
-        typeof p.sessionId !== "string" ||
-        typeof p.streamId !== "string" ||
-        typeof p.text !== "string" ||
-        p.text.length === 0
-      ) {
-        response = err(
-          id,
-          ERROR_CODES.INVALID_REQUEST,
-          "chat/stream requires sessionId, streamId and non-empty text",
-        );
-        break;
-      }
-      registerStreamIdentity({ streamId: p.streamId, sessionId: p.sessionId, ...(p.workId !== undefined ? { workId: p.workId } : {}) });
-      const chatParams = {
-        ...p,
-        onExecutionId: (executionId: string) => {
-          const identity = streamSessions.get(p.streamId!);
-          if (identity) {
-            identity.executionId = executionId;
-            streamSessions.set(p.streamId!, identity);
-          }
-        },
-      } as ChatStreamParams;
-      void runChatStream(
-        chatParams,
-        emitChatEvent,
-        frameBridge,
-        33,
-        sendRequest,
-      );
-      response = ok(id, { accepted: true, streamId: p.streamId });
-      break;
-    }
-
-    case "chat/cancel": {
-      // Notification: abort signal UI → Rust relay → here → engine/provider.
-      const p = (req.params ?? {}) as { streamId?: string };
-      if (typeof p.streamId === "string") {
-        cancelChatStream(p.streamId);
-      }
-      response = null; // notifications never get a reply
-      break;
-    }
-
-    case "chat/tool_retry": {
-      const p = (req.params ?? {}) as {
-        sessionId?: string;
-        streamId?: string;
-        toolId?: string;
-        args?: Record<string, unknown>;
-        agentId?: string;
-        workId?: string;
-      };
-      if (
-        typeof p.sessionId !== "string" ||
-        typeof p.streamId !== "string" ||
-        typeof p.toolId !== "string"
-      ) {
-        response = err(
-          id,
-          ERROR_CODES.INVALID_REQUEST,
-          "chat/tool_retry requires sessionId, streamId, toolId",
-        );
-        break;
-      }
-      const retry = {
-        sessionId: p.sessionId,
-        streamId: p.streamId,
-        toolId: p.toolId,
-        args: p.args ?? {},
-        ...(p.agentId !== undefined ? { agentId: p.agentId } : {}),
-        ...(p.workId !== undefined ? { workId: p.workId } : {}),
-      };
-      registerStreamIdentity({ streamId: p.streamId, sessionId: p.sessionId, ...(p.workId !== undefined ? { workId: p.workId } : {}) });
-      void runToolRetry(retry, emitChatEvent, sendRequest);
-      response = ok(id, { accepted: true });
-      break;
-    }
-
-    case "agui/event": {
-      // P11.5.11 — UI → coordinator AG-UI events (e.g. `interrupt_resolved`
-      // answering an outstanding AG-UI interrupt). Dispatch to registered
-      // handlers; unhandled lines are tolerated (no error to the UI).
-      const p = (req.params ?? {}) as { line?: string; envelope?: unknown };
-      const line = p.line ?? (p.envelope !== undefined ? JSON.stringify(p.envelope) : "");
-      if (line) {
-        dispatchAguiLine(line);
-      }
-      response = null; // notification semantics: nothing to reply
-      break;
-    }
-
-    case "chat/provider_chunk": {
-      // Notification: Rust pushes broker stream chunks here; the engine's
-      // streamProvider consumes them (P1.4, provider bridge).
-      const p = (req.params ?? {}) as Partial<ProviderChunk>;
-      if (typeof p.streamId === "string") {
-        frameBridge.handleChunk(p as ProviderChunk);
-      }
-      response = null;
-      break;
-    }
-
-    case "plan/execute": {
-      // Stage-0 (P6.3): run one blueprint plan through the plan executor
-      // (detached, like chat/stream). The reply is immediate ({accepted});
-      // all progress arrives as `chat/plan_start|step|interrupt|plan_done`
-      // notifications, and the LLM turn streams as chat/ttft|batch|done.
-      const p = (req.params ?? {}) as Partial<PlanExecutionParams>;
-      if (
-        typeof p.sessionId !== "string" ||
-        typeof p.planId !== "string" ||
-        typeof p.streamId !== "string" ||
-        !Array.isArray(p.tasks) ||
-        p.tasks.length === 0
-      ) {
-        response = err(
-          id,
-          ERROR_CODES.INVALID_REQUEST,
-          "plan/execute requires sessionId, planId, streamId and a non-empty tasks array",
-        );
-        break;
-      }
-      const planSessionId = p.sessionId;
-      registerStreamIdentity({ streamId: p.streamId, sessionId: planSessionId, plan: true, ...(p.workId !== undefined ? { workId: p.workId } : {}) });
-      const planParams = {
-        ...p,
-        onExecutionId: (executionId: string) => {
-          const identity = streamSessions.get(p.streamId!);
-          if (identity) {
-            identity.executionId = executionId;
-            streamSessions.set(p.streamId!, identity);
-          }
-        },
-      } as PlanExecutionParams;
-      void runPlanExecution(
-        planParams,
-        emitChatEvent,
-        emitChatEvent,
-        frameBridge,
-        sendRequest,
-        33,
-      );
-      response = ok(id, { accepted: true, planId: p.planId });
-      break;
-    }
-
-    case "plan/respond": {
-      // Stage-0 (P6.3): the user answered a circuit-break MCQ card (UI →
-      // Tauri → ChatRelay::respond_plan → here). Resolves the executor's
-      // pending wait; it resumes with the chosen path.
-      const p = (req.params ?? {}) as { breakId?: string; choice?: string };
-      if (typeof p.breakId !== "string" || typeof p.choice !== "string") {
-        response = err(
-          id,
-          ERROR_CODES.INVALID_REQUEST,
-          "plan/respond requires breakId and choice",
-        );
-        break;
-      }
-      const resolved = respondToBreak(p.breakId, p.choice as PlanChoice);
-      response = ok(id, { resolved });
-      break;
-    }
-
-    case "plan/cancel": {
-      // Notification: abort a running plan execution.
-      const p = (req.params ?? {}) as { planId?: string };
-      if (typeof p.planId === "string") {
-        cancelPlan(p.planId);
-      }
-      response = null; // notifications never get a reply
-      break;
-    }
+    // P71.2c — `chat/stream`, `chat/cancel`, `chat/tool_retry`,
+    // `chat/provider_chunk`, `plan/execute`, `plan/respond` and `plan/cancel`
+    // were the built-in engine's dispatch surface. They are deleted with it
+    // (ADR-0005 §2): a turn is driven by the bound external agent through the
+    // shell's ACP channel, so the coordinator is never asked to run one. A
+    // request that still arrives gets an honest METHOD_NOT_FOUND below rather
+    // than a silent no-op.
 
     case "mcp/search": {
       const p = (req.params ?? {}) as { endpoint?: unknown; query?: unknown; toolName?: unknown };

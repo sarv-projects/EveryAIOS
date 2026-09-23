@@ -72,3 +72,25 @@ Everything opened becomes **ingestible in one click** → ingest pipeline (`ever
 | LibreOffice oracle | harness in `crates/everyaios-office` tests (headless soffice round-trip conformance) | New (dependency: LibreOffice, dev/test only) |
 | Renderers | `ui/` (webview) | New (patterns from app-mobile renderers) |
 | Extract/ingest | `everyaios-office` + `everyaios-storage` | Exists *(Rust; the former TS `core-files` package was consolidated into these two — Tier 2c)* |
+
+## Repo-comparison additions (briefs 01–19)
+
+> Delta group: *"ARCH/04-OFFICE-ENGINE.md"* (`REPO-COMPARE/DELTA-ANALYSIS.md` §3). Evidence paths are
+> repo-relative under `/home/sarvesh/business_Dev/REPO-COMPARE/clone2/`. Dispositions are the briefs' tags;
+> arrows into files not owned here carry `→ <file> §…` and are cross-domain deferred.
+
+- **06-genoffice** · `add` — SOURCE: genoffice (pnpm monorepo) · evidence: `genoffice/apps/sheets/src/ai/edit-journal.ts` (`shiftCellArea`/`shiftFormulaText`), `plan-operations.ts` (`MAX_EXPANDED_CELL_OPS`-style gates), `op-executor.ts` (tri-state `partialApplied|undoDropped|clean`), `privacy-policy.ts` (column classes; cited by 06b, privacy-policy verified per brief 17) — LOGIC: edit-journal shift semantics keep AI ranges and formulas coherent after structural edits, cell-ops caps sit at the Guard ticket layer (never the UI), the tri-state apply result makes partial persistence auditable in outcome codes, and column-class egress policy (allow/redact/statistics-only/deny, columns default closed) governs sheet data before any connector sees it. → target §4.2 (Excel planner/journal) + §4.4 (audit outcome codes, ticket ceilings on the plan gate); egress half → SECURITY.md §5 + 15-CONNECT-STORE cross-domain deferred (17/SEC-19 primary SECURITY lane).
+- **06b-12** · `improve` — SOURCE: genoffice · evidence: `genoffice/apps/sheets/src/ai/deterministic-planner.ts` + `plan-operations.ts` (regex plan compiler hard-fails unknown intent → `UnsupportedPromptError`) — LOGIC: ship the deterministic planner as a minimal closed DSL behind an explicit propose/run dispatcher where unknown intent fails closed to clarification instead of silently degrading. → target §4.2 (deterministic planner) + §4.4 (failure modes — tightens the current wording: LLM-direct remains only as an explicit, permission-gated propose fallback with audit flag; unknown intent ⇒ fail-closed clarify).
+
+## 4.6 Surgical XML Invariants & Field-Balance GC (GenOffice Pattern)
+
+To guarantee 100% round-trip document validity without triggering Microsoft Office repair warnings:
+- **Field-Character Balancing (`field-balance.ts`):** When modifying paragraphs containing complex Word fields (`w:fldChar` markers for Page numbers, Table of Contents, or Hyperlinks), the surgical patcher verifies that field start, separate, and end markers remain balanced. Any patch that disrupts field tag balance is rejected prior to ZIP commit.
+- **Orphaned Media Garbage Collection (`resource-cleanup.ts`):** When replacing or removing image/shape elements in DOCX/PPTX files, unreferenced media payloads in `word/media/` (or `ppt/media/`) and obsolete entries in `_rels/` are swept clean, preventing zip bloat.
+- **`quick-xml` Streaming Pipeline:** Rust `quick-xml` streaming events process XML parts in a single pass without loading entire DOM structures into heap memory, keeping memory consumption bounded (<15MB) even on 500-page enterprise documents.
+
+## 4.7 Direct Office API Bypass (Agent-S Pattern)
+
+To ensure maximum speed, precision, and auditability:
+- **Visual CUA Prohibition:** Computer Use Agents (mouse clicking, keyboard typing, OCR) are strictly forbidden from operating on Office files (Word, Excel, PowerPoint).
+- **Mandatory In-Process Mutation:** All document and spreadsheet edits must route through the `everyaios-office` native API (IronCalc 0.8.3 for calculations, OOXML patcher for text/layout). This guarantees atomic diff generation, deterministic recalculation, and instant undo/rollback receipts without UI latency.

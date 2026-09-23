@@ -158,3 +158,80 @@ The existing five-tier model is replaced by the four classes above; the seven al
 the temporal graph are **retained as strategies** (`P69.A18`, `P69.D30`). The temporal-graph research is not
 being discarded — it is being moved below the contract, where it can be replaced without touching the
 architecture.
+
+---
+
+## 12. Bi-Temporal Knowledge Schema (MEM-1 / Graphiti Pattern)
+
+To eliminate destructive overwrites and model hallucination caused by stale assumptions, `everyaios-memory` persists knowledge across two independent temporal axes:
+
+```sql
+CREATE TABLE facts (
+    id TEXT PRIMARY KEY,
+    space_id TEXT NOT NULL,
+    entity_id TEXT NOT NULL,
+    attribute TEXT NOT NULL,
+    value TEXT NOT NULL,
+    confidence REAL NOT NULL DEFAULT 1.0,
+    source_event_id TEXT NOT NULL,
+    -- System Transaction Time (when the system recorded this fact)
+    recorded_at INTEGER NOT NULL,
+    invalidated_at INTEGER,
+    -- Valid World Time (when this fact was actually true in reality)
+    valid_at INTEGER NOT NULL,
+    invalid_at INTEGER,
+    expired_at INTEGER,
+    superseded_by_fact_id TEXT REFERENCES facts(id)
+);
+```
+
+- When a preference or fact changes (e.g. "User switched from PostgreSQL to SQLite"), the old record is stamped with `invalid_at` and linked via `superseded_by_fact_id` — never deleted.
+- Point-in-time queries can reconstruct the exact state of knowledge at any historical timestamp.
+
+## 13. Non-Touching Memory Channel (MEM-3 / Nooa Pattern)
+
+Passive memory injection (preloading top-5 warm facts into model context) is strictly isolated from cognitive reinforcement equations:
+- Merely injecting a fact into prompt context does **not** update its recency or access count in ACT-R / FSRS formulas.
+- Cognitive reinforcement occurs only when the model explicitly cites, confirms, or queries the fact via `memory.recall` or `memory.remember`. This prevents frequently-preloaded but unused facts from monopolizing high activation scores.
+
+## 14. Asynchronous Observer -> Reflector Pipeline (MEM-4 / Mem0 Pattern)
+
+Memory extraction executes asynchronously after turn settlement using a two-phase architecture:
+1. **Phase 1: Deterministic Observer (Rust `everyaios-memory`):** Scans completed turn events, file edits, and tool outputs using fast pattern matchers. If no state or preference indicators exist, processing halts with zero LLM overhead.
+2. **Phase 2: Structured Reflector:** Gathers candidate facts and executes a lightweight extraction model with closed verbs:
+   - `ADD`: Insert new atomic fact.
+   - `UPDATE`: Link and supersede an existing fact ID.
+   - `DELETE`: Invalidate a fact that is explicitly contradicted.
+   - `NONE`: No durable knowledge discovered.
+
+## 15. 2-Tier Progressive Retrieval (Claude-Mem / Open-Cowork Pattern)
+
+When supplying memory to prompt context, the system provides progressive depth:
+- **Tier 1 (Injected Narrative):** Top 3–5 high-relevance facts formatted as concise sentences (~150–250 tokens total).
+- **Tier 2 (Timeline Outline):** A compact single-line chronological index of relevant past interactions:
+  ```
+  [PAST_EVENTS: 2026-09-18 Refactored auth module (mem_id: 842); 2026-09-20 Migrated to SQLCipher (mem_id: 891)]
+  ```
+- If the agent requires complete context on a timeline item, it executes `memory.recall(id="842")`.
+
+## 16. Dynamic BM25 Sigmoid Normalization & UUID Integer Mapping (Mem0 Pattern)
+
+- **Term-Length Adaptive Sigmoid:** Raw BM25 scores are normalized via `1 / (1 + exp(-k * (score - x0)))`, where `k` and `x0` adapt based on query term length. This prevents short 1-word queries from producing disproportionately high scores compared to multi-term semantic queries.
+- **Sequential Integer Reference Mapping:** In LLM extraction prompts, long UUIDs are mapped to temporary integer indices (`"0"`, `"1"`, `"2"`). The LLM emits decisions over integer indices, which the parser re-maps back to UUIDs, completely eliminating transcription errors.
+
+## 17. Monotonic Memory Write Barrier (AIOS Pattern)
+
+To guarantee read-your-own-writes consistency within multi-step agent plans:
+- Each memory write increments a monotonic per-session sequence counter.
+- When an agent issues a write followed immediately by a tool or search call, the write barrier drains the queue before the next step commences.
+
+## 18. 3-Phase Memory Dreaming (OpenClaw Pattern)
+
+Offline background maintenance runs in three non-blocking phases during idle hours:
+- **Light Dream (Hourly):** De-duplicates near-identical records and reconciles candidate fact links.
+- **Deep Dream (Daily):** Computes ACT-R base-level decay, adjusts FSRS stability curves, and rolls up episodic events into summary knowledge.
+- **REM Dream (Weekly):** Performs global entity clustering and semantic graph pruning.
+
+## 19. Memory Feedback Telemetry
+
+Every access or reference to a memory node records `lastUsedAt`, `useCount`, and `turnId`. This telemetry directly feeds the cognitive activation equations, ensuring that valuable project facts stay warm while transient trivia naturally fades.

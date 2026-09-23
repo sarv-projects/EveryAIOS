@@ -113,40 +113,12 @@ export async function schedulerPauseSession(sessionId: string): Promise<number> 
   return invoke<number>("scheduler_pause_session", { sessionId });
 }
 
-/** S0.5: re-run a failed tool through the same Guard-2 ticket path. */
-export async function chatToolRetry(args: {
-  sessionId: string;
-  streamId: string;
-  toolId: string;
-  args: Record<string, unknown>;
-  agentId?: string;
-  workId?: string;
-}): Promise<void> {
-  return invoke("chat_tool_retry", args);
-}
-
-/** P6.3 Stage-0: run a blueprint plan through the coordinator's plan executor
- * (which steps the Rust-owned circuit breaker per LLM turn / tool call and
- * emits `chat/interrupt` on a trip). Resolves once the coordinator acks. */
-export async function planExecute(args: {
-  sessionId: string;
-  planId: string;
-  tasks: unknown[];
-  provider?: string;
-  model?: string;
-  workId?: string;
-}): Promise<string> {
-  return invoke<string>("plan_execute", args);
-}
-
-/** P6.3 Stage-0: return a circuit-break card choice (skip/retry/escalate/…)
- * to the waiting plan executor. Resolves once the interrupt is resolved. */
-export async function planRespond(
-  breakId: string,
-  choice: string,
-): Promise<void> {
-  return invoke("plan_respond", { breakId, choice });
-}
+// P71.2c — `chatToolRetry`, `planExecute` and `planRespond` are deleted with the
+// built-in engine (ADR-0005 §2): they dispatched a turn to the coordinator's
+// loop, which no longer exists. Tool retry and plan **execution** therefore
+// return with the governed binding (post-v1, P71.7), while the plan *draft* the
+// composer renders stays read-only. Callers say so instead of invoking a
+// command that would 404.
 
 /** Subscribe to chat events; returns an unsubscribe function. */
 export async function onChatEvent(
@@ -164,6 +136,18 @@ export interface RuntimeStatus {
 /** Read-only shell readiness probe used by the canonical runtime state. */
 export async function runtimeStatus(): Promise<RuntimeStatus> {
   return invoke<RuntimeStatus>('runtime_status')
+}
+
+/** P70.A2 — why is the sidecar offline? `missing` is a broken install (or an
+ * unbuilt dev sidecar) and carries the actionable remedy in `detail`. */
+export interface SidecarProbe {
+  connected: boolean;
+  state: 'connected' | 'connecting' | 'missing';
+  detail: string;
+}
+
+export async function sidecarProbe(): Promise<SidecarProbe> {
+  return invoke<SidecarProbe>('sidecar_probe')
 }
 
 // ---------------------------------------------------------------------------

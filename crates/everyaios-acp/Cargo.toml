@@ -21,3 +21,9 @@ everyaios-guard = { path = "../everyaios-guard" }
 # P69.C11/D25 — the canonical `AuthMode` (and the shared id vocabulary) live in
 # the schema crate so the Rust serializers and the TS projection cannot drift.
 everyaios-types = { path = "../everyaios-types" }
+
+[dev-dependencies]
+# P71.6b — the engine-optional acceptance suite asserts the usage ledger the
+# turn path feeds (P71.4), so the test drives the real observation model
+# instead of a stand-in.
+everyaios-memory = { path = "../everyaios-memory" }

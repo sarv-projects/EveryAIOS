@@ -1,9 +1,15 @@
-# EveryAIOS — release build matrix (P8.8).
+# EveryAIOS — release build matrix (P8.8; P70.A1/A6/B7 platform scope).
 #
-# Builds the Tauri installers for all 3 desktop platforms on a version tag
-# (`v*`) or manual dispatch, publishes them as a GitHub release (draft), and
-# uploads the tauri-plugin-updater artifacts (signatures + latest.json) the
-# app's configured endpoints consume.
+# v1 ships **Windows only** (`SUPPORT-MATRIX.md` §1): `.exe` (NSIS) + `.msi`
+# (WiX) for x64 **and** arm64. macOS and native Linux desktop are out of v1
+# scope — the matrix below deliberately contains no macOS/Linux legs, and a
+# tag therefore publishes nothing for them (returning one to scope is a
+# `SUPPORT-MATRIX.md` change plus an acceptance pass, not a matrix edit).
+#
+# Triggered ONLY by a version tag (`v*`) or explicit manual dispatch — every
+# published artifact is CI-produced from a tagged commit (P70.A6); hand-built
+# binaries are never published. The run records the source commit and the
+# toolchain versions into the release body (P70.A6 provenance).
 #
 # Required repo secrets (without them the workflow fails honestly — updater
 # artifacts cannot be signed without the private key):
@@ -15,7 +21,7 @@
 #    packages/core-* — no private-repo token is required anymore).
 #
 # The sidecar (packages/coordinator) is compiled with bun and shipped inside
-# the bundle as a resource (`bin/coordinator`), injected at build time via
+# the bundle as a resource (`bin/coordinator.exe`), injected at build time via
 # TAURI_CONFIG so local `tauri build` (without the sidecar) keeps working.
 
 name: release
@@ -40,22 +46,44 @@ jobs:
       - name: Run doc-sync + kernel-gate check
         run: node scripts/check-doc-sync.mjs
 
+  # P70.E2/E4 — the release commit must carry green suites and a passing
+  # security gate. A tag that cannot qualify is not packaged (P70 sequencing
+  # rule: nothing in P70.A–D ships while a release-blocking gate is open).
+  qualification:
+    name: qualification gates (suites + security)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: crates
+      - name: Rust workspace tests
+        run: cargo test --workspace
+        working-directory: crates
+      - name: UI tests
+        run: |
+          npm install -g pnpm bun
+          pnpm install
+          (cd ui && npx bun test)
+      - name: Coordinator tests
+        run: (cd packages/coordinator && npx bun test)
+      - name: Security release gate (P50.5.7)
+        run: node scripts/e2e/security-gate.mjs
+
   build:
-    name: ${{ matrix.name }}
-    needs: [kernel-gate]
+    name: windows ${{ matrix.target }} (NSIS + MSI)
+    needs: [kernel-gate, qualification]
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
-            name: linux (deb + rpm + AppImage)
-            args: --bundles deb,rpm,appimage
           - os: windows-latest
-            name: windows (NSIS + MSI)
-            args: --bundles nsis,msi
-          - os: macos-latest
-            name: macOS (app + dmg)
-            args: --bundles dmg
+            target: x86_64-pc-windows-msvc
+            name: windows x64
+          - os: windows-latest
+            target: aarch64-pc-windows-msvc
+            name: windows arm64
     runs-on: ${{ matrix.os }}
     defaults:
       run:
@@ -65,8 +93,10 @@ jobs:
         with:
           path: desktop_app
 
-      - name: Install Rust toolchain
+      - name: Install Rust toolchain (${{ matrix.target }})
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
 
       - uses: Swatinem/rust-cache@v2
         with:
@@ -77,14 +107,6 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: desktop_app/ui/package-lock.json
-
-      - name: Install Linux packaging deps
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev \
-            patchelf rpm libssl-dev
 
       - name: Install OpenSSL (windows)
         if: runner.os == 'Windows'
@@ -112,45 +134,51 @@ jobs:
         run: pnpm --filter @everyaios/coordinator build
 
       # Inject the compiled sidecar into the bundle as a resource
-      # (`bin/coordinator(.exe)`) via TAURI_CONFIG. The shell's
+      # (`bin/coordinator.exe`) via TAURI_CONFIG. The shell's
       # `locate_coordinator_bin` probes the resource dir first, so the
       # packaged app spawns the sidecar from the bundle — no external path.
       - name: Inject sidecar as bundle resource
         shell: bash
         run: |
-          if [ "$RUNNER_OS" = "Windows" ]; then
-            SRC="packages/coordinator/dist/coordinator.exe"
-            DST="bin/coordinator.exe"
-          else
-            SRC="packages/coordinator/dist/coordinator"
-            DST="bin/coordinator"
-          fi
+          SRC="packages/coordinator/dist/coordinator.exe"
+          DST="bin/coordinator.exe"
           echo "TAURI_CONFIG={\"bundle\":{\"resources\":{\"$SRC\":\"$DST\"}}}" >> $GITHUB_ENV
 
-      - name: Tauri build + publish to GitHub release
+      - name: Tauri build (${{ matrix.target }}) + publish to GitHub release
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Updater signing: only the release-private key can sign artifacts.
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          # macOS code-signing (optional; unsigned builds otherwise).
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        with:
-          args: ${{ matrix.args }}
+          args: --target ${{ matrix.target }} --bundles nsis,msi
           tagName: v__VERSION__
           releaseName: 'EveryAIOS v__VERSION__'
           releaseBody: |
             **EveryAIOS v__VERSION__** — local-first, BYOK, on-device agentic workspace.
 
-            Installers for all platforms + the auto-updater manifest are attached
-            to this release. The updater signs with the release private key
+            **Platform scope (v1):** Windows x64 + arm64 only (`SUPPORT-MATRIX.md`).
+            No macOS or Linux artifact is published — see the support matrix for
+            what is supported and what is explicitly not claimed.
+
+            Installers + the auto-updater manifest are attached to this release.
+            The updater signs with the release private key
             (TAURI_SIGNING_PRIVATE_KEY); verify the pubkey in
             `src-tauri/tauri.conf.json` before trusting an update.
+
+            ---
+            **Build provenance (P70.A6)**
+            - Source commit: ${{ github.sha }}
+            - Rust: stable (${{ matrix.target }})
+            - Node 22 · Bun latest · pnpm latest
+            - Workflow run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           releaseDraft: true
           prerelease: false
+
+      # P70.B7 — the artifact-leak gate runs on the PRODUCED bundle, not just
+      # the source tree: no key material, .env, dev database, or signing key
+      # may ever ship inside an installer. Scans the whole bundle directory
+      # the tauri-action produced (installer + updater artifacts + manifest).
+      - name: Secret-leak gate on produced artifacts (P70.B7)
+        shell: bash
+        run: node scripts/check-artifact-hygiene.mjs --paths "desktop_app/src-tauri/target/*/release/bundle"

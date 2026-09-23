@@ -787,10 +787,10 @@ export default function GuardPanel() {
             />
             <VaultCard
               icon={<Vault className="h-4 w-4 text-brand" />}
-              title="Session Vault"
-              stats={inTauri() ? '—' : '12 sessions'}
-              sub={inTauri() ? 'Live session count is shown in the work list' : 'preview fixture'}
-              cta="View sessions"
+              title="Chat vault"
+              stats={inTauri() ? '—' : '12 chats'}
+              sub={inTauri() ? 'Live chat count is shown in the work list' : 'preview fixture'}
+              cta="View chats"
               onCta={() => useAppStore.getState().setCenterScreen('chat')}
             />
           </section>

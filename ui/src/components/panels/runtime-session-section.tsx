@@ -48,7 +48,9 @@ export function RuntimeSessionSection() {
 
   const runId = works.find((w) => w.workId === workId)?.currentRunId ?? ''
   const runnableAgents = liveAgents.length > 0 ? liveAgents : []
-  const effectiveAgent = agentId || runnableAgents[0]?.id || 'everyaios-native'
+  // P71.2a — the fallback is **unbound** (`''`), not the retired built-in id:
+  // there is no always-present runtime to spawn under.
+  const effectiveAgent = agentId || runnableAgents[0]?.id || ''
   const effectiveRoot = repoRoot.trim() || taskFolder || '.'
 
   const refresh = useCallback(async (id: string) => {
@@ -116,7 +118,7 @@ export function RuntimeSessionSection() {
       const asid = `agent-${Date.now().toString(36)}`
       await workAgentSpawn({ workId, runId, agentSessionId: asid, agentId: effectiveAgent, lifetime })
       await refresh(workId)
-      notify(`${lifetime} agent session ${asid} spawned (${effectiveAgent})`)
+      notify(`${lifetime} agent process ${asid} spawned (${effectiveAgent})`)
     } catch (e) { notify(String(e)) } finally { setBusy(false) }
   }
   async function agentOp(id: string, op: 'attach' | 'detach' | 'checkpoint' | 'terminate') {
@@ -128,8 +130,8 @@ export function RuntimeSessionSection() {
 
   return (
     <SectionShell
-      title="Session runtime"
-      desc="Persistent PTYs, Run-owned worktrees, and agent sessions — the durable runtime the agent and you both drive (survives client disconnect)."
+      title="Runtime processes"
+      desc="Persistent PTYs, Run-owned worktrees, and agent processes — the durable runtime the agent and you both drive (survives client disconnect)."
     >
       <div className="space-y-4">
         {/* Work selector */}
@@ -206,9 +208,11 @@ export function RuntimeSessionSection() {
               value={agentId}
               onChange={(e) => setAgentId(e.target.value)}
               className="h-6 rounded border border-border bg-background px-1 font-mono text-[10px]"
-              title="Runtime for spawned agent sessions"
+              title="Runtime for spawned agents"
             >
-              {runnableAgents.length === 0 && <option value="everyaios-native">everyaios-native</option>}
+              {runnableAgents.length === 0 && (
+                <option value="">no agent discovered — nothing to spawn under</option>
+              )}
               {runnableAgents.map((a) => (
                 <option key={a.id} value={a.id}>{a.name}</option>
               ))}
@@ -220,7 +224,7 @@ export function RuntimeSessionSection() {
           </div>
           <div className="space-y-1">
             {sessions.length === 0 ? (
-              <div className="py-3 text-center text-[11px] text-muted-foreground">No agent sessions</div>
+              <div className="py-3 text-center text-[11px] text-muted-foreground">No agent processes</div>
             ) : (
               sessions.map((a) => (
                 <div key={a.agentSessionId} className="flex items-center gap-2 rounded px-1.5 py-1 text-[10px] hover:bg-accent/40">

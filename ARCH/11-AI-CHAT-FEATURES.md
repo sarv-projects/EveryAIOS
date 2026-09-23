@@ -8,7 +8,7 @@
 ---
 
 
-> **Full-Stack Module:** Module 1 & Module 3 — Universal Harness Agent Loop & Cockpit Shell Conversation Features (`packages/coordinator/src/chat.ts`, `prompt.ts`, `chief.ts` — module path only; the `Chief` concept is retired per [`AGENT.md`](AGENT.md) §2 and [`CORE.md`](CORE.md) §7.1: the loop owner is the **AgentBinding**, coordination is the **Turn Coordinator**).
+> **Full-Stack Module:** Module 1 & Module 3 — Universal Harness Agent Loop & Cockpit Shell Conversation Features (**module paths historical as of 2026-09-22:** `packages/coordinator/src/chat.ts` · `prompt.ts` · `chief.ts` are archived with the built-in engine (`P71.2c`) at [`ARCH/archive/coordinator-loop/`](archive/coordinator-loop/) — migration material for the post-v1 governed binding (`P71.7`), never a live path; **current:** the loop owner is the **AgentBinding**, coordination is the **Turn Coordinator**, and the bound-agent owner in the sidecar is `packages/coordinator/src/primary-agent.ts` — the live rename of the archived `chief.ts`. The `Chief` concept is retired per [`AGENT.md`](AGENT.md) §2 and [`CORE.md`](CORE.md) §7.1).
 > **User directive (verbatim):** *"for the ai chat features, copy from hermes, etc., and the rest from under ~business_Dev/APP/architecture.md — check the AI chat section. You need to understand what to copy, or convert, and not."*
 > This doc is that analysis. It takes the **two source corpora** and produces one clear list:
 > 1. **COPY** — reuse as-is (already built & tested in the `@everyaios/core-*` engine — **now vendored in-repo at `packages/core-*`**, originally `APP/packages/`; or a research pattern to implement directly).
@@ -74,7 +74,13 @@ These are the shipped chat atoms. The desktop sidecar imports them unchanged fro
 
 **Copy verdict:** A-1…A-16 import as-is into the sidecar. **The only change** is wiring: `generatePrompt` gains the key-ring router (03) and token budgets (05); `executeTool` calls the everyaios-guard ticket flow (06); `persistTurn` also feeds everyaios-audit (06/08).
 
-> **Amended 2026-09-21 — [`ADR/0005`](ADR/0005-external-agents-are-the-v1-engines.md).** The *reasoning* atoms are **deferred with the built-in engine** and are not imported as a v1 execution path: **A-1** (`ConversationEngine`), **A-2** (`RetrievalPlanner`), **A-3** (`ToolPlanner`), **A-5** (`SmartRouter`/`HeuristicClassifier`) and **A-14** (provider clients). The atoms that are **environment rather than engine** survive as coordinator-side turn machinery (`P71.2c`/`P71.2d`): **A-6** prompt assembly, **A-9** output normalizer, **A-10** `StreamSession`, **A-11**/**A-12** compression, **A-13** risk compass, **A-15** trajectory logging, **A-16** artifact side-channel. `A-4` (`PermissionGate`) survives **only as advisory classification** — Guard (Rust) is the sole decider (**I12**, `P69.D3`).
+> **Amended 2026-09-21 — [`ADR/0005`](ADR/0005-external-agents-are-the-v1-engines.md).** The *reasoning* atoms are **deferred with the built-in engine** and are not imported as a v1 execution path: **A-1** (`ConversationEngine`), **A-2** (`RetrievalPlanner`), **A-3** (`ToolPlanner`), **A-5** (`SmartRouter`/`HeuristicClassifier`) and **A-14** (provider clients). The atoms that are **environment rather than engine** survive as **environment** rather than engine — but the ones that lived in the coordinator's loop
+(`prompt.ts` assembly, `StreamSession`, compression, risk compass, trajectory logging, artifact
+side-channel) were **archived 2026-09-22** to `ARCH/archive/coordinator-loop/` with that loop
+(`P71.2c`), so every `core-engine/…` and `packages/coordinator/src/…` path in the tables below now
+resolves under `ARCH/archive/` and is kept as migration material for the post-v1 governed binding
+(`P71.7`), never as a v1 execution path. The surviving environment contract is what a turn calls
+*into*: memory/context projection, Guard, Work, skills, delegation, MCP façades, connectors. `A-4` (`PermissionGate`) survives **only as advisory classification** — Guard (Rust) is the sole decider (**I12**, `P69.D3`).
 
 ---
 

@@ -275,3 +275,172 @@ pub fn scheduler_doctor(state: State<'_, AppState>) -> Result<Value, String> {
     ));
     Ok(serde_json::to_value(checks).unwrap_or(Value::Null))
 }
+
+// ---- P71.9e — the §11 run surface (runs · duplicate · export) --------------
+
+/// The bound agent for a session, resolved exactly as `scheduler_fire` does
+/// (the sidecar's session pin → the config's primary agent). A retired
+/// built-in spelling resolves to nothing (`ADR-0005`) — the UI shows the
+/// truth ("no agent bound"), never a substitute engine.
+fn bound_agent_for(state: &AppState, session_id: &str) -> Option<String> {
+    let resolved = {
+        let relay = state.chat_relay.lock().ok()?;
+        let relay = relay.as_ref()?;
+        relay
+            .link()
+            .request("chief/resolve_session", serde_json::json!({ "sessionId": session_id }))
+            .ok()
+    };
+    if let Some(id) = resolved
+        .as_ref()
+        .and_then(|out| out.get("chiefId"))
+        .and_then(Value::as_str)
+    {
+        let id = id.trim();
+        if !id.is_empty()
+            && id != "inbuilt"
+            && id != "everyaios"
+            && id != "everyaios-native"
+        {
+            return Some(id.to_string());
+        }
+    }
+    let cfg = everyaios_core::Config::load().ok()?;
+    let pinned = cfg.primary_chief.trim().to_string();
+    if pinned.is_empty()
+        || pinned == "inbuilt"
+        || pinned == "everyaios"
+        || pinned == "everyaios-native"
+    {
+        None
+    } else {
+        Some(pinned)
+    }
+}
+
+/// Recent runs for one automation (or all, when `job_id` is empty): the
+/// ExecutionLedger rows whose trigger is `scheduler` and whose context
+/// snapshot carries this job's `automationId` — the record the firing path
+/// already writes (`scheduler_fire.rs`), read back as honest status. A run's
+/// `waitingApproval` phase is the §11 "waiting for approval" state; there is
+/// no fabricated success/failure beyond the ledger's own phases.
+#[tauri::command]
+pub fn scheduler_runs(
+    state: State<'_, AppState>,
+    job_id: String,
+) -> Result<Value, String> {
+    let relay = state
+        .chat_relay
+        .lock()
+        .map_err(|e| e.to_string())?;
+    let relay = relay
+        .as_ref()
+        .ok_or_else(|| "sidecar not connected — run history not ready".to_string())?;
+    let kernel = relay.executions();
+    let k = kernel.lock().map_err(|e| e.to_string())?;
+    let mut runs: Vec<Value> = k
+        .all()
+        .filter(|ex| {
+            if ex.trigger != everyaios_core::execution::ExecutionTrigger::Scheduler {
+                return false;
+            }
+            if !job_id.is_empty() {
+                let ctx = ex.context_snapshot.as_str();
+                let needle = format!("\"automationId\":\"{job_id}\"");
+                if !ctx.contains(&needle) {
+                    return false;
+                }
+            }
+            true
+        })
+        .map(|ex| {
+            serde_json::json!({
+                "id": ex.id,
+                "sessionId": ex.session_id,
+                "objective": ex.objective,
+                "phase": ex.state,
+                "waitingApproval": matches!(ex.state, everyaios_core::execution::ExecutionPhase::WaitingApproval),
+                "createdAtMs": ex.created_at_ms,
+                "context": ex.context_snapshot,
+            })
+        })
+        .collect();
+    // Newest first (the §11 "at a glance" ordering).
+    runs.sort_by(|a, b| {
+        let ka = a.get("createdAtMs").and_then(Value::as_u64).unwrap_or(0);
+        let kb = b.get("createdAtMs").and_then(Value::as_u64).unwrap_or(0);
+        kb.cmp(&ka)
+    });
+    runs.truncate(50);
+    Ok(serde_json::json!({ "runs": runs, "count": runs.len() }))
+}
+
+/// Duplicate an automation: a new id, the same definition, **disabled** (the
+/// §11 duplicate affordance must never silently arm a second trigger).
+#[tauri::command]
+pub fn scheduler_duplicate(
+    state: State<'_, AppState>,
+    id: String,
+) -> Result<String, String> {
+    let handle = svc(&state)?;
+    let new_id = {
+        let mut svc = handle.lock().map_err(|e| e.to_string())?;
+        let src = (*svc
+            .list()
+            .iter()
+            .find(|j| j.id == id)
+            .ok_or_else(|| format!("unknown automation {id}"))?)
+        .clone();
+        let src_name = src.name.clone();
+        let src_session = src.session_id.clone();
+        let src_trigger = serde_json::to_value(&src.trigger).unwrap_or(Value::Null);
+        let src_steps = serde_json::to_value(&src.steps).unwrap_or(Value::Null);
+        let src_policy = serde_json::to_value(&src.policy).unwrap_or(Value::Null);
+        let new_id = format!("{id}-copy-{}", now_secs());
+        let _ = src.name.len();
+        svc.handle(
+            "scheduler/create",
+            &serde_json::json!({
+                "id": new_id,
+                "name": format!("{} (copy)", src_name),
+                "sessionId": src_session,
+                "trigger": src_trigger,
+                "steps": src_steps,
+                "policy": src_policy,
+                "enabled": false,
+            }),
+        )
+        .map_err(|e| e.to_string())?;
+        new_id
+    };
+    Ok(new_id)
+}
+
+/// Export an automation as its `*.automation.json` definition — name, trigger,
+/// steps, policy and the **session binding only**. Secrets never ride this
+/// file (`AUTOMATION.md` §11): the vault holds credentials, and only a
+/// `credential_ref`-shaped empty placeholder could ever appear here (steps
+/// carry capability *requests*, never granted credentials).
+#[tauri::command]
+pub fn scheduler_export(state: State<'_, AppState>, id: String) -> Result<Value, String> {
+    let handle = svc(&state)?;
+    let svc = handle.lock().map_err(|e| e.to_string())?;
+    let jobs = svc.list();
+    let src = jobs
+        .iter()
+        .find(|j| j.id == id)
+        .ok_or_else(|| format!("unknown automation {id}"))?;
+    let bound = bound_agent_for(&state, &src.session_id);
+    Ok(serde_json::json!({
+        "kind": "everyaios.automation",
+        "version": 1,
+        "automation": {
+            "name": src.name,
+            "sessionId": src.session_id,
+            "boundAgent": bound,
+            "trigger": serde_json::to_value(&src.trigger).unwrap_or(Value::Null),
+            "steps": serde_json::to_value(&src.steps).unwrap_or(Value::Null),
+            "policy": serde_json::to_value(&src.policy).unwrap_or(Value::Null),
+        }
+    }))
+}

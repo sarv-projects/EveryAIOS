@@ -4,17 +4,15 @@ import { applyRuntimeBindIfPresent, runtimeBindFromToolArgs } from "./runtime-bi
 describe("P60.1 five-way split (live consumer)", () => {
   test("runtimeBindFromToolArgs keeps harness and model independent", () => {
     expect(runtimeBindFromToolArgs({})).toBeNull();
-    expect(runtimeBindFromToolArgs({ model: "local-vl", role: "worker" })).toEqual({
-      harness: "inbuilt",
-      model: "local-vl",
-      role: "worker",
-    });
+    // P71.9g — a bind that names no harness is refused, not defaulted to a
+    // built-in engine (`ADR-0005`).
+    expect(runtimeBindFromToolArgs({ model: "local-vl", role: "worker" })).toBeNull();
     expect(
-      runtimeBindFromToolArgs({ harness: "acp:other", model: "frontier", chief: "inbuilt" }),
+      runtimeBindFromToolArgs({ harness: "acp:other", model: "frontier", chief: "acme-agent" }),
     ).toEqual({
       harness: "acp:other",
       model: "frontier",
-      chief: "inbuilt",
+      chief: "acme-agent",
     });
   });
 
@@ -23,7 +21,7 @@ describe("P60.1 five-way split (live consumer)", () => {
     const applied = await applyRuntimeBindIfPresent(async (method, params) => {
       calls.push({ method, params });
       return { ok: true, planes: 5 };
-    }, { model: "local-vl", harness: "inbuilt", role: "worker" });
+    }, { model: "local-vl", harness: "acp:agent", role: "worker" });
     expect(applied.applied).toBe(true);
     expect(calls[0]?.method).toBe("execution/runtime_bind");
   });

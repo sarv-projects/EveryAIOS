@@ -721,7 +721,7 @@ export default function ConnectorsPanel() {
                         </div>
                         {s.transport === 'native' ? (
                           <div className="mt-0.5 font-mono text-[9px] text-muted-foreground">
-                            the inbuilt catalog — no external server involved
+                            the bundled catalog — no external server involved
                           </div>
                         ) : s.toolNames.length > 0 ? (
                           <div className="mt-0.5 flex flex-wrap gap-1">

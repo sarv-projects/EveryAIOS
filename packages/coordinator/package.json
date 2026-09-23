@@ -13,7 +13,6 @@
   "dependencies": {
     "@everyaios/core-ai": "workspace:*",
     "@everyaios/core-connectors": "workspace:*",
-    "@everyaios/core-engine": "workspace:*",
     "@everyaios/core-providers": "workspace:*",
     "@everyaios/core-search": "workspace:*"
   },

@@ -17,6 +17,699 @@ Each entry records the date or release marker, change category, affected section
 - A citation or implementation detail may remain in the spec only when it is itself a current behavioral constraint; its historical or evidentiary explanation belongs here.
 
 ---
+## v3.96 — 2026-09-22 — The first full-suite pass, and the five defects it caught (verification · P69/P71 waves)
+
+**Category:** verification + defect repair (the first complete test pass over the P69 architecture thaw and the P71
+external-agent consolidation; no capability change).
+**Capability rows:** none added, none removed — census stays **166**. **Flipped:** no checkbox flips; live count
+unchanged at **1640 = 1304 + 336**. The 39 `[IMPLEMENTED — unverified]` markers stay as they are: this pass proves
+the **tree** is green, not that each row's own acceptance criteria have been demonstrated one at a time.
+
+**What was run, and what it found.** Every suite in the repository was executed for the first time since the
+external-agent consolidation began. Five real defects surfaced — each in code that already carried an
+`[IMPLEMENTED]` marker, and none of them compile-visible:
+
+1. **An assertion rewritten to compare a value with itself.** `ui/src/lib/autonomy.test.ts` asserted
+   `taskScopeHash(a) !== taskScopeHash(b)` over two *different* agent ids; the built-in-agent retirement had renamed
+   both operands to `'claude-code'`, collapsing it to `x !== x`. The test was failing, and it was right — the
+   blind rename was the bug, not the assertion. Restored to two distinct agents.
+2. **`isAcpAgent` still accepted the retired spelling.** `h32.ts` returned `true` for `'everyaios-native'`,
+   leaving the deleted engine a live entry point. It now refuses that id by name.
+3. **`upsert_bundle` reported the wrong thing.** `AgentDirectory::upsert_bundle` returned `HashMap::insert`'s
+   **previous** value, so a first insert and a rejected draft both read as `None` — a caller could not distinguish
+   "created" from "refused". It now returns `Some` when the row is admitted.
+4. **A default defeated the readiness gate.** `chat.rs`'s relay used `unwrap_or("inbuilt")` for an absent harness,
+   which quietly satisfied `bind_runtime`'s fail-closed *"harness required"* check — the retired engine re-entered
+   through the default path. The relay now fails closed on an absent harness, and its fixtures name a real agent
+   with mounted readiness.
+5. **Three MCP tests asserted a catalogue that no longer exists.** `p10_external_client.rs` and
+   `external_client.rs` demanded ≥40 tools including `snapshot` / `search_web` / `office_edit` /
+   `memory_retrieve` — the **internal** catalogue that `P64.9`/`P71.2f` deliberately stopped advertising. An
+   external client is served the **shared plane** (`everyaios_mcp::SHARED_FACADES`, 19 task-shaped façades, per
+   [`ARCH/EXTERNAL-AGENTS.md`](ARCH/EXTERNAL-AGENTS.md) §3); the internal ids remain callable by name but must
+   never appear in `tools/list`. The assertions were inverted to match — façade families present, primitives
+   **explicitly asserted absent** — and the same stale claim was corrected in the standalone server's module doc
+   and in the `initialize` instructions string, both of which still advertised "the native tool catalog".
+
+**Also repaired (test robustness, not a product change).** `everyaios-vault`'s
+`cooldown_backoff_doubles_and_caps` bounded its assertions with a fixed ±10 ms slack against a wall clock, which a
+fully-parallel workspace run outruns. The cooldown is anchored on an internal timestamp that cannot be observed
+from outside but always lands **inside the window bracketing the call**, so each assertion was rewritten to derive
+an exact range from that measured window — no magic slack, and no bound loose enough to be vacuous.
+
+**Evidence — every suite, green.**
+
+| Suite | Result |
+|---|---|
+| `cargo test --workspace` | **2691 passed · 0 failed · 25 ignored** |
+| `bun test` (ui) | **383 passed · 0 failed** |
+| `bun test` (coordinator) | **238 passed · 0 failed** |
+| `cargo check` (src-tauri) | clean |
+| `cargo clippy -p everyaios-mcp -p everyaios-vault --all-targets` | 0 warnings |
+| `tsc --noEmit` (ui · coordinator) | clean |
+| `check-doc-sync` | ✅ (166; 1640 = 1304 + 336; v3.96) |
+| `check-arch-invariants` | ✅ (CRED · AUTH · SCHEMA · DECIDE · LAYER · PURITY · TS-DUP · RUST-DUP) |
+| `ipc-parity` | 350 registered · **0 broken** |
+| `gen-codebase-map --check` | ✅ (1466 tracked) |
+| `scripts/e2e/security-gate.mjs` | **PASS** (S1–S6: Guard suites, the two-path boundary, the audit Merkle/retention suites, the MCP hijack/attach suites, IPC parity, approval provenance) |
+
+**Files.** `ui/src/lib/autonomy.test.ts` · `packages/coordinator/src/{h32.ts,primary-agent.test.ts}` ·
+`crates/everyaios-agents/src/directory.rs` · `crates/everyaios-core/src/chat.rs` ·
+`crates/everyaios-mcp/tests/{p10_external_client.rs,external_client.rs}` ·
+`crates/everyaios-mcp/src/bin/mcp-standalone-server.rs` · `crates/everyaios-mcp/src/server.rs` ·
+`crates/everyaios-vault/src/keyring.rs` · `CODEBASE-MAP.md` (regenerated — line/count drift only).
+
+**Still open after this pass.** Row-level acceptance is **not** claimed: each of the 39
+`[IMPLEMENTED — unverified]` markers names its own criteria, and a green suite is evidence about the tree rather
+than a substitute for demonstrating a row. The `P70` release-engineering block, `P66.5`'s global visual/DOM gate,
+and the Windows acceptance work (`P70.D5`/`P70.D6`) remain unrun.
+
+---
+## v3.95 — 2026-09-22 — Appearance has one owner, and every offered theme is painted (P66.5 · P11.3)
+
+**Category:** UI defect repair + extension (the appearance plane; no capability change).
+**Capability rows:** none added, none removed — census stays **166**. **Flipped:** no checkbox flips
+(`P66.5` stays open — the global visual gate is still unrun); live count unchanged at **1640 = 1304 + 336**.
+
+**Assessment — wired, but not correct.** An audit of the appearance plane found six defects, all in code that
+was already marked as landed:
+
+1. **Two owners of one document.** `AppearanceSection` wrote `font-scale-*` / `high-contrast` onto `<html>` from
+   its own `usePref` state while `ThemeProvider` applied the same attributes from its own. Two writers cannot
+   agree, and the panel's copy was only guaranteed **while the panel was mounted**.
+2. **The pre-paint script read a key nothing wrote.** `writePref` prefixes `everyaios.settings.`, so
+   `THEME_STORAGE_KEY = 'everyaios.theme'` was stored at `everyaios.settings.everyaios.theme` — and
+   `index.html` read `everyaios.theme`. First paint therefore flashed the default appearance: precisely the
+   defect the script exists to prevent. The shipped `theme-persist.test.ts` asserted the correct contract
+   (unprefixed key, plain text) and was **failing — 2 of its 5 cases**.
+3. **Two of seven accents painted nothing.** `theme-provider` offered `rose` and `teal`; `globals.css` had no
+   `[data-accent]` block for either, so choosing them changed nothing anywhere.
+4. **A third, drifted accent list.** `onboarding-modal` kept a hand-written copy of the presets that had fallen
+   two entries behind the picker in Settings, so half the selectable accents were unreachable at first run.
+5. **`data-density` was written and never read.** The provider set the attribute; no stylesheet consumed it, so
+   the control was decorative.
+6. **The picker could not express the mode the app boots in.** Only light/dark were offered, while the default
+   mode is `system`.
+
+**Fixes.**
+
+- **One owner, one encoding.** `ui-prefs.ts` gained `readStoredText` / `writeStoredText` / `readStoredFlag` /
+  `writeStoredFlag` / `removeStoredKey`. Appearance values now live at their **own literal keys as plain text**,
+  which is what both the boot script and the shipped test expect; the double-prefixed and JSON-era locations are
+  still read, so an existing install keeps its choice. `ThemeProvider` is the only writer of every appearance
+  attribute, and `AppearanceSection` became a pure consumer (no `usePref`, no direct DOM access).
+- **Every offered theme is painted.** `globals.css` gained tuned light **and** dark blocks for `rose` and `teal`.
+  Both were chosen against the measured bar: ≥4.5:1 as text on all three light surfaces and on the dark surfaces,
+  with the label-on-fill pair asserted in both themes — `design-tokens.test.ts` now enumerates all six
+  selectable accents, so an unpainted preset is a failing test rather than a silent dead control.
+- **Density is real.** Tailwind v4 derives every padding, margin, gap and size utility from the single `--spacing`
+  token, so `html[data-density=compact|comfortable|spacious]` retunes the whole spacing rhythm from one place
+  instead of rewriting call sites. A third step (`spacious`) was added.
+- **`system` is selectable, and `resetAppearance` exists.** The theme row now offers Light · Dark · System (with
+  the resolved theme named) and a Reset that clears the stored keys, so a reset cannot be undone by a reload.
+- **First run and the title bar were made honest.** `onboarding-modal` reads the shared preset list; the
+  icon-only theme and sidebar toggles name the result they will produce (`Switch to light theme`) and keep their
+  icons out of the accessibility tree, and the accent dots carry `aria-label` + `aria-pressed` at a 24px target.
+
+**Files.** `ui/src/lib/ui-prefs.ts` · `ui/src/components/theme-provider.tsx` ·
+`ui/src/components/panels/settings-sections.tsx` · `ui/src/components/panels/settings-panel.tsx` ·
+`ui/src/components/onboarding-modal.tsx` · `ui/src/components/shell/title-bar.tsx` · `ui/src/globals.css` ·
+`ui/src/lib/design-tokens.test.ts` · `ui/index.html` · `ui/src/main.tsx`.
+
+**Validation.** `tsc --noEmit` (ui) clean · `bun test src/lib/design-tokens.test.ts src/lib/theme-persist.test.ts`
+→ **15 pass / 0 fail** (was 13 pass / 2 fail; the two failures were the pre-existing storage-key bug) ·
+`check-doc-sync` ✅ (166; 1640 = 1304 + 336; v3.95) · `check-arch-invariants` ✅. No suite beyond those two files
+was run; the global visual/DOM gate on P66.5 remains open.
+
+---
+## v3.94 — 2026-09-22 — v1 is a Windows product, and the matrix says so (P70.D5 · P70.D6 · scope)
+
+**Category:** release-engineering decision (the P70 scope ruling; user directive 2026-09-22).
+**Capability rows:** none added, none removed — census stays **166**. **Flipped:** no checkbox flips
+(`P70.D5` → PARTIAL, `P70.D6` → DECIDED, `P70.A1` → PARTIAL); live count unchanged at **1640 = 1304 + 336**.
+**No suite was run.**
+
+**Decision.** v1 ships for **Windows**; the Linux half ships as **WSL2**, a supported host for Linux-native
+agents rather than a cockpit artifact. **macOS and native Linux desktop are out of v1 scope.** The reason is
+evidence: desktop control is the one capability whose correctness depends on the host OS, and the only host
+this project can verify is Linux — the platform v1 does not ship. Windows is where the product will run, so
+Windows is where the acceptance work has to happen, and WSL keeps Linux-native agents reachable from that same
+machine without publishing a Linux desktop build. Out of scope means *no artifact and no acceptance claim*, not
+a deletion: the Linux/macOS code paths stay in the tree (they are what the local harness and CI run on), and
+returning one to scope is a matrix change plus an acceptance pass.
+
+**Artifacts.**
+
+- **`SUPPORT-MATRIX.md` (new, repository root)** — the published form: the v1 scope decision, a per-platform
+  matrix (Windows 10 22H2 / 11 x64+arm64 shipped; WSL2 Ubuntu 22.04/24.04 supported as an agent host; macOS and
+  native Linux out), the Windows specifics (per-user install, sidecar as a resource, no host toolchain, the
+  **weaker Windows sandbox posture stated rather than equated** with `bwrap`), an explicit *what is not
+  claimed* section (Windows capture/UIA and ConPTY still unverified), the data/upgrade policy, and a table of
+  where the decision is enforced.
+- **`ARCH/DESKTOP.md` §6 rewritten** — §6.1 is the architectural half of the same decision (with the
+  host-evidence rule spelled out), §6.2 keeps the recorded gaps table and now includes ConPTY, and the section
+  states that shipping with those open is allowed only because the matrix and the installer say so.
+- **`TODO.md` P70 preamble** gained the platform-scope rule, with its consequences mapped onto the rows below
+  (`A1`/`A3`/`A4`/`A5`/`A6`/`B1`/`B5`/`B6`/`B7`/`C*`/`F1`/`F2` are Windows-only; `B2`/`B3` marked **OUT OF V1**;
+  `D5`/`D6` answered by the matrix; `E5`/`E9` qualify Windows + WSL).
+
+**Not re-scoped (deliberately).** `src-tauri/tauri.conf.json` still lists all six bundle targets, because the
+local verification harness builds and boots here; the *published* set is what `P70.A1`'s CI work narrows. That
+separation — buildable here, published for Windows — is now stated in both the matrix and the row.
+
+**Validation:** `check-doc-sync` ✅ (166; 1640 = 1304 + 336; v3.94); `check-arch-invariants` OK;
+`ipc-parity` 0 broken; `codebase-map --check` ✅.
+
+---
+## v3.93 — 2026-09-22 — The engine is provably optional (P71.6b)
+
+**Category:** implementation (the twelfth `P71` installment — the regression proof `ADR/0005` §2 asks for).
+**Capability rows:** none added, none removed — census stays **166**. **Flipped:** no checkbox flips;
+`P71.6b` moved to `IMPLEMENTED — unverified`. Live count unchanged at **1640 = 1304 + 336**.
+**No suite was run** (standing instruction) — the test is written and compile-checked, not executed.
+
+**Decision.** Deleting the built-in engine (`P71.2c`) is only half the guarantee; the other half is a test that
+fails if it comes back, and that shows a real turn running without it. The row's own words: "boots with the
+built-in agent absent and completes a turn through an external agent."
+
+**Implementation.** New `crates/everyaios-acp/tests/acceptance_engine_optional.rs` — four tests, no mocks in
+process, no credentials, no network:
+
+1. **`a_turn_completes_on_an_external_agent_alone`** — the public ACP client drives a real spawned agent
+   process (`mock_acp_agent`) through `initialize` → `session/new` → `session/prompt` and the turn completes,
+   with nothing of ours in the path. It also asserts the agent's **usage report survives the turn** (`P71.4`:
+   input/output, the cache read/write split, the agent's own cost) and that recording it into the real
+   `UsageLedger` stamps `UsageSource::AgentReport` on the agent.
+2. **`an_agent_that_reports_nothing_is_unreported_not_zero`** — the same fixture driven with a prompt that
+   omits the usage block: `PromptOutcome.usage` is `None`, and the ledger records an **unreported** turn whose
+   token totals stay zero. This is the `I15` claim tested against a live process rather than asserted.
+3. **`no_built_in_protocol_variant_exists`** — exhaustive matches over `AgentProtocol` and `HarnessProtocol`,
+   so reintroducing `Inbuilt` / `ModelBackend` breaks the build in a file whose stated purpose is to forbid it;
+   both retired spellings are asserted unparseable off the wire.
+4. **`the_built_in_engine_is_archived_or_deleted`** — the deletion is asserted **on disk**: the native loop is
+   archived under `ARCH/archive/` and absent from the crate tree, `packages/core-engine/src` and
+   `packages/coordinator/src/chat.ts` do not exist, and the archive's own README is present so the removal
+   stays documented rather than mysterious.
+
+The fixture `mock_acp_agent` now reports usage on its prompt result (and omits it for a `no-usage` prompt), so
+the observation path is drivable from a real process. `everyaios-acp` gained `everyaios-memory` as a
+dev-dependency so the suite drives the real ledger rather than a stand-in.
+
+**Verification pass command (not run here):**
+`cargo test -p everyaios-acp --test acceptance_engine_optional`.
+
+**Validation:** `cargo check -p everyaios-acp --all-targets` clean (0 warnings); `check-doc-sync` ✅;
+`check-arch-invariants` OK; `ipc-parity` 0 broken; `codebase-map --check` ✅.
+
+**Note for the commit:** `gen-codebase-map.mjs` enumerates **tracked** files, so the new test file enters the
+map only once it is committed — regenerate the map in the same commit that adds it.
+
+---
+## v3.92 — 2026-09-22 — Usage is an observation, with its reporter named (P71.4 · P71.9h)
+
+**Category:** implementation (the eleventh `P71` installment — the observability re-home and its UI).
+**Capability rows:** none added, none removed — census stays **166**. **Flipped:** no checkbox flips;
+`P71.4` and `P71.9h` moved to `IMPLEMENTED — unverified`. Live count unchanged at **1640 = 1304 + 336**.
+**No suite was run** (standing instruction).
+
+**Decision.** P71.2c deleted the provider broker, which was the thing that *measured* a turn. That left token
+and cost accounting with **no live producer at all** — `MemoryService::record_usage`'s only remaining callers
+were its own tests, and the ledger's write door took four numbers with no record of where they came from. The
+contract (`ARCH/ROUTING.md` §5) already said what the replacement is: usage survives as **observations** from
+agent reports, ACP events, provider reports where exposed, and EveryAIOS capability calls, and precision an
+agent did not report must never be invented. This wave makes that the only way to write to the ledger.
+
+**Rust — the observation model.**
+
+- `everyaios_memory::UsageSource` (`agent_report` · `acp_event` · `provider_report` · `capability_call`, a
+  closed enum so a new producer is a deliberate addition) plus `UsageObservations`
+  (`by_source` tokens + an `unreported` owner→turn-count map).
+- `UsageRecord` gained `cached_write_tokens` (a prompt-cache **write** is billed apart from a read, so the two
+  are never folded) and `reported_cost_usd` (kept strictly separate from `est_cost_usd`, which stays **our**
+  price-table estimate).
+- `UsageLedger::record_observed(source, …)` is the **only** recording door — provenance is a parameter, not an
+  option — and `record_unreported(owner)` exists for the opposite fact: a turn that finished with nothing
+  reported increments a counter instead of adding zero tokens. A later report from the same owner clears it.
+- The primary/worker split is now computed from the **agent** dimension via `set_primary_agent` +
+  `primary_worker_split()`; the old "a key whose name contains `chief`" heuristic — a share invented from a key
+  name, naming a vocabulary v1 does not have — is deleted. No attribution ⇒ `null`, and a surface renders
+  "not attributed" rather than 0%.
+- `MemoryService`: `record_usage` → `record_usage_from(source, agent, key, session, …)` (agent-attributed),
+  `record_usage_unreported(owner)`, `set_primary_agent(agent)`; `usage_snapshot` now emits per-key/per-session
+  `source` + `reportedCostUsd` + the cache split, an `observations` block, and **`primarySpend`** (renamed from
+  `chiefSpend`, the key `P71.5b` held open for this row). `everyaios-core` re-exports `UsageSource` so the
+  shell can name a reporter without depending on `everyaios-memory`.
+- **ACP plumbing (the live producer).** `SessionPromptResult` parsed only `stop_reason`, so an agent's usage was
+  dropped on the floor. It now carries `PromptUsage` (`inputTokens` · `outputTokens` · `cachedReadTokens` ·
+  `cachedWriteTokens` · `costUsd`) with a `reported()` predicate, `PromptOutcome` carries it through, and
+  `acp_prompt` records the turn as `UsageSource::AgentReport` — or as **unreported** when the agent sent
+  nothing. Nothing estimates tokens from prompt length.
+
+**UI.** `spend.ts` mirrors the new wire (types + `usageSourceLabel` · `unreportedOwners` · `costReadout`, whose
+`reported | estimated | unknown` kind is what a surface must label). Settings → Usage reads "Total spent
+(reported)" / "(estimated)" / an honest dash, names each key's reporter, shows the cache read/write split and
+marks each cost `reported` vs `est`, and lists **turns with no usage report** as a fact about the ledger.
+Analytics drops the invented share fallback (badge only when a primary agent is actually attributed), labels
+`cost estimated` / `no usage reported` / `reported by <sources>`, and surfaces the unreported owners.
+
+**Docs.** `ARCH/05-TOKEN-ECONOMY.md` states what the ledger is and is not (it already carried the "no gateway"
+re-scope); `ARCH/03-BYOK-KEYRINGS.md` was already re-scoped in the P69 thaw; `ARCH/ROUTING.md` §5 is the
+contract this implements, unchanged.
+
+**Validation:** `cargo check --all-targets` clean for `everyaios-memory` / `everyaios-core` / `everyaios-acp` /
+`src-tauri` (0 warnings); `tsc --noEmit` (ui) clean; `check-doc-sync` ✅; `check-arch-invariants` OK;
+`ipc-parity` 0 broken; `codebase-map --check` ✅ (regenerated).
+
+---
+## v3.91 — 2026-09-22 — No affordance offers a built-in engine (P71.9g)
+
+**Category:** implementation (the tenth `P71` installment — the agent-builder/engine-choice row).
+**Capability rows:** none added, none removed — census stays **166**. **Flipped:** no checkbox flips;
+`P71.9g` moved to `IMPLEMENTED — unverified`. Live count unchanged at **1640 = 1304 + 336**.
+**No suite was run** (standing instruction).
+
+**Decision.** The wizard itself was already v1-correct (`agent-builder.ts`'s `EngineBinding` is
+`acp | model-only`, and the panel offers exactly those two), so the row's real content was the **rest of the
+tree**: an agent *protocol* union that no serializer could produce, a preview inventory that advertised a
+runnable built-in engine, a doctor line claiming a 42-tool built-in catalogue, and a dead bind path whose
+absent harness defaulted to `inbuilt`.
+
+**Implementation.**
+
+- **One protocol union, derived from Rust (`P69.C11` / I4).** `ui/src/lib/settings.ts`'s
+  `AgentProtocol` was `'inbuilt' | 'acp' | 'mcp'` — a hand-maintained duplicate missing the variant the shell
+  actually emits (`settings_cmds::protocol_for` and `agent_cmds::entry_json` both write `acp` / `model_only`).
+  It is now the canonical `'acp' | 'model_only'` mirroring `everyaios_types::AgentProtocol`, and
+  `nativeSurfaceNotReplaced` tests `'acp'` only — the retired `'mcp'` spelling could never occur, and a
+  `model_only` bundle has no external agent whose native surface another grant could replace.
+- **The Discover preview no longer seeds a built-in engine.** `discovery.ts`'s demo inventory carried
+  `{kind: 'agent', id: 'inbuilt', name: 'EveryAIOS', source: 'builtin', capabilitiesVerified: true,
+  status: 'healthy'}` — a browser preview presenting a runnable engine no install can produce (I15). The row
+  is gone and `counts.agents` is 0; v1 agents are discovered external agents only.
+- **Reports tell the truth.** `doctor.ts`'s MCP line claimed a "42-tool inbuilt catalog always available" —
+  post-`P71.2f` the TS catalogue is archived and the one façade table is Rust-side, so it now says the
+  bundled catalog is *discovery data* and nothing exposes tools until a server is attached.
+- **The bind path fails closed.** `runtime-bind.ts` defaulted an absent harness to `inbuilt`; it now refuses
+  to bind (returns `null`, exactly like a missing model) and its suite asserts that. The module remains one of
+  the `P71.2c` archive-pending set.
+- **Brand vocabulary.** Remaining `inbuilt`-as-brand uses removed: `store.ts`'s stale "Default = inbuilt
+  EveryAIOS" comment, `chief-handoff.ts`, `bridge.ts`, `chat-composer.tsx`, `agent-model-picker.tsx`,
+  `connectors-panel.tsx` ("the bundled catalog"), `cua-route.ts` ("the Rust Browse engine"), `settings-panel.tsx`,
+  and the DOM harness's `chief_default_get` fixture (which answered `{primaryChief: 'inbuilt'}` — every DOM
+  test started from a binding no install can produce; now unbound). Surviving `inbuilt` spellings are
+  retired-value guards (`isRetiredBinding`, `RETIRED_AGENT_IDS`, `h32`) whose whole job is to reject the name.
+
+**Validation:** `tsc --noEmit` clean (ui + coordinator); `check-doc-sync` ✅ (166; 1640 = 1304 + 336; v3.91);
+`check-arch-invariants` OK; `ipc-parity` 0 broken; `codebase-map --check` ✅ (regenerated).
+
+---
+## v3.90 — 2026-09-22 — Headless runs are reached through their owner (P71.9f)
+
+**Category:** implementation (the ninth `P71` installment — the `ADR-0006` §6/§7 surfacing contract).
+**Capability rows:** none added, none removed — census stays **166**. **Flipped:** no checkbox flips;
+`P71.9f` moved to `IMPLEMENTED — unverified`. Live count unchanged at **1640 = 1304 + 336**.
+**No suite was run** (standing instruction).
+
+**Decision.** `ADR-0006` resolved the headless-Work gap: a non-interactive Session has **no Chat** and that is
+normal, it is reached **through its owner** (§6), and a user may open a run later, at which point "the run's
+Session gains a Chat and the 1:1 rule then holds again" (§7). The code had the first half (`P71.8a–d`: the kind
+is a record property, an automation Work cannot exist without its owning Session) and the run list had the
+status half (`P71.9e`), but the cockpit had **no open-a-run affordance** — and the one surface that did name the
+run's container printed the raw word **"Session"**, which `ARCH/UI.md` §5 forbids as a user-facing container word.
+
+**Implementation.**
+
+- **Open a run (`ADR-0006` §7).** `ui/src/lib/store.ts` gains `openAutomationRun(run)` plus the record fields
+  `originRunId` / `originRunSessionId` on `Session`: opening a run creates a Chat carrying the run's own Work
+  objective as its title and the run's identities, switches to chat, and says so — the Chat is a *continuation*
+  of that run, not a second Session, and nothing fabricates a Chat per firing. `automations-panel.tsx`'s
+  `LiveRuns` row gained the **Open** action.
+- **The owner is named, not the container.** `ui/src/lib/work.ts` gains `sessionKindLabel(kind)` — the one
+  user-facing projection of a Work's owning Session in the cockpit's vocabulary (`chat` · `automation` ·
+  `delegated`). `tasks-rail.tsx`'s child-Work rows previously printed the raw wire enum (`c.sessionKind`);
+  `progress-view.tsx`'s Live Work block listed only the first Work with no owner at all. Both now name the
+  owner per Work (up to six rows in the timeline), so a headless automation run is visibly *an automation* and
+  is never presented as a chat turn.
+- **Vocabulary sweep — the word "Session" is gone from every rendered string.** `title-bar` ("Switch chat"),
+  `right-rail` ("Open activity timeline"), `shell-view` split/unsplit titles ("second chat"), the terminal
+  status line (`<origin> terminal`, "no terminal"), `settings-panel` nav ("Runtime processes"),
+  `runtime-session-section` ("Runtime processes" · "Runtime for spawned agents" · "No agent processes" and its
+  spawn notification), `usage-metrics-section` ("Activity recording", incl. the exported filename),
+  `settings-sections-studio` (Voiceprint "live calls" · Mobile "resume a chat" · "Allow remote chats" ·
+  browser "Headless browser" · "Profile Isolation" · ACP "activity observability"/"per-turn log"/"this chat" ·
+  hooks "new chats"), `settings-sections-security` (usage-ledger description), `guard-panel` ("Chat vault") and
+  `chat-composer` ("No live terminal"). Remaining `Session` spellings are code identifiers, type names and wire
+  transforms only — no user-facing string, which is what §5 governs.
+
+**Declared, not done:** the chat that §7 creates is a *fresh* transcript — it does not hydrate the run's event
+history into the transcript, which is the Event Log's own surface; a dedicated Work-detail pane remains the
+verification-pass remainder recorded under `P71.9d`.
+
+**Validation:** `tsc --noEmit` (ui) clean; `check-doc-sync` ✅ (166 in sync; 1640 = 1304 + 336; version v3.90);
+`check-arch-invariants` OK; `ipc-parity` 0 broken; `codebase-map --check` ✅ (regenerated, 1466 files).
+
+---
+## v3.89 — 2026-09-22 — Automations show honest run status (P71.9e)
+
+**Category:** implementation (the eighth `P71` installment — the `AUTOMATION.md` §11 UI contract).
+**Capability rows:** none added, none removed — census stays **166**. **Flipped:** no checkbox flips;
+`P71.9e` moved to `IMPLEMENTED — unverified`. Live count unchanged at **1640 = 1304 + 336**.
+**No suite was run** (standing instruction).
+
+**Decision.** §11 says the automation surface shows recent runs with an honest status — running ·
+completed · failed · **waiting for approval** — and that a user who never opens a details affordance
+can still tell whether their morning job ran. The trigger-plane refactor (`P71.3d`) deleted the
+scheduler's own run ledger (correctly: the Event Log owns run history, `I3`), which left the History
+tab pointing at "the Event Log and the Activity timeline" with nothing concrete to show. The missing
+piece was already written on every firing: `scheduler_fire.rs` opens an `ExecutionLedger` run tagged
+`ExecutionTrigger::Scheduler` with the job id in its `context_snapshot`. This wave reads that record
+back instead of asking the trigger plane to keep a second one.
+
+**Rust** (`src-tauri/src/scheduler_cmds.rs` + one accessor in the kernel):
+
+- `scheduler_runs(jobId)` — filters `ExecutionKernel::all()` (new read-only accessor; `executions`
+  stays private) to `Trigger::Scheduler` rows, matching the `"automationId":"<id>"` needle in
+  `context_snapshot` when a job is named; returns `{id, sessionId, objective, phase, waitingApproval,
+  createdAtMs}` newest-first, capped at 50. `phase` is the ledger's own `ExecutionPhase`; there is no
+  fabricated success/failure beyond it. Registered in `commands.rs`.
+- `scheduler_duplicate(id)` — clones the definition under `<id>-copy-<secs>` with `enabled: false`:
+  the §11 duplicate affordance must never silently arm a second trigger.
+- `scheduler_export(id)` — the `*.automation.json` body: `{kind: "everyaios.automation", version: 1,
+  automation: {name, sessionId, boundAgent, trigger, steps, policy}}`. `boundAgent` resolves exactly
+  as the firing path does (sidecar session pin → config primary agent; retired built-in spellings →
+  `null`, `ADR-0005`). Steps carry capability *requests*, never credentials — the §11 "never a
+  secret" rule holds structurally, with no secret field anywhere on the wire shape.
+
+**UI** (`ui/src/lib/scheduler.ts`, `ui/src/components/panels/automations-panel.tsx`):
+
+- `schedulerRuns` / `schedulerDuplicate` / `schedulerExport` bridge wrappers (+ `AutomationRun` /
+  `AutomationExport` types) with honest preview fallbacks.
+- The History tab's pointer-card became a real runs list: per-phase styling (`waiting for approval`
+  warning, `running` sky, `completed` emerald, `failed/cancelled` rose, other ledger phases muted) and
+  a caption stating statuses are the ledger's own phases, full step detail behind the Work/Event
+  surfaces.
+- Each automation row gained **Duplicate** (reloads the list so the disabled copy appears with its
+  real state) and **Export** (blob-download `<id>.automation.json`) alongside
+  Run now / Pause / Delete / Enable — completing the §11 action set.
+- The card meta line shows the **bound agent** via `sessionAgentLabel()` (session pin → user default,
+  `isRetiredBinding`-filtered — the same chain the composer resolves); an unbound automation says
+  "none bound" instead of implying an engine.
+
+**Validation:** `cargo check` (src-tauri) clean, 0 warnings; `tsc --noEmit` (ui) clean;
+`check-arch-invariants` OK; `check-doc-sync` ✅ (166 in sync; 1640 = 1304 + 336; version v3.89);
+`ipc-parity` 0 broken (3 new commands registered + invoked).
+
+---
+## v3.88 — 2026-09-22 — Delegation becomes visible and configurable (P71.9d)
+
+**Category:** implementation (the seventh `P71` installment — the delegation UI ADR-0005 §8 ordered
+after the façade). **Capability rows:** none added, none removed — census stays **166**. **Flipped:** no
+checkbox flips; `P71.9d` moved to `IMPLEMENTED — unverified`. Live count unchanged at **1640 = 1304 + 336**.
+**No suite was run** (standing instruction).
+
+**Decision.** `P71.1` put `delegate.*` on the shared plane and `P71.3` re-homed the delegation kernel into
+the Work gateway, but the cockpit had no surface for either: a user could not see which child Work existed
+under a task, nor say "this agent is my researcher, may not spawn, isolated workspace". The per-agent
+profile is **policy input**, not a second authority — the gateway's `delegation_gauge` (durable, derived
+from the one Work graph) stays the admission path; the profile is what the user can edit.
+
+**Implementation.**
+- **Rust:** `SubagentPolicy` in `config.rs` (`subagent_policy` map on Config, camelCase, B3 defaults —
+  modelPolicy `agent-default`, maySpawn `false`, maxChildren 6 / maxDepth 2 / maxConcurrency 6, workspace
+  `shared`, budget 0), re-exported from `everyaios-core`. `chief_subagent_set_policy` persists one
+  installed agent's profile with per-field `Option`s (refuses unknown/uninstalled ids, validates the
+  workspace vocabulary). `work_children` exposes the gateway's `children_of` read-only. Both registered.
+- **UI:** `SubagentProfile` + `chiefSubagentSetPolicy` (`acp.ts`); `ChildWork` + `workChildren`
+  (`work.ts`). Settings → Subagents rows gain a **Delegation profile** disclosure (role · model policy ·
+  may-spawn · max children/depth/concurrency · budget · workspace) noting the gateway stays authoritative.
+  `tasks-rail.tsx` renders **child work** under each ledger row (id · sessionKind · run), fetched
+  best-effort so a gateway miss cannot take the rail down.
+
+**Declared, not done:** a dedicated Work-detail pane (beyond the rail's child rows) is a
+verification-pass remainder; `allowed children` per profile awaits the `delegate.*` façade consuming it.
+
+**Verification.** src-tauri `cargo check` clean; ui `tsc --noEmit` clean; `ipc-parity` 0 broken (347
+registered); doc-sync ✅; arch-invariants ✅.
+
+---
+## v3.87 — 2026-09-22 — "Chief" is retired to Primary Agent (P71.5b)
+
+**Category:** implementation (the sixth `P71` installment — the vocabulary half of ADR-0005's removal).
+**Capability rows:** none added, none removed — census stays **166**. **Flipped:** no checkbox flips;
+`P71.5b` moved to `IMPLEMENTED — unverified` and stays `[ ]`, so the live count keeps meaning *verified*.
+Live count unchanged at **1640 = 1304 done + 336 open**. **No suite was run** (standing instruction).
+
+**Decision.** The removals were done but the product still *spoke* the old model: a "Chief slot", a
+"Chief is not delegating" badge, `chief.ts` owning delegation with an `inbuilt` branch, and `cua.rs`
+naming its delegation outcomes after the worker/chief split. A name is a claim — "Chief" implied a
+built-in brain EveryAIOS owns, which v1 does not ship. The vocabulary is now **primary agent** (the bound
+external agent) and **delegation policy** (depth/concurrency/budget/derived-permission gates), with the
+one honest exception: the `usage_snapshot` **wire key stays `chiefSpend`** until `P71.4` re-homes the
+observation, commented in place on both sides.
+
+**Implementation.**
+- **Sidecar:** `chief.ts` + suite deleted; `primary-agent.ts` (+ tests) — `resolvePrimaryAgentId`
+  (explicit → user default → **none**, retired spellings skipped by name), `validateSessionPin` refusing
+  empty *and* retired ids, `PrimaryAgentRegistry`/`PrimaryAgentRecord`/`buildResumePrompt`,
+  `injectPrimaryContext`, `SubagentLimits`/`checkSpawn`/`deriveChildPermissions` unchanged in force.
+  `index.ts`: `chief/resolve` records only a resolved agent; `chief/set_session` drops the
+  `inbuilt`-means-mediated branch (every v1 binding is external ⇒ `self_contained`);
+  `chief/resolve_session` reports `source: "none"`. `live-agent-harness.test.ts` repointed.
+- **Rust:** `cua.rs` — `WorkerOutcome`→`DelegationOutcome` (+`delegation_step`/`apply_delegation_act`),
+  `AgentRole`→`DelegationRole`, `ChiefSpend`→`PrimarySpend` (`split_primary_spend`, `PRIMARY_SPEND_WARN`),
+  `RuntimePlane::Chief`→`Primary`, harness-case params → `primary_*`, docs de-Chief'ed; `lib.rs`
+  re-exports and the four callers updated; `scheduler_fire.rs`/`config.rs` docs updated.
+- **UI:** `spend.ts` `PrimarySpendView`/`primarySpendWarning`; analytics badge, picker
+  ("Default agent" slot, "Set … as default agent", pin notifications), right-rail, routing tab and
+  Subagents copy de-Chief'ed. Delegation policy itself (perception, accessibility, evidence,
+  verification, replan) untouched, per the row.
+
+**Verification.** `cargo check --workspace --all-targets` + `src-tauri` clean; `npx tsc --noEmit` clean
+for `ui` + `packages/coordinator`. No suite run.
+
+---
+## v3.86 — 2026-09-22 — The composer is the bound agent's surface (P71.9c complete)
+
+**Category:** implementation (the fifth `P71` installment — finishing the row that v3.85 could only declare).
+**Capability rows:** none added, none removed — census stays **166**. **Flipped:** no checkbox flips;
+`P71.9c` moved from `PARTIAL` to `IMPLEMENTED — unverified` and stays `[ ]`, so the live count keeps meaning
+*verified*. Live count unchanged at **1640 = 1304 done + 336 open**. **No suite was run** (standing
+instruction); the UI typecheck and the static gates are this entry's evidence.
+
+**Decision.** With the engine deleted (`P71.2c`) and the picker de-inbuilt'ed (`P71.9a`), the last place the
+cockpit still shipped EveryAIOS-owned chat control was the composer: a static `/help /mode /model /undo
+/compact /clear /export` table the UI intercepted *before* the text reached the bound agent, plus a Settings
+section advertising that table. That contradicted the row's own contract — "slash commands come from
+`available_commands_update`" — and silently stole `/name` inputs an agent may implement itself (Claude Code's
+`/compact` being the recorded example).
+
+**Implementation.**
+- **`agent-model-picker.tsx`** — the dead `!external` branches are **deleted**, not guarded: the
+  models.dev catalog rows/notes/spinner, the curated-seed block, the local-model rows, the auto-route toggle,
+  the live route feed, and the pickers' catalog/cloud pin handlers are gone (file: 1707 → ~1150 lines). The
+  model column is the agent's own ACP option or an explicit "none exposed"; the trigger chip paints the
+  agent-owned value or an em dash. Deleted with the branches: the catalog-loading effect, the local-probe
+  effect, the route-feed effect and the now-unused store selectors (`selectedModelId`, `setSelectedModel`,
+  `autoRoute`/`setAutoRoute`) and imports (`catalog-models`, `providers`, `local-models`, `formatContext`/
+  `formatPrice`, the Gauge/Zap/FileSpreadsheet/Globe/Monitor/Search/HardDrive/Brain icons).
+- **`ui/src/lib/slash-commands.ts` (+ its suite) deleted.** `chat-composer.tsx` loses `runSlash` (the local
+  `/` dispatcher), the static-table hint fallback (an unbound session gets no `/` suggestions; a bound
+  session gets only the agent's live vocabulary), and the send-path intercept — `/word` is now text for the
+  agent, full stop. `settings-sections-studio.tsx` loses `CommandsSection` and `settings-panel.tsx` its
+  Commands nav entry: Settings no longer advertises commands the composer does not own.
+- **`agents-models-section.tsx`** — the routing table's empty value is now a **named** option
+  (`ROUTING_BOUND_AGENT` = "follow the bound agent", added to `agents.ts`) instead of silently selecting the
+  first catalog row, and the tab header no longer names a built-in engine or an auto-route that swaps agents
+  (the routing table is task-tier bookkeeping, not the turn path).
+
+**Also recovered this turn.** `settings-sections-studio.tsx` was briefly truncated by a bad tool write
+during this edit (a script wrote an empty buffer after a failed match); it was restored from git HEAD and
+the v3.85 "Delegation roles" wording re-applied — net content identical to the pre-incident state plus this
+entry's removals. Recorded because the incident, not the restore, is the exception worth remembering.
+
+**Verification.** `npx tsc --noEmit` clean for `ui`; `check-doc-sync` ✅ (1640 = 1304 + 336);
+`check-arch-invariants` ✅; `gen-codebase-map --check` ✅ (1468 tracked files); `ipc-parity` 0 broken
+(345 registered). No suite run.
+
+---
+## v3.85 — 2026-09-22 — The cockpit no longer contains a built-in agent (P71.9a · P71.9c-partial · P71.2d)
+
+**Category:** implementation (the fourth `P71` installment — the *evidence* half of the removal: the code no
+longer merely bypasses the built-in engine, it cannot name one). **Capability rows:** none added, none removed
+— census stays **166**. **Flipped:** no checkbox flips; `P71.9a` moved to `IMPLEMENTED — unverified` and stays
+`[ ]`, so the live count keeps meaning *verified*. Live count unchanged at **1640 = 1304 done + 336 open**.
+**No suite was run** (standing instruction); the UI/coordinator typechecks and the five static gates are this
+entry's evidence.
+
+**Decision.** `ADR-0005` §1/§2 plus `ARCH/AGENT.md` §1 make the *bound agent* the only v1 engine. `P71.2c`
+deleted the loop; this entry removes the cockpit's picture of a second engine, because a UI that can still
+render "EveryAIOS Native · always ready" is the same fallback by another route — it would offer a runtime no
+turn can use and let a picker look satisfied while the send path refuses.
+
+**Implementation.**
+- **`ui/src/lib/agents.ts`** — the `everyaios-native` seed row is **deleted**; `NATIVE_AGENT_ID`,
+  `isNativeRuntime` and `modelsForUsableRuntimes` are deleted with it, and `isRuntimeUsable` no longer carries
+  an "always live" shortcut (readiness, or the install probe, is the only evidence a runtime can serve a
+  turn). `getModelsForAgentLive` returns `[]` for **every** runtime — the one choke point the picker, the
+  palette and the settings panel route through — because no runtime's model surface is EveryAIOS's to draw
+  (`P71.2d`). `DEFAULT_ROUTING` names no agent: an empty row means "run this under the session's bound agent",
+  which is the only honest default once there is no zero-install engine.
+- **State.** `selectedAgentId`/`selectedModelId` start empty (unbound), `setSelectedAgent` is id-only,
+  `cycleModelVariant` returns `undefined` (there is no desktop model list to cycle), and the frozen task
+  snapshot records `''` rather than a retired id.
+- **One predicate.** `isRetiredBinding`/`currentBinding` moved into `ui/src/lib/acp.ts` — the single source of
+  truth the turn path (`bridge.ts`) and the composer both read, so no screen can disagree about whether
+  `inbuilt` / `everyaios` / `everyaios-native` still names an agent. The composer's slash-intercept and the
+  picker's default slot use it; a `primary_chief` holding a retired spelling now reads **"no agent bound"**
+  instead of "inbuilt engine".
+- **The model column is the agent's own.** The picker renders the bound agent's ACP config options
+  (`category: "model"`), or states that the agent exposes none; the desktop models.dev catalog and the
+  "Curated seed · EveryAIOS Native" list are gone from the picker (they remain in Providers / Local models as
+  *observation*). `agents-models-section` loses its built-in card and the 262-line `NativeModelCatalog`
+  disclosure entirely, and every row is an external agent.
+- **`packages/coordinator/src/h32.ts`** — the H32 agent-scoped model policy is restated for v1: there is no
+  built-in branch left, so `shouldForwardModel` is always `false`, `sanitizeRequest` always strips `model`,
+  and the model column is always display-only.
+
+**Verification.** `npx tsc --noEmit` clean for `ui` and `packages/coordinator`; `check-doc-sync` ✅
+(1640 = 1304 + 336); `check-arch-invariants` ✅ (incl. `LAYER-1`, which fails the build if
+`ConversationEngine`/`runChatStream` reappear outside `ARCH/archive/`); `gen-codebase-map --check` ✅ (1470
+tracked files, 335 commands); `ipc-parity` 0 broken. Tests touched but **not run**: `agent-ownership.test.ts`
+and `occupancy.test.ts` rewritten to the v1 boundary, and the three DOM suites that asserted the built-in row
+or the desktop model pair (`status-bar`, `agents-models-section`, `agent-model-picker`) rewritten against the
+v1 contract.
+
+**Declared-but-not-removed.** In `agent-model-picker.tsx` the EveryAIOS-owned branches are now guarded by a
+constant `external = true` rather than deleted; `P71.9c` removes them (and the leftover local-model rows)
+outright. `agents-models-section`'s routing table gained no "follow the bound agent" option yet — an empty
+value selects the first row until `P71.9c` lands. Both are recorded in `TODO.md`.
+
+### Also in this wave — first run leads with the agent (`P71.6a` · `P71.9b`)
+
+**Decision (same reasoning as above, applied to the first five minutes).** The old first-run gate completed
+the *zero-install* path: paste a cloud key or start a local runtime, and chat worked because EveryAIOS ran the
+model. `P71.2c` removed that loop, so the screen had become a promise the product cannot keep — it told the
+user "add one API key and chat works" while the send path would refuse for having no agent. The gate now
+leads with the only step that changes the outcome: **discover → install → bind an external agent.**
+
+- **`ui/src/components/shell/setup-gate.tsx` rewritten.** The cloud-key and local-model modes are gone (those
+  surfaces stay in Settings → Providers / Local models as *catalogue, vault and usage observation*, and the
+  card says so). The gate lists the discovered agents with their **canonical readiness**
+  (`readinessLabel`, one owner in `acp.ts`), and offers per row: `Use` when ready, `Sign in` when the agent
+  asks for it (launch + the agent's own auth method, opening its page — nothing is copied into EveryAIOS), or
+  `Install` with the same Guard-2 handshake as the picker. Binding calls `chief_default_set` (fail-closed on
+  unknown/uninstalled ids) and republishes the user default, so the shell is the authority and the UI never
+  invents a binding. An empty discovery states that nothing can run a turn rather than offering a substitute.
+- **`chat-panel.tsx`'s `NoProviderCard` → `NoAgentCard`.** The empty-chat blocker was "no provider key
+  configured"; it is now "no agent bound" (checked through `currentBinding`, so a stale `primary_chief`
+  spelling cannot make it claim otherwise). Its CTAs are agent discovery first, with provider keys and local
+  models demoted to an observation link.
+- **`onboarding-modal.tsx`.** Step 2 no longer says EveryAIOS "drives its native engine" or badges a
+  detected CLI as "Ready": readiness comes from the live catalog, detection is stated as evidence, rows gain
+  **Use this agent** (binding), the install path gained the missing Guard-2 consent step (`acpInstallAwait` —
+  onboarding was a privileged install path that skipped the approval card), and a `!boundId` banner states
+  what finishing without an agent will mean.
+
+**Verification.** `npx tsc --noEmit` clean for `ui`; doc-sync ✅ (1640 = 1304 + 336); `check-arch-invariants`
+✅; `gen-codebase-map --check` ✅; `ipc-parity` 0 broken. No suite run.
+
+---
+
+## v3.84 — 2026-09-22 — The built-in engine is deleted, not bypassed (P71.2c · P71.2f · P71.5a)
+
+**Category:** architecture + implementation (the third `P71` installment — the delivery half of
+[`ADR-0005`](ARCH/ADR/0005-external-agents-are-the-v1-engines.md)'s removals). **Capability rows:** none
+added, none removed — census stays **166**; `B1` (Agent loop) keeps its identity and its `Source`/status now
+say the loop is the **bound agent's** while the EveryAIOS implementation is archived (post-v1, `P71.7`).
+**Flipped:** no checkbox flips; `P71.2c`/`P71.2f`/`P71.5a` moved to `IMPLEMENTED — unverified` and stay `[ ]`,
+so the live count keeps meaning *verified*. Live count unchanged at **1640 = 1304 done + 336 open**.
+
+**Decision (unchanged, now fully executed).** `ADR-0005` §2 defers the built-in engine to post-v1; the loop
+belongs to the bound agent (`ARCH/AGENT.md` §1) and `ARCH/ROUTING.md` §10 retires the chain
+`ModelCatalog → ModelRouter → Vault → ProviderTransport → model execution`. This entry is that retirement in
+code, done as **removal** rather than as a bypass, because leaving the code in place with no consumer is how a
+second owner of model selection quietly comes back.
+
+**Documentation.**
+- **`P71.5a` — `ARCH/16-CHAT-LOOP-RUST-PORT.md` and `ARCH/17-NATIVE-AGENT.md` physically archived** to
+  `ARCH/archive/` (history preserved via `git mv`), each with an ARCHIVED banner naming the ADR, the post-v1
+  return and the move date, and with relative links rewritten for the new directory. `ARCH/16` joins the move
+  because it scoped a Rust port of a loop that no longer exists. Every live citation was repaired:
+  `ARCH/00-INDEX.md` (reading order collapsed to one **Archive** row + a new Archive line in the
+  document-accounting table + a status note stating the series is `00`–`15` + contracts + `DIAGRAMS.md`),
+  `ARCH/02`, `ARCH/11`, `ARCH/12`, `ARCH/13`, `ARCH/15`, `ARCH/DIAGRAMS.md`, `README.md` (now leads with
+  `AGENT.md` + `EXTERNAL-AGENTS.md`), `DESKTOP-APP-SPEC.md` §4.6 (heading + banner), `UI-DESIGN-PROMPT.md`,
+  `UX-TESTING-PLAN.md`, `docs/codebase/{components,decisions}.md`, and `TODO.md`'s `P64` heading and row-table
+  label. The archive is reachable from `00-INDEX.md` and is **not** cited as authority by anything live.
+
+**Implementation — the sidecar reasoning path.** `packages/core-engine` left the workspace
+(`ARCH/archive/core-engine/`, with a README: what it was, why it moved, how it returns) and
+`@everyaios/core-engine` was dropped from the coordinator's dependencies. Fourteen coordinator modules moved
+to `ARCH/archive/coordinator-loop/` with their suites — `chat.ts` (the turn loop, `FrameProviderBridge`,
+`injectBelowBoundary`), `plan.ts` (the plan **executor**), `tools.ts` (the ~50-tool native catalogue),
+`first-class-tools.ts`, `prompt.ts` (the 12-segment assembler), `context-providers.ts`, `mention.ts`,
+`intent.ts`, `edit-strategies.ts`, `chunking.ts`, `citations.ts`, `agent-patterns.ts` — because after the loop
+was gone every one of them had **no production consumer** (verified by reference, not assumed).
+`index.ts` lost the `chat/stream` · `chat/cancel` · `chat/tool_retry` · `chat/provider_chunk` ·
+`plan/execute` · `plan/respond` · `plan/cancel` arms and the chat-event emitters; a request for a removed
+method now gets an honest `METHOD_NOT_FOUND`, never a silent no-op.
+
+**Implementation — the Rust provider broker.** `ChatRelay::start_stream`, `ChatStreamParams`, `UserDocument`,
+`retry_tool`, `cancel`, `cancel_session`, `start_plan`, `respond_plan`, the `provider/stream` inbound arm and
+its 186-line `stream_provider` broker are deleted, together with the relay's entire provider dial plan
+(`base_urls` · `endpoints` · `profiles` · `local_endpoints`, `with_base_url` · `with_endpoint` ·
+`remove_endpoint` · `with_local` · `with_profiles` · `grant_egress_url`) and the `ChatRelayError` variants
+only that path produced. In the shell: `chat_stream` · `chat_cancel` · `chat_tool_retry` · `plan_execute` ·
+`plan_respond` and the boot-time endpoint/profile sync are gone, as are
+`catalog_cmds::{register_endpoint, refresh_endpoint_live, endpoint_action, resolve_endpoints,
+ResolveCtx::is_connected}` — the endpoint **resolution** and the capability **observation** sweep stay,
+because those are observability, not execution (`ARCH/ROUTING.md` §5–§6).
+
+**Two guarantees were re-homed, not dropped** — the whole point of the surgery:
+- **`P71.3f` readiness.** The turn gate moved to the live boundary (`src-tauri::acp_prompt`): a turn runs only
+  for a `Ready` agent, and otherwise fails closed **with the state named** (`ARCH/AUTOMATION.md` §9).
+- **`J11` session budget.** The pre-flight is now `ChatRelay::preflight_session_budget`, called from
+  `acp_prompt` (which gained an optional `sessionId`, wired through `ui/src/lib/acp.ts` + `bridge.ts`) and
+  from the firing path (`scheduler_fire.rs`, passing the automation Session), so an over-budget session is
+  still refused before anything is dispatched.
+- `agent/stop` now cancels the bound agent's **live ACP sessions** instead of sidecar streams.
+
+**Tests, re-pointed rather than dropped.** Four Rust suites were rewritten against the contracts that
+survived (`session_budget_preflight_refuses_over_limit`; `relay_forwards_chat_events` and
+`relay_forwards_plan_interrupt_notifications` and `post_turn_budget_kill_surfaces_stopped` now write their
+notifications straight onto the link, which is what the receive arms actually read); four were deleted with
+their subject (broker chunk push, credentialed-provider forwarding, `retry_tool` Work forwarding, the
+provider-broker endpoint fixtures). `p10_e2e.rs`'s journey keeps its BYOK + guard-gated tool legs and its chat
+leg became an explicit **engine-optional** assertion. `crates/everyaios-core/tests/p50_e2e.rs` — two verticals
+that pointed a *real* provider endpoint at our own engine — is deleted with its `p50-gates.yml` step, and its
+live replacement is named: **`P70.E5`** (real external-agent ACP handshake/prompt/permission).
+
+**New CI invariant.** `LAYER-1` (`scripts/check-arch-invariants.mjs`) now asserts the **literal** form of
+`P69.D8`: `packages/core-engine/src` must not exist, and `ConversationEngine` / `runChatStream` must not be
+re-declared anywhere outside `ARCH/archive/`. A resurrected copy is exactly the competing-runtime regression
+the invariant exists to catch, and the check no longer silently passes on a missing directory.
+
+**Declared, not deleted (recorded so nothing reads as stale).** The Rust `chat/*` receive plane
+(`ChatWireEvent` → `on_event`) and the UI's `onChatEvent` handlers have no producer; `P71.9c` either feeds
+them from the ACP live updates or removes them. `packages/coordinator/{observations,router,scorer}.ts` keep
+their pure functions and their tests, with headers stating the production consumer is gone — `P71.4` owns the
+re-homing onto **agent reports** (`ARCH/ROUTING.md` §5: an unobserved value is reported as unobserved, never
+invented). And one contradiction is named rather than hidden: the **A8 local OpenAI-compatible server**
+(`src-tauri/src/openai_cmds.rs`) builds on the *vault* broker, so it survived this removal, but it is an
+EveryAIOS inference path and therefore contradicts `ARCH/ROUTING.md` §10 — it needs an explicit v1 decision
+(`P71.4`/`P71.7`).
+
+**Verification (compile-level + gates only — the standing "implement, do not test yet" instruction; the row's
+own suites are the verification pass).** `cargo check --workspace --all-targets` clean; `src-tauri
+--all-targets` clean (0 warnings); `tsc --noEmit` clean for coordinator, UI, `core-providers`, `core-tools`;
+`check-arch-invariants` OK; `check-doc-sync` ✅ (166 capabilities; 1640 = 1304 + 336);
+`gen-codebase-map --check` ✅; `ipc-parity` 0 broken (**345** registered, down from 350 — the five deleted turn
+commands).
+
+**Not flipped / not done.** No test suite was run and no row became `DONE`. `P71.4`, `P71.5b`, `P71.6a/b`,
+`P71.9a–h`, `P70`, and the verification pass remain open.
+
+---
 ## 2026-09-21 — P71 implementation wave: swarm strategy, Work factory, and the scheduler trigger plane
 
 **Category:** implementation (the `ADR-0005`/`ADR-0006` programme's second installment; `P71.1` + `P71.3a`

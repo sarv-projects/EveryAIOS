@@ -193,3 +193,23 @@ remaining duplicates (a second Execution-state vocabulary, duplicate event write
 > as a first-class outcome), and §8's waits are `WaitReason`/`WaitCondition`. The Work Gateway projects
 > both onto presence (`work_state` + `wait` alongside the client-presence state), the transition door is
 > typed, and a `Recoverable` run projects as *blocked*, never *failed* (**I15**).
+
+---
+
+## Repo-comparison additions (briefs 01–19)
+
+> Delta-analysis items re-homed into this contract (each entry: brief item ID · disposition tag ·
+> SOURCE repo + evidence path under `REPO-COMPARE/clone2|clone3/` · one-sentence LOGIC · target §).
+> No entry names an archived coordinator-loop module as an owner; arrows to files not owned here are
+> annotations only.
+
+- **COO-10** · [ADD] · SOURCE: `clone2/openclaw` (`ui/src/pages/debug/lane-table.ts`, lane table upheld by brief 17) — LOGIC: lane-aware turn admission (session lane → global cap → `steer|followup|collect|interrupt`, debounced, cancel identities preserved) is coordination-plane admission **around** Work with an explicit "admission ≠ execution" line, never a second runtime (**I26**-safe) — target: §7.
+- **WRK-2** · [ADD] · SOURCE: `clone2/openclaw` (workboard-style run registry; heartbeat-claim surface noted by brief 17) — LOGIC: liveness diagnostics (`stranded_ready` · `running_without_heartbeat` · `blocked_too_long` · `orphaned_session`) with named repair actions and TTL sweeps are event projections with repair affordances (**I3**/**I4**), not a second state machine — target: §6 (+ [RECOVERY.md](RECOVERY.md) repair sweeps).
+- **WRK-10** · [ADD] · SOURCE: `clone2/codex` — LOGIC: UUIDv7 time-ordered IDs for runs/turns/submissions give one public correlation vocabulary from Work/Step outward without minting a second ID scheme — target: §3 (canonical Run/Step IDs) → `everyaios-audit` + `everyaios-types` (schema owner).
+- **DeerFlow-1/5** · [ADD] · SOURCE: `clone2/deerflow` (additive `stop_reason` contract; run leases with restart/queue-timeout recovery) — LOGIC: an additive `stop_reason` vocabulary (`token_capped|loop_capped|subagent_limit_capped`, tool calls stripped at hard stops) on step results plus a run lease with restart/queue-timeout recovery and byte-identical error strings keeps hard stops honest and gives scheduler admission one vocabulary — target: §5 (scheduler-admission half → [AUTOMATION.md](AUTOMATION.md) §7).
+- **14-4** · [ADD] · SOURCE: `clone2/grok-build` (`session/pending_interaction.rs`) — LOGIC: a pending-interaction registry keyed by `tool_call_id` (blocking reverse-requests, RAII-guarded, reconnect-safe, never persisted) makes "what is pending" a contract object instead of adapter-local state — target: §4 (contract objects; uncertain half → [RECOVERY.md](RECOVERY.md) §3).
+- **16-4** · [ADD] · SOURCE: `clone2/openwork` (`packages/world/{preflight,stage,hold,ledger,reaper}`; `ee/` pattern-read only) — LOGIC: world-style hold/lease plus a reaper (preflight → stage → hold → ledger → reclaim) bounds long-running shared work so stale leases are reclaimed from the ledger, never guessed — target: §5.
+- **19-14** · [ADD] · SOURCE: `clone3/agent-control/mosoo-agent-driver` (`README.md` Runtime Contract) — LOGIC: Authority/Preview split + single-writer + fenced leases + bounded recovery queues is the projection model §§5–§6 already imply, formalized so no read surface can become a second writer — target: §5–§6 (lease half → [RECOVERY.md](RECOVERY.md) §6).
+- **12-11 / 19-13** · [IMPROVE] · SOURCE: `clone2/open-cowork` (`utils/artifact-parser.ts` — fence-parsing evidence) + `clone3/agent-control/vibe-kanban` (`normalize_logs` family) — LOGIC: artifact announcements are typed records on the Work event stream (never parsed out of assistant prose) with per-executor normalization into one vocabulary before any UI/storage consumer — target: §5–§6 → `UI.md` §4.3.
+- **12-14 / 16-13** · [ADD] · SOURCE: `clone2/workany` (`createSession('plan'|'execute')`, `PlanApproval.tsx`, `QuestionInput`, `src/shared/hooks/useAgent.ts`) — LOGIC: plan → approve → execute → chat phases with mid-run question pauses are specified **Work-native** (Blueprint planning + §4 `Planning`/approval states compiled into Work), because the coordinator `plan.ts` executor is archived — not a loop revival — target: §3 (phase/approval semantics) → `12-UI-SPEC.md` (plan-approval chat mode).
+- **11-10** · [ADD] · SOURCE: `clone2/openfang` (`docs/architecture.md` "Agent Lifecycle" — spawn validates capability inheritance before grants) — LOGIC: child ≤ parent capability inheritance, enforced before the grant issues, closes the delegation escalation hole before any ticket can exist — target: §8 → `SECURITY.md` §2 (annotation).

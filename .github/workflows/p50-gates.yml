@@ -82,14 +82,12 @@ jobs:
       - name: P50.5.5/5.6 crash + failure gates
         run: cargo test -p everyaios-core --test p50_gates
 
-      # P50.5.1/5.3 precedent suites still green alongside the new gates.
-      - name: P50.5.1/5.3 vertical suites
-        run: cargo test -p everyaios-core --test p50_e2e
-        env:
-          EVERYAIOS_E2E_BASE_URL: ${{ secrets.EVERYAIOS_E2E_BASE_URL }}
-          EVERYAIOS_E2E_PROVIDER: ${{ secrets.EVERYAIOS_E2E_PROVIDER }}
-          EVERYAIOS_E2E_MODEL: ${{ secrets.EVERYAIOS_E2E_MODEL }}
-          EVERYAIOS_E2E_API_KEY: ${{ secrets.EVERYAIOS_E2E_API_KEY }}
+      # P71.2c — the P50.5.1/5.3 "real chat vertical" suites drove the vault
+      # broker through `ChatRelay::start_stream` and were deleted with the
+      # built-in engine (ADR-0005 §2): EveryAIOS no longer owns provider
+      # transport, so there is no EveryAIOS turn to point at a real endpoint.
+      # The live equivalent is the external-agent gate (P70.E5 — real ACP
+      # handshake/prompt/permission against an installed agent).
 
       # P50.5.7 — suites + shell-integration proofs (needs node for parity).
       - name: Setup node (for gate scripts)

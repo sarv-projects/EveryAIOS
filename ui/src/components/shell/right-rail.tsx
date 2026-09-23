@@ -204,7 +204,7 @@ export function ActivityRail() {
     useAppStore((s) =>
       s.sessions.some((x) => x.id === s.activeSessionId && x.status === 'running'),
     ) || useAppStore((s) => s.workEvents.length > 0 || s.workItems.length > 0)
-  // Occupancy is the currently picked Chief — not DEFAULT_ROUTING per view.
+  // Occupancy is the currently picked primary agent — not DEFAULT_ROUTING per view.
   const selectedAgentId = useAppStore((s) => s.selectedAgentId)
   const occupancyId = dispatchOccupancy(activeView, selectedAgentId, {})
   const occupancyAgent = AGENT_MAP[occupancyId]
@@ -395,7 +395,7 @@ export function ActivityRail() {
           <button
             type="button"
             onClick={() => setActiveView('timeline')}
-            aria-label="Open session timeline"
+            aria-label="Open activity timeline"
             className="grid h-9 w-9 place-items-center rounded-md text-muted-foreground/60 hover:bg-accent hover:text-foreground transition-all mt-1 border border-dashed border-border"
           >
             <Activity className="h-4 w-4" />

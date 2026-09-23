@@ -149,3 +149,38 @@ The workbench is new (`P69.B8`); the existing rail/view infrastructure is the st
 browser/office/file viewers already exist in some form. The rule that changes behaviour is §4.1's cascade —
 which is what makes "all file types open" true rather than aspirational. Consolidating the UI store into the
 four classes in §2 is `P69.D24` and is a prerequisite for the timeline rebuild in `P69.F7`.
+
+---
+
+## Repo-comparison additions (briefs 01–19)
+
+> Delta group: *"ARCH/12-UI-SPEC.md + ARCH/UI.md + ARCH/SESSION.md"* (`REPO-COMPARE/DELTA-ANALYSIS.md` §3).
+> Evidence paths are repo-relative under `/home/sarvesh/business_Dev/REPO-COMPARE/clone2/`. Dispositions are
+> the briefs' tags; arrows into files not owned here carry `→ <file> §…` and are cross-domain deferred.
+
+- **12-1** · `add` — SOURCE: openwork (MIT) · evidence: `openwork/docs/features/headless-session-control.md` (`session.send {sessionId, text, workspaceId?, reveal?}` with ownership check equal to `session.read`; navigation only via explicit `reveal: true` or a separate `session.open`; honest `effects.ui` metadata) — LOGIC: control actions are addressed by id and headless-by-default — surfacing the UI is an explicit `reveal` opt-in and every registered control action carries truthful `effects` metadata declared by the kernel, never asserted by the renderer — which keeps this document's projection and gateway rules enforceable per action rather than by convention (the single-registry half is already proven by `ipc-parity.mjs`). → target §2 (what the UI may own: by-id control handles + declared effects are projection, not authority) + §3 (mutations only through the Work Gateway: `reveal` and `effects` are kernel-authored; the shell never decides what a control will do).
+- **A5** · documented **ANTI-pattern — never adopt** · SOURCE: ChatGPT (lencx) — **no license file** (all-rights-reserved; pattern-read as what-not-to-build only) · evidence: `ChatGPT/src-tauri/scripts/ask.js` (DOM-scraping injection into the remote chatgpt.com webview: native-setter textarea writes, synthetic `InputEvent`s, form-button `submit()`), `ChatGPT/src-tauri/src/core/cmd.rs` (`format!("ChatAsk.sync({})", message)` string-built eval), `ChatGPT/src-tauri/src/core/setup.rs` + `tauri.conf.json` (`csp: null` multi-webview shell) — LOGIC: recorded strictly as anti-patterns — the chat/agent plane stays natively owned and external-site interaction goes through the Browse/browser capability, never DOM-scraping eval-injection; `format!`-built eval strings are rejected in favor of structured JSON IPC (`nativeCall`), the shape §2–§3 already require. → target §2–§3 (anti-pattern register: chat-plane custody + IPC shape); AGENT.md §1 cross-ref (primary owned by the agent lane — cross-domain deferred).
+
+---
+
+## 9. Drafting Table In-Pane Search Grammar & Viewport Controls
+
+The right-rail Drafting Table provides unified, keyboard-first in-pane discovery across all 19 viewports:
+- **Search Prefix Grammar:**
+  - `/file:<pattern>`: Filters workspace explorer and file tabs by glob.
+  - `/symbol:<name>` or `@<name>`: Jumps to AST definitions in code/diff viewports via `everyaios-codeintel`.
+  - `/line:<num>` or `:<num>`: Direct jump to line offset.
+  - `#<heading>`: Document outline navigation in DOCX, Markdown, and PDF viewports.
+  - `$<range>` (e.g. `$A1:D50`): Cell range selection and formula inspection in XLSX viewports.
+- **Escape Hatch & Keyboard Priority:** `Escape` clears active search highlights before unfocusing; `Cmd/Ctrl+F` attaches search context directly to the active viewport rather than the global application frame.
+
+## 10. Physical Spring Motion & Semantic Cool-Blue Theming Tokens
+
+To achieve top-tier visual craft (Linear / Apple standard):
+- **Physical Spring Damping:** All sidebar collapsing, modal reveals, and viewport expansions use Framer Motion damped springs (`{ type: "spring", mass: 1.0, stiffness: 280, damping: 28 }`), ensuring zero cumulative layout shift (`CLS = 0`).
+- **Semantic Color Tokens:** Accent colors are fully tokenized semantic variables:
+  - `accent-primary`: Default Cool Blue (`#2563eb` light / `#3b82f6` dark)
+  - `accent-muted`: `#93c5fd` / `#1e3a8a`
+  - User-selectable themes (Cool Blue, Slate, Emerald, Violet, Indigo) dynamically bind semantic tokens without hardcoded hex values.
+- **Tabular Numerical Telemetry:** JetBrains Mono tabular figures (`font-variant-numeric: tabular-nums`) format all token counts, latency metrics, line numbers, and financial spend readouts to prevent horizontal jitter during real-time streaming.
+- **WCAG 2.2 Accessibility:** Focus outlines (`ring-2 ring-accent-primary`), ARIA labels, and keyboard tab sequences are strictly validated across all 12 center screens and 19 right-rail viewports.

@@ -1,11 +1,10 @@
-// P58.7 — DOM proof for the status bar's model label.
+// P71.2d — DOM proof for the status bar's model label.
 //
-// The bar must name the exact `(provider, model-id)` pair the broker receives
-// when the composer pinned a live models.dev row, and keep the curated label for
-// a curated pick. `catalogPickLabel`'s rules are unit-tested in
-// `src/lib/catalog-models.test.ts`; this proves the *bar actually paints it*
-// only when a usable agent row backs it (the label is inside an `agent && …`
-// branch, so an empty live-agent list must not surface a model claim at all).
+// The bar used to name the exact `(provider, model-id)` pair the broker would
+// receive for EveryAIOS's own model call. There is no such call any more: the
+// bound agent owns its model, so the bar paints **that agent's** ACP value (or an
+// explicit "managed by <agent>") and never a desktop-sourced model name. With no
+// usable agent row it must claim nothing at all.
 
 import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test'
 import type { ReactElement } from 'react'
@@ -15,14 +14,28 @@ import { useAppStore } from '@/lib/store'
 let StatusBar: () => ReactElement
 let mounted: Mounted
 
-/** A usable native runtime row (the bar only paints the label for one). */
-const NATIVE = {
-  id: 'everyaios-native',
-  name: 'EveryAIOS Native',
-  mark: 'E',
+/** A usable external runtime row (the bar only paints the label for one). */
+const AGENT = {
+  id: 'claude-code',
+  name: 'Claude Code',
+  mark: 'CC',
   accent: 'bg-brand text-black',
   status: 'installed' as const,
   capabilities: [],
+  models: [],
+  defaultModel: '',
+}
+
+/**
+ * The agent's own model option, exactly as `available_commands_update` /
+ * session config advertises it.
+ */
+const MODEL_OPTION = {
+  id: 'model',
+  name: 'Model',
+  category: 'model',
+  type: 'select',
+  currentValue: 'claude-sonnet-4.5',
 }
 
 async function setState(patch: Record<string, unknown>): Promise<void> {
@@ -43,14 +56,15 @@ afterEach(() => {
   mounted.unmount()
 })
 
-describe('P58.7 — status bar names a catalog pick by the pair the broker gets', () => {
-  test('paints `provider · model-id` for a catalog pick', async () => {
+describe('P71.2d — the bar names the agent\u2019s own model, never EveryAIOS\u2019s', () => {
+  test('paints the agent\u2019s ACP model value', async () => {
     installShell()
     await setState({
-      selectedAgentId: 'everyaios-native',
-      selectedModelId: 'anthropic/claude-sonnet-4',
-      selectedModelProvider: 'openrouter',
-      liveAgents: [NATIVE],
+      selectedAgentId: 'claude-code',
+      selectedModelId: '',
+      selectedModelProvider: undefined,
+      acpConfigOptions: { 'claude-code': [MODEL_OPTION] },
+      liveAgents: [AGENT],
       activeSessionId: null,
       sessions: [],
       autoRoute: false,
@@ -60,16 +74,17 @@ describe('P58.7 — status bar names a catalog pick by the pair the broker gets'
     })
     mounted = await mount(<StatusBar />)
 
-    expect(mounted.container.textContent ?? '').toContain('openrouter · anthropic/claude-sonnet-4')
+    expect(mounted.container.textContent ?? '').toContain('claude-sonnet-4.5')
   })
 
-  test('keeps the curated label for a curated pick', async () => {
+  test('says who owns the model when the agent exposes none', async () => {
     installShell()
     await setState({
-      selectedAgentId: 'everyaios-native',
-      selectedModelId: 'claude-sonnet-4.5',
-      selectedModelProvider: undefined,
-      liveAgents: [NATIVE],
+      selectedAgentId: 'claude-code',
+      selectedModelId: 'anthropic/claude-sonnet-4',
+      selectedModelProvider: 'openrouter',
+      acpConfigOptions: {},
+      liveAgents: [AGENT],
       activeSessionId: null,
       sessions: [],
       autoRoute: false,
@@ -78,18 +93,18 @@ describe('P58.7 — status bar names a catalog pick by the pair the broker gets'
     mounted = await mount(<StatusBar />)
 
     const body = mounted.container.textContent ?? ''
-    expect(body).toContain('Sonnet 4.5')
-    // A curated pick is not provider-qualified: nothing may claim a provider
-    // endpoint the send path would never use.
-    expect(body).not.toContain('openrouter ·')
+    expect(body).toContain('managed by Claude Code')
+    // A leftover desktop pair must never be painted as if it governed the agent.
+    expect(body).not.toContain('openrouter · anthropic/claude-sonnet-4')
   })
 
   test('claims no model when no live runtime is usable', async () => {
     installShell()
     await setState({
-      selectedAgentId: 'everyaios-native',
+      selectedAgentId: 'claude-code',
       selectedModelId: 'anthropic/claude-sonnet-4',
       selectedModelProvider: 'openrouter',
+      acpConfigOptions: {},
       liveAgents: [],
       activeSessionId: null,
       sessions: [],

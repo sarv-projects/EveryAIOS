@@ -71,22 +71,27 @@ fn inspector_cli_lists_catalog_over_stdio() {
     let v: serde_json::Value = serde_json::from_str(stdout.trim())
         .unwrap_or_else(|e| panic!("tools/list output not JSON: {e}\n{stdout}"));
     let tools = v["result"]["tools"].as_array().expect("result.tools array");
-    // The real native catalog — browser + office + memory + search + storage.
-    // Derive the expectation from the crate so a catalog change cannot leave
-    // this env-gated test asserting a stale magic number.
+    // An external client is advertised the shared plane (task-shaped façades),
+    // never the internal catalogue. Derive the expectation from the crate so a
+    // façade change cannot leave this env-gated test asserting a stale magic
+    // number.
     assert_eq!(
         tools.len(),
-        everyaios_mcp::all_tools().len(),
-        "catalog size"
+        everyaios_mcp::SHARED_FACADES.len(),
+        "façade count"
     );
     let names: Vec<&str> = tools
         .iter()
         .map(|t| t["name"].as_str().unwrap_or_default())
         .collect();
-    assert!(names.contains(&"snapshot"), "snapshot in catalog");
+    assert!(names.contains(&"browser.extract"), "browser façade present");
     assert!(
-        names.contains(&"filename_search"),
-        "storage tool in catalog"
+        names.contains(&"office.edit"),
+        "office façade present"
+    );
+    assert!(
+        !names.contains(&"snapshot"),
+        "internal primitive not advertised"
     );
     // Wire shape is camelCase (the MCP spec) — a real client keeps entries
     // only when `inputSchema` is present; annotations/ttlMs/etag are stripped
@@ -99,7 +104,7 @@ fn inspector_cli_lists_catalog_over_stdio() {
 
 #[test]
 #[ignore]
-fn inspector_cli_calls_snapshot_tool_over_stdio() {
+fn inspector_cli_calls_shared_plane_facade_over_stdio() {
     if !enabled() {
         return;
     }
@@ -110,7 +115,7 @@ fn inspector_cli_calls_snapshot_tool_over_stdio() {
             "--method",
             "tools/call",
             "--tool-name",
-            "snapshot",
+            "browser.extract",
             "--format",
             "json",
         ],
@@ -121,7 +126,7 @@ fn inspector_cli_calls_snapshot_tool_over_stdio() {
         .unwrap_or_else(|e| panic!("tools/call output not JSON: {e}\n{stdout}"));
     // The standalone harness echoes the tool name back in structuredContent.
     assert_eq!(
-        v["result"]["structuredContent"]["tool"], "snapshot",
+        v["result"]["structuredContent"]["tool"], "browser.extract",
         "echoed tool name"
     );
     assert_eq!(
@@ -204,12 +209,12 @@ fn inspector_cli_lists_catalog_over_loopback_http() {
     let tools = v["result"]["tools"].as_array().expect("result.tools array");
     assert_eq!(
         tools.len(),
-        everyaios_mcp::all_tools().len(),
-        "catalog size over HTTP"
+        everyaios_mcp::SHARED_FACADES.len(),
+        "façade count over HTTP"
     );
     let names: Vec<&str> = tools
         .iter()
         .map(|t| t["name"].as_str().unwrap_or_default())
         .collect();
-    assert!(names.contains(&"snapshot"));
+    assert!(names.contains(&"browser.extract"));
 }

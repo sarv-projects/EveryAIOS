@@ -4,19 +4,19 @@
  * Exercises the actual installed binaries on the machine:
  * 1. OpenCode (`opencode acp`): Real stdio ACP JSON-RPC handshake
  * 2. Grok Build (`grok`): Real binary execution and CLI inspection
- * 3. Chief Resolution & Installed-ness derivation
+ * 3. Primary-agent resolution & installed-ness derivation
  * 4. Two-Plane Shared Cowork Capability injection
  */
 
 import { describe, expect, test } from "bun:test";
 import { spawn, spawnSync } from "node:child_process";
 import {
-  chiefRegistry,
-  resolveSessionChief,
+  primaryAgentRegistry,
+  resolveSessionPrimaryAgent,
   checkSpawn,
   deriveChildPermissions,
   type SpawnState,
-} from "./chief";
+} from "./primary-agent";
 import {
   STANDARD_SHARED_CAPABILITIES,
   isCapabilityEnabled,
@@ -129,11 +129,11 @@ describe("Live Real-World Agent Harness Verification", () => {
     expect(stdout).toContain("grok");
   });
 
-  test("Primary: OpenCode Chief delegating to Grok Build Subagent with Shared Cowork loadout", () => {
+  test("Primary: OpenCode agent delegating to Grok Build Subagent with Shared Cowork loadout", () => {
     // Session pinned to real installed OpenCode
     const sessionId = "live-session-opencode-primary";
-    chiefRegistry.setSessionPin(sessionId, "opencode");
-    expect(resolveSessionChief({ sessionPin: "opencode" })).toBe("opencode");
+    primaryAgentRegistry.setSessionPin(sessionId, "opencode");
+    expect(resolveSessionPrimaryAgent({ sessionPin: "opencode" })).toBe("opencode");
 
     // OpenCode delegates to Grok Build subagent
     const spawnState: SpawnState = {
@@ -164,11 +164,11 @@ describe("Live Real-World Agent Harness Verification", () => {
     expect(childPermissions.has("shared:fleet")).toBe(true);
   });
 
-  test("Primary: Grok Build Chief delegating to OpenCode Subagent with selective denial", () => {
+  test("Primary: Grok Build agent delegating to OpenCode Subagent with selective denial", () => {
     // Session pinned to real installed Grok Build
     const sessionId = "live-session-grok-primary";
-    chiefRegistry.setSessionPin(sessionId, "grok");
-    expect(resolveSessionChief({ sessionPin: "grok" })).toBe("grok");
+    primaryAgentRegistry.setSessionPin(sessionId, "grok");
+    expect(resolveSessionPrimaryAgent({ sessionPin: "grok" })).toBe("grok");
 
     // Grok Build delegates code editing to OpenCode subagent while restricting desktop computer use
     const spawnState: SpawnState = {

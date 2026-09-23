@@ -30,6 +30,7 @@ import {
   type TaskRecord,
   type TaskStatus,
 } from '@/lib/tasks'
+import { sessionKindLabel, workChildren, type ChildWork } from '@/lib/work'
 import { staggerStyle } from '@/lib/stagger'
 
 const STATUS_STYLE: Record<TaskStatus, string> = {
@@ -58,10 +59,15 @@ export default function TasksRail() {
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<'all' | 'active' | 'terminal'>('all')
   const unlistenRef = useRef<(() => void) | null>(null)
+  // P71.9d — visible delegation: child Work per parent, with the bound agent
+  // handle from the parent's live agent sessions. Loaded with the ledger and
+  // refreshed by the same `task-update` push.
+  const [childrenByParent, setChildrenByParent] = useState<Record<string, ChildWork[]>>({})
 
   const refresh = useCallback(async () => {
+    let all: TaskRecord[] = []
     try {
-      const all = await tasksList()
+      all = await tasksList()
       setTasks(all)
       setError(null)
       setLoading(false)
@@ -69,6 +75,18 @@ export default function TasksRail() {
       setTasks([])
       setError(cause instanceof Error ? cause.message : 'Task ledger is unavailable')
       setLoading(false)
+    }
+    // P71.9d — delegation tree is best-effort: a gateway miss must not take
+    // the whole rail down (the ledger rows above are the primary surface).
+    try {
+      const map: Record<string, ChildWork[]> = {}
+      for (const t of all.slice(0, 25)) {
+        const kids = await workChildren(t.id).catch(() => [])
+        if (kids.length > 0) map[t.id] = kids
+      }
+      setChildrenByParent(map)
+    } catch {
+      setChildrenByParent({})
     }
   }, [])
 
@@ -252,6 +270,24 @@ export default function TasksRail() {
                     )}
                   </div>
                 </div>
+                {childrenByParent[t.id]?.length ? (
+                  <div className="mt-2 space-y-1 border-t border-border/40 pt-1.5">
+                    <div className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground/70">
+                      child work · {childrenByParent[t.id].length} delegated
+                    </div>
+                    {childrenByParent[t.id].map((c) => (
+                      <div key={c.workId} className="flex items-center justify-between gap-2 rounded border border-border/40 bg-background/40 px-2 py-1">
+                        <span className="truncate font-mono text-[10px] text-foreground/80">{c.workId}</span>
+                        <span className="flex shrink-0 items-center gap-1.5 text-[9px] text-muted-foreground">
+                          {/* P71.9f — the cockpit's vocabulary, not the wire enum
+                              (`ARCH/UI.md` §5): a kind never renders as "Session". */}
+                          {c.sessionKind && <span>{sessionKindLabel(c.sessionKind)}</span>}
+                          {c.currentRunId && <span className="font-mono">{c.currentRunId.split('/').pop()}</span>}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
               </motion.div>
             )
           })}

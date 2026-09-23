@@ -199,8 +199,9 @@ export interface AuthenticateResult {
  * `grok`, …). Synthesized registry rows already carry their registry id, so
  * unknown ids pass through unchanged. Always translate before `acp_launch` /
  * `acp_install_*` calls. */
+// P71.2a — no built-in row, so nothing maps to `everyaios` any more: that id
+// named the retired built-in agent (ADR-0005 §1).
 const CATALOG_TO_ACP: Record<string, string> = {
-  "everyaios-native": "everyaios",
   "claude-code": "claude",
   "codex-cli": "codex",
   "grok-build": "grok",
@@ -212,6 +213,27 @@ const CATALOG_TO_ACP: Record<string, string> = {
 
 export function acpIdFor(catalogId: string): string {
   return CATALOG_TO_ACP[catalogId] ?? catalogId;
+}
+
+/**
+ * P71.2c — the retired built-in binding spellings (ADR-0005 §1). They are not
+ * agents: resolving one to something else would substitute an engine the user
+ * never chose, so they resolve to *nothing* and the turn refuses by name.
+ *
+ * This is the single source of truth for that predicate — `bridge.ts` (the turn
+ * path) and the composer picker both read it, so no screen can disagree about
+ * whether a spelling still names an agent.
+ */
+export function isRetiredBinding(agentId: string): boolean {
+  return agentId === "everyaios-native" || agentId === "everyaios" || agentId === "inbuilt";
+}
+
+/** The live binding for an id, or `null` when the id names nothing runnable. */
+export function currentBinding(agentId: string | undefined): string | null {
+  if (typeof agentId !== "string") return null;
+  const id = agentId.trim();
+  if (id === "" || isRetiredBinding(id)) return null;
+  return id;
 }
 
 /** P69.D1 — one directory entry, composed server-side by
@@ -272,6 +294,41 @@ export function isAgentInstalled(r: AgentReadiness): boolean {
 /// The agent may serve a turn (top rung, or top rung with a stated reduction).
 export function isAgentReady(r: AgentReadiness): boolean {
   return r === 'ready' || r === 'degraded'
+}
+
+/**
+ * Plain words for the canonical readiness state (ARCH/AGENT.md §3.1).
+ *
+ * One owner for the wording: the first-run gate, the onboarding scan and any
+ * future surface must not each invent their own phrase for `auth_required` —
+ * "sign in to continue" is the difference between a user knowing what to do and
+ * reading a state name.
+ */
+export function readinessLabel(r: AgentReadiness | undefined): string {
+  switch (r) {
+    case 'ready':
+      return 'ready';
+    case 'degraded':
+      return 'degraded — may fail mid-turn';
+    case 'auth_required':
+      return 'sign in to continue';
+    case 'authenticating':
+      return 'signing in…';
+    case 'protocol_compatible':
+      return 'installed — protocol not negotiated';
+    case 'launchable':
+      return 'launchable — not yet verified';
+    case 'installed':
+      return 'installed';
+    case 'discovered':
+      return 'found on this machine';
+    case 'unavailable':
+      return 'unavailable on this platform';
+    case 'failed':
+      return 'last launch failed';
+    default:
+      return 'not installed';
+  }
 }
 
 /// The readiness half of "allowed as a subagent" — the Rust delegation gate
@@ -357,12 +414,18 @@ export async function acpPrompt(
   text: string,
   handoff?: string,
   refs?: string[],
+  sessionId?: string,
 ): Promise<AcpPromptResult> {
+  // P71.2c — `sessionId` carries the EveryAIOS Session so the turn boundary can
+  // apply the J11 budget pre-flight and P71.3f readiness gate that used to guard
+  // the deleted `chat_stream` dispatch. It is optional: a turn with no session
+  // ledger to consult is not budget-gated.
   return nativeCall('ACP prompt', () => invoke<AcpPromptResult>("acp_prompt", {
     handle,
     text,
     ...(handoff ? { handoff } : {}),
     ...(refs?.length ? { refs } : {}),
+    ...(sessionId ? { sessionId } : {}),
   }));
 }
 
@@ -479,6 +542,45 @@ export async function chiefDefaultGet(): Promise<{
 
 /** P38 — set the `primary_chief` default. Unknown ids are refused (fail
  * closed — never a silent fallback to the inbuilt engine). */
+/**
+ * P71.9d — one installed agent's delegation profile. Absent fields mean the
+ * spec default (B3: depth ≤2, concurrency ≤6), never a silent zero.
+ */
+export interface SubagentProfile {
+  modelPolicy: string
+  role: string
+  maySpawn: boolean
+  maxChildren: number
+  maxDepth: number
+  maxConcurrency: number
+  workspace: 'shared' | 'isolated'
+  budget: number
+}
+
+/**
+ * P71.9d — persist one installed agent's delegation profile
+ * (Settings → Subagents). The Rust command fills unspecified fields with
+ * their spec defaults and validates the workspace vocabulary.
+ */
+export async function chiefSubagentSetPolicy(
+  agentId: string,
+  policy: Partial<SubagentProfile>,
+): Promise<SubagentProfile> {
+  return nativeCall('chief subagent set policy', () =>
+    invoke<SubagentProfile>('chief_subagent_set_policy', {
+      agentId,
+      modelPolicy: policy.modelPolicy ?? undefined,
+      role: policy.role ?? undefined,
+      maySpawn: policy.maySpawn ?? undefined,
+      maxChildren: policy.maxChildren ?? undefined,
+      maxDepth: policy.maxDepth ?? undefined,
+      maxConcurrency: policy.maxConcurrency ?? undefined,
+      workspace: policy.workspace ?? undefined,
+      budget: policy.budget ?? undefined,
+    }),
+  )
+}
+
 export async function chiefDefaultSet(primaryChief: string): Promise<string> {
   return nativeCall('chief default set', () => invoke<string>("chief_default_set", { primaryChief }));
 }

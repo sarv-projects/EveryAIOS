@@ -30,7 +30,7 @@ use everyaios_core::work_gateway::WorkGateway;
 use everyaios_blueprint::{ScriptLanguage, TaskStatus};
 // P71.3f — the delegation gate judges the canonical readiness state.
 use everyaios_types::AgentReadiness;
-use everyaios_core::chat::{ChatRelay, ChatStreamParams, ChatWireEvent};
+use everyaios_core::chat::{ChatRelay, ChatWireEvent};
 use everyaios_core::connector_hub::{ConnectorHub, Engine};
 use everyaios_core::connectors::gmail::GmailConnector;
 use everyaios_core::connectors::{HttpTransport, TransportError, TransportErrorKind};
@@ -66,6 +66,7 @@ fn link_from(a: UnixStream) -> SidecarLink<UnixStream, UnixStream> {
 
 /// Spin a fake OpenAI-compatible endpoint (same pattern as the chat.rs unit
 /// tests): returns the base URL the relay should route `nvidia` to.
+#[allow(dead_code)]
 fn mock_openai(respond: impl Fn(&str) -> (u16, String) + Send + 'static) -> String {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let addr = listener.local_addr().unwrap();
@@ -93,6 +94,7 @@ fn mock_openai(respond: impl Fn(&str) -> (u16, String) + Send + 'static) -> Stri
     format!("http://{addr}")
 }
 
+#[allow(dead_code)]
 fn wait_events(events: &Arc<Mutex<Vec<ChatWireEvent>>>, min: usize, timeout: Duration) -> bool {
     let start = Instant::now();
     loop {
@@ -137,75 +139,42 @@ fn journey_install_byok_chat_tool_call() {
     let key = pool.select().unwrap();
     assert_eq!(key.id, "my-byok");
 
-    // "chat": a real ChatRelay over a socketpair, routed to the fake endpoint.
+    // "chat": `P71.2c` deleted the built-in engine (ADR-0005 §2), so there is no
+    // EveryAIOS turn to dispatch. What a journey now proves here is the
+    // **engine-optional** guarantee (`ARCH/AGENT.md` §2, `P71.6b`): the shell
+    // holds its own credentials and governance without a built-in binding being
+    // present, and the J11 budget pre-flight still refuses a session over limit
+    // before anything is dispatched — the check moved from the deleted
+    // `start_stream` to `preflight_session_budget`, which is what the live ACP
+    // turn path calls. The chat leg itself runs on the bound agent's channel and
+    // is gated live by `P70.E5`.
     let vault = Arc::new(Mutex::new(Vault::open_in_memory("test-key").unwrap()));
-    let base = mock_openai(|_req| {
-        (
-            200,
-            serde_json::json!({
-                "choices": [{ "message": { "role": "assistant", "content": "hello from the model" } }],
-                "usage": { "prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15 }
-            })
-            .to_string(),
-        )
-    });
-    let (a, b) = pair();
-    let side = std::thread::spawn(move || {
-        let mut s = b;
-        while let Ok(Some(payload)) = everyaios_ipc::frame::decode(&mut s) {
-            let v: serde_json::Value = serde_json::from_slice(&payload).unwrap_or_default();
-            if v.get("method").and_then(|m| m.as_str()) == Some("chat/stream") {
-                let id = v.get("id").cloned().unwrap_or(serde_json::Value::Null);
-                let reply = serde_json::json!({ "jsonrpc": "2.0", "id": id, "result": { "accepted": true } });
-                let _ =
-                    everyaios_ipc::frame::write_frame(&mut s, &serde_json::to_vec(&reply).unwrap());
-                let n = serde_json::json!({
-                    "jsonrpc": "2.0", "method": "chat/batch",
-                    "params": { "streamId": "st-1", "text": "hi", "tokenCount": 1 },
-                });
-                let _ = everyaios_ipc::frame::write_frame(&mut s, &serde_json::to_vec(&n).unwrap());
-                let d = serde_json::json!({
-                    "jsonrpc": "2.0", "method": "chat/done",
-                    "params": { "streamId": "st-1", "turnId": "s1:1", "fullText": "hi", "totalTokens": 1 },
-                });
-                let _ = everyaios_ipc::frame::write_frame(&mut s, &serde_json::to_vec(&d).unwrap());
-                break;
-            }
-        }
-    });
-    let events: Arc<Mutex<Vec<ChatWireEvent>>> = Arc::new(Mutex::new(Vec::new()));
-    let ev = Arc::clone(&events);
-    let relay = ChatRelay::new(link_from(a), Arc::clone(&vault), move |e| {
-        ev.lock().unwrap_or_else(|x| x.into_inner()).push(e);
-    });
-    relay.with_base_url("nvidia", base);
-    relay.spawn();
-    relay
-        .start_stream(ChatStreamParams {
-            session_id: "s1".into(),
-            work_id: None,
-            stream_id: "st-1".into(),
-            text: "hi".into(),
-            surface: None,
-            agent_id: None,
-            provider: Some("nvidia".into()),
-            model: Some("m".into()),
-            persona_id: None,
-            soul_md: None,
-            user_documents: None,
-            project_id: None,
-            primary_chief: None,
-            credentialed_providers: None,
-        })
-        .expect("start_stream");
+    let (a, _b) = pair();
+    let relay = ChatRelay::new(link_from(a), Arc::clone(&vault), |_| {});
     assert!(
-        wait_events(&events, 2, Duration::from_secs(5)),
-        "chat events never arrived"
+        relay.preflight_session_budget("s1").is_ok(),
+        "a session with no spend passes the budget pre-flight"
     );
-    let evs = events.lock().unwrap_or_else(|x| x.into_inner());
-    assert!(matches!(&evs[0], ChatWireEvent::Batch { text, .. } if text == "hi"));
-    assert!(matches!(&evs[1], ChatWireEvent::Done { .. }));
-    side.join().unwrap();
+    {
+        let v = vault.lock().unwrap();
+        v.record_usage(&everyaios_vault::UsageRow {
+            session: "s1".into(),
+            provider: "nvidia".into(),
+            model: "m".into(),
+            key_id: "k".into(),
+            usage: everyaios_vault::Usage::default(),
+            cost: everyaios_vault::DEFAULT_SESSION_BUDGET_USD,
+            tool: None,
+            task_id: String::new(),
+            run_id: String::new(),
+            work_id: String::new(),
+        })
+        .unwrap();
+    }
+    assert!(
+        relay.preflight_session_budget("s1").is_err(),
+        "an over-budget session is refused before dispatch"
+    );
 
     // "tool call": the guard-gated executor writes a file (ask → approve →
     // commit → audit row).

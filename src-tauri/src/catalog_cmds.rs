@@ -15,7 +15,7 @@
 //! vendored registry, or the user's own profile file says so. Secrets never
 //! cross this boundary — a probe carries a key *in*, and only a status back.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -462,13 +462,12 @@ impl ResolveCtx {
         connected_ids_from(&keyed, &usable_profiles, &keyless)
     }
 
-    /// P63 — is *this* provider still connected? Membership in the connected
-    /// set is the exact rule the relay uses, so a disconnect verdict here can
-    /// never disagree with what the next boot would resolve.
-    fn is_connected(&self, state: &AppState, provider: &str) -> bool {
-        self.connected_ids(state).iter().any(|id| id == provider)
-    }
 }
+
+// P71.2c — `ResolveCtx::is_connected` was deleted with the relay's endpoint map
+// (P63's register/retire decision was its only reader). The **connected set**
+// itself survives as `connected_ids_from`, because the capability-observation
+// sweep still probes exactly what the user connected.
 
 /// Pure union of the three "connected" sources — sorted and de-duplicated. A
 /// provider is dialable only if at least one of them names it; the rest of the
@@ -879,8 +878,12 @@ pub fn provider_profiles_list() -> Value {
 /// override / NVIDIA NIM). Rejects a base URL that already carries a request
 /// path, because the broker appends the dialect path itself.
 #[tauri::command]
+/// P71.2c — the profile is durable provider **metadata** now, not a dial plan:
+/// the relay map it used to feed is gone, so the command no longer needs the
+/// shell state (the parameter is kept because Tauri matches renderer arguments
+/// by name against the command signature).
 pub fn provider_profile_upsert(
-    state: State<'_, AppState>,
+    _state: State<'_, AppState>,
     profile: Value,
 ) -> Result<Value, String> {
     let format = match profile.get("format").and_then(|f| f.as_str()) {
@@ -969,7 +972,7 @@ pub fn provider_profile_upsert(
 }
 
 #[tauri::command]
-pub fn provider_profile_remove(state: State<'_, AppState>, id: String) -> Result<Value, String> {
+pub fn provider_profile_remove(_state: State<'_, AppState>, id: String) -> Result<Value, String> {
     let removed = profile_store().remove(&id)?;
     Ok(json!({ "ok": true, "removed": removed, "id": id }))
 }
@@ -1067,22 +1070,16 @@ pub fn spawn_refresh_job(catalog: Arc<CatalogState>) {
 
 #[cfg(test)]
 mod tests {
+    // P71.2c — the P63 endpoint-lifecycle tests (`endpoint_action` /
+    // `EndpointAction`) are deleted with the relay's endpoint map they decided
+    // on: EveryAIOS no longer holds a provider dial plan, so there is nothing to
+    // register or retire. `connected_ids_from` below is still tested because the
+    // **observation** sweep keys on the connected set.
     use super::{
-        connected_ids_from, endpoint_action, observation_file_in, observation_from_probe,
-        observed_registry_in, record_observation_in, EndpointAction,
+        connected_ids_from, observation_file_in, observation_from_probe, observed_registry_in,
+        record_observation_in,
     };
     use everyaios_catalog::{endpoint_probe_result, ProviderObservation};
-
-    /// P63 — the endpoint lifecycle decision. A disconnected provider retires
-    /// its live endpoint; a connected one with an unspeakable transport also
-    /// retires (nothing built), so the relay map is never append-only.
-    #[test]
-    fn connected_resolvable_registers_everything_else_retires() {
-        assert_eq!(endpoint_action(true, true), EndpointAction::Register);
-        assert_eq!(endpoint_action(true, false), EndpointAction::Retire);
-        assert_eq!(endpoint_action(false, true), EndpointAction::Retire);
-        assert_eq!(endpoint_action(false, false), EndpointAction::Retire);
-    }
 
     /// P63.2 — the relay resolves only the connected set. A provider is
     /// dialable if it is vault-keyed, keyless, or the user profiled it; a

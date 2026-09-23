@@ -157,3 +157,201 @@ Tools from connected servers are merged into the unified catalog surface
 (`manager::merge_into_catalog`); the coordinator's model-facing tool list is the
 sidecar's concern and unchanged here. Memory indexing from connectors
 (`indexes_into_memory`) is an explicit per-entry flag the consent card shows.
+
+---
+
+## Repo-comparison additions (briefs 01–19)
+
+> Provenance: `REPO-COMPARE/DELTA-ANALYSIS.md` §3 group "ARCH/15-CONNECT-STORE.md + connectors/MCP
+> (briefs 02 + 18)" — minus CON-3, pre-routed to the AUTOMATION lane — plus 11-3, the SEC-19
+> cross-presence pointer, and §6 #5. Evidence paths are relative to
+> `/home/sarvesh/business_Dev/REPO-COMPARE/`. **MCP-first stance (ADR-0001) is unchanged** (ADR files
+> referenced, never edited): every entry extends the store/façade contract — never a second protocol,
+> registry, or permission universe. `→ …` marks an implementation target queued in TODO by its owning lane.
+
+### Adds
+
+- **CON-1** · `[add]` · SOURCE: nango (ELv2 — pattern-read only) — `clone2/nango/packages/providers/providers.yaml`
+  · LOGIC: a declarative provider-template registry (auth modes, token/authorize URL interpolation, header
+  templates, typed connection-config schemas driving auto-generated forms) makes connectors data instead of
+  bespoke adapter code, with bespoke adapters only for outliers.
+  · TARGET: this file §What this commit adds (the store) → **core-connectors** (impl queued).
+- **CON-2** · `[add]` · SOURCE: nango (ELv2 — pattern-read only) —
+  `clone2/nango/packages/shared/lib/services/connections/credentials/refresh.ts:100,602`
+  (`refresh_exhausted`, expiration buffer; failure cooldown window at `:104`) · LOGIC: an OAuth refresh
+  state machine (expiry buffer, provider quirks, single-flight collapse, failure cooldown +
+  `refresh_exhausted`, 24h keep-alive sweep, preserve-old-token) keeps connector sessions alive with state
+  living Rust-side next to the tokens. · TARGET: this file §Honest boundaries → **vault** state columns +
+  sweep (impl queued).
+- **CON-4** · `[add]` · SOURCE: nango (ELv2 — pattern-read only) —
+  `clone2/nango/packages/types/lib/agent/toolset.ts` (pinned/searchable tool split) +
+  `clone2/nango/packages/server/lib/services/agentSessionToolSearch.service.ts` · LOGIC: the connector
+  façade is a session-scoped toolset — pinned + searchable tools with a `tool_search` meta-tool in the
+  stable prefix from day one — so connector tool count stays out of every prompt (I16 cache-stable).
+  · TARGET: EXTERNAL-AGENTS §3 (task-shaped façades) → **everyaios-mcp** (impl queued); item recorded
+  here per the delta's connectors/MCP group.
+- **STO-7** · `[add]` · SOURCE: nango (ELv2 — pattern-read only) —
+  `clone2/nango/packages/records/lib/cursor.ts:21` (`sort||id` cursors) +
+  `clone2/nango/packages/records/lib/store.ts` (hard/soft/prune modes) +
+  `clone2/nango/packages/shared/lib/services/sync/job.service.ts` · LOGIC: a records-cache sync store
+  (`sort||id` cursors, checkpoints, soft-delete generations, retention daemons with documented retention
+  defaults) is the contract note for connector data sync recorded here, never a copy of their policy
+  numbers. · TARGET: contract note here → **everyaios-storage** (impl queued).
+- **REG-3** · `[add]` · SOURCE: modelcontextprotocol/registry (Apache-2.0) —
+  `clone3/mcp-plugins-skills-connectors/registry/docs/reference/server-json/official-registry-requirements.md`
+  · LOGIC: publisher namespace-ownership proof (reverse-DNS namespace + an Ed25519 key bound to the
+  namespace in the signed index) hardens the existing signed skillstore without creating a registry.
+  · TARGET: this file §Skills / plugins (skillstore).
+- **CFG-1** · `[add]` · SOURCE: IBM/mcp-context-forge (Apache-2.0) —
+  `clone3/mcp-plugins-skills-connectors/mcp-context-forge/mcp-catalog.yml` · LOGIC: seeded public OAuth
+  discovery metadata (issuer/authorization/token/scopes copied from provider `.well-known`, never client
+  secrets) bundled as Connect Store seed lets remote-MCP add skip an add-time outbound probe, with runtime
+  discovery as fallback. · TARGET: this file §What this commit adds (the store) → **vault** `oauth`
+  (impl queued).
+- **OC-1** · `[add]` · SOURCE: oomol-lab/open-connector (Apache-2.0) —
+  `clone3/mcp-plugins-skills-connectors/open-connector/docs/catalog-format.md` +
+  `clone3/mcp-plugins-skills-connectors/open-connector/src/catalog-store.ts` · LOGIC: `operationType`
+  (read|write|destructive) plus executability flags (`locallyExecutable`/`catalogOnly`/`needsCredential`/
+  `noAuthRunnable`) on store rows and pack tool listings is discovery honesty only — Guard remains the
+  authorization decider. · TARGET: this file §What this commit adds (the store) → **CAPABILITIES**
+  §permissions vocabulary (impl queued).
+- **OC-3** · `[add]` · SOURCE: oomol-lab/open-connector (Apache-2.0) —
+  `clone3/mcp-plugins-skills-connectors/open-connector/docs/credentials.md` · LOGIC: idempotency keys for
+  connector writes store hash + request fingerprint only (never the raw key) with a 24h replay window,
+  enforced at Guard/executor admission so duplicate writes cannot double-commit.
+  · TARGET: this file §Capability-pack contract (connector-scoped writes) → **everyaios-guard** admission
+  (impl queued).
+- **CMP-2** · `[add]` · SOURCE: ComposioHQ/composio (MIT) —
+  `clone3/mcp-plugins-skills-connectors/composio/ts/packages/experimental/src/pi/session-tools.ts` +
+  `clone3/mcp-plugins-skills-connectors/composio/ts/packages/core/src/lib/toolRouterMcp.ts` · LOGIC: an
+  optional meta-tool mode on the connector façade (`search_tools`/`auth_tool`/`execute_tool`) lazily
+  fetches schemas for context economy while auth stays a first-class runtime step and execution still runs
+  Guard→ticket→executor. · TARGET: EXTERNAL-AGENTS §3 façades → **CAPABILITIES** small-inventory rule
+  (impl queued); item recorded here per the delta's connectors/MCP group.
+- **OBS-1** · `[add]` · SOURCE: Observal (Apache-2.0) —
+  `clone3/mcp-plugins-skills-connectors/Observal/observal_cli/capability_lock.py` · LOGIC: a
+  per-activation capability lock (JSONL `{ts, kind: agent|mcp|skill|hook|prompt|sandbox, harness session,
+  pack}`, 8KB line cap, 30-day retention) appended on the executor/ticket path is an audit-compatible
+  record — never a parallel authority or connector-scoped Work state. · TARGET: this file §Capability-pack
+  contract → **CAPABILITIES** §4 + everyaios-audit (impl queued).
+- **SP-2** · `[add]` · SOURCE: obra/superpowers (MIT) —
+  `clone3/mcp-plugins-skills-connectors/superpowers/hooks/hooks.json` · LOGIC: declared lifecycle hooks in
+  the pack manifest (e.g. `on: session_start`, explicit async flag) run as ticketed Guard→executor
+  commands with the activation recorded in OBS-1's capability lock, so packs never smuggle ambient shell.
+  · TARGET: this file §Skills / plugins → **CAPABILITIES** manifest §3 + ticketed execution (impl queued).
+- **11-3** · `[add]` · SOURCE: eliza (MIT) — `clone2/eliza/packages/core/README.md` (roomId as the single
+  room entitlement, evaluated inside the storage adapter before rows/counts/ranking return; CAS for grant
+  changes; fail-closed for unresolved identities) · LOGIC: Connect Store/connector data reads check the
+  entitlement inside the storage adapter before any row, count, or ranking returns — fail-closed for
+  unresolved identities, CAS for role changes. · TARGET (primary): this file (connector data reads; pairs
+  with the STO-7 sync-store contract) **→ SECURITY §2**.
+
+### Improves
+
+- **REG-1** · `[improve]` · SOURCE: modelcontextprotocol/registry (Apache-2.0) —
+  `clone3/mcp-plugins-skills-connectors/registry/docs/reference/server-json/generic-server-json.md` +
+  `clone3/mcp-plugins-skills-connectors/registry/docs/reference/server-json/official-registry-requirements.md`
+  (4KB `_meta` cap) · LOGIC: a namespaced, size-capped publisher extension on `store_catalog`/skillstore
+  rows (`_meta.everyaios.*` preserved, foreign keys dropped, 4KB cap) gives store entries a bounded
+  extension slot without a publish-side registry. · TARGET: this file §Skills / plugins + §What this
+  commit adds (the store).
+- **REG-2** · `[improve]` · SOURCE: modelcontextprotocol/registry (Apache-2.0) —
+  `clone3/mcp-plugins-skills-connectors/registry/internal/service/versioning.go` · LOGIC:
+  semver-with-publication-timestamp-fallback ordering makes skillstore/store version precedence total and
+  deterministic (valid semver wins; both non-semver → publication timestamp).
+  · TARGET: this file §Skills / plugins → **everyaios-guard**::skillstore (impl queued).
+- **CFG-2** · `[improve]` · SOURCE: IBM/mcp-context-forge (Apache-2.0) —
+  `clone3/mcp-plugins-skills-connectors/mcp-context-forge/docs/architecture-plugin-multi-tenancy.md` +
+  `clone3/mcp-plugins-skills-connectors/mcp-context-forge/mcpgateway/plugins/__init__.py` · LOGIC:
+  two-tier pack config — an immutable declarative base loaded at startup plus additive, selective
+  per-context/session overrides — feeds the effective-set resolver instead of mutating manifests.
+  · TARGET: this file §Capability-pack contract → **CAPABILITIES** §§3–4 (impl queued).
+- **DIF-1** · `[improve]` · SOURCE: langgenius/dify-plugin-daemon (Apache-2.0) —
+  `clone3/mcp-plugins-skills-connectors/dify-plugin-daemon/pkg/plugin_packager/signer/sign.go` · LOGIC:
+  per-artifact detached signatures (zip-comment or sidecar `.sig`) verified against the skillstore Ed25519
+  key at install make unsigned/tampered bundles a refusal, not a warning. · TARGET: this file §Skills /
+  plugins → **everyaios-blueprint** skill store (impl queued).
+- **DIF-3** · `[improve]` · SOURCE: langgenius/dify-plugin-daemon (Apache-2.0) —
+  `clone3/mcp-plugins-skills-connectors/dify-plugin-daemon/internal/core/plugin_manager/installer.go` +
+  `clone3/mcp-plugins-skills-connectors/dify-plugin-daemon/internal/core/plugin_manager/local_launch_test.go`
+  (`TestEnsureLocalRuntimeFailureKeepsInstalledPackage`) · LOGIC: a runtime-start failure must never
+  discard an installed pack — it lands as honestly `unverified` under evidence-gated readiness, never
+  lost. · TARGET: this file §Skills / plugins → **everyaios-blueprint** install path (impl queued).
+- **MCPM-2** · `[improve]` · SOURCE: mcpm.sh (MIT) —
+  `clone3/mcp-plugins-skills-connectors/mcpm.sh/src/mcpm/profile/profile_config.py` · LOGIC:
+  profiles-as-tags — pack membership is a tag query on one manifest, never a duplicate per-profile
+  manifest — keeps the effective-set resolver the single shape of "what this context gets".
+  · TARGET: this file §Capability-pack contract → **CAPABILITIES** §4 (impl queued).
+- **OC-2** · `[improve]` · SOURCE: oomol-lab/open-connector (Apache-2.0) —
+  `clone3/mcp-plugins-skills-connectors/open-connector/docs/credentials.md` · LOGIC: formalize the
+  connection-identity runtime contract (`accountId`/`displayName`/`grantedScopes`, raw tokens never leave
+  the vault) and make plaintext credential storage a hard error rather than a warned fallback.
+  · TARGET: this file §Honest boundaries → **SECURITY** §5 + 03-BYOK-KEYRINGS §3.4 (secondary, cross-ref).
+
+### Cross-presence pointer + recorded invariants
+
+- **SEC-19 (pointer)** · `[pointer]` · SOURCE: genoffice (Apache-2.0) —
+  `clone2/genoffice/apps/sheets/src/ai/privacy-policy.ts` · LOGIC: column-class egress policy
+  (allow/redact/statistics-only/deny; columns default closed) must be enforced before any artifact reaches
+  a connector. · TARGET: **→ SECURITY §5** (policy owner) **+ this file §Honest boundaries**
+  (connector-facing half: no artifact egress to a connector outside an allowed column class — the policy
+  text lives in SECURITY, this file records the enforcement point on the connector path).
+- **§6 #5 (rejection register)** · `[invariant]` · **"the store catalog is what-to-show, never a
+  permission."** — recorded invariant: **No new registries** — REG/CFG/OBS touch only the `store_catalog`
+  show-list and the signed skillstore; Guard remains the only decider.
+
+---
+
+## Official MCP Registry Schema (Version 2025-12-11)
+
+EveryAIOS adopts the canonical Model Context Protocol `server.json` schema:
+```json
+{
+  "$schema": "https://modelcontextprotocol.io/schema/2025-12-11/server.json",
+  "name": "com.github.modelcontextprotocol/github-server",
+  "version": "1.4.2",
+  "description": "Official GitHub MCP Server for repositories, issues, and PRs",
+  "publisher": {
+    "name": "GitHub Inc.",
+    "ed25519_public_key": "MC4CAQAwBQYDK2VwBCIEIP..."
+  },
+  "distribution": {
+    "type": "binary",
+    "platforms": {
+      "windows-x64": {
+        "url": "https://github.com/modelcontextprotocol/servers/releases/download/v1.4.2/github-win-x64.zip",
+        "sha256": "4b92ec84a7...",
+        "bin": "github-mcp.exe",
+        "args": ["--stdio"]
+      }
+    }
+  }
+}
+```
+- **Integrity Validation:** SHA-256 verification is mandatory before executing downloaded binary MCP servers.
+- **Publisher Namespace Signature:** Server publishers are cryptographically proven via Ed25519 digital signatures.
+
+## 5-Meta-Tool Catalog Scaling (`CON-4` / Open-Connector Pattern)
+
+To prevent prompt context window exhaustion when hundreds of connector actions are available, `everyaios-mcp` exposes 5 meta-tools instead of dumping raw tool schemas into the prompt:
+
+1. **`list_apps`:** Lists available connector applications (GitHub, Google Drive, Slack, Linear, Notion) and their connection states.
+2. **`list_connections`:** Returns authenticated account identities (`accountId`, `grantedScopes`).
+3. **`search_actions(query, app?)`:** Executes fast in-memory MiniSearch ranking over thousands of action descriptions.
+4. **`get_action_guide(action_id)`:** Lazily fetches parameter schemas, usage examples, and required scopes only when the agent selects the action.
+5. **`execute_action(action_id, params)`:** Dispatches the execution through `Guard -> Ticket -> Vault Outbound Proxy -> Receipt`.
+
+## Proactive OAuth Token Refresh in Rust (`CON-2` / Nango Pattern)
+
+To maintain long-lived connector sessions without exposing tokens to the TypeScript sidecar:
+- **Rust-Only Custody:** 100% of OAuth `access_token` and `refresh_token` payloads reside exclusively in SQLCipher (`everyaios-vault`). Outbound authenticated HTTP requests are brokered through Rust.
+- **15-Minute Expiration Buffer:** If `expires_at - now <= 900s`, the vault automatically triggers token refresh before dispatching the request.
+- **Singleflight Promise Collapsing:** Concurrent tool calls targeting the same provider share a single active token refresh future, preventing duplicate refresh calls and provider rate-limiting.
+- **30-Second Failure Cooldown:** If a refresh fails (e.g. temporary network drop), the provider enters a 30s cooldown before retrying, preventing runaway tight retry loops.
+
+## Native Windows Everything Search Integration
+
+For sub-millisecond local file discovery across multi-terabyte drives:
+- **Loopback Search Client:** Rust connects to the Voidtools Everything search service via loopback HTTP (`127.0.0.1:47512`).
+- **FILETIME Conversion:** Windows 64-bit `FILETIME` timestamps and NTFS attributes are converted directly into canonical `FileMetadata`.
+- **Netfloor Isolation:** Everything HTTP connections are strictly confined to `127.0.0.1` and barred from external network egress.

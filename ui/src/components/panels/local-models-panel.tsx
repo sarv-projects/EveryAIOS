@@ -495,7 +495,9 @@ export default function LocalModelsPanel() {
     try {
       const res = await serveModel(id)
       notify(`Serving ${id} on ${res.baseUrl} — health is verified in the background.`)
-      setSelectedAgent('everyaios-native')
+      // P71.2d — serving a local model *prepares* an endpoint; it does not bind
+      // an agent. EveryAIOS no longer chats through a local runtime itself, so
+      // the model is selected for a bound agent that points here.
       setSelectedModel(id)
       setLocalRuntime('llamafile', res.port ? 16384 : undefined)
     } catch (e) {
@@ -1012,7 +1014,8 @@ export default function LocalModelsPanel() {
               key={`${row.runtime}:${row.name}`}
               type="button"
               onClick={() => {
-                setSelectedAgent('everyaios-native')
+                // P71.2d — see `serve()`: this makes the endpoint usable by the
+                // agent the user binds; it never binds a desktop-side engine.
                 setSelectedModel(row.name)
                 setLocalRuntime(row.runtime, row.contextWindow)
                 notify(`Using ${row.name} (${row.runtime})`)

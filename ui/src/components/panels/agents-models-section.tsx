@@ -19,32 +19,20 @@ import {
   Settings2,
   Terminal,
   Zap,
-  GitCompare,
   X,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
 import { useAppStore } from '@/lib/store'
 import {
   AGENTS,
   CAPABILITY_LABELS,
-  MODELS,
-  PROVIDER_LABELS,
+  ROUTING_BOUND_AGENT,
   TASK_LABELS,
-  formatContext,
-  formatPrice,
   getModelsForAgentLive,
-  isNativeRuntime,
   isRuntimeUsable,
-  modelsForUsableRuntimes,
   type AgentRuntime,
   type TaskKind,
 } from '@/lib/agents'
@@ -69,7 +57,7 @@ import {
   settingsAgentGet,
   type AgentSettings,
 } from '@/lib/settings'
-import { Row, SectionShell } from './settings-shared'
+import { SectionShell } from './settings-shared'
 
 function formatTokens(n: number): string {
   if (!n || n <= 0) return '—'
@@ -392,9 +380,8 @@ function AgentLogo({ agent }: { agent: AgentRuntime }) {
 type AgentReadiness = 'ready' | 'degraded' | 'unavailable' | 'unverified'
 
 function agentReadiness(agent: AgentRuntime): { state: AgentReadiness; reason: string } {
-  if (agent.id === 'everyaios-native') {
-    return { state: 'ready', reason: 'built-in — always live' }
-  }
+  // P71.2a — no runtime is "always live": readiness is the only evidence a
+  // runtime can serve a turn, built-in or not.
   if (agent.status === 'disabled') {
     return { state: 'unavailable', reason: 'disabled on this machine' }
   }
@@ -434,26 +421,19 @@ function readinessTone(state: AgentReadiness): string {
 }
 
 function ModelOwnerBadge({ agent }: { agent: AgentRuntime }) {
-  const native = isNativeRuntime(agent.id)
+  // P71.2d — every runtime owns its own model and keys; EveryAIOS owns no model
+  // surface to label here (the catalogue/vault/usage surfaces are observation).
   return (
     <Badge
-      className={cn(
-        'text-[9px]',
-        native ? 'bg-sky-500/15 text-sky-300' : 'bg-zinc-500/15 text-zinc-300',
-      )}
-      title={
-        native
-          ? 'EveryAIOS owns this model surface (providers, keys, catalog)'
-          : `This agent owns its model and keys — EveryAIOS never copies them here`
-      }
+      className="bg-zinc-500/15 text-zinc-300 text-[9px]"
+      title={`This agent owns its model and keys — EveryAIOS never copies them here`}
     >
-      {native ? 'model owner: EveryAIOS' : `model owner: ${agent.name}`}
+      {`model owner: ${agent.name}`}
     </Badge>
   )
 }
 
 function AgentDetailCards({ agent }: { agent: AgentRuntime }) {
-  const native = isNativeRuntime(agent.id)
   const acpOptions = useAppStore((s) => s.acpConfigOptions[agent.id])
   const readiness = agentReadiness(agent)
   const [live, setLive] = useState<AgentSettings | null>(null)
@@ -475,15 +455,14 @@ function AgentDetailCards({ agent }: { agent: AgentRuntime }) {
       {/* Native capabilities — owned by the agent itself. */}
       <div className="rounded-md border border-border/50 bg-background/30 p-2">
         <div className="flex items-center gap-1.5">
-          <span className="text-[10px] font-medium text-foreground">Native capabilities</span>
+          <span className="text-[10px] font-medium text-foreground">Agent capabilities</span>
           <Badge variant="outline" className="text-[8px] text-muted-foreground">
-            {native ? 'EveryAIOS' : `owned by ${agent.name}`}
+            {`owned by ${agent.name}`}
           </Badge>
         </div>
         <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
-          {native
-            ? 'The built-in agent. Model surface lives in Providers / BYOK and Local models.'
-            : 'What this runtime itself exposes. Model, sign-in, and routing stay in its own config — managed here only by reference.'}
+          What this runtime itself exposes. Model, sign-in, and routing stay in its own config —
+          managed here only by reference.
         </p>
         <div className="mt-1.5 flex flex-wrap gap-1">
           {((live && nativeSurfaceNotReplaced(live) && live.nativeCapabilities?.length
@@ -516,27 +495,23 @@ function AgentDetailCards({ agent }: { agent: AgentRuntime }) {
           <div className="flex justify-between gap-2">
             <dt>launch</dt>
             <dd className="text-foreground/80">
-              {(agent.launchable ?? (agent.status === 'installed' || native)) ? 'launchable' : 'not launchable'}
+              {(agent.launchable ?? agent.status === 'installed') ? 'launchable' : 'not launchable'}
               {agent.location ? ` · ${agent.location.kind}/${agent.location.source.replaceAll('_', ' ')}` : ''}
             </dd>
           </div>
           <div className="flex justify-between gap-2">
             <dt>models</dt>
             <dd className="text-foreground/80">
-              {native
-                ? 'EveryAIOS catalog (see disclosure)'
-                : acpOptions?.length
-                  ? `${acpOptions.length} agent-owned options`
-                  : 'managed by the agent — no EveryAIOS copy'}
+              {acpOptions?.length
+                ? `${acpOptions.length} agent-owned options`
+                : 'managed by the agent — no EveryAIOS copy'}
             </dd>
           </div>
         </dl>
-        {!native && (
-          <p className="mt-1.5 rounded border border-border/40 bg-background/40 px-1.5 py-1 text-[9px] leading-relaxed text-muted-foreground">
-            Keys stay in the agent&apos;s own sign-in. EveryAIOS injects provider env <em>names</em> at
-            launch only — values are never copied into this surface.
-          </p>
-        )}
+        <p className="mt-1.5 rounded border border-border/40 bg-background/40 px-1.5 py-1 text-[9px] leading-relaxed text-muted-foreground">
+          Keys stay in the agent&apos;s own sign-in. EveryAIOS injects provider env <em>names</em> at
+          launch only — values are never copied into this surface.
+        </p>
       </div>
       {/* Shared cowork — EveryAIOS grants, next-turn only. */}
       <div className="rounded-md border border-border/50 bg-background/30 p-2">
@@ -593,9 +568,8 @@ function AgentCard({
   const usable = isRuntimeUsable(
     liveSource?.find((a) => a.id === agent.id) ?? agent,
   )
-  // P60 — ownership. Native owns EveryAIOS's model catalog; an external CLI
-  // owns its own and exposes it (if at all) over ACP config options.
-  const native = isNativeRuntime(agent.id)
+  // P60/P71.2d — ownership. Every CLI owns its own model and exposes it (if at
+  // all) over ACP config options; EveryAIOS owns no model surface to show.
   const acpOptions = useAppStore((s) => s.acpConfigOptions[agent.id])
   const [busyInstall, setBusyInstall] = useState(false)
   const [busyScan, setBusyScan] = useState(false)
@@ -717,13 +691,11 @@ function AgentCard({
       <div className="mt-2 flex items-center gap-2 font-mono text-[10px] text-muted-foreground">
         <Layers className="h-3 w-3" />
         <span>
-          {native
-            ? `${models.length} models`
-            : usable
-              ? acpOptions?.length
-                ? `agent-owned · ${acpOptions.length} options`
-                : 'own model config'
-              : 'models on install'}
+          {usable
+            ? acpOptions?.length
+              ? `agent-owned · ${acpOptions.length} options`
+              : 'own model config'
+            : 'models on install'}
         </span>
         <span className="text-muted-foreground/30">|</span>
         <Terminal className="h-3 w-3" />
@@ -753,10 +725,10 @@ function AgentCard({
 
       {detailOpen && <AgentDetailCards agent={agent} />}
 
-      {configOpen && usable && !native && <AgentBackendPanel agentId={agent.id} />}
+      {configOpen && usable && <AgentBackendPanel agentId={agent.id} />}
 
       <div className="mt-2.5 flex items-center gap-1">
-        {usable || agent.id === 'everyaios-native' ? (
+        {usable ? (
           <Button
             size="sm"
             variant={isSelected ? 'default' : 'outline'}
@@ -805,7 +777,7 @@ function AgentCard({
             Model catalog ({models.length})
           </Button>
         )}
-        {usable && !native && (
+        {usable && (
           <Button
             size="sm"
             variant="outline"
@@ -880,13 +852,10 @@ function AgentsTab() {
   // letting the seed read as "these are on this machine".
   const catalog = liveAgents.length > 0 ? liveAgents : AGENTS
   const occupancyUnknown = inTauri() && liveAgents.length === 0
-  // P60 — the Native model catalog is a disclosure on the EveryAIOS Native
-  // card, not a peer Settings tab: Native is the only runtime that table
-  // governs, so it lives with the runtime that owns it. Collapsed by default
-  // so the runtimes surface stays the primary one.
-  const [nativeOpen, setNativeOpen] = useState(false)
-  const nativeRow = catalog.find((a) => isNativeRuntime(a.id))
-  const otherRows = catalog.filter((a) => !isNativeRuntime(a.id))
+  // P71.2d — there is no built-in runtime card and no "EveryAIOS Native model
+  // catalog" disclosure: the desktop's models.dev table is *observation*
+  // (Providers / Local models), not a surface any agent receives. Every row in
+  // `catalog` is an external agent, so the grid is the whole list.
 
   const discoverMore = async () => {
     setBusyDiscover(true)
@@ -933,30 +902,14 @@ function AgentsTab() {
           confirms it. Use <span className="text-warning">Discover more</span>.
         </div>
       )}
-      {/* EveryAIOS Native first, full width, with its own disclosure: the
-          built-in agent is the only runtime whose model surface EveryAIOS owns. */}
-      {nativeRow && (
-        <div>
-          <AgentCard
-            agent={nativeRow}
-            catalogExpanded={nativeOpen}
-            onToggleCatalog={() => setNativeOpen((o) => !o)}
-          />
-          {nativeOpen && (
-            <div className="mt-2.5 rounded-lg border border-border/60 bg-background/25 p-3">
-              <NativeModelCatalog />
-            </div>
-          )}
-        </div>
-      )}
-
       <div className="grid grid-cols-1 gap-2.5 lg:grid-cols-2 [contain-intrinsic-size:auto_120px]">
-        {otherRows.length === 0 ? (
+        {catalog.length === 0 ? (
           <p className="rounded-md border border-dashed border-border/60 px-3 py-6 text-center text-[11px] text-muted-foreground">
-            No external runtimes in the catalog — use Discover more to refresh the registry.
+            No runtimes discovered yet — use Discover more to refresh the registry. v1 ships no
+            built-in agent, so an empty list means nothing can run a turn until one is installed.
           </p>
         ) : (
-          otherRows.map((a) => (
+          catalog.map((a) => (
             <AgentCard key={a.id} agent={a} />
           ))
         )}
@@ -964,259 +917,6 @@ function AgentsTab() {
     </SectionShell>
   )
 }
-
-// === EveryAIOS Native model catalog =========================================
-
-function NativeModelCatalog() {
-  const selectedModelId = useAppStore((s) => s.selectedModelId)
-  const setSelectedModel = useAppStore((s) => s.setSelectedModel)
-  const selectedAgentId = useAppStore((s) => s.selectedAgentId)
-  const liveAgents = useAppStore((s) => s.liveAgents)
-  const [compareOpen, setCompareOpen] = useState(false)
-  const [compareIds, setCompareIds] = useState<string[]>([])
-
-  // Only models reachable from installed runtimes are listed — uninstalled
-  // runtimes contribute nothing (their lists load live after install).
-  const liveSource = liveAgents.length > 0 ? liveAgents : AGENTS
-  const visibleModels = modelsForUsableRuntimes(liveSource)
-  const activeModels = getModelsForAgentLive(selectedAgentId, liveAgents.length > 0 ? liveAgents : undefined)
-
-  const toggleCompare = (id: string) => {
-    setCompareIds((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : prev.length < 3 ? [...prev, id] : prev
-    )
-  }
-
-  return (
-    <>
-      {/* No SectionShell here: this renders inside the Native card's
-          disclosure, whose trigger already names it. */}
-      <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0 flex-1">
-          <h4 className="text-[12px] font-semibold text-foreground">
-            EveryAIOS Native model catalog
-          </h4>
-          <p className="mt-0.5 max-w-2xl text-[11px] leading-relaxed text-muted-foreground">
-            The model surface of the built-in EveryAIOS Native agent — the only runtime this
-            table governs. External agents (Claude Code, OpenCode, Codex, …) own their own model,
-            key, and routing configuration and expose theirs over ACP; the live models.dev catalog
-            lives in Providers / BYOK and Local models. Pricing is per 1M tokens. Click to make it
-            the active Native model.
-          </p>
-        </div>
-        <div className="shrink-0 sm:ml-3">
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-6 px-2 text-[9px] gap-1"
-            disabled={compareIds.length < 2}
-            onClick={() => setCompareOpen(true)}
-          >
-            <GitCompare className="h-3 w-3" />
-            Compare {compareIds.length > 0 ? `(${compareIds.length})` : ''}
-          </Button>
-        </div>
-      </div>
-      <div className="overflow-x-auto rounded-lg border border-border/60 scroll-thin">
-        <table className="w-full min-w-[640px] text-[11px]">
-          <thead className="bg-zinc-900/60 font-mono text-[9px] uppercase tracking-wider text-muted-foreground/80">
-            <tr>
-              <th className="px-2 py-1.5 w-6"></th>
-              <th className="px-2 py-1.5 text-left">Model</th>
-              <th className="px-2 py-1.5 text-left min-w-[110px]">Provider</th>
-              <th className="px-2 py-1.5 text-right">Context</th>
-              <th className="px-2 py-1.5 text-right">In / 1M</th>
-              <th className="px-2 py-1.5 text-right">Out / 1M</th>
-              <th className="px-2 py-1.5 text-left">Strengths</th>
-              <th className="px-2 py-1.5 text-right"></th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border/40">
-            {visibleModels.length === 0 && (
-              <tr>
-                <td colSpan={8} className="px-2 py-4 text-center text-[11px] text-muted-foreground">
-                  No installed runtime exposes models yet — install one from the
-                  Runtimes tab first.
-                </td>
-              </tr>
-            )}
-            {visibleModels.map((m) => {
-              const isActive = m.id === selectedModelId
-              const supportedByActive = activeModels.some(
-                (x) => x.id === m.id,
-              )
-              return (
-                <tr
-                  key={m.id}
-                  className={cn(
-                    'transition-colors',
-                    isActive
-                      ? 'bg-sky-500/10'
-                      : compareIds.includes(m.id)
-                        ? 'bg-blue-500/10'
-                        : 'hover:bg-accent/30',
-                  )}
-                >
-                  <td className="px-2 py-1.5 text-center">
-                    <button
-                      onClick={() => toggleCompare(m.id)}
-                      className={cn(
-                        'h-3.5 w-3.5 rounded border transition-colors',
-                        compareIds.includes(m.id)
-                          ? 'bg-sky-500 border-sky-500'
-                          : 'border-border hover:border-sky-500/40'
-                      )}
-                    />
-                  </td>
-                  <td className="px-2 py-1.5">
-                    <div className="flex items-center gap-2">
-                      <span
-                        className={cn(
-                          'flex h-5 w-5 items-center justify-center rounded text-[9px] font-bold',
-                          m.tone,
-                        )}
-                      >
-                        {m.label.charAt(0)}
-                      </span>
-                      <span className="font-medium text-foreground">{m.label}</span>
-                      {isActive && (
-                        <Badge className="bg-sky-500/20 text-[8px] text-sky-300">active</Badge>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-2 py-1.5 font-mono text-[10px] text-muted-foreground">
-                    {PROVIDER_LABELS[m.provider]}
-                  </td>
-                  <td className="px-2 py-1.5 text-right font-mono text-[10px] text-muted-foreground">
-                    {formatContext(m.context)}
-                  </td>
-                  <td className="px-2 py-1.5 text-right font-mono text-[10px] text-emerald-300">
-                    {formatPrice(m.inputPrice)}
-                  </td>
-                  <td className="px-2 py-1.5 text-right font-mono text-[10px] text-sky-300">
-                    {formatPrice(m.outputPrice)}
-                  </td>
-                  <td className="px-2 py-1.5">
-                    <div className="flex flex-wrap gap-1">
-                      {m.strengths.slice(0, 3).map((s) => (
-                        <span
-                          key={s}
-                          className="rounded border border-border/50 bg-background/40 px-1 py-0.5 font-mono text-[8px] text-muted-foreground"
-                        >
-                          {s}
-                        </span>
-                      ))}
-                    </div>
-                  </td>
-                  <td className="px-2 py-1.5 text-right">
-                    <Button
-                      size="sm"
-                      variant={isActive ? 'ghost' : 'outline'}
-                      disabled={isActive || !m.available || !supportedByActive}
-                      className="h-6 px-2 text-[9px] disabled:cursor-not-allowed"
-                      onClick={() => setSelectedModel(m.id)}
-                      title={
-                        !m.available
-                          ? 'Model gated — request access from provider'
-                          : !supportedByActive
-                            ? 'Active runtime does not support this model'
-                            : ''
-                      }
-                    >
-                      {!m.available
-                        ? 'gated'
-                        : !supportedByActive
-                          ? 'not in runtime'
-                          : isActive
-                            ? 'active'
-                            : 'use'}
-                    </Button>
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-      </div>
-
-      <Row
-        label="API keys (BYOK)"
-        desc="Per-provider keys live in the API Keys section"
-      >
-        <KeyRound className="h-4 w-4 text-sky-400" />
-      </Row>
-
-    {/* Model Comparison Dialog */}
-    <Dialog open={compareOpen} onOpenChange={setCompareOpen}>
-      <DialogContent className="max-w-2xl glass-panel">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-sm">
-            <GitCompare className="h-4 w-4 text-sky-500" />
-            Model Comparison
-          </DialogTitle>
-        </DialogHeader>
-        {compareIds.length >= 2 && (
-          <div className="grid gap-4" style={{ gridTemplateColumns: `repeat(${Math.min(compareIds.length, 3)}, 1fr)` }}>
-            {compareIds.map((id) => {
-              const m = visibleModels.find((x) => x.id === id) ?? MODELS.find((x) => x.id === id)
-              if (!m) return null
-              return (
-                <div key={m.id} className="rounded-lg border border-border/60 bg-background/40 p-3 accent-top-gradient">
-                  <div className="flex items-center gap-2 mb-3">
-                    <span className={cn('flex h-6 w-6 items-center justify-center rounded text-[10px] font-bold', m.tone)}>
-                      {m.label.charAt(0)}
-                    </span>
-                    <div>
-                      <div className="text-xs font-semibold">{m.label}</div>
-                      <div className="text-[10px] text-muted-foreground">{PROVIDER_LABELS[m.provider]}</div>
-                    </div>
-                  </div>
-                  <div className="space-y-2 text-[11px]">
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Context</span>
-                      <span className="font-mono">{formatContext(m.context)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Input price</span>
-                      <span className="font-mono text-emerald-300">{formatPrice(m.inputPrice)} / 1M</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Output price</span>
-                      <span className="font-mono text-sky-300">{formatPrice(m.outputPrice)} / 1M</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Available</span>
-                      <span className={m.available ? 'text-emerald-400' : 'text-red-400'}>{m.available ? 'Yes' : 'Gated'}</span>
-                    </div>
-                    <div className="h-px bg-border/40" />
-                    <div>
-                      <div className="text-muted-foreground mb-1">Strengths</div>
-                      <div className="flex flex-wrap gap-1">
-                        {m.strengths.map((s) => (
-                          <span key={s} className="rounded border border-border/50 bg-background/40 px-1 py-0.5 font-mono text-[8px] text-muted-foreground">{s}</span>
-                        ))}
-                      </div>
-                    </div>
-                    {m.recommendedFor && (
-                      <div>
-                        <div className="text-muted-foreground mb-0.5">Best for</div>
-                        <span className="text-sky-300 text-[10px]">{m.recommendedFor}</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        )}
-      </DialogContent>
-    </Dialog>
-    </>
-  )
-}
-
-
-// === Routing tab =============================================================
 
 const TASKS: TaskKind[] = [
   'code',
@@ -1247,7 +947,7 @@ function RoutingTab() {
   return (
     <SectionShell
       title="Task → runtime routing"
-      desc="Occupancy is the composer picker: Browse, Computer use, Office, and the right rail all run as the currently picked Chief. This table is not that path. Auto-route only affects model-tier (A7) inside the same Chief — it must not swap Claude/Codex/Grok per view."
+      desc="Occupancy is the composer picker: Browse, Computer use, Office, and the right rail all run as the currently picked primary agent. This table is not that path — it is per-task bookkeeping only (P71.5b: the retired \u2018Chief\u2019 name)."
       action={
         <div className="flex items-center gap-2 rounded-md border border-border/60 bg-background/40 px-2 py-1">
           <Route className="h-3 w-3 text-sky-400" />
@@ -1287,6 +987,10 @@ function RoutingTab() {
                         disabled={!autoRoute}
                         className="h-7 rounded border border-border bg-background px-1.5 font-mono text-[10px] text-foreground disabled:cursor-not-allowed disabled:opacity-50"
                       >
+                        {/* P71.9c — the empty value is a named option: an unset
+                            row follows the session's bound agent, it is not a
+                            silent pick of the first row. */}
+                        <option value="">{ROUTING_BOUND_AGENT}</option>
                         {catalog.map(
                           (a) => (
                             <option key={a.id} value={a.id}>
@@ -1352,7 +1056,7 @@ export default function AgentsModelsSection() {
   return (
     <SectionShell
       title="Agent CLIs & Runtimes"
-      desc="EveryAIOS Native is the built-in agent that owns EveryAIOS's providers, keys, and models. Everything else is an external agent CLI discovered from the ACP registry or PATH — it owns its own authentication and model configuration. Toggle auto-route to let EveryAIOS pick per task."
+      desc="Every row is an external agent CLI discovered from the ACP registry or PATH — each owns its own authentication and model configuration (ADR-0005: v1 ships no built-in engine)."
     >
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList className="h-8 bg-background/40">

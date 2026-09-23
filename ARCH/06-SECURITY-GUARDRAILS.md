@@ -262,3 +262,61 @@ External agent CLIs bring their **own auth** — OAuth tokens from the user's te
 4. ❌ **Never harvest the subscription OAuth token** (`CLAUDE_CODE_OAUTH_TOKEN`) to power our own (or any non-Claude) engine's direct calls — ToS violation, takedown risk (OpenClaw/OpenCode precedent); the broker never ingests a subscription token.
 5. 🏷️ **Auth-mode badge** (F12 UI): every harness labeled **subscription-backed / API-key-backed / local**; Claude Agent shows **subscription-backed (allowed via official wrapper)**.
 6. **Enforcement points:** Trust Ladder (§6.2) + ACP `request_permission` → Guard-2 (§6.4) + audit (§6.7); the registry's curated allow-list (doc 57 §2) is the first gate — only reviewed agents ship as defaults.
+
+## 6.17 Control-Plane Rate Limiting (SEC-2 / OpenClaw Pattern)
+
+To defeat automated denial-of-service, ticket-exhaustion loops, and brute-force bypass attempts against native commands, `src-tauri` enforces sliding-window rate limiting on all `nativeCall` IPC entry points:
+- **Authentication & Ticket Gate:** 5 consecutive ticket validation failures or malformed permission requests trigger an immediate 60-second exponential lockout.
+- **Write Operations:** Mutating commands (file write, terminal spawn, connector dispatch) are bucketed with a sliding-window token bucket capped at 60 operations per minute per workspace session.
+- **Fail-Closed Threshold:** When the bucket is exhausted, requests are refused with `RateLimitExceeded` and logged to `everyaios-audit` — never queued unbounded.
+
+## 6.18 ACP Permission Bridge with Create/Wait Split & Diff Previews (SEC-3 / Codex-ACP Pattern)
+
+The bridge between external agent ACP channels and `everyaios-guard` formalizes a two-phase transaction:
+1. **`create_permission_request`:** The agent emits a tool execution or patch proposal. If the action is a file modification (`ToolKind::Edit`), the bridge constructs a structured unified diff preview (`Diff::new(path, content).old_text(...)`) rather than raw prose.
+2. **`wait_permission_decision`:** The loop suspends until the user answers via the Guard-2 card (`AllowOnce`, `AllowAlways`, `Reject`).
+3. **Fail-Closed Disconnect:** If the ACP connection terminates, times out (default 30s), or crashes while awaiting decision, the pending request is automatically aborted with `Reject` and cleaned up. Auto-approvals without human interaction are strictly forbidden.
+
+## 6.20 Two-Dimensional Authorization Matrix (SEC-5 / Atlas Pattern)
+
+Every operation requested by an agent or capability pack is evaluated across two independent orthogonal axes `(AskForApproval, SandboxPolicy)`:
+
+| Dimension | Options | Responsibility |
+|---|---|---|
+| **`AskForApproval`** | `Never` (routine read-only) · `OnMiss` · `Always` (destructive/network) | Determines whether a human-in-the-loop Guard-2 approval card must be rendered. |
+| **`SandboxPolicy`** | `None` (pure internal) · `SubprocessJail` (Job Object / seccomp) · `RestrictedFilesystem` · `NetworkIsolated` | Determines the OS-level container isolation and syscall filtering applied during execution. |
+
+> **Crucial Rule:** Sandboxing never substitutes for authorization, and authorization never excuses running without isolation. Separating the two axes prevents conflating container containment with user consent.
+
+## 6.21 Pre-Persistence Secret Scrubbing & Transcript Redaction (Atlas-Checkpoint Pattern)
+
+Before any message, tool output, or memory snapshot is persisted to disk (SQLite `ui_sessions.db`, NDJSON audit logs, or checkpoint blobs):
+- **Streaming Redaction Engine:** High-performance Aho-Corasick and Regex scanners redact known credential formats:
+  - AWS Access Keys (`AKIA[0-9A-Z]{16}`)
+  - OpenAI / Anthropic / Provider API keys (`sk-[a-zA-Z0-9_-]{20,}`)
+  - GitHub Personal Access Tokens (`ghp_[0-9a-zA-Z]{36}`, `github_pat_[0-9a-zA-Z_]{82}`)
+  - Private Key Blocks (`-----BEGIN [A-Z ]+ PRIVATE KEY-----`)
+  - Password and Bearer token fields in JSON strings (`"password":\s*"[^"]+"`, `"bearer":\s*"[^"]+"`)
+- **Digest Substitution:** Redacted secrets are replaced with a deterministic truncated hash `[REDACTED_SECRET:<hash:8>]` allowing causal correlation in audits without exposing raw plaintext.
+
+## 6.22 Hermetic Child Process Environment Building (Mosoo / ACPX Pattern)
+
+When spawning subprocesses for MCP stdio servers, ACP harnesses, or scripting sandboxes:
+1. **Explicit Whitelist Isolation:** The child process environment is constructed from `essential_env()` rather than inheriting ambient `process.env` or `os.Environ()`.
+2. **Secret Token Stripping:** Host-level secret variables (`*_API_KEY`, `*_TOKEN`, `*_SECRET`, `*_PASSWORD`, `EVERYAIOS_*`) are unconditionally stripped from child process environments.
+3. **Windows Case-Insensitive Normalization:** Duplicate environment variables on Windows (e.g. `Path` vs `PATH`) are deduplicated and normalized to prevent variable shadowing vulnerabilities.
+4. **Boot Payload Sanitation:** Internal coordinator bootstrap tokens (`DRIVER_BOOT_PAYLOAD_*`) are purged immediately following initial process handshake.
+
+## 6.23 Credential Manager Hard Denylist (Open-Codex-Computer-Use Pattern)
+
+Computer Use Agents (CUA) driving native OS desktop interactions are bounded by an inviolable process and window class hard denylist:
+- **Blocked Password Managers:** Bitwarden (`bitwarden.exe`), 1Password (`1Password.exe`), KeePass (`KeePass.exe`), LastPass.
+- **Blocked System Auth Dialogs:** Windows User Account Control (UAC consent dialogs, `consent.exe`), Windows Security Credential Prompt (`CredentialUIBroker.exe`), macOS SecurityAgent Keychain dialogs, Linux polkit agents.
+- **Blocked App Surfaces:** EveryAIOS Guard approval cards and Vault settings screens.
+- **Action:** Any attempt by CUA vision or tree walkers to target, capture, or inject keystrokes into a denylisted window immediately triggers an emergency stop (`E-STOP`), invalidates the run lease, and records a security incident receipt.
+
+## 6.24 Single-Use Parameter-Bound Nonces with TTL (Vibe-Kanban Pattern)
+
+To guarantee replay protection across distributed relays, local IPC, and ticket authorizations:
+- **Claim-and-Burn Execution:** Nonce claims (`claim_refresh_nonce`) must be single-use. The token store validates that the nonce exists, has not expired (`TTL <= 60s`), and immediately burns the record within an atomic transaction.
+- **Parameter Hashing:** Every nonce is cryptographically bound to the SHA-256 hash of the normalized request parameters (`args_hash`), ensuring that intercepted or replayed tokens cannot authorize altered arguments.

@@ -248,6 +248,16 @@ pub fn work_agent_op(
     serde_json::to_value(ev).map_err(|e| e.to_string())
 }
 
+/// P71.9d — the delegation tree below a Work: child Works with their parent
+/// link, owning Session kind and bound-agent handle. Read-only; children only
+/// ever come into existence through `delegate_child_work` (P69.D14).
+#[tauri::command]
+pub fn work_children(state: State<'_, AppState>, work_id: String) -> Result<Value, String> {
+    let gateway = gateway(&state)?;
+    let g = gateway.lock().map_err(|e| e.to_string())?;
+    serde_json::to_value(g.children_of(&work_id)).map_err(|e| e.to_string())
+}
+
 /// P49.12 — list agent sessions for a work.
 #[tauri::command]
 pub fn work_agent_sessions(state: State<'_, AppState>, work_id: String) -> Result<Value, String> {

@@ -12,6 +12,14 @@
  * 3. Rank: cheapest first (costScore), stable by provider declaration order.
  *    `preferPowerful` inverts toward the most capable (planner tier).
  * 4. Return a human-readable `reason` so the UI can show why a model won.
+ *
+ * **P71.2c status — no production consumer.** The caller was the built-in turn
+ * loop (`chat.ts`, archived to `ARCH/archive/coordinator-loop/`), so this is
+ * retained as a **pure, tested** function and as the migration note for the
+ * post-v1 governed binding (`P71.7`), never as a v1 execution authority:
+ * `ARCH/ROUTING.md` §1/§10 — an external agent owns its own model and provider
+ * fallback, and EveryAIOS no longer selects one. `P71.4` decides whether the
+ * route-observation half is re-homed onto agent reports or retired with this.
  */
 
 import {

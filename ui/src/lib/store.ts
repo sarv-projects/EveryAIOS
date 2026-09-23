@@ -12,9 +12,6 @@ import {
 import {
   AGENT_MAP,
   DEFAULT_ROUTING,
-  getDefaultModelForAgent,
-  getModelsForAgentLive,
-  isNativeRuntime,
   type AgentRuntime,
   type TaskKind,
 } from './agents'
@@ -273,6 +270,12 @@ export interface Session {
   goalAchieved?: boolean
   /** P66.4 — per-session capability loadout overrides (MCP, skills, connectors, shared cowork tools) */
   capabilityLoadout?: SessionCapabilityLoadout
+  /** P71.9f — when a Chat was opened **from** an automation run (`ADR-0006` §7),
+   * this records the run's Work and the Session it belonged to. The Chat is a
+   * continuation of that run, not a second Session — so the 1:1 rule between a
+   * Chat and its Session holds again, and no Chat is ever fabricated per run. */
+  originRunId?: string
+  originRunSessionId?: string
 }
 
 /**
@@ -957,6 +960,11 @@ interface AppState {
   markSessionsHydrated: () => void
   setActiveSession: (id: string) => void
   newSession: () => void
+  /** P71.9f — open an automation run as a Chat (`ADR-0006` §7): the run's
+   * Session gains a Chat **on demand**, so the run list stays the surface that
+   * owns headless work and nothing invents a hidden Chat per firing. Returns
+   * the new chat's id. */
+  openAutomationRun: (run: { id: string; sessionId: string; objective: string }) => string
   deleteSession: (id: string) => Promise<void>
   /** Rename a session (title). Auto-persisted via the session subscription. */
   renameSession: (id: string, title: string) => void
@@ -1436,6 +1444,32 @@ export const useAppStore = create<AppState>((set, get) => ({
       ...(inherited.folder ? { taskFolder: inherited.folder } : {}),
     }))
   },
+  openAutomationRun: (run) => {
+    // ADR-0006 §7 — the run's Session gains a Chat here; the Chat is the
+    // continuation, not a second Session. The title is the run's own Work
+    // objective, never an invented label.
+    const id = freshId('s')
+    const objective = run.objective.trim() || 'Automation run'
+    if (!get().sessionsHydrated) set({ sessionsHydrated: true })
+    const fresh: Session = {
+      id,
+      title: objective.length > 60 ? `${objective.slice(0, 57)}…` : objective,
+      status: 'idle',
+      preview: 'Opened from an automation run — continue or inspect it here.',
+      updatedAt: new Date().toISOString(),
+      messages: [],
+      originRunId: run.id,
+      originRunSessionId: run.sessionId,
+    }
+    set((s) => ({
+      sessions: [fresh, ...s.sessions],
+      activeSessionId: id,
+      centerScreen: 'chat',
+      composerValue: '',
+    }))
+    get().notify('Automation run opened as a chat')
+    return id
+  },
   monitorBadge: { count: 0, stopped: false },
   pushMonitor: (ev) => {
     set((s) => ({
@@ -1874,59 +1908,39 @@ export const useAppStore = create<AppState>((set, get) => ({
   composerValue: '',
   setComposerValue: (v) => set({ composerValue: v }),
 
-  // Default = inbuilt EveryAIOS (not an ACP harness).
-  selectedAgentId: 'everyaios-native',
+  // P71.2a/2d — selection starts **unbound**: an empty id means "no agent bound
+  // yet", and the turn path leads with discovery rather than substituting an
+  // engine (ADR-0005 §1). There is no built-in row to default to.
+  selectedAgentId: '',
   setSelectedAgent: (id) => {
     // Occupancy is live: a row published by the ACP registry refresh is
     // selectable even though it has no entry in the static seed. The static
     // map stays the fallback for the pre-hydration UI.
     const row = AGENT_MAP[id] ?? get().liveAgents.find((a) => a.id === id)
     if (!row) return
-    // P60 — model ownership. An external ACP agent owns its model, auth, and
-    // routing; selecting one must not snap EveryAIOS's Native pin onto a
-    // curated model that agent never receives. The Native pin is preserved
-    // untouched so switching back to Native restores the exact same choice.
-    if (!isNativeRuntime(id)) {
-      set({ selectedAgentId: id })
-      return
-    }
-    // Switching to Native snaps the model to its default unless the current
-    // pin is also in Native's curated set.
-    const supported = row.models
-    set((s) => {
-      const keepModel = supported.includes(s.selectedModelId)
-      return {
-        selectedAgentId: id,
-        selectedModelId: keepModel ? s.selectedModelId : getDefaultModelForAgent(id),
-        // P58.7 — a kept curated model has no provider; a reset one is the
-        // agent's curated default, so the catalog provider must not survive.
-        selectedModelProvider: keepModel ? s.selectedModelProvider : undefined,
-      }
-    })
+    // P60/P71.2d — model ownership. An external ACP agent owns its model, auth
+    // and routing; since *every* runtime is external now, selection never snaps
+    // a desktop-side model pin onto an agent and never resets one on the way out.
+    set({ selectedAgentId: id })
   },
-  selectedModelId: getDefaultModelForAgent('everyaios-native'),
+  // P71.2d — no desktop-side model pin exists to default: any model a turn uses
+  // belongs to the agent. Kept as an empty string so the composer can say "the
+  // agent decides" rather than naming a model nobody receives.
+  selectedModelId: '',
   selectedModelProvider: undefined,
   setSelectedModel: (id, provider) =>
     set({ selectedModelId: id, selectedModelProvider: provider }),
   // P51.3 — variant cycle over the current agent's available models. The
   // order is the picker's row order; auto-route is switched off so the
   // pinned variant actually reaches the send path (see resolveProviderModel).
-  cycleModelVariant: (dir) => {
-    const { selectedAgentId, selectedModelId, liveAgents } = get()
-    // P60 — an external ACP agent owns its own model list, so there is no
-    // Native variant to cycle; the live gate returns `[]` for it.
-    const models = getModelsForAgentLive(selectedAgentId, liveAgents).filter((m) => m.available)
-    if (models.length === 0) return undefined
-    const idx = models.findIndex((m) => m.id === selectedModelId)
-    const next = models[(idx + dir + models.length) % models.length]!
-    set({
-      selectedModelId: next.id,
-      autoRoute: false,
-      // P58.7 — a cycled variant is a curated row; drop any catalog provider
-      // so the send path resolves through `MODEL_MAP`, not a stale provider.
-      selectedModelProvider: undefined,
-    })
-    return next.id
+  cycleModelVariant: (_dir) => {
+    // P71.2d — there is no EveryAIOS-owned model list to cycle. A bound agent's
+    // model is switched through that agent's own ACP config options (the picker
+    // renders them from `available_commands_update` / session config), never by
+    // EveryAIOS mutating a pin the agent never receives. Returning `undefined`
+    // is the honest answer, so callers fall through instead of showing a switch
+    // that did nothing.
+    return undefined
   },
   personaId: 'straight-shooter',
   setPersonaId: (id) => set({ personaId: id }),
@@ -2037,7 +2051,9 @@ export const useAppStore = create<AppState>((set, get) => ({
     const s = get()
     const session = s.sessions.find((x) => x.id === s.activeSessionId)
     const workspace = session?.folder ?? s.taskFolder ?? '~'
-    const agent = s.selectedAgentId || 'everyaios-native'
+    // P71.2a — an unbound session freezes as `''`, not as the retired built-in
+    // id: the snapshot must not name an engine that does not exist.
+    const agent = s.selectedAgentId || ''
     const configHash = taskScopeHash(s.permissionMode, s.composerMode, workspace, agent)
     set({
       taskSnapshot: {
@@ -2594,18 +2610,15 @@ export const useAppStore = create<AppState>((set, get) => ({
       return
     }
     try {
-      const { chatToolRetry } = await import('./tauri')
-      // P49: carry the real Work so the coordinator files the retry under it
-      // (`registerStreamIdentity` keys on workId), not under the session id.
-      // Off-plan retries have no Work yet; Rust falls back to the session id.
-      const retryWorkId = get().pendingPlan?.workId
-      await chatToolRetry({
-        sessionId: st.activeSessionId,
-        streamId: activeStreamMsg[st.activeSessionId] ?? recordId,
-        toolId: rec.toolId,
-        args: rec.args ?? {},
-        ...(retryWorkId ? { workId: retryWorkId } : {}),
-      })
+      // P71.2c — the retry used to re-enter the coordinator's built-in tool loop
+      // (`chat_tool_retry`), which is deleted with that loop (ADR-0005 §2). A
+      // turn's tools belong to the bound agent now: retrying is asking **that
+      // agent** again, so this refuses with the reason instead of invoking a
+      // command that no longer exists. Re-establishing a one-click retry on the
+      // agent channel is `P71.9c`.
+      throw new Error(
+        'Tool retry ran on the built-in engine, which v1 does not ship (ADR-0005). Ask the bound agent to retry instead.',
+      )
     } catch (err) {
       patchActiveAssistant(set, (m) => ({
         ...m,
@@ -2713,23 +2726,26 @@ export const useAppStore = create<AppState>((set, get) => ({
           .find((m) => m.mcq?.id === id)?.mcq?.kind
         if (kind === 'plan') {
           const pending = get().pendingPlan
-          if (choice === 'approve' && pending) {
-            const { planExecute } = await import('./tauri')
-            await planExecute({
-              sessionId: pending.sessionId,
-              planId: pending.planId,
-              tasks: pending.tasks,
-              ...(pending.workId ? { workId: pending.workId } : {}),
-            })
-          }
+          // P71.2c — the plan **executor** ran on the built-in engine's provider
+          // broker, so it is deferred to post-v1 with the governed binding
+          // (ADR-0005 §2, recorded in `P71.2c`). The draft stays: it is what the
+          // user reads and approves, and the same task list becomes Work once an
+          // executor is bound again. Approving must not imply execution, so the
+          // card resolves with that stated.
           get().setPendingPlan(undefined)
           clearMcq(id)
+          if (choice === 'approve' && pending) {
+            get().notify(
+              `Plan approved — ${pending.tasks.length} task(s). Execution needs a bound agent engine (post-v1, ADR-0005); nothing was run.`,
+            )
+          }
           return
         }
         if (kind === 'mcq') {
-          const { planRespond } = await import('./tauri')
-          await planRespond(id, choice)
+          // P71.2c — the circuit-break responder belonged to the deleted plan
+          // executor. An agent's own questions arrive over ACP, not here.
           clearMcq(id)
+          get().notify('Dismissed. Answers route through the bound agent (ACP) in v1.')
           return
         }
         // F1 — approval happens in the dedicated guard window, never in the

@@ -28,6 +28,7 @@ import { dagFromWire, layoutCuaDag, type CuaDagLayout } from '@/lib/cua-dag'
 import {
   describeWorkEvent,
   presenceLabel,
+  sessionKindLabel,
   type WorkEventEnvelope,
   type WorkEventDescription,
 } from '@/lib/work'
@@ -311,14 +312,32 @@ export default function ProgressView() {
               {workPresence.currentSurface}
             </p>
           )}
-          <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
-            <span className="font-mono">{workItems[0]?.workId}</span>
-            <span>·</span>
-            <span>{workEvents.length} events</span>
-            {workPresence?.activeClients.length ? (
-              <span>· {workPresence.activeClients.length} client(s)</span>
-            ) : null}
+          {/* P71.9f — every Work names its **owner** in the cockpit's own
+              vocabulary (`ARCH/UI.md` §5): an automation run is never presented
+              as a chat turn, and the word "Session" never appears. */}
+          <div className="space-y-0.5">
+            {workItems.slice(0, 6).map((w) => (
+              <div
+                key={w.workId}
+                className="flex items-center gap-2 text-[10px] text-muted-foreground"
+              >
+                <span className="font-mono">{w.workId}</span>
+                <span>·</span>
+                <span>{sessionKindLabel(w.sessionKind)}</span>
+                {w.workId === workItems[0]?.workId ? (
+                  <>
+                    <span>·</span>
+                    <span>{workEvents.length} events</span>
+                  </>
+                ) : null}
+              </div>
+            ))}
           </div>
+          {workPresence?.activeClients.length ? (
+            <p className="mt-0.5 text-[10px] text-muted-foreground">
+              {workPresence.activeClients.length} client(s) attached
+            </p>
+          ) : null}
         </div>
       )}
 

@@ -60,6 +60,7 @@ use crate::xlsx_cmds;
 pub fn handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync + 'static {
     tauri::generate_handler![
         crate::runtime_status,
+        crate::sidecar_probe,
         crate::version,
         catalog_cmds::catalog_sync_plan,
         catalog_cmds::catalog_sync_refresh,
@@ -209,6 +210,7 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Syn
         acp_cmds::acp_tool_log,
         // P53.6 — Settings → Subagents rows + when-to-use note edits.
         acp_cmds::chief_subagents,
+        acp_cmds::chief_subagent_set_policy,
         acp_cmds::chief_subagent_set_note,
         acp_cmds::chief_subagent_set_enabled,
         acp_cmds::chief_subagent_mix,
@@ -237,6 +239,9 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Syn
         scheduler_cmds::scheduler_pause_session,
         scheduler_cmds::scheduler_resume,
         scheduler_cmds::scheduler_run_now,
+        scheduler_cmds::scheduler_runs,
+        scheduler_cmds::scheduler_duplicate,
+        scheduler_cmds::scheduler_export,
         scheduler_cmds::scheduler_battery,
         scheduler_cmds::scheduler_fire_event,
         scheduler_cmds::scheduler_fire_webhook,
@@ -376,6 +381,7 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Syn
         work_cmds::work_agent_spawn,
         work_cmds::work_agent_op,
         work_cmds::work_agent_sessions,
+        work_cmds::work_children,
         // P49.1/.3/.4/.7/.8/.9/.13/.14/.15/.17: the V1-local Work Gateway wiring.
         work_cmds::work_create,
         work_cmds::work_get,

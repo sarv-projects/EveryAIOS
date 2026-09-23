@@ -27,27 +27,27 @@ function seedSession() {
     composerMode: 'build',
     taskFolder: '~/work/test',
     taskSnapshot: undefined,
-    selectedAgentId: 'everyaios-native',
+    selectedAgentId: 'claude-code',
   })
   return id
 }
 
 describe('taskScopeHash', () => {
   test('is deterministic and sensitive to every scope field', () => {
-    expect(taskScopeHash('ask', 'build', '~/work/test', 'everyaios-native')).toBe(
-      taskScopeHash('ask', 'build', '~/work/test', 'everyaios-native'),
-    )
-    expect(taskScopeHash('ask', 'build', '~/work/test', 'everyaios-native')).not.toBe(
-      taskScopeHash('auto', 'build', '~/work/test', 'everyaios-native'),
-    )
-    expect(taskScopeHash('ask', 'build', '~/work/test', 'everyaios-native')).not.toBe(
-      taskScopeHash('ask', 'plan', '~/work/test', 'everyaios-native'),
-    )
-    expect(taskScopeHash('ask', 'build', '~/work/other', 'everyaios-native')).not.toBe(
-      taskScopeHash('ask', 'build', '~/work/test', 'everyaios-native'),
+    expect(taskScopeHash('ask', 'build', '~/work/test', 'claude-code')).toBe(
+      taskScopeHash('ask', 'build', '~/work/test', 'claude-code'),
     )
     expect(taskScopeHash('ask', 'build', '~/work/test', 'claude-code')).not.toBe(
-      taskScopeHash('ask', 'build', '~/work/test', 'everyaios-native'),
+      taskScopeHash('auto', 'build', '~/work/test', 'claude-code'),
+    )
+    expect(taskScopeHash('ask', 'build', '~/work/test', 'claude-code')).not.toBe(
+      taskScopeHash('ask', 'plan', '~/work/test', 'claude-code'),
+    )
+    expect(taskScopeHash('ask', 'build', '~/work/other', 'claude-code')).not.toBe(
+      taskScopeHash('ask', 'build', '~/work/test', 'claude-code'),
+    )
+    expect(taskScopeHash('ask', 'build', '~/work/test', 'claude-code')).not.toBe(
+      taskScopeHash('ask', 'build', '~/work/test', 'codex'),
     )
   })
 })
@@ -62,9 +62,9 @@ describe('freezeTaskSnapshot', () => {
     expect(snap!.autonomyLevel).toBe('ask')
     expect(snap!.mode).toBe('build')
     expect(snap!.workspaceScope).toBe('~/work/test')
-    expect(snap!.agentScope).toBe('everyaios-native')
+    expect(snap!.agentScope).toBe('claude-code')
     const hash = snap!.configHash
-    expect(hash).toBe(taskScopeHash('ask', 'build', '~/work/test', 'everyaios-native'))
+    expect(hash).toBe(taskScopeHash('ask', 'build', '~/work/test', 'claude-code'))
     // Deterministic across freezes with the same inputs.
     useAppStore.getState().clearTaskSnapshot()
     useAppStore.getState().freezeTaskSnapshot()

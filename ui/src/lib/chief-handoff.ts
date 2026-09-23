@@ -1,5 +1,5 @@
 // P53.4 — compact-before-swap handoff bundle (spec §4.2.5a §4).
-// On Chief change (and the first ACP turn after inbuilt work), the new loop
+// On bound-agent change (and the first ACP turn after every earlier turn), the new loop
 // receives the LIVE compacted view — not the raw disk history:
 //   - compacted transcript (last N messages; snipped tool blobs + old
 //     tool-call XML stripped — only user/assistant text survives);

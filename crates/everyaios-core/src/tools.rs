@@ -1648,7 +1648,7 @@ impl ToolService {
                     .get("identicalFailCount")
                     .and_then(Value::as_u64)
                     .unwrap_or(0) as u32;
-                let outcome = crate::worker_step(verify_ok, fails);
+                let outcome = crate::delegation_step(verify_ok, fails);
                 let has_evidence =
                     args.get("verifyPath").is_some() || args.get("evidence").is_some();
                 if let Some(root) = args.get("cuaRoot").and_then(Value::as_str) {
@@ -1658,7 +1658,7 @@ impl ToolService {
                                 // P60.6 — when independent evidence is present, do not
                                 // stamp Verified from the Worker/banner claim.
                                 if !has_evidence {
-                                    crate::apply_worker_act(node, verify_ok);
+                                    crate::apply_delegation_act(node, verify_ok);
                                 }
                             }
                             let _ = crate::persist_dag(std::path::Path::new(root), &dag);
@@ -1666,7 +1666,7 @@ impl ToolService {
                     }
                 }
                 match outcome {
-                    crate::WorkerOutcome::Halt => {
+                    crate::DelegationOutcome::Halt => {
                         return json!({
                             "ok": false,
                             "code": "cua_halt",
@@ -1674,7 +1674,7 @@ impl ToolService {
                             "halt": true,
                         });
                     }
-                    crate::WorkerOutcome::Mismatch => {
+                    crate::DelegationOutcome::Mismatch => {
                         return json!({
                             "ok": false,
                             "code": "cua_mismatch",
@@ -1682,7 +1682,7 @@ impl ToolService {
                             "halt": false,
                         });
                     }
-                    crate::WorkerOutcome::Verified => {}
+                    crate::DelegationOutcome::Verified => {}
                 }
                 match act {
                     Ok(v) => json!({"ok": true, "result": v, "verified": true}),
