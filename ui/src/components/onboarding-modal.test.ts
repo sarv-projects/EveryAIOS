@@ -2,11 +2,20 @@
 // failure contract is deterministic: completion runs only after the selected
 // native path returns an explicit success receipt.
 
-import { describe, expect, test } from 'bun:test'
-import {
-  completeOnboardingAfterVault,
-  type VaultSetupDependencies,
-} from './onboarding-modal'
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
+import { registerDom, unregisterDom } from '@/test/dom-harness'
+import type { VaultSetupDependencies } from './onboarding-modal'
+
+let completeOnboardingAfterVault: typeof import('./onboarding-modal').completeOnboardingAfterVault
+
+beforeAll(async () => {
+  registerDom()
+  completeOnboardingAfterVault = (await import('./onboarding-modal')).completeOnboardingAfterVault
+})
+
+afterAll(() => {
+  unregisterDom()
+})
 
 function dependencies(
   invoke: VaultSetupDependencies['invoke'],

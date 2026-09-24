@@ -7,7 +7,8 @@
 //! assertion:
 //!
 //! - expired tickets are refused at consume time (approval cannot resurrect);
-//! - corrupt scheduler/tasks JSON recovers fresh instead of crash-looping;
+//! - corrupt scheduler JSON fails closed while task JSON recovery remains
+//!   explicitly non-authoritative;
 //! - a wrong vault key fails closed (no plaintext, no silent recreate);
 //! - scheduler leases held by a dead worker reconcile to Idle on reload;
 //! - a task ledger killed mid-run reopens Running (never terminal — recovery
@@ -26,10 +27,10 @@ use everyaios_audit::session_log::{EventInput, EventType, SessionLog};
 use everyaios_core::execution::{ExecutionKernel, ExecutionPhase, ExecutionTrigger};
 use everyaios_core::scheduler_service::{SchedulerService, TriggerSpec};
 use everyaios_core::task_ledger::{FileStore, TaskKind, TaskLedger, TaskStatus};
+use everyaios_guard::RiskLevel;
 use everyaios_guard::ticket::{
     ApprovalSource, AuthorizationTicket, TicketError, TicketState, TicketStore,
 };
-use everyaios_guard::RiskLevel;
 use everyaios_vault::Vault;
 
 fn temp_dir(tag: &str) -> std::path::PathBuf {
@@ -97,31 +98,34 @@ fn expired_ticket_is_refused_at_consume() {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn corrupt_scheduler_json_recovers_fresh() {
+fn corrupt_scheduler_json_fails_closed() {
     let dir = temp_dir("sched-corrupt");
     let path = dir.join("scheduler.json");
     std::fs::write(&path, "not-json{{").unwrap();
-    // load_or_new is infallible by contract: garbage becomes an empty
-    // service the UI can drive (honest empty, not a crash, not seeded jobs).
+    // A corrupt registry is not an empty healthy registry. The compatibility
+    // constructor remains infallible for the relay, but the service carries a
+    // named load error and every host-facing door refuses it.
     let mut svc = SchedulerService::load_or_new(path.clone());
-    svc.upsert(
-        "j1",
-        "probe",
-        "s1",
-        TriggerSpec::Interval { secs: 60 },
-        Vec::new(),
-        None,
-        0,
-    );
-    svc.persist()
-        .expect("P50.5.5: persist after corrupt recovery");
-    let reloaded = SchedulerService::load_or_new(path);
+    assert!(!svc.is_healthy());
+    assert!(svc.registry_error().is_some());
     assert!(
-        reloaded.get("j1").is_some(),
-        "P50.5.5: scheduler must be writable after corrupt recovery"
+        svc.handle("scheduler/list", &serde_json::json!({}))
+            .is_err()
+    );
+    assert!(
+        svc.upsert_checked(
+            "j1",
+            "probe",
+            "s1",
+            TriggerSpec::Interval { secs: 60 },
+            Vec::new(),
+            None,
+            0,
+        )
+        .is_err()
     );
     let _ = std::fs::remove_dir_all(&dir);
-    eprintln!("P50.5.5: corrupt scheduler.json recovered fresh and writable");
+    eprintln!("P50.5.5: corrupt scheduler.json failed closed");
 }
 
 #[test]
@@ -206,8 +210,19 @@ fn scheduler_trigger_registry_survives_crash() {
             None,
             0,
         );
-        // A firing is recorded, then the process dies (drop = SIGKILL).
-        svc.mark_fired("nightly", 1_000).expect("firing recorded");
+        // A durable occurrence is admitted, then Work/Run admission is recorded
+        // before the process dies (drop = SIGKILL). Trigger-only advancement is
+        // intentionally not a valid persistence boundary.
+        let occurrence = svc
+            .admit_due(3_601)
+            .expect("due occurrence admitted")
+            .pop()
+            .expect("one due occurrence");
+        let receipt = svc
+            .receipt_for_occurrence(&occurrence.trigger_occurrence_id)
+            .expect("durable Work/Run receipt");
+        svc.mark_occurrence_fired_with_receipt(&occurrence.trigger_occurrence_id, 3_601, &receipt)
+            .expect("firing recorded");
         svc.persist().expect("persist fired state");
         "nightly".to_string()
     };
@@ -218,7 +233,7 @@ fn scheduler_trigger_registry_survives_crash() {
     let job = reloaded.get(&job_id).expect("job survives the crash");
     assert_eq!(
         job.last_fired_at,
-        Some(1_000),
+        Some(3_601),
         "P50.5.6: the occurrence record survives the crash"
     );
     assert!(

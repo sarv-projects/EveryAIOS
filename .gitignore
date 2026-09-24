@@ -60,3 +60,6 @@ __pycache__/
 
 # Local scratch transcripts (working notes, not repository content)
 multiagent.txt
+
+# Deepwork progress state (local planning only)
+.slim/deepwork/

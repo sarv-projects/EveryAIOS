@@ -1,10 +1,10 @@
-// P63 — per-agent model-backend configuration client (Agent runtimes card).
+// P63 — legacy per-agent backend compatibility client (Agent runtimes card).
 //
-// The user points an external agent at one of their own providers here. The
-// choice is stored by the shell; the provider *key* is read from the EveryAIOS
-// vault in Rust at spawn time and injected as environment. Nothing is written
-// to the agent's own config file, and no key material ever crosses this
-// boundary — `agentBackendGet` returns variable *names*, never values.
+// External agents own their account, authentication, model, and config. The
+// host may retain only a credential-free launch override such as a model or
+// base URL; it never reads a provider key from the EveryAIOS vault for a child
+// process and never writes the agent's own config. `agentBackendGet` returns
+// non-secret variable names only.
 
 import { invoke } from './tauri'
 import { nativeCall } from './runtime'
@@ -17,9 +17,19 @@ export type BackendChannel =
   | 'subscription'
   | 'unknown'
 
+/** Authentication is always owned and completed by the external agent. */
+export type AgentCredentialMode = 'agent_owned'
+
+/** The host has no approved way to delegate a vault-held provider key. */
+export type HostVaultInjection = 'unavailable'
+
 export interface AgentBackendChoice {
   provider: string
   model: string
+  /**
+   * @deprecated Legacy compatibility only. `true` identifies an old record that
+   * must be cleared; the host never injects an EveryAIOS vault key.
+   */
   useVaultKey: boolean
   baseUrl: string | null
 }
@@ -27,17 +37,23 @@ export interface AgentBackendChoice {
 export interface AgentBackendState {
   agentId: string
   channel: BackendChannel
-  /** True only for `provider_env` / `fixed_env` — env injection works. */
+  credentialMode: AgentCredentialMode
+  hostVaultInjection: HostVaultInjection
+  /** True only when a non-secret launch override can be planned. */
   injectable: boolean
   note: string
   configFile: string | null
   configured: AgentBackendChoice | null
-  /** Names of the variables a launch will carry. Never values. */
+  /** Credential-free variable names a launch may carry. Never values. */
   injectedEnv: string[]
   /** Requested settings this agent has no variable for. */
   unexpressed: string[]
+  /**
+   * @deprecated Historical compatibility field. It is always `false` and is not
+   * evidence of agent authentication or host-vault injection.
+   */
   keyPresent: boolean
-  /** Always false today: no agent config file is written (see TODO P47.7). */
+  /** Always false: no agent config file is written. */
   writesToDisk: boolean
   /** Why a binding cannot be expressed, when that is the case. */
   refusal: string | null
@@ -51,7 +67,10 @@ export interface AgentProviderRow {
   baseUrl: string
   /** Loopback / localhost endpoint — a keyless local runtime. */
   local: boolean
-  /** A key for this provider is already in the EveryAIOS vault. */
+  /**
+   * @deprecated Host-vault inventory observation only. It never means the key is
+   * available to, shared with, or accepted by the external agent.
+   */
   keyInVault: boolean
   verifiedAt: string | null
 }
@@ -68,16 +87,23 @@ export interface ProviderProbeResult {
 export function channelLabel(channel: BackendChannel): string {
   switch (channel) {
     case 'provider_env':
-      return 'reads provider env'
+      return 'agent-owned provider auth'
     case 'fixed_env':
-      return 'fixed env vars'
+      return 'agent-owned env auth'
     case 'config_file':
-      return 'own config file'
+      return 'agent-owned config'
     case 'subscription':
-      return 'signs in itself'
+      return 'agent-owned sign-in'
     default:
-      return 'not verified'
+      return 'auth not verified'
   }
+}
+
+/** True when an old saved record requested the now-unavailable vault path. */
+export function hasLegacyVaultKeyRequest(
+  state: Pick<AgentBackendState, 'configured'>,
+): boolean {
+  return state.configured?.useVaultKey === true
 }
 
 export async function agentBackendGet(agentId: string): Promise<AgentBackendState> {
@@ -97,6 +123,7 @@ export async function agentBackendSet(input: {
   agentId: string
   provider: string
   model?: string
+  /** @deprecated Compatibility only. New UI writes always default to `false`. */
   useVaultKey?: boolean
   baseUrl?: string | null
 }): Promise<AgentBackendState> {
@@ -105,7 +132,7 @@ export async function agentBackendSet(input: {
       agentId: input.agentId,
       provider: input.provider,
       model: input.model ?? null,
-      useVaultKey: input.useVaultKey ?? true,
+      useVaultKey: input.useVaultKey ?? false,
       baseUrl: input.baseUrl ?? null,
     }),
   )

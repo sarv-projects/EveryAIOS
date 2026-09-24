@@ -2,7 +2,8 @@
 // Left = which job · center = talk + now-doing + approve · right = one lens.
 // Never 9 peer tabs; never Chat/Cowork/Code as three apps.
 
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
+import { Menu } from "lucide-react";
 import { TitleBar } from "@/components/shell/title-bar";
 import { LeftSidebar } from "@/components/shell/left-sidebar";
 import { CenterColumn } from "@/components/shell/center-column";
@@ -21,11 +22,69 @@ import NpsPrompt from "@/components/nps-prompt";
 import { startPerfMeasurement } from "@/lib/perf";
 import { recordSessionEvent } from "@/lib/session-recording";
 import { RuntimeStatusBanner } from "@/components/shell/runtime-status-banner";
+import { cn } from "@/lib/utils";
+
+export const NARROW_SHELL_BREAKPOINT = 900
+
+export function isNarrowShellWidth(width: number): boolean {
+  return width > 0 && width < NARROW_SHELL_BREAKPOINT
+}
+
+function useNarrowShell(): boolean {
+  const [narrow, setNarrow] = useState(() =>
+    typeof window === "undefined"
+      ? false
+      : isNarrowShellWidth(window.innerWidth),
+  )
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const update = () => setNarrow(isNarrowShellWidth(window.innerWidth))
+    update()
+    window.addEventListener("resize", update)
+    return () => window.removeEventListener("resize", update)
+  }, [])
+
+  return narrow
+}
+
+/** One visible owner for first-run: onboarding first, setup only afterward. */
+export function FirstRunSurfaces() {
+  const onboardingDone = useAppStore((s) => s.onboardingDone)
+  return onboardingDone ? <SetupGate /> : <OnboardingModal />
+}
 
 export default function App() {
   const powerMode = useAppStore((s) => s.powerMode);
   const cockpitOpen = useAppStore((s) => s.cockpitOpen);
   const setCockpitOpen = useAppStore((s) => s.setCockpitOpen);
+  const sidebarCollapsed = useAppStore((s) => s.sidebarCollapsed);
+  const narrow = useNarrowShell();
+  const [narrowSidebarOpen, setNarrowSidebarOpen] = useState(false);
+  const previousNarrow = useRef<boolean | null>(null);
+
+  // The title bar remains the desktop sidebar owner. On a narrow window its
+  // existing collapse control also opens/closes the drawer, while the first
+  // render starts closed so a small window does not flash a full navigation
+  // sheet over the first task.
+  useEffect(() => {
+    if (previousNarrow.current === null) {
+      previousNarrow.current = narrow;
+      setNarrowSidebarOpen(false);
+      return;
+    }
+    if (previousNarrow.current !== narrow) {
+      previousNarrow.current = narrow;
+      setNarrowSidebarOpen(false);
+      return;
+    }
+    if (!narrow) {
+      setNarrowSidebarOpen(false);
+      return;
+    }
+    setNarrowSidebarOpen(!sidebarCollapsed);
+  }, [narrow, sidebarCollapsed]);
+
   // P11.4 — kick off LCP/TTI measurement at boot.
   useEffect(() => {
     startPerfMeasurement();
@@ -47,30 +106,43 @@ export default function App() {
 
   return (
     <VaultGate>
-    <div className="h-screen w-screen flex flex-col bg-background overflow-hidden">
-      <KeyboardShortcuts />
-      <TitleBar />
-      <RuntimeStatusBanner />
-      <main className="flex-1 min-h-0 flex">
-        <LeftSidebar />
-        <CenterColumn />
-        {/* Power mode intentionally reveals the cockpit rail and active lens. */}
-        {powerMode && <ActivityRail />}
-        {powerMode && <RightViewport />}
-      </main>
-      <StatusBar />
-      <CommandPalette />
-      {/* P3.2 — multi-agent flight deck (was implemented but never mounted). */}
-      <CockpitSlideover open={cockpitOpen} onClose={() => setCockpitOpen(false)} />
-      <ToastBridge />
-      <AiPointer />
-      {/* P50.4.1 — first-run provider setup (no model → no generic agent error). */}
-      <SetupGate />
-      {/* P11.2 — first-launch onboarding (welcome → key → chat → success). */}
-      <OnboardingModal />
-      {/* P11.6.2 — non-intrusive NPS prompt (after 7 days, at most once per 90). */}
-      <NpsPrompt />
-    </div>
+      <div className="relative flex h-screen w-screen flex-col overflow-hidden bg-background">
+        <KeyboardShortcuts />
+        <TitleBar />
+        <RuntimeStatusBanner />
+        <main className={cn("flex min-h-0 min-w-0 flex-1 overflow-hidden", narrow ? "flex-col" : "flex-row")}>
+          <LeftSidebar
+            narrow={narrow}
+            drawerOpen={narrow && narrowSidebarOpen}
+            onDrawerOpenChange={setNarrowSidebarOpen}
+          />
+          <CenterColumn />
+          {/* Power mode intentionally reveals the cockpit rail and active lens. */}
+          {powerMode && <ActivityRail narrow={narrow} />}
+          {powerMode && <RightViewport narrow={narrow} />}
+        </main>
+        <StatusBar />
+        <CommandPalette />
+        {/* P3.2 — multi-agent flight deck (was implemented but never mounted). */}
+        <CockpitSlideover open={cockpitOpen} onClose={() => setCockpitOpen(false)} />
+        <ToastBridge />
+        <AiPointer />
+        {narrow && !narrowSidebarOpen && (
+          <button
+            type="button"
+            data-testid="narrow-sidebar-trigger"
+            aria-label="Open work navigation"
+            aria-expanded={false}
+            onClick={() => setNarrowSidebarOpen(true)}
+            className="no-drag fixed left-2 top-10 z-40 grid h-8 w-8 place-items-center rounded-md border border-border bg-card/90 text-muted-foreground shadow-sm backdrop-blur hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
+          >
+            <Menu aria-hidden className="h-4 w-4" />
+          </button>
+        )}
+        <FirstRunSurfaces />
+        {/* P11.6.2 — non-intrusive NPS prompt (after 7 days, at most once per 90). */}
+        <NpsPrompt />
+      </div>
     </VaultGate>
   );
 }

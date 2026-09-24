@@ -333,6 +333,53 @@ impl WorkState {
     pub fn is_terminal(self) -> bool {
         matches!(self, Self::Completed | Self::Failed | Self::Cancelled)
     }
+
+    /// Whether a lifecycle transition is legal for a durable Work projection.
+    ///
+    /// Terminal outcomes are one-way. A repeated terminal state is idempotent
+    /// (replay can observe the same fact more than once), but no terminal
+    /// outcome may be replaced by `Ready`/`Running` or by another terminal
+    /// outcome. `Recoverable` is intentionally resumable; callers that allow
+    /// its `Running` edge must first reconcile any uncertain effect at the
+    /// Work/effect owner rather than infer success from this vocabulary alone.
+    pub fn can_transition(self, next: Self) -> bool {
+        use WorkState::*;
+        if self == next {
+            return true;
+        }
+        if self.is_terminal() {
+            return false;
+        }
+        match self {
+            Created => matches!(next, Planning | Ready | Cancelled),
+            Planning => matches!(next, Ready | Failed | Cancelled),
+            Ready => matches!(next, Running | WaitingTool | WaitingApproval | WaitingUser | Cancelled),
+            Running => matches!(
+                next,
+                WaitingTool
+                    | WaitingApproval
+                    | WaitingUser
+                    | Checkpointed
+                    | Verifying
+                    | Completed
+                    | Failed
+                    | Cancelled
+                    | Paused
+                    | Recoverable
+            ),
+            WaitingTool | WaitingApproval | WaitingUser => matches!(
+                next,
+                Running | Failed | Cancelled | Paused | Recoverable | WaitingTool | WaitingApproval | WaitingUser
+            ),
+            Checkpointed => matches!(next, Running | Failed | Cancelled | Paused | Recoverable),
+            Verifying => matches!(next, Completed | Failed | Cancelled | Recoverable),
+            Paused => matches!(next, Running | Failed | Cancelled | Recoverable),
+            // The owner must perform effect reconciliation before selecting the
+            // resumable edge; the vocabulary itself does not grant permission.
+            Recoverable => matches!(next, Running | Failed | Cancelled),
+            Completed | Failed | Cancelled => false,
+        }
+    }
 }
 
 /// Why a Work is not progressing (`ARCH/AUTOMATION.md` §8).

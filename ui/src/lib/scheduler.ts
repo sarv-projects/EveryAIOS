@@ -8,6 +8,55 @@
 import { invoke, inTauri } from "./tauri";
 import { bridgeCall } from "./runtime";
 
+/**
+ * A caller-owned scheduler delivery identity. Create it once for a logical
+ * action and pass the same value to every retry.
+ */
+export type SchedulerRequestKey = string;
+
+const schedulerRetryKeys = new Map<string, SchedulerRequestKey>();
+let schedulerKeyCounter = 0;
+
+function normalizeSchedulerRequestKey(value: string): SchedulerRequestKey {
+  const key = value.trim();
+  if (!key || key.length > 256 || /[\u0000-\u001f\u007f]/u.test(key)) {
+    throw new Error("scheduler ingress requires a valid caller idempotency key");
+  }
+  return key;
+}
+
+/**
+ * Create a fresh UI-side request key without using the wall clock or a
+ * payload digest. The caller must retain it for retries.
+ */
+export function createSchedulerRequestKey(prefix = "ui"): SchedulerRequestKey {
+  const randomUUID = (globalThis.crypto as (Crypto & { randomUUID?: () => string }) | undefined)
+    ?.randomUUID;
+  if (randomUUID) return `${prefix}:${randomUUID.call(globalThis.crypto)}`;
+
+  // Older webviews without randomUUID still get a process-local unique value;
+  // this is an identity fallback, never a timestamp-derived key.
+  schedulerKeyCounter = (schedulerKeyCounter + 1) >>> 0;
+  return `${prefix}:${schedulerKeyCounter.toString(36)}-${Math.random().toString(36).slice(2)}`;
+}
+
+function schedulerKeyFor(operation: string, supplied?: SchedulerRequestKey): SchedulerRequestKey {
+  if (supplied !== undefined) return normalizeSchedulerRequestKey(supplied);
+  const existing = schedulerRetryKeys.get(operation);
+  if (existing) return existing;
+  const key = createSchedulerRequestKey("ui");
+  schedulerRetryKeys.set(operation, key);
+  return key;
+}
+
+function settleSchedulerKey(operation: string, key: SchedulerRequestKey, ok: boolean): void {
+  // A failed native request keeps its key for a retry. A successful one-shot
+  // operation releases it so a later deliberate Run Now gets a distinct key.
+  if (ok && schedulerRetryKeys.get(operation) === key) {
+    schedulerRetryKeys.delete(operation);
+  }
+}
+
 /** Mirror of the Rust `TriggerSpec` serde shape. */
 export type SchedulerTrigger =
   | { type: "cron"; expr: string }
@@ -150,12 +199,30 @@ export async function schedulerResume(id: string): Promise<boolean> {
   });
 }
 
-export async function schedulerRunNow(id: string): Promise<boolean> {
-  return bridgeCall({
-    operation: 'scheduler run now',
-    live: () => invoke<boolean>('scheduler_run_now', { id }),
-    preview: () => true,
-  });
+/**
+ * Request a manual run. Pass a caller-created key when the action may be
+ * retried; omitting it uses the documented one-shot compatibility boundary,
+ * which keeps the generated key until the request settles. That cache is
+ * process-local and is not a substitute for a caller-retained retry key.
+ */
+export async function schedulerRunNow(
+  id: string,
+  idempotencyKey?: SchedulerRequestKey,
+): Promise<boolean> {
+  const operation = `manual:${id}`;
+  const key = schedulerKeyFor(operation, idempotencyKey);
+  try {
+    const result = await bridgeCall({
+      operation: 'scheduler run now',
+      live: () => invoke<boolean>('scheduler_run_now', { id, idempotencyKey: key }),
+      preview: () => true,
+    });
+    settleSchedulerKey(operation, key, true);
+    return result;
+  } catch (error) {
+    settleSchedulerKey(operation, key, false);
+    throw error;
+  }
 }
 
 export async function schedulerBattery(onBattery: boolean): Promise<boolean> {
@@ -166,16 +233,29 @@ export async function schedulerBattery(onBattery: boolean): Promise<boolean> {
   });
 }
 
-/** Fire an event trigger (CI fail / regression / repo change / ticket / metric). */
+/**
+ * Fire an event trigger (CI fail / regression / repo change / ticket / metric).
+ * The event producer owns the key and must reuse it for a delivery retry.
+ */
 export async function schedulerFireEvent(
   kind: string,
   payload: Record<string, unknown>,
+  idempotencyKey?: SchedulerRequestKey,
 ): Promise<string[]> {
-  return bridgeCall({
-    operation: 'scheduler fire event',
-    live: () => invoke<string[]>("scheduler_fire_event", { kind, payload }),
-    preview: () => [],
-  });
+  const operation = `event:${kind}`;
+  const key = schedulerKeyFor(operation, idempotencyKey);
+  try {
+    const result = await bridgeCall({
+      operation: 'scheduler fire event',
+      live: () => invoke<string[]>("scheduler_fire_event", { kind, payload, idempotencyKey: key }),
+      preview: () => [],
+    });
+    settleSchedulerKey(operation, key, true);
+    return result;
+  } catch (error) {
+    settleSchedulerKey(operation, key, false);
+    throw error;
+  }
 }
 
 /** Nudge sentinels: repeating-pattern schedule suggestions (H14 nudge cards). */

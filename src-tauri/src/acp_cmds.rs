@@ -412,22 +412,20 @@ impl std::fmt::Display for AcpIdentityError {
 
 impl std::error::Error for AcpIdentityError {}
 
-/// Per-handle session storage. The small wrapper keeps the legacy
-/// `session.cancel()` call shape source-compatible for the control-channel
-/// module while routing new cancellation through the independent hook.
+/// Per-handle session storage. The small wrapper keeps the provider session
+/// mutex separate from the global handle map and exposes the independent
+/// cancellation writer used by stop/cancel paths.
 pub(crate) struct AcpSessionSlot {
     inner: Arc<Mutex<AcpSession<ProcessTransport>>>,
     cancel: AcpCancelHandle,
-    provider_session_id: Arc<Mutex<Option<String>>>,
 }
 
 impl AcpSessionSlot {
-    fn new(session: AcpSession<ProcessTransport>, provider_session_id: Option<String>) -> Self {
+    fn new(session: AcpSession<ProcessTransport>) -> Self {
         let cancel = session.cancellation_handle();
         Self {
             inner: Arc::new(Mutex::new(session)),
             cancel,
-            provider_session_id: Arc::new(Mutex::new(provider_session_id)),
         }
     }
 
@@ -435,27 +433,8 @@ impl AcpSessionSlot {
         self.inner.lock().map_err(|e| e.to_string())
     }
 
-    fn set_provider_session_id(&self, session_id: Option<String>) {
-        if let Ok(mut current) = self.provider_session_id.lock() {
-            *current = session_id;
-        }
-    }
-
     fn cancellation_handle(&self) -> AcpCancelHandle {
         self.cancel.clone()
-    }
-
-    /// Compatibility cancellation for the existing control-channel caller.
-    /// It uses the independent writer and therefore does not wait for a
-    /// prompt's per-handle session mutex.
-    pub(crate) fn cancel(&mut self) -> Result<(), everyaios_acp::AcpError> {
-        let session_id = self
-            .provider_session_id
-            .lock()
-            .map_err(|_| everyaios_acp::AcpError::NotReady)?
-            .clone()
-            .ok_or(everyaios_acp::AcpError::NotReady)?;
-        self.cancel.request(&session_id).map_err(everyaios_acp::AcpError::Io)
     }
 }
 
@@ -464,7 +443,6 @@ impl Clone for AcpSessionSlot {
         Self {
             inner: Arc::clone(&self.inner),
             cancel: self.cancel.clone(),
-            provider_session_id: Arc::clone(&self.provider_session_id),
         }
     }
 }
@@ -1558,7 +1536,7 @@ pub fn acp_launch(
     // report the same list.
     let config_options = session.config_options().to_vec();
     let provider_session_id = (!session_id.is_empty()).then(|| session_id.clone());
-    let session = AcpSessionSlot::new(session, provider_session_id.clone());
+    let session = AcpSessionSlot::new(session);
     let cancel = session.cancellation_handle();
     state
         .acp_sessions
@@ -1656,7 +1634,6 @@ pub fn acp_authenticate(
             .ok_or_else(|| format!("unknown ACP handle: {handle}"))?;
         entry.auth_required = false;
         entry.provider_session_id = Some(session_id.clone());
-        entry.session.set_provider_session_id(Some(session_id.clone()));
         entry.config_options = config_options;
     }
     Ok(serde_json::json!({ "ok": true, "sessionId": session_id }))
@@ -2467,16 +2444,25 @@ pub fn acp_prompt(
     text: String,
     handoff: Option<String>,
     refs: Option<Vec<String>>,
-    session_id: Option<String>,
+    session_id: String,
+    binding_id: Option<String>,
 ) -> Result<serde_json::Value, String> {
     // The caller's Session id is the canonical EveryAIOS identity. Never
     // replace it with the provider's ACP session id.
-    let application_session_id = session_id
-        .ok_or_else(|| AcpIdentityError::MissingApplicationSession.to_string())?;
-    if application_session_id.trim().is_empty() {
+    let application_session_id = session_id.trim().to_string();
+    if application_session_id.is_empty() {
         return Err(AcpIdentityError::MissingApplicationSession.to_string());
     }
-    let application_session_id = application_session_id.trim().to_string();
+    let requested_binding_id = match binding_id {
+        Some(binding_id) => {
+            let binding_id = binding_id.trim();
+            if binding_id.is_empty() {
+                return Err(AcpIdentityError::Binding("binding id is empty".into()).to_string());
+            }
+            Some(binding_id.to_string())
+        }
+        None => None,
+    };
     let handoff_declared = handoff
         .as_ref()
         .map(|h| !h.trim().is_empty())
@@ -2550,6 +2536,34 @@ pub fn acp_prompt(
             }
             .to_string());
         }
+        if let Some(requested_binding_id) = requested_binding_id.as_deref() {
+            if owner.binding_id != requested_binding_id {
+                return Err(AcpIdentityError::BindingMismatch {
+                    handle: handle.clone(),
+                    expected_binding: requested_binding_id.to_string(),
+                    actual_binding: owner.binding_id.clone(),
+                }
+                .to_string());
+            }
+        }
+    }
+
+    if existing_owner.is_none() {
+        if let Some(requested_binding_id) = requested_binding_id.as_deref() {
+            let expected_binding_id = canonical_binding_id(
+                &application_session_id,
+                &canonical_work_id(&application_session_id),
+                &agent_id,
+            );
+            if requested_binding_id != expected_binding_id {
+                return Err(AcpIdentityError::BindingMismatch {
+                    handle: handle.clone(),
+                    expected_binding: expected_binding_id,
+                    actual_binding: requested_binding_id.to_string(),
+                }
+                .to_string());
+            }
+        }
     }
 
     // J11 session budget is checked against the application Session, never a
@@ -2597,6 +2611,17 @@ pub fn acp_prompt(
         )
         .map_err(|e| e.to_string())?
     };
+
+    if let Some(requested_binding_id) = requested_binding_id.as_deref() {
+        if identity.owner.binding_id != requested_binding_id {
+            return Err(AcpIdentityError::BindingMismatch {
+                handle: handle.clone(),
+                expected_binding: identity.owner.binding_id.clone(),
+                actual_binding: requested_binding_id.to_string(),
+            }
+            .to_string());
+        }
+    }
 
     // Publish the canonical owner only after Work/Run/Binding durability has
     // succeeded. A handle that was concurrently claimed by another Session is
@@ -2929,41 +2954,77 @@ fn validate_cancel_owner(
     Ok(())
 }
 
-fn cancel_one_acp_handle(
-    state: &State<'_, AppState>,
-    handle: &str,
-    cancel: &AcpCancelHandle,
-    provider_session_id: &str,
-    owner: Option<&AcpCanonicalOwner>,
-    run_id: Option<&str>,
-) -> Result<(), String> {
-    cancel
-        .request(provider_session_id)
-        .map_err(|e| format!("ACP cancellation request failed for {handle}: {e}"))?;
-    if let (Some(owner), Some(run_id)) = (owner, run_id) {
-        // The provider notification is already sent; report a durable Work
-        // transition failure rather than pretending the Run was cancelled.
-        transition_acp_run(
-            state,
-            &owner.work_id,
-            run_id,
-            everyaios_types::WorkState::Cancelled,
-        )?;
-    }
-    Ok(())
+#[derive(Clone)]
+struct AcpCancellationTarget {
+    handle: String,
+    provider_session_id: String,
+    owner: AcpCanonicalOwner,
+    cancel: AcpCancelHandle,
 }
 
-/// Interrupt one canonical ACP turn. The optional owner fields are checked
-/// against the handle before the provider notification is sent; a handle that
-/// belongs to another Session is never used as a fallback.
+fn request_acp_cancellation(target: &AcpCancellationTarget) -> Result<(), String> {
+    if target.provider_session_id.trim().is_empty() {
+        return Err(format!(
+            "{}: {}",
+            target.handle,
+            AcpIdentityError::MissingProviderSession
+        ));
+    }
+    target
+        .cancel
+        .request(&target.provider_session_id)
+        .map_err(|e| format!("ACP cancellation request failed for {}: {e}", target.handle))
+}
+
+/// Request cancellation only for targets whose canonical owner is the requested
+/// application Session. This helper deliberately has no Work/Run transition:
+/// sending `session/cancel` is only a provider request. The prompt's observed
+/// cancellation result is the evidence that may settle the durable Run.
+fn cancel_acp_targets_for_session(
+    targets: impl IntoIterator<Item = AcpCancellationTarget>,
+    session_id: &str,
+) -> Result<Vec<String>, String> {
+    let session_id = session_id.trim();
+    if session_id.is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut cancelled = Vec::new();
+    let mut errors = Vec::new();
+    for target in targets {
+        if target.owner.session_id != session_id {
+            continue;
+        }
+        match request_acp_cancellation(&target) {
+            Ok(()) => cancelled.push(target.handle),
+            Err(error) => errors.push(error),
+        }
+    }
+    if errors.is_empty() {
+        Ok(cancelled)
+    } else {
+        Err(errors.join("; "))
+    }
+}
+
+/// Interrupt one canonical ACP turn. Both owner fields are mandatory: a stale
+/// handle must not become a global cancellation primitive when a renderer or
+/// control caller omits identity.
 #[tauri::command]
 pub fn acp_cancel(
     state: State<'_, AppState>,
     handle: String,
-    session_id: Option<String>,
-    binding_id: Option<String>,
+    session_id: String,
+    binding_id: String,
 ) -> Result<(), String> {
-    let (cancel, provider_session_id, owner, run_id) = {
+    let session_id = session_id.trim().to_string();
+    let binding_id = binding_id.trim().to_string();
+    if session_id.is_empty() {
+        return Err(AcpIdentityError::MissingApplicationSession.to_string());
+    }
+    if binding_id.is_empty() {
+        return Err(AcpIdentityError::Binding("binding id is empty".into()).to_string());
+    }
+    let (cancel, provider_session_id, owner) = {
         let sessions = state.acp_sessions.lock().map_err(|e| e.to_string())?;
         let entry = sessions
             .get(&handle)
@@ -2971,8 +3032,8 @@ pub fn acp_cancel(
         validate_cancel_owner(
             &handle,
             entry.owner.as_ref(),
-            session_id.as_deref(),
-            binding_id.as_deref(),
+            Some(&session_id),
+            Some(&binding_id),
         )
         .map_err(|e| e.to_string())?;
         let provider_session_id = entry
@@ -2983,76 +3044,47 @@ pub fn acp_cancel(
             entry.cancel.clone(),
             provider_session_id,
             entry.owner.clone(),
-            entry.run_id.clone(),
         )
     };
+    let target = AcpCancellationTarget {
+        handle: handle.clone(),
+        provider_session_id,
+        owner: owner
+            .ok_or_else(|| AcpIdentityError::NoCanonicalOwner { handle })
+            .map_err(|e| e.to_string())?,
+        cancel,
+    };
     // The global map lock is released before writing to the provider pipe.
-    cancel_one_acp_handle(
-        &state,
-        &handle,
-        &cancel,
-        &provider_session_id,
-        owner.as_ref(),
-        run_id.as_deref(),
-    )
+    request_acp_cancellation(&target)
 }
 
 /// Cancel every live ACP handle owned by one application Session. This is the
 /// scoped stop seam used by the control-channel `agent_stop` path; callers must
 /// use it instead of enumerating agent ids.
-#[allow(dead_code)] // the control-channel writer owns the final call site
 pub(crate) fn cancel_acp_for_session(
     state: &State<'_, AppState>,
     session_id: &str,
 ) -> Result<Vec<String>, String> {
-    let owner_handles = state.acp_handles_for_session(session_id)?;
-    let owner_set: std::collections::HashSet<String> = owner_handles.into_iter().collect();
-    let handles: Vec<(String, AcpCancelHandle, String, AcpCanonicalOwner, Option<String>)> = {
+    let session_id = session_id.trim();
+    let targets: Vec<AcpCancellationTarget> = {
         let sessions = state.acp_sessions.lock().map_err(|e| e.to_string())?;
         sessions
             .iter()
             .filter_map(|(handle, entry)| {
-                if !owner_set.contains(handle) {
+                let owner = entry.owner.as_ref()?.clone();
+                if owner.session_id != session_id {
                     return None;
                 }
-                let owner = entry.owner.as_ref()?;
-                Some((
-                    handle.clone(),
-                    entry.cancel.clone(),
-                    entry
-                        .provider_session_id
-                        .clone()
-                        .unwrap_or_default(),
-                    owner.clone(),
-                    entry.run_id.clone(),
-                ))
+                Some(AcpCancellationTarget {
+                    handle: handle.clone(),
+                    provider_session_id: entry.provider_session_id.clone().unwrap_or_default(),
+                    owner,
+                    cancel: entry.cancel.clone(),
+                })
             })
             .collect()
     };
-    let mut cancelled = Vec::new();
-    let mut errors = Vec::new();
-    for (handle, cancel, provider, owner, run_id) in handles {
-        if provider.is_empty() {
-            errors.push(format!("{handle}: {}", AcpIdentityError::MissingProviderSession));
-            continue;
-        }
-        match cancel_one_acp_handle(
-            state,
-            &handle,
-            &cancel,
-            &provider,
-            Some(&owner),
-            run_id.as_deref(),
-        ) {
-            Ok(()) => cancelled.push(handle),
-            Err(error) => errors.push(error),
-        }
-    }
-    if errors.is_empty() {
-        Ok(cancelled)
-    } else {
-        Err(errors.join("; "))
-    }
+    cancel_acp_targets_for_session(targets, session_id)
 }
 
 /// Tear an ACP session down (kill + reap) and drop its handle. The provider
@@ -3366,6 +3398,46 @@ mod tests {
         let binding_error = validate_cancel_owner("h1", Some(&owner), Some("session-a"), Some("binding-b"))
             .expect_err("a handle cannot be reused by another binding");
         assert!(matches!(binding_error, AcpIdentityError::BindingMismatch { .. }));
+    }
+
+    #[test]
+    fn session_scoped_cancellation_leaves_other_session_handles_alone() {
+        let owner_a = AcpCanonicalOwner {
+            session_id: "session-a".into(),
+            work_id: "work-a".into(),
+            binding_id: "binding-a".into(),
+        };
+        let owner_b = AcpCanonicalOwner {
+            session_id: "session-b".into(),
+            work_id: "work-b".into(),
+            binding_id: "binding-b".into(),
+        };
+        let flag_a = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let flag_b = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let cancel_a = AcpCancelHandle::new(Arc::clone(&flag_a), None);
+        let cancel_b = AcpCancelHandle::new(Arc::clone(&flag_b), None);
+        let cancelled = cancel_acp_targets_for_session(
+            [
+                AcpCancellationTarget {
+                    handle: "handle-a".into(),
+                    provider_session_id: "provider-a".into(),
+                    owner: owner_a,
+                    cancel: cancel_a,
+                },
+                AcpCancellationTarget {
+                    handle: "handle-b".into(),
+                    provider_session_id: "provider-b".into(),
+                    owner: owner_b,
+                    cancel: cancel_b,
+                },
+            ],
+            "session-a",
+        )
+        .unwrap();
+
+        assert_eq!(cancelled, vec!["handle-a".to_string()]);
+        assert!(flag_a.load(Ordering::Acquire));
+        assert!(!flag_b.load(Ordering::Acquire));
     }
 
     #[test]

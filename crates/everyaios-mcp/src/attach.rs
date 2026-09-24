@@ -154,7 +154,7 @@ impl AttachedServer {
         args: &[&str],
     ) -> Result<Self, AttachError> {
         use everyaios_guard::sandbox::{
-            essential_env, profiles, LinuxBwrapBackend, SandboxRole, SandboxSpec,
+            LinuxBwrapBackend, SandboxRole, SandboxSpec, essential_env, profiles,
         };
         // The backend refuses to bind a path that does not exist (fail-closed),
         // so the child's scratch dir has to exist before the spawn.
@@ -467,7 +467,7 @@ pub fn sanitize_attach_name(name: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{sanitize_attach_name, AttachedServer, SandboxPosture};
+    use super::{AttachedServer, SandboxPosture, sanitize_attach_name};
 
     #[test]
     fn name_sanitizer_accepts_slugs() {
@@ -541,7 +541,7 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     fn confined_launch_is_clearenv_and_network_constrained() {
-        use everyaios_guard::sandbox::{profiles, LinuxBwrapBackend, SandboxRole, SandboxSpec};
+        use everyaios_guard::sandbox::{LinuxBwrapBackend, SandboxRole, SandboxSpec, profiles};
         let scratch = "/tmp/everyaios-mcp-confined-test";
         let _ = std::fs::create_dir_all(scratch);
         let spec = SandboxSpec {

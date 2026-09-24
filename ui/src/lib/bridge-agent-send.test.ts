@@ -4,6 +4,7 @@
 // draft recoverable instead of queueing or marking it running.
 
 import { afterAll, beforeEach, describe, expect, test } from 'bun:test'
+import { acpHandleRecordFromLaunch, type AcpHandleInfo } from './acp'
 import { sendUserMessage } from './bridge'
 import { AGENTS, type AgentRuntime } from './agents'
 import { resetStreamingTestState, useAppStore, type Session } from './store'
@@ -53,6 +54,55 @@ afterAll(() => {
     sessionChiefs: {},
     liveAgents: [],
     composerValue: '',
+  })
+})
+
+function handleInfo(handle: string, providerSessionId: string): AcpHandleInfo {
+  return {
+    handle,
+    agentId: 'claude',
+    agentName: 'Claude',
+    sessionId: providerSessionId,
+    providerSessionId,
+    applicationSessionId: '',
+    workId: '',
+    bindingId: '',
+    runId: '',
+    protocol: 'acp',
+    authRequired: false,
+    authMethods: [],
+    embeddedContext: false,
+    configOptions: [],
+  }
+}
+
+describe('ACP handle ownership', () => {
+  test('the same agent resolves distinct records for distinct application Sessions', () => {
+    const store = useAppStore.getState()
+    const recordA = acpHandleRecordFromLaunch(handleInfo('handle-a', 'provider-a'), 'session-a', 'claude-code')
+    const recordB = acpHandleRecordFromLaunch(handleInfo('handle-b', 'provider-b'), 'session-b', 'claude-code')
+    store.setAcpHandle(recordA)
+    store.setAcpHandle(recordB)
+
+    expect(recordA.key).not.toBe(recordB.key)
+    expect(useAppStore.getState().getAcpHandle('session-a', 'claude-code')?.handle).toBe('handle-a')
+    expect(useAppStore.getState().getAcpHandle('session-b', 'claude-code')?.handle).toBe('handle-b')
+
+    // Canonical identity replaces the provisional launch row in place; the
+    // other Session's handle is untouched.
+    store.setAcpHandle({
+      ...recordA,
+      bindingId: 'binding-a',
+      workId: 'work-a',
+      runId: 'run-a',
+    })
+    expect(useAppStore.getState().getAcpHandle('session-a', 'claude-code')).toMatchObject({
+      handle: 'handle-a',
+      applicationSessionId: 'session-a',
+      bindingId: 'binding-a',
+      workId: 'work-a',
+    })
+    expect(useAppStore.getState().getAcpHandle('session-b', 'claude-code')?.handle).toBe('handle-b')
   })
 })
 

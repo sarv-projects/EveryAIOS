@@ -62,13 +62,18 @@ export type RuntimeLocation =
   | { kind: 'wsl'; distro: string; linuxPath: string; windowsLauncher: string }
   | { kind: 'unavailable'; reason: string }
 
-/** The P63 spawn-time binding, as reported to the UI: variable NAMES only. */
+/** The P63 compatibility binding, as reported to the UI: non-secret NAMES only. */
 export interface BackendBindingView {
   providerId: string
+  /** Credential-free launch inputs, such as model or base URL. */
   injectedEnvNames: string[]
   unexpressed: string[]
   /** Always `false` — EveryAIOS never writes an external agent's own config. */
   writesToAgentConfig: boolean
+  /**
+   * @deprecated Historical compatibility only. It is not authentication or
+   * readiness evidence and never means a host-vault key was delegated.
+   */
   keyPresent: boolean
   refusal?: string
 }
@@ -122,10 +127,14 @@ export interface AgentSettings {
   authMode: AgentAuthMode
   nativeCapabilities: string[]
   sharedCapabilities: string[]
-  /** Authoritative: `managed` only for a verified launch-time (P63) binding. */
+  /**
+   * Shell-reported compatibility label. The UI projects `managed` down to
+   * `agent` unless a non-empty, credential-free host launch override exists.
+   */
   modelOwner: ModelOwner
   backendBinding?: BackendBindingView
   configOptions: AgentConfigOptionView[]
+  /** Live agent/ACP state; host-vault presence is not a readiness input. */
   readiness: AgentReadiness
   location: RuntimeLocation
   sessionLoadout: SessionLoadoutRow[]
@@ -305,10 +314,47 @@ export function assertNoAgentConfigWrite(binding: BackendBindingView): void {
   }
 }
 
+/** True only for an actual non-empty, credential-free host launch override. */
+export function hasHostLaunchOverride(
+  binding: Pick<BackendBindingView, 'injectedEnvNames'> | undefined,
+): boolean {
+  return (binding?.injectedEnvNames ?? []).some((name) => name.trim().length > 0)
+}
+
+/**
+ * Defensive UI projection for older shell replies: a `managed` label without
+ * a concrete host launch input is not host-managed. Authentication and the
+ * model remain agent-owned.
+ */
+export function projectModelOwner(
+  row: Pick<AgentSettings, 'modelOwner' | 'backendBinding'>,
+): ModelOwner {
+  if (row.modelOwner === 'managed' && !hasHostLaunchOverride(row.backendBinding)) {
+    return 'agent'
+  }
+  return row.modelOwner
+}
+
+/** Authentication always belongs to the agent; the method may still be unknown. */
+export function agentAuthenticationLabel(authMode: AgentAuthMode | undefined): string {
+  switch (authMode) {
+    case 'subscription':
+      return 'agent-owned · subscription'
+    case 'api_key':
+      return 'agent-owned · API key'
+    case 'local':
+      return 'agent-owned · local'
+    case 'keyless':
+      return 'agent-owned · keyless'
+    default:
+      return 'agent-owned · method not verified'
+  }
+}
+
 /**
  * P65.2 — an external agent's native model/tools stay its own. Shared
  * cowork grants are additional; they must not replace native occupancy
- * or flip `modelOwner` to EveryAIOS-managed.
+ * or flip the effective `modelOwner` to EveryAIOS-managed.
  */
 export function nativeSurfaceNotReplaced(
   row: Pick<AgentSettings, 'protocol' | 'modelOwner' | 'backendBinding'> & {
@@ -325,7 +371,8 @@ export function nativeSurfaceNotReplaced(
   // by the user in the bundle), and the retired `'mcp'` spelling was never a
   // value any serializer emitted (P71.9g).
   if (row.protocol === 'acp') {
-    if (row.modelOwner === 'managed' || row.modelOwner === 'native') return false
+    const modelOwner = projectModelOwner(row)
+    if (modelOwner === 'managed' || modelOwner === 'native') return false
     if (row.backendBinding?.writesToAgentConfig) return false
   }
   const native = new Set(row.nativeCapabilities ?? [])

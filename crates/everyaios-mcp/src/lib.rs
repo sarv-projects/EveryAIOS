@@ -24,27 +24,29 @@ pub mod remote;
 pub mod server;
 pub mod store;
 
-pub use attach::{sanitize_attach_name, AttachError, AttachRequest, AttachedServer};
-pub use hijack::{validate_external_tool, HijackError, ToolIdentity, ToolSource};
+pub use attach::{AttachError, AttachRequest, AttachedServer, sanitize_attach_name};
+pub use hijack::{HijackError, ToolIdentity, ToolSource, validate_external_tool};
 pub use loopback::{LoopbackPool, PoolStats};
 pub use manager::{
-    install_plan, is_allowed, merge_into_catalog, verify_sha256, ChildHandle, InstallPlan,
-    ManagedServer, McpServerManager, PlanError, ProcessSpawner, RegistryIndex, RegistryServer,
-    ServerSpawner, ServerState, SpawnError, ToolSurface, ALLOW_LIST,
+    ALLOW_LIST, ChildHandle, InstallPlan, ManagedServer, McpServerManager, PlanError,
+    ProcessSpawner, RegistryIndex, RegistryServer, ServerSpawner, ServerState, SpawnError,
+    ToolSurface, install_plan, is_allowed, merge_into_catalog, verify_sha256,
 };
 pub use npx::{
-    npx_package_from_args, resolve_stdio_launch, resolve_stdio_launch_with, trusted_npx_package,
-    NpxError, NpxSource, ResolvedLaunch,
+    NpxError, NpxSource, ResolvedLaunch, npx_package_from_args, resolve_stdio_launch,
+    resolve_stdio_launch_with, trusted_npx_package,
 };
 pub use remote::{
-    build_authorize_url, connect, discover_authorization_server, discover_protected_resource,
-    exchange_code, refresh_token, register_dynamic_client, rpc, AuthServerMetadata,
-    ClientRegistration, HttpTransport, PkceFlow, ProtectedResource, RemoteError, RemoteTarget,
-    TokenResponse, UreqTransport,
+    AuthServerMetadata, ClientRegistration, HttpTransport, PkceFlow, ProtectedResource,
+    RemoteError, RemoteTarget, TokenResponse, UreqTransport, build_authorize_url, connect,
+    discover_authorization_server, discover_protected_resource, exchange_code, refresh_token,
+    register_dynamic_client, rpc,
 };
 pub use server::{
-    tool_list, ExternalTool, McpServer, MrtrHandle, StatelessRequest, ToolCallHandler, ToolCatalog,
-    ToolListEntry, ToolListResponse,
+    ExternalTool, McpHttpLease, McpHttpListener, McpServer, McpServerLease, MrtrHandle,
+    SUPPORTED_PROTOCOL_VERSION, SUPPORTED_PROTOCOL_VERSIONS, StatelessRequest, ToolCallError,
+    ToolCallErrorKind, ToolCallHandler, ToolCatalog, ToolListEntry, ToolListResponse,
+    start_http_listener, tool_list, tool_list_shared_facades, tool_list_shared_plane,
 };
 pub use store::{ConnectConsent, ConnectFlow, StoreEntry, StoreIndex, StoreKind};
 
@@ -281,7 +283,9 @@ pub const BROWSER_TOOLS: &[ToolDef] = tools!(
     false,
     Core,
     "Input: click/type/fill/press/hover/select/scroll/drag/dialog",
-    &[STR_REF, STR_TEXT, STR_KEY, STR_VALUE, ARR_FIELDS, NUM_X, NUM_Y, STR_REF2],
+    &[
+        STR_REF, STR_TEXT, STR_KEY, STR_VALUE, ARR_FIELDS, NUM_X, NUM_Y, STR_REF2
+    ],
     "download",
     Edit,
     false,
@@ -1176,7 +1180,7 @@ mod tests {
     fn all_tools_merges_browser_and_storage() {
         let all = all_tools();
         assert_eq!(all.len(), 37 + 4 + 3 + 2 + 5); // browser + office + memory + search + storage
-                                                   // No name collision across the catalogs (Channel B unified registry).
+        // No name collision across the catalogs (Channel B unified registry).
         let mut names: Vec<&str> = all.iter().map(|t| t.name).collect();
         names.sort_unstable();
         names.dedup();
@@ -1234,17 +1238,23 @@ mod tests {
             }
         }
         // Spot-check the ARCH/17 §17.5 fan-outs.
-        assert!(find_facade("browser.research")
-            .unwrap()
-            .fans_out_to
-            .contains(&"search_web"));
-        assert!(find_facade("workspace.map")
-            .unwrap()
-            .fans_out_to
-            .contains(&"disk_scan"));
-        assert!(find_facade("office.edit")
-            .unwrap()
-            .fans_out_to
-            .contains(&"office_edit"));
+        assert!(
+            find_facade("browser.research")
+                .unwrap()
+                .fans_out_to
+                .contains(&"search_web")
+        );
+        assert!(
+            find_facade("workspace.map")
+                .unwrap()
+                .fans_out_to
+                .contains(&"disk_scan")
+        );
+        assert!(
+            find_facade("office.edit")
+                .unwrap()
+                .fans_out_to
+                .contains(&"office_edit")
+        );
     }
 }

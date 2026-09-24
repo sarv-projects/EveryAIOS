@@ -1,52 +1,40 @@
-//! P71.2c — the host-owned automation firing path.
+//! Host-owned automation admission and Work dispatch.
 //!
-//! `ARCH/AUTOMATION.md` §9 puts **agent execution of any kind** outside the
-//! scheduler's ownership, and §6 says an agent-backed step is run by the
-//! **bound agent**; §5 says the factory only compiles Work. Until `P71.2c` the
-//! coordinator's trigger client executed a firing by running its own built-in
-//! turn (`runChatStream` → `core-engine`), which is exactly the path
-//! `ARCH/ADR/0005` retires.
-//!
-//! The firing therefore lives here, in the shell that already owns the three
-//! authorities it needs — the trigger plane
-//! ([`everyaios_core::scheduler_service`]), the Work gateway, and the ACP
-//! channel:
-//!
-//! ```text
-//! due job ──▶ Work (automation Session) ──▶ Run ──▶ bound agent (ACP prompt)
-//!          ──▶ occurrence record (mark_fired) + monitor verdict
-//! ```
-//!
-//! The sidecar executes nothing here: it keeps the loopback webhook listener
-//! that marks a job due. Nothing in this module assumes an EveryAIOS-owned
-//! model — a firing with no bound agent fails honestly and is filed as a
-//! run-level incident, never as a silent `Running` Work.
+//! A trigger never owns execution. The host admits one durable occurrence,
+//! compiles the immutable automation revision through the Work factory, and
+//! creates ordinary Work/Run records through the existing gateway/kernel
+//! owners. Agent execution, waits, retries, effects, and completion remain
+//! outside this module.
 
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use everyaios_core::automation_runtime::{WorkSpec, compile_work};
 use everyaios_core::execution::{ExecutionPhase, ExecutionTrigger};
-use everyaios_core::scheduler_service::SchedulerService;
+use everyaios_core::scheduler_service::{
+    AutomationOccurrence, SchedulerService, WorkRunAdmissionReceipt,
+};
+use everyaios_core::work_gateway::{DomainEvent, WorkEvent};
 use everyaios_types::{SessionKind, WorkState};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use tauri::{AppHandle, Manager, State};
 
 use crate::AppState;
 
-/// Stop-condition marker for monitoring jobs (`ARCH/AUTOMATION.md` §4/§11).
-///
-/// One owner: this module builds the directive *and* reads the marker back,
-/// because it is what prompts the bound agent and sees the reply. The semantic
-/// judgment stays the agent's — we only detect that it said so.
+/// Stop-condition marker retained for monitor compatibility. The scheduler no
+/// longer executes a monitor turn itself; a bound Work executor owns that
+/// interpretation when it is attached.
+#[allow(dead_code)]
 pub const MONITOR_STOP_MARKER: &str = "[MONITOR_DONE]";
 
-/// Seconds between due checks (the cadence the sidecar's tick used).
+/// Seconds between due checks (the cadence used by the host loop).
 pub const TICK_SECS: u64 = 5;
 
 fn now_secs() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
+        .map(|duration| duration.as_secs())
         .unwrap_or(0)
 }
 
@@ -54,23 +42,145 @@ fn service(state: &AppState) -> Result<Arc<Mutex<SchedulerService>>, String> {
     crate::scheduler_cmds::scheduler_handle(state)
 }
 
-fn home_dir() -> String {
-    std::env::var("HOME")
-        .or_else(|_| std::env::var("USERPROFILE"))
-        .unwrap_or_else(|_| ".".to_string())
+/// The deterministic owner identity for one automation. It is deliberately
+/// not the Work id: a Work can be retried/recovered independently of the
+/// Session that owns it.
+fn automation_session_id(automation_id: &str, generation: u64) -> String {
+    if generation <= 1 {
+        format!("automation-session:{automation_id}")
+    } else {
+        format!("automation-session:{automation_id}:g{generation}")
+    }
 }
 
-/// Whether an id names a real external agent — never a retired built-in
-/// spelling (ADR-0005).
-fn is_agent_id(id: &str) -> bool {
-    !id.is_empty() && id != "inbuilt" && id != "everyaios" && id != "everyaios-native"
+fn automation_work_id(automation_id: &str, occurrence_id: &str) -> String {
+    format!("automation-work:{automation_id}:{occurrence_id}")
 }
 
-/// The agent a firing runs under: the session's resolved binding (the sidecar
-/// still owns the session pins; `P71.5b` renamed the vocabulary to
-/// primary-agent), else the configured default. A retired built-in spelling
-/// resolves to nothing, so the firing refuses by name rather than substituting
-/// an engine.
+fn automation_run_id(automation_id: &str, occurrence_id: &str) -> String {
+    format!("automation-run:{automation_id}:{occurrence_id}")
+}
+
+fn job_id_for_occurrence(
+    service: &SchedulerService,
+    occurrence: &AutomationOccurrence,
+) -> Option<String> {
+    service
+        .list()
+        .into_iter()
+        .find(|job| job.automation_id == occurrence.automation_id)
+        .map(|job| job.id.clone())
+}
+
+/// A headless Session record is a real owner, not a Chat fabricated per run.
+/// The vault is the existing Session persistence seam; the WorkGateway still
+/// receives the explicit owner and kind on Work creation.
+fn ensure_automation_session(
+    state: &State<'_, AppState>,
+    session_id: &str,
+    automation_id: &str,
+    revision_id: &str,
+    automation_generation: u64,
+) -> Result<(), String> {
+    let vault = state.vault.lock().map_err(|error| error.to_string())?;
+    if let Some(raw) = vault
+        .get_ui_session(session_id)
+        .map_err(|error| format!("automation Session lookup failed: {error}"))?
+    {
+        let value: Value = serde_json::from_str(&raw)
+            .map_err(|error| format!("automation Session `{session_id}` is corrupt: {error}"))?;
+        if value.get("id").and_then(Value::as_str) != Some(session_id)
+            || value.get("kind").and_then(Value::as_str) != Some("automation")
+            || value.get("automationId").and_then(Value::as_str) != Some(automation_id)
+            || value
+                .get("automationGeneration")
+                .and_then(Value::as_u64)
+                .is_some_and(|generation| generation != automation_generation)
+        {
+            return Err(format!(
+                "automation Session `{session_id}` is not the expected headless owner"
+            ));
+        }
+        return Ok(());
+    }
+    let payload = serde_json::to_string(&json!({
+        "id": session_id,
+        "kind": "automation",
+        "automationId": automation_id,
+        "revisionId": revision_id,
+        "automationGeneration": automation_generation,
+        "headless": true,
+    }))
+    .map_err(|error| format!("encode automation Session: {error}"))?;
+    vault
+        .put_ui_session(session_id, &payload)
+        .map_err(|error| format!("persist automation Session: {error}"))
+}
+
+/// Compile an occurrence with the production factory. Keeping this as a small
+/// named boundary makes it straightforward to test that no trigger path can
+/// silently bypass `compile_work`.
+fn compile_occurrence(occurrence: &AutomationOccurrence) -> Result<WorkSpec, String> {
+    let automation = occurrence.revision.automation();
+    let spec = compile_work(
+        &automation,
+        &occurrence.revision_id,
+        &occurrence.trigger_occurrence_id,
+    )
+    .map_err(|error| format!("automation compile refused: {error}"))?;
+    if spec.provenance.automation_id != occurrence.automation_id
+        || spec.provenance.revision_id != occurrence.revision_id
+        || spec.provenance.automation_generation != occurrence.revision.generation()
+        || spec.provenance.trigger_occurrence_id != occurrence.trigger_occurrence_id
+    {
+        return Err("compiled Work provenance does not match its occurrence".into());
+    }
+    Ok(spec)
+}
+
+fn provenance_patch(occurrence: &AutomationOccurrence, spec: &WorkSpec) -> Value {
+    json!({
+        "automationId": occurrence.automation_id,
+        "revisionId": occurrence.revision_id,
+        "automationGeneration": spec.provenance.automation_generation,
+        "triggerOccurrenceId": occurrence.trigger_occurrence_id,
+        "payloadDigest": occurrence.payload_digest,
+        "dedupDigest": occurrence.dedup_digest,
+        "compiledWork": spec,
+        "capabilityRequests": spec.capability_requests,
+    })
+}
+
+fn has_provenance_event(
+    gateway: &everyaios_core::WorkGateway,
+    work_id: &str,
+    occurrence: &AutomationOccurrence,
+    spec: &WorkSpec,
+) -> bool {
+    let expected_spec = serde_json::to_value(spec).ok();
+    gateway.events(work_id).iter().any(|envelope| {
+        matches!(
+            &envelope.event,
+            WorkEvent::Domain(DomainEvent::WorkUpdated { patch })
+                if patch.get("automationId").and_then(Value::as_str)
+                    == Some(occurrence.automation_id.as_str())
+                    && patch.get("revisionId").and_then(Value::as_str)
+                        == Some(occurrence.revision_id.as_str())
+                    && patch.get("automationGeneration").and_then(Value::as_u64)
+                        == Some(occurrence.revision.generation())
+                    && patch.get("triggerOccurrenceId").and_then(Value::as_str)
+                        == Some(occurrence.trigger_occurrence_id.as_str())
+                    && patch.get("payloadDigest").and_then(Value::as_str)
+                        == Some(occurrence.payload_digest.as_str())
+                    && patch.get("dedupDigest").and_then(Value::as_str)
+                        == Some(occurrence.dedup_digest.as_str())
+                    && expected_spec
+                        .as_ref()
+                        .is_some_and(|expected| patch.get("compiledWork") == Some(expected))
+        )
+    })
+}
+
 fn bound_agent(state: &State<'_, AppState>, session_id: &str) -> Option<String> {
     let resolved = {
         let relay = state.chat_relay.lock().ok()?;
@@ -80,275 +190,436 @@ fn bound_agent(state: &State<'_, AppState>, session_id: &str) -> Option<String> 
             .request("chief/resolve_session", json!({ "sessionId": session_id }))
             .ok()
     };
-    if let Some(id) = resolved
+    resolved
         .as_ref()
-        .and_then(|out| out.get("chiefId"))
+        .and_then(|value| value.get("chiefId"))
         .and_then(Value::as_str)
-    {
-        if is_agent_id(id) {
-            return Some(id.to_string());
-        }
-    }
-    let cfg = everyaios_core::Config::load().ok()?;
-    let pinned = cfg.primary_chief.trim();
-    if is_agent_id(pinned) {
-        Some(pinned.to_string())
-    } else {
-        None
-    }
-}
-
-/// Fire every due job once and return the ids that fired (the shape the tray
-/// and the UI's "Run automations now" report).
-pub fn fire_due(app: &AppHandle) -> Vec<String> {
-    let state = app.state::<AppState>();
-    let Ok(svc) = service(&state) else {
-        return Vec::new();
-    };
-    let now = now_secs();
-    let (due, jobs) = {
-        let mut svc = svc.lock().unwrap_or_else(|e| e.into_inner());
-        (
-            svc.handle("scheduler/due", &json!({ "now": now })).ok(),
-            svc.handle("scheduler/list", &json!({ "now": now })).ok(),
-        )
-    };
-    let due: Vec<String> = due
-        .and_then(|v| v.get("due").and_then(Value::as_array).cloned())
-        .unwrap_or_default()
-        .iter()
-        .filter_map(Value::as_str)
+        .map(str::trim)
+        .filter(|id| {
+            !id.is_empty() && *id != "inbuilt" && *id != "everyaios" && *id != "everyaios-native"
+        })
         .map(str::to_string)
-        .collect();
-    if due.is_empty() {
-        return Vec::new();
-    }
-    let jobs: Vec<Value> = jobs
-        .and_then(|v| v.get("jobs").and_then(Value::as_array).cloned())
-        .unwrap_or_default();
-
-    let mut fired: Vec<String> = Vec::new();
-    for id in due {
-        let Some(job) = jobs
-            .iter()
-            .find(|j| j.get("id").and_then(Value::as_str) == Some(id.as_str()))
-        else {
-            continue;
-        };
-        if job.get("enabled").and_then(Value::as_bool) == Some(false)
-            || job.get("paused").and_then(Value::as_bool) == Some(true)
-        {
-            continue;
-        }
-        // A firing that cannot run still *happened*: the occurrence is recorded
-        // and the reason is filed as a run-level incident, so the trigger never
-        // spins forever on a job it cannot execute.
-        if let Err(reason) = fire_job(&state, job, now) {
-            let _ = observe(&state, &id, &format!("run could not execute: {reason}"), false);
-        }
-        let _ = mark_fired(&state, &id, now);
-        fired.push(id);
-    }
-    fired
+        .or_else(|| {
+            let config = everyaios_core::Config::load().ok()?;
+            let id = config.primary_chief.trim();
+            (!id.is_empty() && id != "inbuilt" && id != "everyaios" && id != "everyaios-native")
+                .then(|| id.to_string())
+        })
 }
 
-/// Fire one job: create its Work + Run, run the agent-backed step through the
-/// session's bound agent, then leave the Work in an honest state.
-fn fire_job(state: &State<'_, AppState>, job: &Value, _now: u64) -> Result<(), String> {
-    let job_id = job
-        .get("id")
-        .and_then(Value::as_str)
-        .unwrap_or("")
-        .to_string();
-    let name = job
-        .get("name")
-        .and_then(Value::as_str)
-        .unwrap_or("scheduled task")
-        .to_string();
-    let session_id = job
-        .get("sessionId")
-        .and_then(Value::as_str)
-        .unwrap_or("")
-        .to_string();
-    if job_id.is_empty() || session_id.is_empty() {
-        return Err("trigger job is missing id/sessionId".to_string());
-    }
+struct AdmittedWork {
+    admission_receipt: WorkRunAdmissionReceipt,
+    blocked: Option<String>,
+}
 
-    // 1. The Work. A trigger-created Work is an **automation** Session's Work
-    //    with no Chat (ADR-0006 §2/§4); each firing is a **Run** of it (I9: a
-    //    retried automation produces Runs of one Work, not new Works).
-    let exec_id = {
-        let relay = state.chat_relay.lock().map_err(|e| e.to_string())?;
-        let relay = relay
+/// Admit one occurrence into the canonical Work/Run spine. No provider I/O is
+/// performed here. A required-but-unready agent leaves Work/Run in `Ready` and
+/// reports a blocker; it is never reported as a completed execution.
+fn dispatch_occurrence(
+    state: &State<'_, AppState>,
+    occurrence: &AutomationOccurrence,
+) -> Result<AdmittedWork, String> {
+    let spec = compile_occurrence(occurrence)?;
+    let session_id =
+        automation_session_id(&occurrence.automation_id, occurrence.revision.generation());
+    let work_id = automation_work_id(&occurrence.automation_id, &occurrence.trigger_occurrence_id);
+    let run_id = automation_run_id(&occurrence.automation_id, &occurrence.trigger_occurrence_id);
+
+    // The Session must exist before Work. A failed vault write is a failed
+    // admission, not a reason to create an ownerless Work.
+    ensure_automation_session(
+        state,
+        &session_id,
+        &occurrence.automation_id,
+        &occurrence.revision_id,
+        occurrence.revision.generation(),
+    )?;
+
+    let (relay, kernel) = {
+        let relay_guard = state.chat_relay.lock().map_err(|error| error.to_string())?;
+        let relay = relay_guard
             .as_ref()
-            .ok_or("sidecar not connected — the firing has no Work gateway")?;
-        let gateway = relay.work_gateway();
-        let kernel = relay.executions();
-        let mut gw = gateway.lock().unwrap_or_else(|e| e.into_inner());
-        gw.create_work_in_session(
-            session_id.clone(),
+            .ok_or_else(|| "sidecar not connected — Work gateway unavailable".to_string())?;
+        (relay.work_gateway(), relay.executions())
+    };
+
+    let mut gateway = relay.lock().map_err(|error| error.to_string())?;
+    if let Some(existing) = gateway.get_work(&work_id) {
+        let provenance_replayed = has_provenance_event(&gateway, &work_id, occurrence, &spec);
+        let kind_matches = existing.session_kind == SessionKind::Automation
+            || (existing.session_kind == SessionKind::Interactive && provenance_replayed);
+        if existing.session_id.as_deref() != Some(session_id.as_str()) || !kind_matches {
+            return Err(format!("Work `{work_id}` exists with a different owner"));
+        }
+        let objective_matches = gateway.events(&work_id).iter().any(|envelope| {
+            matches!(
+                &envelope.event,
+                WorkEvent::Domain(DomainEvent::WorkCreated { objective, .. })
+                    if objective == &spec.objective
+            )
+        });
+        if !objective_matches {
+            return Err(format!("Work `{work_id}` has a different objective"));
+        }
+    } else {
+        gateway.create_work_in_session(
+            work_id.clone(),
             None,
             Some(session_id.clone()),
             SessionKind::Automation,
-            format!("automation:{job_id}:{name}"),
-        )
-        .map_err(|e| e.to_string())?;
-        let exec = {
-            let mut k = kernel.lock().unwrap_or_else(|e| e.into_inner());
-            let ex = k.begin(
-                ExecutionTrigger::Scheduler,
-                &session_id,
-                &name,
-                None,
-                String::new(),
-                json!({ "automationId": job_id, "trigger": "scheduler" }).to_string(),
-                vec![],
-            );
-            let _ = k.transition(&ex.id, ExecutionPhase::Running);
-            ex.id
-        };
-        gw.bind_execution(&session_id, &exec)
-            .map_err(|e| e.to_string())?;
-        let _ = gw.record_execution_transition(&session_id, &exec, WorkState::Running);
-        exec
-    };
-
-    // 2. The agent. A missing or unready agent is a refusal with a stated
-    //    reason — never a substitute engine (ADR-0005; I23/I24).
-    let agent_id = match bound_agent(state, &session_id) {
-        Some(id) => id,
-        None => {
-            let _ = finish(state, &session_id, &exec_id, WorkState::Failed);
-            return Err(
-                "no agent is bound to this automation's session — install and select an agent \
-                 (EveryAIOS has no built-in engine in v1)"
-                    .to_string(),
-            );
-        }
-    };
-    let readiness = crate::acp_cmds::agent_readiness(&agent_id);
-    if !readiness.is_ready() {
-        let _ = finish(state, &session_id, &exec_id, WorkState::Failed);
-        return Err(format!(
-            "bound agent `{agent_id}` cannot run this automation: {}",
-            readiness.summary()
-        ));
+            spec.objective.clone(),
+        )?;
     }
 
-    // 3. The run. A live session for this agent is reused (the user's own
-    //    handle); otherwise one is launched — the same ACP path the composer
-    //    uses, so a firing is mediated identically.
-    let handle = match live_handle(state, &agent_id) {
-        Some(handle) => handle,
-        None => match crate::acp_cmds::acp_launch(state.clone(), agent_id.clone(), home_dir()) {
-            Ok(info) => info.handle,
-            Err(e) => {
-                let _ = finish(state, &session_id, &exec_id, WorkState::Failed);
-                return Err(format!("could not launch `{agent_id}`: {e}"));
-            }
-        },
-    };
-
-    let prompt = prompt_for(&name, &session_id, &job_id, job.get("monitor").is_some());
-    // P71.2c — the firing's turns are gated like any other: the agent must be
-    // `Ready` and the automation Session must be inside its budget, checked at
-    // the turn boundary (`acp_prompt`) now that the `start_stream` dispatch is
-    // deleted. Passing the Session id is what makes the J11 refusal name the
-    // right ledger.
-    match crate::acp_cmds::acp_prompt(state.clone(), handle, prompt, None, None, Some(session_id.clone())) {
-        Ok(out) => {
-            if job.get("monitor").is_some() {
-                let text = out
-                    .get("finalText")
-                    .and_then(Value::as_str)
-                    .unwrap_or("")
-                    .to_string();
-                let condition_met = text.contains(MONITOR_STOP_MARKER);
-                let observation = text.replace(MONITOR_STOP_MARKER, "").trim().to_string();
-                let _ = observe(state, &job_id, &observation, condition_met);
-            }
-            let _ = finish(state, &session_id, &exec_id, WorkState::Completed);
-            Ok(())
-        }
-        Err(e) => {
-            let _ = finish(state, &session_id, &exec_id, WorkState::Failed);
-            Err(e)
-        }
+    // Provenance is a durable Work event, not an in-memory side channel. The
+    // deterministic occurrence makes this append idempotent across retries.
+    if !has_provenance_event(&gateway, &work_id, occurrence, &spec) {
+        gateway.append(
+            &work_id,
+            WorkEvent::Domain(DomainEvent::WorkUpdated {
+                patch: provenance_patch(occurrence, &spec),
+            }),
+            None,
+        )?;
     }
-}
 
-/// The prompt a firing sends: the task's name plus the monitor directive, with
-/// the Work/Run ids so the agent can correlate its own delegation.
-fn prompt_for(name: &str, session_id: &str, job_id: &str, monitor: bool) -> String {
-    let mut text = format!("Run scheduled task \"{name}\" (automation {job_id}, work {session_id}).");
-    if monitor {
-        text.push_str(&format!(
-            "\n\nThis is a monitoring task. Report the current state you observe. If the monitored \
-             end condition is now met, end your response with the exact marker {MONITOR_STOP_MARKER}."
-        ));
-    }
-    text
-}
-
-/// A live, authenticated ACP session for this agent, when one is already open.
-fn live_handle(state: &State<'_, AppState>, agent_id: &str) -> Option<String> {
-    let sessions = state.acp_sessions.lock().ok()?;
-    sessions
+    let context = serde_json::to_string(&json!({
+        "automationId": occurrence.automation_id,
+        "revisionId": occurrence.revision_id,
+        "automationGeneration": spec.provenance.automation_generation,
+        "triggerOccurrenceId": occurrence.trigger_occurrence_id,
+        "payloadDigest": occurrence.payload_digest,
+        "dedupDigest": occurrence.dedup_digest,
+        "sourceSessionId": occurrence.revision.session_id,
+        "workId": work_id,
+        "runId": run_id,
+        "agentRequired": spec.agent_required,
+        "compiledWork": spec,
+    }))
+    .map_err(|error| format!("encode Work context: {error}"))?;
+    let capability_scope: Vec<String> = spec
+        .capability_requests
         .iter()
-        .find(|(_, h)| h.agent_id == agent_id && !h.auth_required)
-        .map(|(handle, _)| handle.clone())
+        .map(|request| request.capability_id.clone())
+        .collect();
+
+    let run_phase = {
+        let mut executions = kernel.lock().map_err(|error| error.to_string())?;
+        match executions.get(&run_id) {
+            Some(existing) => {
+                if existing.session_id != session_id {
+                    return Err(format!("Run `{run_id}` belongs to another Session"));
+                }
+                let existing_context: Value = serde_json::from_str(&existing.context_snapshot)
+                    .map_err(|error| {
+                        format!("Run `{run_id}` has corrupt provenance context: {error}")
+                    })?;
+                if existing_context.get("automationId").and_then(Value::as_str)
+                    != Some(occurrence.automation_id.as_str())
+                    || existing_context.get("revisionId").and_then(Value::as_str)
+                        != Some(occurrence.revision_id.as_str())
+                    || existing_context
+                        .get("automationGeneration")
+                        .and_then(Value::as_u64)
+                        != Some(occurrence.revision.generation())
+                    || existing_context
+                        .get("triggerOccurrenceId")
+                        .and_then(Value::as_str)
+                        != Some(occurrence.trigger_occurrence_id.as_str())
+                {
+                    return Err(format!(
+                        "Run `{run_id}` has a different occurrence provenance"
+                    ));
+                }
+                Some(existing.state)
+            }
+            None => {
+                executions.begin_named(
+                    run_id.clone(),
+                    ExecutionTrigger::Scheduler,
+                    &session_id,
+                    &spec.objective,
+                    None,
+                    serde_json::to_string(&occurrence.revision.policy)
+                        .map_err(|error| format!("encode Work policy: {error}"))?,
+                    context,
+                    capability_scope,
+                );
+                Some(ExecutionPhase::Ready)
+            }
+        }
+    };
+
+    if gateway.execution_id(&work_id).is_some()
+        && gateway.execution_id(&work_id) != Some(run_id.as_str())
+    {
+        return Err(format!("Work `{work_id}` is already bound to another Run"));
+    }
+    if gateway.execution_id(&work_id).is_none() {
+        gateway.bind_execution(&work_id, &run_id)?;
+    }
+    let work_state = work_state_for_phase(run_phase);
+    if gateway
+        .presence(&work_id)
+        .and_then(|presence| presence.work_state)
+        != Some(work_state)
+    {
+        gateway.record_execution_transition(&work_id, &run_id, work_state)?;
+    }
+
+    let blocked = if spec.agent_required {
+        match bound_agent(state, &occurrence.revision.session_id) {
+            Some(agent_id) => {
+                let readiness = crate::acp_cmds::agent_readiness(&agent_id);
+                (!readiness.is_ready()).then(|| {
+                    format!(
+                        "bound agent `{agent_id}` is not ready: {}",
+                        readiness.summary()
+                    )
+                })
+            }
+            None => Some(
+                "no external agent is bound to this automation's source Session; Work remains pending"
+                    .to_string(),
+            ),
+        }
+    } else {
+        None
+    };
+
+    let admission_receipt = WorkRunAdmissionReceipt::new(
+        &work_id,
+        &run_id,
+        &occurrence.automation_id,
+        &occurrence.revision_id,
+        &occurrence.trigger_occurrence_id,
+        spec.provenance.automation_generation,
+    );
+
+    Ok(AdmittedWork {
+        admission_receipt,
+        blocked,
+    })
 }
 
-/// Close the run's Work state through the typed door (`P71.3g`).
-fn finish(
-    state: &State<'_, AppState>,
-    work_id: &str,
-    execution_id: &str,
-    next: WorkState,
-) -> Result<(), String> {
-    let relay = state.chat_relay.lock().map_err(|e| e.to_string())?;
-    let relay = relay.as_ref().ok_or("sidecar not connected")?;
-    let gateway = relay.work_gateway();
-    let mut gw = gateway.lock().unwrap_or_else(|e| e.into_inner());
-    gw.record_execution_transition(work_id, execution_id, next)
+fn work_state_for_phase(phase: Option<ExecutionPhase>) -> WorkState {
+    match phase {
+        Some(ExecutionPhase::WaitingTool) => WorkState::WaitingTool,
+        Some(ExecutionPhase::WaitingApproval) => WorkState::WaitingApproval,
+        Some(ExecutionPhase::WaitingUser) => WorkState::WaitingUser,
+        Some(ExecutionPhase::Checkpointed) => WorkState::Checkpointed,
+        Some(ExecutionPhase::Verifying) => WorkState::Verifying,
+        Some(ExecutionPhase::Completed) => WorkState::Completed,
+        Some(ExecutionPhase::Failed) => WorkState::Failed,
+        Some(ExecutionPhase::Cancelled) => WorkState::Cancelled,
+        Some(ExecutionPhase::Paused) => WorkState::Paused,
+        Some(ExecutionPhase::Recoverable) => WorkState::Recoverable,
+        Some(ExecutionPhase::Running) => WorkState::Running,
+        Some(ExecutionPhase::Created | ExecutionPhase::Planning | ExecutionPhase::Ready) | None => {
+            WorkState::Ready
+        }
+    }
 }
 
-fn mark_fired(state: &State<'_, AppState>, id: &str, now: u64) -> Result<(), String> {
-    let svc = service(state)?;
-    let mut svc = svc.lock().unwrap_or_else(|e| e.into_inner());
-    svc.handle("scheduler/mark_fired", &json!({ "id": id, "now": now }))
-        .map_err(|e| e.to_string())?;
-    Ok(())
+fn mark_occurrence_uncertain(state: &State<'_, AppState>, occurrence_id: &str, reason: &str) {
+    if let Ok(service) = service(state) {
+        if let Ok(mut service) = service.lock() {
+            let _ = service.mark_occurrence_uncertain(occurrence_id, reason);
+        }
+    }
 }
 
-/// The monitor verdict (`scheduler/monitor`): the delta comparison and the
-/// notification/stop accounting are the trigger plane's, never a second store.
-fn observe(
-    state: &State<'_, AppState>,
-    id: &str,
-    observation: &str,
-    condition_met: bool,
-) -> Result<(), String> {
-    let svc = service(state)?;
-    let mut svc = svc.lock().unwrap_or_else(|e| e.into_inner());
-    svc.handle(
-        "scheduler/monitor",
-        &json!({ "id": id, "observation": observation, "conditionMet": condition_met }),
-    )
-    .map_err(|e| e.to_string())?;
-    Ok(())
+/// Fire all pending occurrences plus all currently due schedules. Every path
+/// converges here; event/webhook/manual ingress only admits metadata and never
+/// creates Work itself.
+pub fn fire_due_checked(app: &AppHandle) -> Result<Vec<String>, String> {
+    let state = app.state::<AppState>();
+    let service_handle = service(&state)?;
+    let now = now_secs();
+    let occurrences = {
+        let mut service = service_handle
+            .lock()
+            .map_err(|error| format!("scheduler lock unavailable: {error}"))?;
+        service.ensure_public_health()?;
+        let mut pending = service.pending_occurrences();
+        service.admit_due(now)?;
+        pending.extend(service.pending_occurrences());
+        let mut unique = HashMap::new();
+        for occurrence in pending {
+            unique
+                .entry(occurrence.trigger_occurrence_id.clone())
+                .or_insert(occurrence);
+        }
+        unique.into_values().collect::<Vec<_>>()
+    };
+
+    let mut fired = Vec::new();
+    let mut first_error: Option<String> = None;
+    for occurrence in occurrences {
+        // Admission and dispatch are deliberately separate. Re-check the
+        // durable state after releasing the scheduler lock so a cancellation or
+        // uncertainty decision wins before any Work is created.
+        let still_pending = match service_handle.lock() {
+            Ok(service) => service
+                .occurrence(&occurrence.trigger_occurrence_id)
+                .is_some_and(|current| current.is_pending()),
+            Err(error) => {
+                first_error.get_or_insert_with(|| {
+                    format!("scheduler occurrence state unavailable: {error}")
+                });
+                continue;
+            }
+        };
+        if !still_pending {
+            continue;
+        }
+        match dispatch_occurrence(&state, &occurrence) {
+            Ok(admitted) => {
+                let result = service_handle.lock().ok().map(|mut service| {
+                    service.mark_occurrence_fired_with_receipt(
+                        &occurrence.trigger_occurrence_id,
+                        now,
+                        &admitted.admission_receipt,
+                    )
+                });
+                match result {
+                    Some(Ok(())) => {
+                        if let Some(job_id) = service_handle
+                            .lock()
+                            .ok()
+                            .and_then(|service| job_id_for_occurrence(&service, &occurrence))
+                        {
+                            fired.push(job_id);
+                        }
+                    }
+                    Some(Err(error)) => {
+                        first_error.get_or_insert_with(|| error.clone());
+                        mark_occurrence_uncertain(
+                            &state,
+                            &occurrence.trigger_occurrence_id,
+                            &error,
+                        );
+                    }
+                    None => {
+                        let error = "scheduler occurrence advancement was unavailable";
+                        first_error.get_or_insert_with(|| error.to_string());
+                        mark_occurrence_uncertain(&state, &occurrence.trigger_occurrence_id, error);
+                    }
+                }
+                if let Some(reason) = admitted.blocked {
+                    // The Work/Run remain durable and non-terminal. This is an
+                    // explicit pending state, never a fabricated completion.
+                    eprintln!(
+                        "automation occurrence {} pending: {reason}",
+                        occurrence.id()
+                    );
+                }
+            }
+            Err(reason) => {
+                first_error.get_or_insert_with(|| reason.clone());
+                mark_occurrence_uncertain(&state, &occurrence.trigger_occurrence_id, &reason);
+            }
+        }
+    }
+    if let Some(error) = first_error {
+        Err(error)
+    } else {
+        Ok(fired)
+    }
 }
 
-/// The firing loop: one due-check + execution pass per [`TICK_SECS`], started
-/// with the app so a headless run (tray, window closed) still fires. A firing
-/// is fire-and-forget per job — a slow agent never blocks the ticker.
+/// Fire the host dispatcher without making the background loop panic on a
+/// transiently unavailable owner.
+pub fn fire_due(app: &AppHandle) -> Vec<String> {
+    match fire_due_checked(app) {
+        Ok(ids) => ids,
+        Err(error) => {
+            eprintln!("automation firing paused: {error}");
+            Vec::new()
+        }
+    }
+}
+
+/// Start the host trigger loop. The sidecar only admits webhook requests; it
+/// never owns this dispatch loop.
 pub fn spawn_loop(app: &AppHandle) {
     let app = app.clone();
     std::thread::Builder::new()
         .name("everyaios-automation-firing".to_string())
-        .spawn(move || loop {
-            std::thread::sleep(std::time::Duration::from_secs(TICK_SECS));
-            let _ = fire_due(&app);
+        .spawn(move || {
+            loop {
+                std::thread::sleep(std::time::Duration::from_secs(TICK_SECS));
+                let _ = fire_due(&app);
+            }
         })
         .ok();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use everyaios_blueprint::AutomationStep;
+    use everyaios_core::automation_runtime::content_addressed_revision_id;
+    use everyaios_core::scheduler_service::{
+        AutomationRevision, OccurrenceState, OccurrenceTrigger,
+    };
+
+    fn occurrence() -> AutomationOccurrence {
+        let mut revision = AutomationRevision {
+            automation_id: "automation:auto:test".into(),
+            revision: 1,
+            revision_id: "1:revision".into(),
+            name: "test".into(),
+            session_id: "source".into(),
+            trigger: everyaios_core::scheduler_service::TriggerSpec::Manual,
+            steps: vec![AutomationStep::RunCode {
+                language: "js".into(),
+                code: "return 1".into(),
+            }],
+            policy: Default::default(),
+        };
+        revision.revision_id =
+            content_addressed_revision_id(&revision.automation(), revision.revision);
+        let payload_digest = "b".repeat(64);
+        let dedup_digest = "a".repeat(64);
+        AutomationOccurrence {
+            trigger_occurrence_id: format!("occ:{}", &dedup_digest[..32]),
+            automation_id: revision.automation_id.clone(),
+            revision_id: revision.revision_id.clone(),
+            trigger: OccurrenceTrigger::Manual,
+            payload_digest,
+            dedup_digest,
+            admitted_at: 1,
+            state: OccurrenceState::Pending,
+            idempotency_key: "test-delivery".into(),
+            fired_at: None,
+            work_id: None,
+            run_id: None,
+            admission_error: None,
+            admission_receipt: None,
+            revision,
+        }
+    }
+
+    #[test]
+    fn production_compile_preserves_occurrence_provenance() {
+        let occurrence = occurrence();
+        let spec = compile_occurrence(&occurrence).unwrap();
+        assert_eq!(spec.provenance.automation_id, occurrence.automation_id);
+        assert_eq!(spec.provenance.revision_id, occurrence.revision_id);
+        assert_eq!(spec.provenance.automation_generation, 1);
+        assert_eq!(
+            spec.provenance.trigger_occurrence_id,
+            occurrence.trigger_occurrence_id
+        );
+        assert_eq!(spec.capability_requests.len(), 1);
+    }
+
+    #[test]
+    fn deterministic_work_does_not_require_an_agent() {
+        let spec = compile_occurrence(&occurrence()).unwrap();
+        assert_eq!(MONITOR_STOP_MARKER, "[MONITOR_DONE]");
+        assert!(!spec.agent_required);
+        assert!(spec.steps.iter().all(|step| step.deterministic));
+    }
 }

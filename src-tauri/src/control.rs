@@ -2,7 +2,7 @@
 //! `agent/interrupt-response` mutate live AppState (chat cancel / cockpit
 //! undo / plan respond). Tauri commands call the same helpers.
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::path::PathBuf;
 use tauri::{AppHandle, Manager};
 
@@ -64,37 +64,17 @@ pub fn dispatch(app: &AppHandle, method: &str, params: &Value) -> Value {
     }
 }
 
-/// P71.2c — stop cancels the **bound agent's** live turns, not a sidecar stream.
+/// P71.2c — stop cancels only ACP turns owned by the requesting Session.
 ///
-/// The old body asked the coordinator to cancel every `chat/stream` bound to the
-/// session; those streams died with the built-in engine (ADR-0005 §2), and the
-/// live turn is now an ACP session. Cancellation is therefore issued over the ACP
-/// channel (`session/cancel`, the same call the UI's Stop makes) for every live
-/// handle, and the cancelled handle ids are returned — a session id has no ACP
-/// counterpart because the UI keys one handle per bound agent.
-///
-/// `session_id` is kept in the signature: it is the control channel's identity
-/// for the request and is what the caller reports back.
+/// A host handle is a private value scoped to its Session/binding. The control
+/// channel must not enumerate the global handle map: doing so lets a stop for
+/// Session A cancel Session B when both chats use the same external agent. The
+/// ACP helper snapshots only canonical owners, sends the provider-scoped
+/// `session/cancel` notification, and leaves durable Run terminalization to the
+/// prompt's observed cancellation outcome.
 pub fn stop_session(app: &AppHandle, session_id: &str) -> Result<Vec<String>, String> {
     let state = app.state::<AppState>();
-    let handles: Vec<String> = {
-        let sessions = state.acp_sessions.lock().map_err(|e| e.to_string())?;
-        sessions.keys().cloned().collect()
-    };
-    let mut cancelled = Vec::new();
-    for handle in handles {
-        let mut sessions = state.acp_sessions.lock().map_err(|e| e.to_string())?;
-        let Some(entry) = sessions.get_mut(&handle) else {
-            continue;
-        };
-        // A cancel on an already-idle agent is not an error worth failing the
-        // stop for; the intent ("nothing from this session is running") holds.
-        if entry.session.cancel().is_ok() {
-            cancelled.push(handle);
-        }
-    }
-    let _ = session_id;
-    Ok(cancelled)
+    crate::acp_cmds::cancel_acp_for_session(&state, session_id)
 }
 
 pub fn undo_session(app: &AppHandle, session_id: &str) -> Result<(), String> {
@@ -153,7 +133,7 @@ pub fn undo_session(app: &AppHandle, session_id: &str) -> Result<(), String> {
 /// users open documents under home / mounts — but it closes the
 /// self-documented xlsx/office bypass of `everyaios-guard::pathfloor`.
 pub fn floor_user_file(path: &str) -> Result<PathBuf, String> {
-    use everyaios_guard::pathfloor::{enforce_floor, FloorVerdict};
+    use everyaios_guard::pathfloor::{FloorVerdict, enforce_floor};
     let p = PathBuf::from(path);
     let parent = p
         .parent()

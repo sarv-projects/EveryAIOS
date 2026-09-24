@@ -29,6 +29,7 @@ import {
   Download,
   RotateCw,
   Trash2,
+  Wrench,
 } from 'lucide-react'
 import {
   Tooltip,
@@ -101,6 +102,99 @@ const sessionItems: RailItem[] = [
   { id: 'progress', icon: Activity, label: 'Progress', shortcut: '⌘⇧P' },
   { id: 'trajectory', icon: ScanSearch, label: 'Trajectory', shortcut: '⌘⇧T' },
 ]
+
+/** The four user-facing destinations used when the icon rail cannot fit. */
+export const NARROW_RIGHT_TABS = [
+  { id: 'chat', label: 'Chat', icon: Sparkles },
+  { id: 'files', label: 'Files', icon: Folder },
+  { id: 'preview', label: 'Preview', icon: MonitorSmartphone },
+  { id: 'tools', label: 'Tools', icon: Wrench },
+] as const
+
+export type NarrowRightTab = (typeof NARROW_RIGHT_TABS)[number]['id']
+
+export function narrowTabForView(view: ViewId): NarrowRightTab {
+  if (view === 'folder') return 'files'
+  if (view === 'progress' || view === 'trajectory' || view === 'diff' || view === 'audit' || view === 'storage' || view === 'timeline' || view === 'kanban' || view === 'blueprint' || view === 'local-server') return 'tools'
+  return 'preview'
+}
+
+export function NarrowRightTabBar({
+  activeTab,
+  onChange,
+  onCollapse,
+}: {
+  activeTab: NarrowRightTab
+  onChange: (tab: NarrowRightTab) => void
+  onCollapse?: () => void
+}) {
+  const refs = React.useRef<Partial<Record<NarrowRightTab, HTMLButtonElement | null>>>({})
+  const onKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>, index: number) => {
+    if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft' && event.key !== 'Home' && event.key !== 'End') return
+    event.preventDefault()
+    const last = NARROW_RIGHT_TABS.length - 1
+    const nextIndex =
+      event.key === 'Home'
+        ? 0
+        : event.key === 'End'
+          ? last
+          : event.key === 'ArrowRight'
+            ? (index + 1) % NARROW_RIGHT_TABS.length
+            : (index - 1 + NARROW_RIGHT_TABS.length) % NARROW_RIGHT_TABS.length
+    const next = NARROW_RIGHT_TABS[nextIndex]
+    if (!next) return
+    onChange(next.id)
+    refs.current[next.id]?.focus()
+  }
+
+  return (
+    <div className="flex min-w-0 shrink-0 items-stretch border-b border-border bg-sidebar/70">
+      <div
+        role="tablist"
+        aria-label="Chat, files, preview, and tools"
+        className="scroll-thin flex min-w-0 flex-1 items-stretch gap-0.5 overflow-x-auto px-1 pt-1"
+      >
+        {NARROW_RIGHT_TABS.map((tab, index) => {
+          const Icon = tab.icon
+          const selected = activeTab === tab.id
+          return (
+            <button
+              key={tab.id}
+              ref={(node) => { refs.current[tab.id] = node }}
+              type="button"
+              role="tab"
+              id={`narrow-right-tab-${tab.id}`}
+              aria-controls={`narrow-right-panel-${tab.id}`}
+              aria-selected={selected}
+              tabIndex={selected ? 0 : -1}
+              onClick={() => onChange(tab.id)}
+              onKeyDown={(event) => onKeyDown(event, index)}
+              className={cn(
+                'flex min-w-[4.5rem] shrink-0 items-center justify-center gap-1.5 rounded-t-md border border-b-0 px-2 py-1.5 text-[10.5px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand/60',
+                selected
+                  ? 'border-border bg-card text-foreground'
+                  : 'border-transparent text-muted-foreground hover:bg-accent/60 hover:text-foreground',
+              )}
+            >
+              <Icon className={cn('h-3.5 w-3.5', selected && 'text-brand')} aria-hidden="true" />
+              <span>{tab.label}</span>
+            </button>
+          )
+        })}
+      </div>
+      {onCollapse && (
+        <button
+          type="button"
+          aria-label="Hide work lenses"
+          onClick={onCollapse}
+          className="mr-1 grid h-7 w-7 shrink-0 place-items-center self-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
+        >
+          <PanelRightClose aria-hidden className="h-3.5 w-3.5" />
+        </button>
+      )}
+    </div>
+  )
+}
 
 // P58.5 — `live` was a constant `false` for all four (a lie: the xlsx/docx/
 // pdf engines are real; pptx is engine-read). The flyout now derives liveness
@@ -187,7 +281,7 @@ function renderView(view: ViewId) {
   }
 }
 
-export function ActivityRail() {
+export function ActivityRail({ narrow = false }: { narrow?: boolean } = {}) {
   const activeView = useAppStore((s) => s.activeView)
   const setActiveView = useAppStore((s) => s.setActiveView)
   const officePaths = useAppStore((s) => s.officePaths)
@@ -216,6 +310,8 @@ export function ActivityRail() {
       setActiveView(item.id)
     }
   }
+
+  if (narrow) return null
 
   return (
     <div className="shrink-0 w-12 border-l border-border bg-sidebar flex flex-col items-center py-2 gap-1 no-select relative z-20">
@@ -431,7 +527,7 @@ export function ActivityRail() {
   )
 }
 
-export function RightViewport() {
+export function RightViewport({ narrow = false }: { narrow?: boolean } = {}) {
   const railCollapsed = useAppStore((s) => s.railCollapsed)
   const activeView = useAppStore((s) => s.activeView)
   const setActiveView = useAppStore((s) => s.setActiveView)
@@ -446,6 +542,32 @@ export function RightViewport() {
   const reorderViews = useAppStore((s) => s.reorderViews)
   const fullscreenView = useAppStore((s) => s.fullscreenView)
   const setFullscreenView = useAppStore((s) => s.setFullscreenView)
+  const setRailCollapsed = useAppStore((s) => s.setRailCollapsed)
+  const setCenterScreen = useAppStore((s) => s.setCenterScreen)
+
+  // Narrow mode keeps the selected lens mounted while the user moves between
+  // the four coarse destinations. The desktop tab strip and store remain the
+  // source of truth; these are presentation layers, not a second view registry.
+  const initialNarrowViewRef = React.useRef<ViewId | null>(null)
+  if (initialNarrowViewRef.current === null) {
+    const preview = openViews.find((view) => narrowTabForView(view) === 'preview')
+    initialNarrowViewRef.current = preview ?? (narrowTabForView(activeView) === 'preview' ? activeView : 'browse')
+  }
+  const initialNarrowView = initialNarrowViewRef.current ?? activeView
+  const previewViewRef = React.useRef<ViewId>(initialNarrowView)
+  const [narrowTab, setNarrowTab] = React.useState<NarrowRightTab>(() => narrowTabForView(activeView))
+  const [mountedNarrowViews, setMountedNarrowViews] = React.useState<ViewId[]>(() => [initialNarrowView])
+
+  React.useEffect(() => {
+    if (!narrow) return
+    if (narrowTabForView(activeView) === 'preview') previewViewRef.current = activeView
+    const targetView: ViewId =
+      narrowTab === 'files' ? 'folder' : narrowTab === 'tools' ? 'progress' : previewViewRef.current
+    setMountedNarrowViews((current) => {
+      const next = current.includes(activeView) ? [...current] : [...current, activeView]
+      return next.includes(targetView) ? next : [...next, targetView]
+    })
+  }, [activeView, narrow, narrowTab])
 
   // P33.7 — drag-reorder state for the tab strip.
   const [dragIndex, setDragIndex] = React.useState<number | null>(null)
@@ -632,6 +754,25 @@ export function RightViewport() {
   }
   const actions = viewActions[activeView] ?? []
 
+  const chooseNarrowTab = (tab: NarrowRightTab) => {
+    setNarrowTab(tab)
+    if (tab === 'chat') {
+      setCenterScreen('chat')
+      return
+    }
+    const nextView: ViewId =
+      tab === 'files'
+        ? 'folder'
+        : tab === 'tools'
+          ? 'progress'
+          : previewViewRef.current
+    setMountedNarrowViews((current) =>
+      current.includes(nextView) ? current : [...current, nextView],
+    )
+    setActiveView(nextView)
+    setCenterScreen('chat')
+  }
+
   // Resize drag handlers
   React.useEffect(() => {
     if (!isResizing) return
@@ -654,6 +795,87 @@ export function RightViewport() {
       window.removeEventListener('mouseup', onUp)
     }
   }, [isResizing])
+
+  if (narrow && railCollapsed) {
+    return (
+      <div data-narrow-right-collapsed className="flex min-h-0 w-full flex-none items-center justify-end border-t border-border bg-card/40 px-2 py-1">
+        <button
+          type="button"
+          onClick={() => setRailCollapsed(false)}
+          aria-label="Show work lenses"
+          className="grid h-7 w-7 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
+        >
+          <PanelRight aria-hidden className="h-3.5 w-3.5" />
+        </button>
+      </div>
+    )
+  }
+
+  if (narrow) {
+    const visibleView: ViewId =
+      narrowTab === 'files' ? 'folder' : narrowTab === 'tools' ? 'progress' : previewViewRef.current
+    return (
+      <section
+        data-narrow-right-rail
+        data-testid="narrow-right-rail"
+        aria-label="Work lenses"
+        className={cn(
+          'flex min-h-0 min-w-0 flex-none flex-col overflow-hidden border-t border-border bg-card/40',
+          fullscreenView ? 'h-full' : 'h-[min(42vh,22rem)]',
+        )}
+      >
+        <NarrowRightTabBar
+          activeTab={narrowTab}
+          onChange={chooseNarrowTab}
+          onCollapse={() => setRailCollapsed(true)}
+        />
+        <div className="min-h-0 flex-1 overflow-hidden">
+          {NARROW_RIGHT_TABS.map((tab) => {
+            const active = narrowTab === tab.id
+            const tabViews = mountedNarrowViews.filter((view) => narrowTabForView(view) === tab.id)
+            return (
+              <div
+                key={tab.id}
+                id={`narrow-right-panel-${tab.id}`}
+                role="tabpanel"
+                aria-labelledby={`narrow-right-tab-${tab.id}`}
+                hidden={!active}
+                className="h-full min-h-0"
+              >
+                {tab.id === 'chat' ? (
+                  <div className="grid h-full place-items-center px-5 text-center">
+                    <div className="max-w-sm">
+                      <Sparkles className="mx-auto h-5 w-5 text-brand" aria-hidden="true" />
+                      <p className="mt-2 text-xs font-medium text-foreground">Chat stays in the main pane</p>
+                      <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+                        Your task, approvals, and composer remain above. Use Files, Preview, or Tools when you need to inspect the work around it.
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="relative h-full min-h-0">
+                    {tabViews.map((view) => {
+                      const visible = view === visibleView
+                      return (
+                        <div
+                          key={view}
+                          data-lens-view={view}
+                          hidden={!visible}
+                          className="absolute inset-0 min-h-0"
+                        >
+                          <ViewportContent view={view} />
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      </section>
+    )
+  }
 
   return (
     <AnimatePresence initial={false} mode="wait">

@@ -19,6 +19,12 @@ import type { ComposerRole, PermissionMode } from './ui-prefs'
 import type { WorkAddress, WorkEventEnvelope, WorkPresence } from './work'
 import type { SessionCapabilityLoadout } from './capabilities'
 import { layoutWalkthroughStops, type WalkthroughStop } from './walkthrough'
+import {
+  acpHandleKey,
+  findAcpHandleRecord,
+  parseAcpHandleKey,
+  type AcpHandleRecord,
+} from './acp'
 
 // === Types ============================================================
 
@@ -1325,9 +1331,20 @@ interface AppState {
   /** P52.15 — empty the whole closed ring. */
   purgeAllClosed: () => void
 
-  /** Live ACP handles keyed by catalog agent id. */
+  /**
+   * Live ACP handle table keyed by application Session + binding + Work (+ the
+   * catalog agent id). The value stays an opaque provider handle; the typed
+   * owner record is materialized by `getAcpHandle`.
+   */
   acpHandles: Record<string, string>
-  setAcpHandle: (agentId: string, handle: string) => void
+  setAcpHandle: (record: AcpHandleRecord) => void
+  getAcpHandle: (
+    sessionId: string,
+    agentId?: string,
+    bindingId?: string,
+    workId?: string,
+  ) => AcpHandleRecord | undefined
+  clearAcpHandles: (sessionId: string, handle?: string) => void
   /** Agent-owned ACP config options keyed by catalog agent id. Native provider
    * model state never enters this map. */
   acpConfigOptions: Record<string, import('./acp').AcpConfigOption[]>
@@ -1403,6 +1420,7 @@ streamTestReset = () => {
     queuePaused: {},
     closedSessions: [],
     liveStreamId: {},
+    acpHandles: {},
     agentSendBlocker: undefined,
     setupOpen: false,
   })
@@ -1518,6 +1536,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
     }
     const st = get()
+    // Handles are Session-owned, not agent-owned. Remove the deleted Session's
+    // records so a later chat can never inherit a stale provider handle.
+    st.clearAcpHandles(id)
     const remaining = st.sessions.filter((x) => x.id !== id)
     const nextActive =
       st.activeSessionId === id ? (remaining[0]?.id ?? '') : st.activeSessionId
@@ -2207,10 +2228,10 @@ export const useAppStore = create<AppState>((set, get) => ({
       // native provider stream (and its `chat_cancel` handle) is gone with the
       // built-in engine, so there is no stream id to cancel.
       const bound = s.sessionChiefs[s.activeSessionId] ?? s.userDefaultChief ?? ''
-      const handle = bound ? s.acpHandles[bound] : undefined
-      if (handle) {
+      const record = bound ? s.getAcpHandle(s.activeSessionId, bound) : undefined
+      if (record?.bindingId && record.workId) {
         void import('./acp').then(({ acpCancel }) => {
-          void acpCancel(handle).catch(() => {})
+          void acpCancel(record.handle, record.applicationSessionId, record.bindingId).catch(() => {})
         })
       }
     }
@@ -2794,9 +2815,61 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
+  // One ordinary handle table; identity lives in its key and is projected by
+  // getAcpHandle. There is intentionally no agent-only alias: a shared agent
+  // has one independent record per application Session/binding/Work.
   acpHandles: {},
-  setAcpHandle: (agentId, handle) =>
-    set((s) => ({ acpHandles: { ...s.acpHandles, [agentId]: handle } })),
+  setAcpHandle: (record) =>
+    set((s) => {
+      const key = acpHandleKey(
+        record.applicationSessionId,
+        record.bindingId,
+        record.workId,
+        record.agentId,
+      )
+      const next: Record<string, string> = {}
+      for (const [existingKey, existingHandle] of Object.entries(s.acpHandles)) {
+        const parsed = parseAcpHandleKey(existingKey)
+        // A Session/binding/agent has one current live handle. Replace the
+        // provisional launch row when the first prompt returns canonical
+        // Work/Binding identity, and never leave a stale same-owner row behind.
+        if (
+          parsed &&
+          parsed.applicationSessionId === record.applicationSessionId &&
+          parsed.agentId === record.agentId &&
+          (
+            existingHandle === record.handle ||
+            (record.bindingId === '' &&
+              record.workId === '' &&
+              parsed.bindingId === '' &&
+              parsed.workId === '') ||
+            (record.bindingId !== '' &&
+              record.workId !== '' &&
+              parsed.bindingId === '' &&
+              parsed.workId === '')
+          )
+        ) {
+          continue
+        }
+        next[existingKey] = existingHandle
+      }
+      next[key] = record.handle
+      return { acpHandles: next }
+    }),
+  getAcpHandle: (sessionId, agentId, bindingId, workId) =>
+    findAcpHandleRecord(get().acpHandles, sessionId, agentId, bindingId, workId),
+  clearAcpHandles: (sessionId, handle) =>
+    set((s) => {
+      const next: Record<string, string> = {}
+      for (const [key, existingHandle] of Object.entries(s.acpHandles)) {
+        const parsed = parseAcpHandleKey(key)
+        if (parsed?.applicationSessionId === sessionId && (handle === undefined || existingHandle === handle)) {
+          continue
+        }
+        next[key] = existingHandle
+      }
+      return { acpHandles: next }
+    }),
   acpConfigOptions: {},
   setAcpConfigOptions: (agentId, options) =>
     set((s) => ({ acpConfigOptions: { ...s.acpConfigOptions, [agentId]: options } })),

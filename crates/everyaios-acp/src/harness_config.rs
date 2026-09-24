@@ -36,7 +36,7 @@
 //! alongside `model_provider`; and `api_key_env` is documented as an env-var
 //! **name** but written into the value slot.
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 /// What a harness config edit needs.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -199,11 +199,7 @@ fn toml_key(doc: &str, key: &str) -> Option<String> {
             return None;
         }
         let v = v.trim().trim_matches('"').to_string();
-        if v.is_empty() {
-            None
-        } else {
-            Some(v)
-        }
+        if v.is_empty() { None } else { Some(v) }
     })
 }
 

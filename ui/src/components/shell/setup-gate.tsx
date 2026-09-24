@@ -64,6 +64,12 @@ export function SetupGate() {
       // Read the republished list: the merge (seed + registry + install records)
       // is owned by `bridge`, so this screen never composes its own catalog.
       setRows(useAppStore.getState().liveAgents)
+      const state = useAppStore.getState()
+      const requestedId = state.selectedAgentId || state.userDefaultChief
+      const requested = requestedId
+        ? state.liveAgents.find((agent) => acpIdFor(agent.id) === requestedId || agent.id === requestedId)
+        : undefined
+      if (requested && isAgentReady(requested.readiness as AgentReadiness)) setBound(requested)
     } catch (e) {
       setRows([])
       setProbeError(
@@ -199,7 +205,11 @@ export function SetupGate() {
 
   return (
     <Dialog open onOpenChange={() => closeSetup()}>
-      <DialogContent className="max-w-md gap-0 p-0">
+      <DialogContent
+        data-first-run-owner="setup"
+        aria-label="Agent setup"
+        className="max-w-md gap-0 p-0"
+      >
         <div className="flex flex-col gap-3 p-6">
           {bound ? (
             <>

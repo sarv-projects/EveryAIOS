@@ -3,8 +3,8 @@
 //! occurrences and admission policy — nothing else**:
 //!
 //! - trigger registry: cron · interval · event · webhook · window;
-//! - cron math, next-due computation, trigger dedupe (one firing = one
-//!   `mark_fired`, so a due job is never re-queued mid-flight);
+//! - cron math, next-due computation, trigger dedupe (one durable occurrence
+//!   is admitted before Work; advancement happens after Work/Run admission);
 //! - battery/wake policy, misfire policy (`run_once_on_resume` by
 //!   construction: a stale `next_run_at` fires once, then advances),
 //!   frequency admission (rolling-hour cap);
@@ -30,9 +30,13 @@
 //!   time-of-day/weekday) → suggest a schedule (H14 nudge-card surface).
 
 use std::collections::HashMap;
+use std::io::Write;
 
-use everyaios_blueprint::automation::AutomationStep;
-use serde_json::{json, Value};
+use crate::automation_runtime::{content_addressed_revision_id_for_generation, parse_revision_id};
+use everyaios_blueprint::automation::{Automation, AutomationStep, Trigger as BlueprintTrigger};
+use serde::{Deserialize, Serialize};
+use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
 
 // ---------------------------------------------------------------------------
 // Cron (5-field: min hour dom mon dow; `*`, `N`, `N-M`, `*/step`, comma lists)
@@ -141,8 +145,8 @@ fn civil_parts(unix_secs: u64) -> (u8, u8, u8, u8, u8) {
     let mp = (5 * doy + 2) / 153; // [0, 11]
     let d = (doy - (153 * mp + 2) / 5 + 1) as u8; // [1, 31]
     let m = if mp < 10 { mp + 3 } else { mp - 9 } as u8; // [1, 12]
-                                                         // 1970-01-01 was a Thursday; days % 7 = 0 is Thursday, so +4 shifts to
-                                                         // Sunday = 0 (cron dow convention).
+    // 1970-01-01 was a Thursday; days % 7 = 0 is Thursday, so +4 shifts to
+    // Sunday = 0 (cron dow convention).
     let weekday = (((days + 4) % 7) + 7) % 7; // 0 = Sunday (cron dow)
     (
         (secs_of_day / 60 % 60) as u8,
@@ -212,6 +216,9 @@ pub enum TriggerSpec {
         path: String,
         schema: Vec<String>,
     },
+    /// A user-initiated one-shot admission. It has no next-run timestamp;
+    /// `scheduler/run_now` creates the durable occurrence instead.
+    Manual,
     /// Broader time window (morning / afternoon / evening) — a schedule
     /// primitive above raw cron.
     Window {
@@ -219,6 +226,25 @@ pub enum TriggerSpec {
         #[serde(default, alias = "utcOffsetMinutes")]
         utc_offset_minutes: i32,
     },
+}
+
+/// Policy for schedule firings that were missed while the host was asleep or
+/// offline.  This is admission policy around Work, not an execution retry.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MisfirePolicy {
+    /// Drop the missed tick and move the schedule forward.
+    Skip,
+    /// Admit one occurrence for the missed tick, then advance after receipt.
+    RunOnceOnResume,
+    /// Reserved for an explicit future bounded catch-up implementation.
+    CatchUp,
+}
+
+impl Default for MisfirePolicy {
+    fn default() -> Self {
+        Self::RunOnceOnResume
+    }
 }
 
 /// Admission policy per job (doc 62 §3: scope + frequency; battery-aware B7).
@@ -233,6 +259,9 @@ pub struct SchedulePolicy {
     pub max_runs_per_hour: Option<u32>,
     /// Scope filter (repo/worktree/path prefix the event payload must match).
     pub scope: Option<String>,
+    /// Overdue schedule behavior.  `run_once_on_resume` is the safe default.
+    #[serde(default)]
+    pub misfire_policy: MisfirePolicy,
 }
 
 impl Default for SchedulePolicy {
@@ -241,6 +270,7 @@ impl Default for SchedulePolicy {
             suppress_on_battery: true,
             max_runs_per_hour: Some(4),
             scope: None,
+            misfire_policy: MisfirePolicy::RunOnceOnResume,
         }
     }
 }
@@ -318,9 +348,25 @@ impl MonitorConfig {
 
 /// One trigger-plane job: a **definition + trigger**, never a run.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Job {
     pub id: String,
+    /// Rust-owned identity used in occurrence/provenance records. The
+    /// registry key remains the user-facing automation id, but trigger
+    /// payloads are never allowed to choose this provenance identity.
+    #[serde(default)]
+    pub automation_id: String,
+    /// Monotonic definition revision. It advances only when the definition
+    /// changes; mutable trigger-plane flags do not rewrite it.
+    #[serde(default)]
+    pub revision: u64,
+    /// Durable automation lifetime generation.  Delete/recreate advances it;
+    /// edits keep it stable.
+    #[serde(default)]
+    pub generation: u64,
+    /// Content-addressed identity for [`Self::revision`] and generation.
+    #[serde(default)]
+    pub revision_id: String,
     pub name: String,
     /// The session this job reawakens (heartbeat automation — doc 67 §2).
     pub session_id: String,
@@ -381,8 +427,23 @@ impl Job {
         session_id: impl Into<String>,
         trigger: TriggerSpec,
     ) -> Self {
-        Self {
-            id: id.into(),
+        Self::new_with_generation(id, name, session_id, trigger, 1)
+    }
+
+    fn new_with_generation(
+        id: impl Into<String>,
+        name: impl Into<String>,
+        session_id: impl Into<String>,
+        trigger: TriggerSpec,
+        generation: u64,
+    ) -> Self {
+        let id = id.into();
+        let mut job = Self {
+            automation_id: trusted_automation_id(&id),
+            revision: 1,
+            generation,
+            revision_id: String::new(),
+            id,
             name: name.into(),
             session_id: session_id.into(),
             trigger,
@@ -395,8 +456,218 @@ impl Job {
             recent_fires: Vec::new(),
             monitor: None,
             notepad: String::new(),
+        };
+        job.revision_id = revision_id_for(&job, job.revision);
+        job
+    }
+}
+
+/// The on-disk scheduler format version. Version 1 was the historical bare
+/// `Vec<Job>` file; version 2 added occurrences; version 3 adds generation
+/// counters and explicit occurrence admission states.
+const SCHEDULER_STORE_VERSION: u64 = 3;
+
+/// The trigger kind captured on an occurrence. This is admission metadata,
+/// not an execution state machine.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum OccurrenceTrigger {
+    Schedule { scheduled_at: u64 },
+    Manual,
+    Event { kind: String },
+    Webhook { path: String },
+}
+
+/// The immutable definition snapshot used to admit one occurrence. Keeping the
+/// snapshot beside its id means an edit after admission cannot rewrite the
+/// Work that the occurrence will compile.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct AutomationRevision {
+    pub automation_id: String,
+    pub revision: u64,
+    pub revision_id: String,
+    pub name: String,
+    pub session_id: String,
+    pub trigger: TriggerSpec,
+    pub steps: Vec<AutomationStep>,
+    pub policy: SchedulePolicy,
+}
+
+impl AutomationRevision {
+    /// The automation generation encoded by the canonical revision id.
+    pub fn generation(&self) -> u64 {
+        parse_revision_id(&self.revision_id)
+            .map(|identity| identity.generation)
+            .unwrap_or(0)
+    }
+
+    /// Convert the immutable snapshot to the compiler's definition type.
+    /// Trigger variants that have no blueprint equivalent are represented as
+    /// `Manual` for compilation; the full trigger remains in this snapshot.
+    pub fn automation(&self) -> Automation {
+        let trigger = match &self.trigger {
+            TriggerSpec::Cron { expr } => BlueprintTrigger::Schedule { cron: expr.clone() },
+            _ => BlueprintTrigger::Manual,
+        };
+        let metadata_digest = digest_json(&json!({
+            "sessionId": self.session_id,
+            "trigger": self.trigger,
+            "policy": self.policy,
+        }));
+        Automation {
+            id: format!("{}::snapshot:{}", self.automation_id, metadata_digest),
+            name: self.name.clone(),
+            trigger,
+            steps: self.steps.clone(),
         }
     }
+}
+
+/// Durable admission state of one trigger occurrence.  This is metadata for
+/// the trigger plane; it is not an execution state machine.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum OccurrenceState {
+    /// Admitted and waiting for a host Work/Run admission receipt.
+    Pending,
+    /// Admission or its outcome cannot be proven; reconciliation is required.
+    Uncertain,
+    /// Cancellation won the race and this occurrence can never reopen.
+    Cancelled,
+    /// A durable Work/Run admission receipt advanced the occurrence.
+    Terminal,
+}
+
+impl OccurrenceState {
+    /// Compatibility spelling for the terminal admission projection.
+    pub const ADVANCED: Self = Self::Terminal;
+}
+
+impl Default for OccurrenceState {
+    fn default() -> Self {
+        Self::Pending
+    }
+}
+
+/// The host-owned proof that Work and Run admission was durably completed.
+/// The scheduler validates its provenance and identity, but it does not
+/// create Work or claim that execution completed.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkRunAdmissionReceipt {
+    pub work_id: String,
+    pub run_id: String,
+    pub automation_id: String,
+    pub revision_id: String,
+    #[serde(alias = "occurrenceId", alias = "occurrence_id")]
+    pub trigger_occurrence_id: String,
+    #[serde(default)]
+    pub automation_generation: u64,
+    #[serde(default)]
+    pub durable: bool,
+}
+
+impl WorkRunAdmissionReceipt {
+    /// Construct a receipt for a host which has already durably created the
+    /// deterministic Work/Run pair.  The host still owns the actual proof.
+    pub fn new(
+        work_id: impl Into<String>,
+        run_id: impl Into<String>,
+        automation_id: impl Into<String>,
+        revision_id: impl Into<String>,
+        trigger_occurrence_id: impl Into<String>,
+        automation_generation: u64,
+    ) -> Self {
+        Self {
+            work_id: work_id.into(),
+            run_id: run_id.into(),
+            automation_id: automation_id.into(),
+            revision_id: revision_id.into(),
+            trigger_occurrence_id: trigger_occurrence_id.into(),
+            automation_generation,
+            durable: true,
+        }
+    }
+}
+
+/// A durable trigger admission record. It is the scheduler's occurrence
+/// metadata only; Work/Run lifecycle, waits, retries, and effects remain in
+/// the Work owners.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct AutomationOccurrence {
+    /// Stable, Rust-generated identity for this one trigger admission.
+    pub trigger_occurrence_id: String,
+    pub automation_id: String,
+    pub revision_id: String,
+    pub trigger: OccurrenceTrigger,
+    /// Digest of the canonical trigger payload. Raw payloads are intentionally
+    /// not persisted here; the digest is enough for idempotency/audit.
+    pub payload_digest: String,
+    /// Digest of `(automation, trigger, payload)`, used for delivery dedupe.
+    pub dedup_digest: String,
+    pub admitted_at: u64,
+    /// Explicit durable admission state.  Older rows are normalized on load.
+    #[serde(default)]
+    pub state: OccurrenceState,
+    /// Stable delivery/request key used to derive `dedup_digest`.
+    #[serde(default)]
+    pub idempotency_key: String,
+    #[serde(default)]
+    pub fired_at: Option<u64>,
+    #[serde(default)]
+    pub work_id: Option<String>,
+    #[serde(default)]
+    pub run_id: Option<String>,
+    #[serde(default)]
+    pub admission_error: Option<String>,
+    /// The durable Work/Run admission proof, retained for terminal rows.
+    #[serde(default)]
+    pub admission_receipt: Option<WorkRunAdmissionReceipt>,
+    pub revision: AutomationRevision,
+}
+
+impl AutomationOccurrence {
+    pub fn is_pending(&self) -> bool {
+        self.state == OccurrenceState::Pending
+    }
+
+    pub fn status(&self) -> OccurrenceState {
+        self.state
+    }
+
+    pub fn is_uncertain(&self) -> bool {
+        self.state == OccurrenceState::Uncertain
+    }
+
+    pub fn is_cancelled(&self) -> bool {
+        self.state == OccurrenceState::Cancelled
+    }
+
+    pub fn is_terminal(&self) -> bool {
+        matches!(
+            self.state,
+            OccurrenceState::Terminal | OccurrenceState::Cancelled
+        )
+    }
+
+    pub fn id(&self) -> &str {
+        &self.trigger_occurrence_id
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct PersistedScheduler {
+    version: u64,
+    jobs: Vec<Job>,
+    #[serde(default)]
+    occurrences: Vec<AutomationOccurrence>,
+    /// Monotonic generation allocator per registry id.  It is retained after
+    /// deletion so recreate cannot inherit an old automation lifetime.
+    #[serde(default)]
+    generation_counters: HashMap<String, u64>,
 }
 
 // ---------------------------------------------------------------------------
@@ -445,6 +716,7 @@ pub struct CronCheck {
     pub detail: String,
 }
 
+#[derive(Clone)]
 pub struct SchedulerService {
     jobs: HashMap<String, Job>,
     on_battery: bool,
@@ -454,6 +726,14 @@ pub struct SchedulerService {
     /// written through to the JSON file (atomic tmp+rename, best-effort: a
     /// failed save is an error surfaced by `persist`, never a silent drop).
     persist_path: Option<std::path::PathBuf>,
+    /// Durable trigger admissions. This is metadata for the Work factory,
+    /// not a second execution/retry/wait store.
+    occurrences: Vec<AutomationOccurrence>,
+    /// Durable generation allocator retained across delete/recreate.
+    generation_counters: HashMap<String, u64>,
+    /// A corrupt/unknown on-disk state is retained as an explicit load error;
+    /// it is never converted into an apparently healthy empty registry.
+    load_error: Option<String>,
     /// P51.32e — explicit-ack incident store.
     incidents: Vec<Incident>,
     incident_seq: u64,
@@ -473,48 +753,206 @@ impl SchedulerService {
             nudge_log: Vec::new(),
             webhook_token: None,
             persist_path: None,
+            occurrences: Vec::new(),
+            generation_counters: HashMap::new(),
+            load_error: None,
             incidents: Vec::new(),
             incident_seq: 0,
         }
     }
 
-    /// P50.3.3 — open (or create) the service with a JSON file backing store.
-    /// The trigger registry survives shell/coordinator restart. Recovery is
-    /// misfire-policy-by-construction (`AUTOMATION.md` §7): a job whose
-    /// `next_run_at` slipped past while the process was down fires **once**
-    /// on the next due-cycle (`run_once_on_resume` — the default), then
-    /// `mark_fired` advances it; it never replays every missed occurrence.
-    pub fn load_or_new(path: std::path::PathBuf) -> Self {
+    /// Open the service and fail closed on an unknown/corrupt persisted
+    /// state. The compatibility [`Self::load_or_new`] wrapper preserves the
+    /// infallible constructor used by the relay, but records the failure so
+    /// every mutating/query funnel can refuse it explicitly.
+    pub fn load_or_new_checked(path: std::path::PathBuf) -> Result<Self, String> {
         let mut svc = Self::new();
         svc.persist_path = Some(path.clone());
-        if let Ok(bytes) = std::fs::read(&path) {
-            if let Ok(jobs) = serde_json::from_slice::<Vec<Job>>(&bytes) {
-                for job in jobs {
-                    svc.jobs.insert(job.id.clone(), job);
-                }
+        let bytes = match std::fs::read(&path) {
+            Ok(bytes) => bytes,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(svc),
+            Err(error) => return Err(format!("read scheduler state: {error}")),
+        };
+        let raw: Value = serde_json::from_slice(&bytes)
+            .map_err(|error| format!("parse scheduler state: {error}"))?;
+        let (jobs, occurrences, generation_counters) = if let Some(array) = raw.as_array() {
+            let jobs: Vec<Job> = serde_json::from_value(Value::Array(array.clone()))
+                .map_err(|error| format!("parse scheduler jobs: {error}"))?;
+            (jobs, Vec::new(), HashMap::new())
+        } else {
+            let store: PersistedScheduler = serde_json::from_value(raw)
+                .map_err(|error| format!("parse scheduler store: {error}"))?;
+            if store.version != 2 && store.version != SCHEDULER_STORE_VERSION {
+                return Err(format!(
+                    "unsupported scheduler store version {} (expected 2 or {SCHEDULER_STORE_VERSION})",
+                    store.version
+                ));
             }
-        }
-        svc
+            (store.jobs, store.occurrences, store.generation_counters)
+        };
+        svc.generation_counters = generation_counters;
+        svc.install_loaded(jobs, occurrences)?;
+        Ok(svc)
     }
 
-    /// Write the job registry through to the backing file (best-effort:
-    /// returns the error so callers can surface it, but persistence failure
-    /// never mutates the in-memory state).
+    /// Compatibility constructor. A malformed store is **not** treated as an
+    /// empty registry: the returned service is poisoned and callers receive a
+    /// named error from `handle`/admission instead of silently losing jobs.
+    pub fn load_or_new(path: std::path::PathBuf) -> Self {
+        Self::load_or_new_checked(path.clone()).unwrap_or_else(|error| {
+            let mut svc = Self::new();
+            svc.persist_path = Some(path);
+            svc.load_error = Some(error);
+            svc
+        })
+    }
+
+    fn install_loaded(
+        &mut self,
+        jobs: Vec<Job>,
+        occurrences: Vec<AutomationOccurrence>,
+    ) -> Result<(), String> {
+        for mut job in jobs {
+            if job.id.trim().is_empty() {
+                return Err("scheduler job has an empty id".into());
+            }
+            if job.automation_id.trim().is_empty() {
+                job.automation_id = trusted_automation_id(&job.id);
+            }
+            if job.automation_id != trusted_automation_id(&job.id) {
+                return Err(format!(
+                    "scheduler job `{}` has an untrusted automation id",
+                    job.id
+                ));
+            }
+            if job.revision == 0 {
+                job.revision = 1;
+            }
+            if job.generation == 0 {
+                job.generation = 1;
+            }
+            self.generation_counters
+                .entry(job.id.clone())
+                .and_modify(|current| *current = (*current).max(job.generation))
+                .or_insert(job.generation);
+            validate_job_definition(&job)?;
+            let expected_revision = revision_id_for(&job, job.revision);
+            if !job.revision_id.is_empty()
+                && job.revision_id != expected_revision
+                && !legacy_revision_id_matches(&job, &job.revision_id)
+            {
+                return Err(format!(
+                    "scheduler job `{}` has an invalid immutable revision id",
+                    job.id
+                ));
+            }
+            job.revision_id = expected_revision;
+            if self.jobs.contains_key(&job.id) {
+                return Err(format!("duplicate scheduler job id `{}`", job.id));
+            }
+            if self
+                .jobs
+                .values()
+                .any(|existing| existing.automation_id == job.automation_id)
+            {
+                return Err(format!(
+                    "duplicate scheduler automation id `{}`",
+                    job.automation_id
+                ));
+            }
+            self.jobs.insert(job.id.clone(), job);
+        }
+        for mut occurrence in occurrences {
+            normalize_loaded_occurrence(&mut occurrence)?;
+            self.validate_occurrence(&occurrence)?;
+            if self
+                .occurrences
+                .iter()
+                .any(|existing| existing.trigger_occurrence_id == occurrence.trigger_occurrence_id)
+            {
+                return Err(format!(
+                    "duplicate scheduler occurrence `{}`",
+                    occurrence.trigger_occurrence_id
+                ));
+            }
+            if self
+                .occurrences
+                .iter()
+                .any(|existing| existing.dedup_digest == occurrence.dedup_digest)
+            {
+                return Err(format!(
+                    "duplicate scheduler delivery digest `{}`",
+                    occurrence.dedup_digest
+                ));
+            }
+            self.occurrences.push(occurrence);
+        }
+        Ok(())
+    }
+
+    fn validate_occurrence(&self, occurrence: &AutomationOccurrence) -> Result<(), String> {
+        validate_occurrence_shape(occurrence)
+    }
+
+    /// Whether this service may be used. A corrupt persisted registry is a
+    /// hard refusal, not an empty healthy service.
+    pub fn is_healthy(&self) -> bool {
+        self.load_error.is_none()
+    }
+
+    pub fn registry_error(&self) -> Option<&str> {
+        self.load_error.as_deref()
+    }
+
+    /// Public fail-closed health check for host adapters that cannot call the
+    /// private mutation guard.
+    pub fn ensure_public_health(&self) -> Result<(), String> {
+        self.ensure_healthy()
+    }
+
+    fn ensure_healthy(&self) -> Result<(), String> {
+        match &self.load_error {
+            Some(error) => Err(format!("scheduler registry unavailable: {error}")),
+            None => Ok(()),
+        }
+    }
+
+    /// Write the registry and occurrence index through to the backing file
+    /// (atomic tmp+rename). The caller receives persistence failures instead
+    /// of continuing with an occurrence that is only in memory.
     pub fn persist(&self) -> Result<(), String> {
+        self.ensure_healthy()?;
         let Some(path) = &self.persist_path else {
             return Ok(());
         };
+        if let Some(parent) = path
+            .parent()
+            .filter(|parent| !parent.as_os_str().is_empty())
+        {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| format!("create scheduler directory: {e}"))?;
+        }
         let mut jobs: Vec<&Job> = self.jobs.values().collect();
         jobs.sort_by(|a, b| a.id.cmp(&b.id));
-        let json = serde_json::to_vec_pretty(&jobs).map_err(|e| format!("encode: {e}"))?;
+        let mut occurrences = self.occurrences.clone();
+        occurrences.sort_by(|a, b| {
+            a.admitted_at
+                .cmp(&b.admitted_at)
+                .then(a.trigger_occurrence_id.cmp(&b.trigger_occurrence_id))
+        });
+        let store = PersistedScheduler {
+            version: SCHEDULER_STORE_VERSION,
+            jobs: jobs.into_iter().cloned().collect(),
+            occurrences,
+            generation_counters: self.generation_counters.clone(),
+        };
+        let json = serde_json::to_vec_pretty(&store).map_err(|e| format!("encode: {e}"))?;
         let tmp = path.with_extension("json.tmp");
-        std::fs::write(&tmp, &json).map_err(|e| format!("write: {e}"))?;
+        let mut file = std::fs::File::create(&tmp).map_err(|e| format!("write: {e}"))?;
+        file.write_all(&json).map_err(|e| format!("write: {e}"))?;
+        file.sync_all()
+            .map_err(|e| format!("sync scheduler state: {e}"))?;
         std::fs::rename(&tmp, path).map_err(|e| format!("rename: {e}"))
-    }
-
-    /// Persist ignoring errors (for paths where the caller cannot propagate).
-    fn persist_quiet(&self) {
-        let _ = self.persist();
     }
 
     // -- registry -----------------------------------------------------------
@@ -529,7 +967,37 @@ impl SchedulerService {
         self.jobs.get(id)
     }
 
-    /// Create (or replace) a job. `now` seeds next-run for cron/interval.
+    pub fn job_id_for_automation(&self, automation_id: &str) -> Option<&str> {
+        self.jobs
+            .values()
+            .find(|job| job.automation_id == automation_id)
+            .map(|job| job.id.as_str())
+    }
+
+    pub fn automation_id_for_job(&self, id: &str) -> Option<&str> {
+        self.jobs.get(id).map(|job| job.automation_id.as_str())
+    }
+
+    pub fn job_ids_for_occurrences(&self, occurrences: &[AutomationOccurrence]) -> Vec<String> {
+        occurrences
+            .iter()
+            .filter_map(|occurrence| self.job_id_for_automation(&occurrence.automation_id))
+            .map(str::to_string)
+            .collect()
+    }
+
+    fn pending_job_ids_for_occurrences(&self, occurrences: &[AutomationOccurrence]) -> Vec<String> {
+        occurrences
+            .iter()
+            .filter(|occurrence| occurrence.is_pending())
+            .filter_map(|occurrence| self.job_id_for_automation(&occurrence.automation_id))
+            .map(str::to_string)
+            .collect()
+    }
+
+    /// Create (or replace) a job. The legacy signature cannot return a
+    /// persistence error, so it rolls back in-memory state on failure; host
+    /// adapters should use [`Self::upsert_checked`].
     #[allow(clippy::too_many_arguments)]
     pub fn upsert(
         &mut self,
@@ -542,32 +1010,166 @@ impl SchedulerService {
         now: u64,
     ) -> &mut Job {
         let id = id.into();
-        {
-            let job = self
-                .jobs
-                .entry(id.clone())
-                .or_insert_with(|| Job::new(id.clone(), name, session_id, trigger.clone()));
-            job.name = job.name.clone();
-            job.trigger = trigger;
-            job.steps = steps;
-            if let Some(p) = policy {
-                job.policy = p;
+        let name = name.into();
+        let session_id = session_id.into();
+        let fallback = Job::new(
+            id.clone(),
+            name.clone(),
+            session_id.clone(),
+            trigger.clone(),
+        );
+        if let Err(error) = self.upsert_checked_with_enabled(
+            id.clone(),
+            name.clone(),
+            session_id.clone(),
+            trigger.clone(),
+            steps.clone(),
+            policy.clone(),
+            None,
+            now,
+        ) {
+            // The historical API cannot return an error. Poison the service
+            // rather than exposing an unpersisted/invalid registry.
+            self.load_error = Some(error);
+            if !self.jobs.contains_key(&id) {
+                self.jobs.insert(id.clone(), fallback);
             }
-            job.next_run_at = compute_next_run(&job.trigger, now, job.next_run_at);
         }
-        self.persist_quiet();
         self.jobs.get_mut(&id).expect("job was just upserted")
     }
 
-    pub fn delete(&mut self, id: &str) -> bool {
-        let removed = self.jobs.remove(id).is_some();
-        if removed {
-            self.persist_quiet();
+    /// Checked host-facing definition write.
+    pub fn upsert_checked(
+        &mut self,
+        id: impl Into<String>,
+        name: impl Into<String>,
+        session_id: impl Into<String>,
+        trigger: TriggerSpec,
+        steps: Vec<AutomationStep>,
+        policy: Option<SchedulePolicy>,
+        now: u64,
+    ) -> Result<(), String> {
+        self.upsert_checked_with_enabled(id, name, session_id, trigger, steps, policy, None, now)
+    }
+
+    /// Checked definition write with an explicit `enabled` value. `None`
+    /// preserves the current value for an edit and defaults a new job to true.
+    #[allow(clippy::too_many_arguments)]
+    pub fn upsert_checked_with_enabled(
+        &mut self,
+        id: impl Into<String>,
+        name: impl Into<String>,
+        session_id: impl Into<String>,
+        trigger: TriggerSpec,
+        steps: Vec<AutomationStep>,
+        policy: Option<SchedulePolicy>,
+        enabled: Option<bool>,
+        now: u64,
+    ) -> Result<(), String> {
+        self.ensure_healthy()?;
+        let before = self.clone();
+        let id = id.into();
+        let name = name.into();
+        let session_id = session_id.into();
+        let existing = self.jobs.get(&id).cloned();
+        let old_digest = existing.as_ref().map(legacy_definition_digest);
+        let mut candidate = existing.clone().unwrap_or_else(|| {
+            let generation = self
+                .generation_counters
+                .get(&id)
+                .copied()
+                .unwrap_or(0)
+                .saturating_add(1)
+                .max(1);
+            Job::new_with_generation(
+                id.clone(),
+                name.clone(),
+                session_id.clone(),
+                trigger.clone(),
+                generation,
+            )
+        });
+        candidate.name = name;
+        candidate.session_id = session_id;
+        candidate.trigger = trigger;
+        candidate.steps = steps;
+        if let Some(policy) = policy {
+            candidate.policy = policy;
         }
-        removed
+        if let Some(enabled) = enabled {
+            candidate.enabled = enabled;
+        }
+        if old_digest.as_ref() != Some(&legacy_definition_digest(&candidate)) {
+            candidate.revision = existing
+                .as_ref()
+                .map(|job| job.revision.saturating_add(1))
+                .unwrap_or(1)
+                .max(1);
+        } else if candidate.revision == 0 {
+            candidate.revision = 1;
+        }
+        if candidate.generation == 0 {
+            candidate.generation = 1;
+        }
+        if existing
+            .as_ref()
+            .map(|job| job.trigger != candidate.trigger)
+            .unwrap_or(true)
+            || candidate.next_run_at.is_none()
+        {
+            candidate.next_run_at =
+                compute_next_run(&candidate.trigger, now, candidate.next_run_at);
+        }
+        candidate.revision_id = revision_id_for(&candidate, candidate.revision);
+        validate_job_definition(&candidate)?;
+        let candidate_generation = candidate.generation;
+        self.jobs.insert(id.clone(), candidate);
+        self.generation_counters
+            .entry(id)
+            .and_modify(|current| *current = (*current).max(candidate_generation))
+            .or_insert(candidate_generation);
+        if let Err(error) = self.persist() {
+            *self = before;
+            return Err(error);
+        }
+        Ok(())
+    }
+
+    pub fn delete(&mut self, id: &str) -> bool {
+        match self.delete_checked(id) {
+            Ok(removed) => removed,
+            Err(error) => {
+                self.load_error = Some(error);
+                false
+            }
+        }
+    }
+
+    pub fn delete_checked(&mut self, id: &str) -> Result<bool, String> {
+        self.ensure_healthy()?;
+        let Some(job) = self.jobs.get(id) else {
+            return Ok(false);
+        };
+        let automation_id = job.automation_id.clone();
+        if self.occurrences.iter().any(|occurrence| {
+            occurrence.automation_id == automation_id && !occurrence.is_terminal()
+        }) {
+            return Err(format!(
+                "automation `{id}` has an unresolved occurrence; cancel or reconcile it first"
+            ));
+        }
+        let before = self.clone();
+        self.jobs.remove(id);
+        if let Err(error) = self.persist() {
+            *self = before;
+            return Err(error);
+        }
+        Ok(true)
     }
 
     pub fn set_enabled(&mut self, id: &str, enabled: bool, now: u64) -> Result<(), String> {
+        self.ensure_healthy()?;
+        let before = self.clone();
         let job = self
             .jobs
             .get_mut(id)
@@ -576,31 +1178,38 @@ impl SchedulerService {
         if enabled && job.next_run_at.is_none() {
             job.next_run_at = compute_next_run(&job.trigger, now, None);
         }
-        self.persist_quiet();
+        if let Err(error) = self.persist() {
+            *self = before;
+            return Err(error);
+        }
         Ok(())
     }
 
     /// Attach/replace a job's monitoring config (or clear it with `None`).
     pub fn set_monitor(&mut self, id: &str, monitor: Option<MonitorConfig>) -> Result<(), String> {
+        self.ensure_healthy()?;
+        let before = self.clone();
         let job = self
             .jobs
             .get_mut(id)
             .ok_or_else(|| format!("unknown job {id:?}"))?;
         job.monitor = monitor;
+        if let Err(error) = self.persist() {
+            *self = before;
+            return Err(error);
+        }
         Ok(())
     }
 
-    /// P6.4 monitoring semantics (the "notify only on a meaningful delta"
-    /// pattern from the ChatGPT Scheduled-Tasks model): compare this run's
-    /// `observation` against the job's previous observation and return whether
-    /// to notify + whether the stop condition ended the monitor. Stores the new
-    /// observation (stateful polling — "previous runs are remembered").
+    /// Evaluate and durably store a monitor observation.
     pub fn monitor_evaluate(
         &mut self,
         id: &str,
         observation: &str,
         condition_met: bool,
     ) -> Result<MonitorVerdict, String> {
+        self.ensure_healthy()?;
+        let before = self.clone();
         let job = self
             .jobs
             .get_mut(id)
@@ -610,59 +1219,74 @@ impl SchedulerService {
         let changed = previous.as_deref() != Some(observation);
         let notified = previous.is_none() || changed || condition_met;
         if notified {
-            monitor.notifications += 1;
+            monitor.notifications = monitor.notifications.saturating_add(1);
         }
         monitor.last_observation = Some(observation.to_string());
         let stopped = condition_met && monitor.stop_on_condition;
         if stopped {
-            // End condition met: stop the recurring monitor (keep the record).
             job.enabled = false;
         }
-        Ok(MonitorVerdict {
+        let verdict = MonitorVerdict {
             changed,
             notified,
             stopped,
             previous,
             current: observation.to_string(),
             notifications: monitor.notifications,
-        })
+        };
+        if let Err(error) = self.persist() {
+            *self = before;
+            return Err(error);
+        }
+        Ok(verdict)
     }
 
     // -- continuity (P51.32a) --------------------------------------------------
 
-    /// Append one line to a job's notepad. Returns `false` for unknown jobs.
-    /// (The notepad is the only continuity this plane keeps — run results are
-    /// Event Log territory, **I3**.)
     pub fn append_notepad(&mut self, id: &str, line: &str) -> bool {
-        let Some(job) = self.jobs.get_mut(id) else {
-            return false;
-        };
+        match self.append_notepad_checked(id, line) {
+            Ok(changed) => changed,
+            Err(error) => {
+                self.load_error = Some(error);
+                false
+            }
+        }
+    }
+
+    pub fn append_notepad_checked(&mut self, id: &str, line: &str) -> Result<bool, String> {
+        self.ensure_healthy()?;
+        if !self.jobs.contains_key(id) {
+            return Ok(false);
+        }
+        let before = self.clone();
+        let job = self.jobs.get_mut(id).expect("job existence checked");
         if job.notepad.is_empty() {
             job.notepad = line.to_string();
         } else {
             job.notepad.push('\n');
             job.notepad.push_str(line);
         }
-        self.persist_quiet();
-        true
+        if let Err(error) = self.persist() {
+            *self = before;
+            return Err(error);
+        }
+        Ok(true)
     }
 
-    /// A job's durable notepad (`None` for unknown jobs).
     pub fn notepad(&self, id: &str) -> Option<String> {
-        self.jobs.get(id).map(|j| j.notepad.clone())
+        self.jobs.get(id).map(|job| job.notepad.clone())
     }
 
     // -- monitor-script mode (P51.32b) -----------------------------------------
 
-    /// Stateful script-mode evaluation: stores `stdout` verbatim as the job's
-    /// observation (no trim) with silent-empty semantics, mirroring
-    /// [`Self::monitor_evaluate`] accounting.
     pub fn monitor_evaluate_script(
         &mut self,
         id: &str,
         stdout: &str,
         silent_on_empty: bool,
     ) -> Result<MonitorVerdict, String> {
+        self.ensure_healthy()?;
+        let before = self.clone();
         let job = self
             .jobs
             .get_mut(id)
@@ -674,35 +1298,41 @@ impl SchedulerService {
         if verdict.notified {
             monitor.notifications = monitor.notifications.saturating_add(1);
         }
-        Ok(MonitorVerdict {
+        let result = MonitorVerdict {
             notifications: monitor.notifications,
             ..verdict
-        })
+        };
+        if let Err(error) = self.persist() {
+            *self = before;
+            return Err(error);
+        }
+        Ok(result)
     }
 
-    /// Stateless script verdict helper on the service (same pure semantics as
-    /// [`MonitorConfig::evaluate_script`], with no stored observation).
     pub fn evaluate_script(&self, stdout: &str, silent_on_empty: bool) -> MonitorVerdict {
         MonitorConfig::default().evaluate_script(stdout, silent_on_empty)
     }
 
     // -- trigger-plane pause -----------------------------------------------------
 
-    /// Pause a job: stop firing without losing the definition (HITL pause,
-    /// cronflow pattern). Returns `Ok(())` even if already paused.
     pub fn pause(&mut self, id: &str) -> Result<(), String> {
+        self.ensure_healthy()?;
+        let before = self.clone();
         let job = self
             .jobs
             .get_mut(id)
             .ok_or_else(|| format!("unknown job {id:?}"))?;
         job.paused = true;
-        self.persist_quiet();
+        if let Err(error) = self.persist() {
+            *self = before;
+            return Err(error);
+        }
         Ok(())
     }
 
-    /// Resume a paused job. Re-seeds next-run for schedule triggers that have
-    /// none (event/webhook jobs keep waiting on their event).
     pub fn resume(&mut self, id: &str, now: u64) -> Result<(), String> {
+        self.ensure_healthy()?;
+        let before = self.clone();
         let job = self
             .jobs
             .get_mut(id)
@@ -711,53 +1341,689 @@ impl SchedulerService {
         if job.enabled && job.next_run_at.is_none() {
             job.next_run_at = compute_next_run(&job.trigger, now, None);
         }
-        self.persist_quiet();
+        if let Err(error) = self.persist() {
+            *self = before;
+            return Err(error);
+        }
         Ok(())
     }
 
-    /// Pause every job bound to `session_id` (chat-delete cascade). Returns
-    /// how many jobs were newly paused.
     pub fn pause_session(&mut self, session_id: &str) -> usize {
-        let mut n = 0usize;
+        match self.pause_session_checked(session_id) {
+            Ok(count) => count,
+            Err(error) => {
+                self.load_error = Some(error);
+                0
+            }
+        }
+    }
+
+    pub fn pause_session_checked(&mut self, session_id: &str) -> Result<usize, String> {
+        self.ensure_healthy()?;
+        let before = self.clone();
+        let mut count = 0;
         for job in self.jobs.values_mut() {
             if job.session_id == session_id && !job.paused {
                 job.paused = true;
-                n += 1;
+                count += 1;
             }
         }
-        if n > 0 {
-            self.persist_quiet();
+        if count > 0 {
+            if let Err(error) = self.persist() {
+                *self = before;
+                return Err(error);
+            }
         }
-        n
+        Ok(count)
+    }
+
+    // -- durable occurrence admission ------------------------------------------
+
+    /// All durable trigger occurrences, newest admission first.
+    pub fn occurrences(&self) -> Vec<&AutomationOccurrence> {
+        let mut rows: Vec<&AutomationOccurrence> = self.occurrences.iter().collect();
+        rows.sort_by(|a, b| {
+            b.admitted_at
+                .cmp(&a.admitted_at)
+                .then(b.trigger_occurrence_id.cmp(&a.trigger_occurrence_id))
+        });
+        rows
+    }
+
+    /// Pending occurrences are the only rows a host may automatically pick up.
+    /// Uncertain and cancelled rows are deliberately excluded.
+    pub fn pending_occurrences(&self) -> Vec<AutomationOccurrence> {
+        self.occurrences()
+            .into_iter()
+            .filter(|occurrence| occurrence.is_pending())
+            .cloned()
+            .collect()
+    }
+
+    /// Occurrences that require an explicit host reconciliation receipt.
+    pub fn uncertain_occurrences(&self) -> Vec<AutomationOccurrence> {
+        self.occurrences()
+            .into_iter()
+            .filter(|occurrence| occurrence.is_uncertain())
+            .cloned()
+            .collect()
+    }
+
+    /// Cancelled occurrences retained as monotonic admission history.
+    pub fn cancelled_occurrences(&self) -> Vec<AutomationOccurrence> {
+        self.occurrences()
+            .into_iter()
+            .filter(|occurrence| occurrence.is_cancelled())
+            .cloned()
+            .collect()
+    }
+
+    pub fn occurrence(&self, id: &str) -> Option<&AutomationOccurrence> {
+        self.occurrences
+            .iter()
+            .find(|occurrence| occurrence.trigger_occurrence_id == id)
+    }
+
+    /// Admit currently due schedule/window occurrences.  Cron admission uses
+    /// the stored due timestamp, not whether the wall clock happens to match
+    /// the cron expression, so an overdue `run_once_on_resume` tick fires once.
+    pub fn admit_due(&mut self, now: u64) -> Result<Vec<AutomationOccurrence>, String> {
+        self.ensure_healthy()?;
+        let before = self.clone();
+        let ids = self.due(now);
+        let mut admitted = Vec::new();
+        let mut changed = false;
+        for id in ids {
+            let Some(job) = self.jobs.get(&id).cloned() else {
+                continue;
+            };
+            let scheduled_at = job.next_run_at.unwrap_or(now);
+            if matches!(job.trigger, TriggerSpec::Cron { .. }) {
+                match job.policy.misfire_policy {
+                    MisfirePolicy::RunOnceOnResume => {}
+                    MisfirePolicy::Skip => {
+                        let mut next = job.clone();
+                        next.next_run_at = compute_next_run(&next.trigger, now, None);
+                        self.jobs.insert(id.clone(), next);
+                        changed = true;
+                        continue;
+                    }
+                    MisfirePolicy::CatchUp => {
+                        *self = before;
+                        return Err(
+                            "scheduler catch_up misfire policy is not admitted; use run_once_on_resume or skip"
+                                .into(),
+                        );
+                    }
+                }
+            }
+            let trigger = OccurrenceTrigger::Schedule { scheduled_at };
+            let payload = json!({
+                "scheduledAt": scheduled_at,
+                "trigger": "schedule",
+            });
+            let key = format!("schedule:{}:{}", job.generation, scheduled_at);
+            match self.admit_one_in_memory(&job, trigger, &payload, &key, now) {
+                Ok(occurrence) => {
+                    if occurrence.is_pending() {
+                        admitted.push(occurrence);
+                    }
+                }
+                Err(error) => {
+                    *self = before;
+                    return Err(error);
+                }
+            }
+        }
+        if changed || self.occurrences.len() != before.occurrences.len() {
+            if let Err(error) = self.persist() {
+                *self = before;
+                return Err(error);
+            }
+        }
+        Ok(admitted)
+    }
+
+    /// Admit matching event triggers. A stable delivery key is mandatory.
+    pub fn admit_event(
+        &mut self,
+        kind: EventKind,
+        payload: &Value,
+        now: u64,
+    ) -> Result<Vec<AutomationOccurrence>, String> {
+        let key = extract_idempotency_key(payload, "event")?;
+        self.admit_event_with_key(kind, payload, &key, now)
+    }
+
+    pub fn admit_event_with_key(
+        &mut self,
+        kind: EventKind,
+        payload: &Value,
+        idempotency_key: &str,
+        now: u64,
+    ) -> Result<Vec<AutomationOccurrence>, String> {
+        self.ensure_healthy()?;
+        if !payload.is_object() {
+            return Err("event admission requires an object payload".into());
+        }
+        let key = normalize_idempotency_key(idempotency_key, "event")?;
+        let payload_text = canonical_json(payload);
+        let mut selected = Vec::new();
+        for job in self.jobs.values() {
+            if !job.enabled || job.paused {
+                continue;
+            }
+            let TriggerSpec::Event {
+                kind: expected,
+                filter,
+            } = &job.trigger
+            else {
+                continue;
+            };
+            if *expected != kind || (!filter.is_empty() && !payload_text.contains(filter)) {
+                continue;
+            }
+            if let Some(scope) = &job.policy.scope {
+                if !payload_text.contains(scope) {
+                    continue;
+                }
+            }
+            selected.push(job.clone());
+        }
+        let event_kind = serde_json::to_value(kind)
+            .ok()
+            .and_then(|value| value.as_str().map(str::to_string))
+            .unwrap_or_else(|| "event".into());
+        self.admit_selected_transactional(
+            selected,
+            |_job| {
+                Some((
+                    OccurrenceTrigger::Event {
+                        kind: event_kind.clone(),
+                    },
+                    payload.clone(),
+                    key.clone(),
+                ))
+            },
+            now,
+        )
+    }
+
+    /// Admit a webhook after token, path, body-shape, schema, and stable
+    /// delivery-key validation. The key must be supplied by the ingress owner.
+    pub fn admit_webhook(
+        &mut self,
+        path: &str,
+        body: &Value,
+        now: u64,
+        token: Option<&str>,
+    ) -> Result<Vec<AutomationOccurrence>, String> {
+        let key = extract_idempotency_key(body, "webhook")?;
+        self.admit_webhook_with_key(path, body, &key, now, token)
+    }
+
+    pub fn admit_webhook_with_key(
+        &mut self,
+        path: &str,
+        body: &Value,
+        idempotency_key: &str,
+        now: u64,
+        token: Option<&str>,
+    ) -> Result<Vec<AutomationOccurrence>, String> {
+        self.ensure_healthy()?;
+        let key = normalize_idempotency_key(idempotency_key, "webhook")?;
+        if let Some(expected) = &self.webhook_token {
+            if token != Some(expected.as_str()) {
+                return Err("webhook: bad token".into());
+            }
+        }
+        let object = body
+            .as_object()
+            .ok_or_else(|| format!("webhook {path}: body must be a JSON object"))?;
+        let mut selected = Vec::new();
+        for job in self.jobs.values() {
+            if !job.enabled || job.paused {
+                continue;
+            }
+            let TriggerSpec::Webhook {
+                path: expected_path,
+                schema,
+            } = &job.trigger
+            else {
+                continue;
+            };
+            if expected_path != path {
+                continue;
+            }
+            for required in schema {
+                if !object.contains_key(required) {
+                    return Err(format!("webhook {path}: missing required key {required:?}"));
+                }
+            }
+            selected.push(job.clone());
+        }
+        self.admit_selected_transactional(
+            selected,
+            |_job| {
+                Some((
+                    OccurrenceTrigger::Webhook {
+                        path: path.to_string(),
+                    },
+                    body.clone(),
+                    key.clone(),
+                ))
+            },
+            now,
+        )
+    }
+
+    /// Admit a manual request. A stable request key is mandatory; a timestamp
+    /// or payload digest is not an identity for a retryable request.
+    pub fn admit_manual(
+        &mut self,
+        id: &str,
+        payload: &Value,
+        now: u64,
+    ) -> Result<AutomationOccurrence, String> {
+        let key = extract_idempotency_key(payload, "manual")?;
+        self.admit_manual_with_key(id, payload, &key, now)
+    }
+
+    pub fn admit_manual_with_key(
+        &mut self,
+        id: &str,
+        payload: &Value,
+        idempotency_key: &str,
+        now: u64,
+    ) -> Result<AutomationOccurrence, String> {
+        self.ensure_healthy()?;
+        let key = normalize_idempotency_key(idempotency_key, "manual")?;
+        let job = self
+            .jobs
+            .get(id)
+            .cloned()
+            .ok_or_else(|| format!("unknown job {id:?}"))?;
+        if !job.enabled || job.paused {
+            return Err(format!("job {id} is disabled or paused"));
+        }
+        let mut admitted = self.admit_selected_transactional(
+            vec![job],
+            |_job| Some((OccurrenceTrigger::Manual, payload.clone(), key.clone())),
+            now,
+        )?;
+        admitted
+            .pop()
+            .ok_or_else(|| format!("manual occurrence for {id} was not admitted"))
+    }
+
+    pub fn admit_event_idempotent(
+        &mut self,
+        kind: EventKind,
+        payload: &Value,
+        key: &str,
+        now: u64,
+    ) -> Result<Vec<AutomationOccurrence>, String> {
+        self.admit_event_with_key(kind, payload, key, now)
+    }
+
+    pub fn admit_webhook_idempotent(
+        &mut self,
+        path: &str,
+        body: &Value,
+        key: &str,
+        now: u64,
+        token: Option<&str>,
+    ) -> Result<Vec<AutomationOccurrence>, String> {
+        self.admit_webhook_with_key(path, body, key, now, token)
+    }
+
+    pub fn admit_manual_idempotent(
+        &mut self,
+        id: &str,
+        payload: &Value,
+        key: &str,
+        now: u64,
+    ) -> Result<AutomationOccurrence, String> {
+        self.admit_manual_with_key(id, payload, key, now)
+    }
+
+    fn frequency_admits(&self, job: &Job, now: u64) -> bool {
+        let Some(cap) = job.policy.max_runs_per_hour else {
+            return true;
+        };
+        let cutoff = now.saturating_sub(3600);
+        (job.recent_fires.iter().filter(|at| **at >= cutoff).count() as u32) < cap
+    }
+
+    fn admit_selected_transactional<F>(
+        &mut self,
+        selected: Vec<Job>,
+        make: F,
+        now: u64,
+    ) -> Result<Vec<AutomationOccurrence>, String>
+    where
+        F: Fn(&Job) -> Option<(OccurrenceTrigger, Value, String)>,
+    {
+        let before = self.clone();
+        match self.admit_selected_in_memory(selected, make, now) {
+            Ok(admitted) => {
+                if self.occurrences.len() != before.occurrences.len() {
+                    if let Err(error) = self.persist() {
+                        *self = before;
+                        return Err(error);
+                    }
+                }
+                Ok(admitted)
+            }
+            Err(error) => {
+                *self = before;
+                Err(error)
+            }
+        }
+    }
+
+    fn admit_selected_in_memory<F>(
+        &mut self,
+        selected: Vec<Job>,
+        make: F,
+        now: u64,
+    ) -> Result<Vec<AutomationOccurrence>, String>
+    where
+        F: Fn(&Job) -> Option<(OccurrenceTrigger, Value, String)>,
+    {
+        let original_len = self.occurrences.len();
+        let mut admitted = Vec::new();
+        for job in selected {
+            let Some((trigger, payload, key)) = make(&job) else {
+                continue;
+            };
+            let key = normalize_idempotency_key(&key, "delivery")?;
+            let payload_digest = digest_json(&payload);
+            let dedup_digest = dedup_digest_for(&job.automation_id, job.generation, &trigger, &key);
+            if let Some(existing) = self
+                .occurrences
+                .iter()
+                .find(|occurrence| occurrence.dedup_digest == dedup_digest)
+            {
+                if existing.payload_digest != payload_digest {
+                    self.occurrences.truncate(original_len);
+                    return Err(format!(
+                        "idempotency key `{key}` was reused with a different payload"
+                    ));
+                }
+                admitted.push(existing.clone());
+                continue;
+            }
+            if !self.frequency_admits(&job, now) {
+                continue;
+            }
+            let occurrence = AutomationOccurrence {
+                trigger_occurrence_id: format!("occ:{}", &dedup_digest[..32]),
+                automation_id: job.automation_id.clone(),
+                revision_id: job.revision_id.clone(),
+                trigger,
+                payload_digest,
+                dedup_digest,
+                admitted_at: now,
+                state: OccurrenceState::Pending,
+                idempotency_key: key,
+                fired_at: None,
+                work_id: None,
+                run_id: None,
+                admission_error: None,
+                admission_receipt: None,
+                revision: revision_snapshot(&job),
+            };
+            if let Err(error) = validate_occurrence_shape(&occurrence) {
+                self.occurrences.truncate(original_len);
+                return Err(error);
+            }
+            self.occurrences.push(occurrence.clone());
+            admitted.push(occurrence);
+        }
+        Ok(admitted)
+    }
+
+    fn admit_one_in_memory(
+        &mut self,
+        job: &Job,
+        trigger: OccurrenceTrigger,
+        payload: &Value,
+        key: &str,
+        now: u64,
+    ) -> Result<AutomationOccurrence, String> {
+        self.admit_selected_in_memory(
+            vec![job.clone()],
+            |_candidate| Some((trigger.clone(), payload.clone(), key.to_string())),
+            now,
+        )?
+        .pop()
+        .ok_or_else(|| format!("occurrence for automation `{}` was not admitted", job.id))
+    }
+
+    /// Deterministic Work identity expected by the host admission receipt.
+    pub fn expected_work_id(&self, occurrence: &AutomationOccurrence) -> String {
+        format!(
+            "automation-work:{}:{}",
+            occurrence.automation_id, occurrence.trigger_occurrence_id
+        )
+    }
+
+    pub fn expected_run_id(&self, occurrence: &AutomationOccurrence) -> String {
+        format!(
+            "automation-run:{}:{}",
+            occurrence.automation_id, occurrence.trigger_occurrence_id
+        )
+    }
+
+    /// Build the receipt shape expected by the current host adapter.  The
+    /// caller must only use this after Work and Run are durably admitted.
+    pub fn receipt_for_occurrence(
+        &self,
+        occurrence_id: &str,
+    ) -> Result<WorkRunAdmissionReceipt, String> {
+        let occurrence = self
+            .occurrence(occurrence_id)
+            .ok_or_else(|| format!("unknown occurrence {occurrence_id:?}"))?;
+        let generation = parse_revision_id(&occurrence.revision_id)
+            .map_err(|error| error.to_string())?
+            .generation;
+        Ok(WorkRunAdmissionReceipt::new(
+            self.expected_work_id(occurrence),
+            self.expected_run_id(occurrence),
+            occurrence.automation_id.clone(),
+            occurrence.revision_id.clone(),
+            occurrence.trigger_occurrence_id.clone(),
+            generation,
+        ))
+    }
+
+    /// Legacy trigger-only advancement is intentionally fail-closed. Callers
+    /// must use [`Self::mark_occurrence_fired_with_receipt`] with a receipt
+    /// minted after durable Work/Run admission.
+    pub fn mark_occurrence_fired(
+        &mut self,
+        _occurrence_id: &str,
+        _now: u64,
+        _work_id: &str,
+        _run_id: &str,
+    ) -> Result<(), String> {
+        Err("occurrence advancement requires a durable WorkRunAdmissionReceipt".into())
+    }
+
+    /// Advance/reconcile an occurrence only with a matching durable receipt.
+    pub fn mark_occurrence_fired_with_receipt(
+        &mut self,
+        occurrence_id: &str,
+        now: u64,
+        receipt: &WorkRunAdmissionReceipt,
+    ) -> Result<(), String> {
+        self.ensure_healthy()?;
+        let index = self
+            .occurrences
+            .iter()
+            .position(|occurrence| occurrence.trigger_occurrence_id == occurrence_id)
+            .ok_or_else(|| format!("unknown occurrence {occurrence_id:?}"))?;
+        let original = self.occurrences[index].clone();
+        validate_receipt_for(
+            &original,
+            receipt,
+            &self.expected_work_id(&original),
+            &self.expected_run_id(&original),
+        )?;
+        if original.state == OccurrenceState::Cancelled {
+            return Err(format!("occurrence {occurrence_id} is cancelled"));
+        }
+        if original.state == OccurrenceState::Terminal {
+            if original.admission_receipt.as_ref() == Some(receipt) {
+                return Ok(());
+            }
+            return Err(format!(
+                "occurrence {occurrence_id} was already advanced with a different receipt"
+            ));
+        }
+        let job_id = self
+            .jobs
+            .values()
+            .find(|job| job.automation_id == original.automation_id)
+            .map(|job| job.id.clone())
+            .ok_or_else(|| format!("occurrence {occurrence_id} names an unknown automation"))?;
+        let old_job = self
+            .jobs
+            .get(&job_id)
+            .cloned()
+            .ok_or_else(|| format!("unknown job {job_id:?}"))?;
+        let before = self.clone();
+        let mut next_job = old_job.clone();
+        next_job.last_fired_at = Some(now);
+        let cutoff = now.saturating_sub(3600);
+        next_job.recent_fires.retain(|at| *at >= cutoff);
+        next_job.recent_fires.push(now);
+        if let OccurrenceTrigger::Schedule { scheduled_at } = &original.trigger {
+            next_job.next_run_at =
+                compute_next_run(&next_job.trigger, now.max(*scheduled_at), None);
+        }
+        let mut next_occurrence = original.clone();
+        next_occurrence.state = OccurrenceState::Terminal;
+        next_occurrence.fired_at = Some(now);
+        next_occurrence.work_id = Some(receipt.work_id.clone());
+        next_occurrence.run_id = Some(receipt.run_id.clone());
+        next_occurrence.admission_error = None;
+        next_occurrence.admission_receipt = Some(receipt.clone());
+        validate_occurrence_shape(&next_occurrence)?;
+        self.occurrences[index] = next_occurrence;
+        self.jobs.insert(job_id, next_job);
+        if let Err(error) = self.persist() {
+            *self = before;
+            return Err(error);
+        }
+        Ok(())
+    }
+
+    pub fn advance_occurrence(
+        &mut self,
+        occurrence_id: &str,
+        now: u64,
+        receipt: WorkRunAdmissionReceipt,
+    ) -> Result<(), String> {
+        self.mark_occurrence_fired_with_receipt(occurrence_id, now, &receipt)
+    }
+
+    pub fn reconcile_occurrence(
+        &mut self,
+        occurrence_id: &str,
+        now: u64,
+        receipt: WorkRunAdmissionReceipt,
+    ) -> Result<(), String> {
+        self.advance_occurrence(occurrence_id, now, receipt)
+    }
+
+    /// Mark admission uncertainty.  An uncertain occurrence is intentionally
+    /// absent from `pending_occurrences` until an explicit receipt reconciles it.
+    pub fn mark_occurrence_uncertain(
+        &mut self,
+        occurrence_id: &str,
+        reason: &str,
+    ) -> Result<(), String> {
+        self.ensure_healthy()?;
+        if reason.trim().is_empty() {
+            return Err("uncertain occurrence requires a reconciliation reason".into());
+        }
+        let index = self
+            .occurrences
+            .iter()
+            .position(|occurrence| occurrence.trigger_occurrence_id == occurrence_id)
+            .ok_or_else(|| format!("unknown occurrence {occurrence_id:?}"))?;
+        let original = self.occurrences[index].clone();
+        if original.state == OccurrenceState::Cancelled
+            || original.state == OccurrenceState::Terminal
+        {
+            return Err(format!("occurrence {occurrence_id} is already terminal"));
+        }
+        let before = self.clone();
+        self.occurrences[index].state = OccurrenceState::Uncertain;
+        self.occurrences[index].admission_error = Some(reason.to_string());
+        if let Err(error) = self.persist() {
+            *self = before;
+            return Err(error);
+        }
+        Ok(())
+    }
+
+    /// Cancel one occurrence monotonically.  A later scheduler tick can admit a
+    /// new scheduled occurrence, but it can never reopen this one.
+    pub fn cancel_occurrence(&mut self, occurrence_id: &str, reason: &str) -> Result<(), String> {
+        self.ensure_healthy()?;
+        let index = self
+            .occurrences
+            .iter()
+            .position(|occurrence| occurrence.trigger_occurrence_id == occurrence_id)
+            .ok_or_else(|| format!("unknown occurrence {occurrence_id:?}"))?;
+        let original = self.occurrences[index].clone();
+        if original.state == OccurrenceState::Terminal {
+            return Err(format!("occurrence {occurrence_id} is already terminal"));
+        }
+        if original.state == OccurrenceState::Cancelled {
+            return Ok(());
+        }
+        let before = self.clone();
+        self.occurrences[index].state = OccurrenceState::Cancelled;
+        self.occurrences[index].admission_error =
+            (!reason.trim().is_empty()).then(|| reason.to_string());
+        if let OccurrenceTrigger::Schedule { scheduled_at } = &original.trigger {
+            if let Some(job) = self
+                .jobs
+                .values_mut()
+                .find(|job| job.automation_id == original.automation_id)
+            {
+                job.next_run_at = compute_next_run(&job.trigger, *scheduled_at, None);
+            }
+        }
+        if let Err(error) = self.persist() {
+            *self = before;
+            return Err(error);
+        }
+        Ok(())
+    }
+
+    pub fn occurrence_state(&self, occurrence_id: &str) -> Option<OccurrenceState> {
+        self.occurrence(occurrence_id)
+            .map(|occurrence| occurrence.state)
     }
 
     // -- occurrences ------------------------------------------------------------
 
-    /// Record one firing of the trigger (`AUTOMATION.md` §4: every trigger
-    /// produces an Occurrence before any Work exists; the Event Log owns the
-    /// run itself, **I3**). Advances next-run (so a due job is never
-    /// re-queued mid-flight — trigger dedupe) and feeds the rolling-hour
-    /// admission window. The host calls this after the run attempt,
-    /// success or failure — a fired trigger is a fired trigger; retries are
-    /// the Work kernel's business (`RECOVERY.md`), never a schedule matter.
-    pub fn mark_fired(&mut self, id: &str, now: u64) -> Result<(), String> {
-        let job = self
-            .jobs
-            .get_mut(id)
-            .ok_or_else(|| format!("unknown job {id:?}"))?;
-        job.last_fired_at = Some(now);
-        let cutoff = now.saturating_sub(3600);
-        job.recent_fires.retain(|t| *t >= cutoff);
-        job.recent_fires.push(now);
-        job.next_run_at = compute_next_run(&job.trigger, now, None);
-        self.persist_quiet();
-        Ok(())
+    /// Legacy trigger-only advancement is fail-closed by design.
+    pub fn mark_fired(&mut self, _id: &str, _now: u64) -> Result<(), String> {
+        Err("mark_fired cannot advance a schedule without a WorkRunAdmissionReceipt".into())
     }
 
     // -- battery ---------------------------------------------------------------
 
     pub fn set_battery(&mut self, on_battery: bool) {
-        self.on_battery = on_battery;
+        if self.load_error.is_none() {
+            self.on_battery = on_battery;
+        }
     }
 
     pub fn on_battery(&self) -> bool {
@@ -770,6 +2036,9 @@ impl SchedulerService {
     /// pause, battery suppression and the frequency policy. Returns job ids
     /// ordered by next_run_at.
     pub fn due(&mut self, now: u64) -> Vec<String> {
+        if self.load_error.is_some() {
+            return Vec::new();
+        }
         let on_battery = self.on_battery;
         let ids: Vec<String> = self.jobs.keys().cloned().collect();
         let mut out = Vec::new();
@@ -793,17 +2062,33 @@ impl SchedulerService {
                 }
             }
             let due = match &job.trigger {
-                TriggerSpec::Cron { expr } => match CronExpr::parse(expr) {
-                    Ok(c) => job.next_run_at.is_some_and(|nr| nr <= now) && c.matches(now),
-                    Err(_) => false,
-                },
-                TriggerSpec::Interval { .. } | TriggerSpec::Window { .. } => {
-                    job.next_run_at.is_some_and(|nr| nr <= now)
+                // A stale cron tick is due by its persisted next-run value;
+                // requiring the current wall-clock minute would silently lose
+                // run_once_on_resume occurrences.
+                TriggerSpec::Cron { expr } => {
+                    CronExpr::parse(expr).is_ok() && job.next_run_at.is_some_and(|next| next <= now)
                 }
-                TriggerSpec::Event { .. } | TriggerSpec::Webhook { .. } => false,
+                TriggerSpec::Interval { .. } | TriggerSpec::Window { .. } => {
+                    job.next_run_at.is_some_and(|next| next <= now)
+                }
+                TriggerSpec::Event { .. } | TriggerSpec::Webhook { .. } | TriggerSpec::Manual => {
+                    false
+                }
             };
             if due {
-                out.push(id);
+                let blocked_by_reconciliation = job.next_run_at.is_some_and(|next| {
+                    self.occurrences.iter().any(|occurrence| {
+                        occurrence.automation_id == job.automation_id
+                            && matches!(
+                                &occurrence.trigger,
+                                OccurrenceTrigger::Schedule { scheduled_at } if *scheduled_at == next
+                            )
+                            && !occurrence.is_pending()
+                    })
+                });
+                if !blocked_by_reconciliation {
+                    out.push(id);
+                }
             }
         }
         out.sort_by_key(|id| {
@@ -817,50 +2102,22 @@ impl SchedulerService {
 
     // -- event + webhook triggers ----------------------------------------------
 
-    /// Fire an event (Gartner kinds). Matches Event-triggered jobs by kind +
-    /// filter + scope, respects the frequency cap, queues immediately.
-    pub fn fire_event(&mut self, kind: EventKind, payload: &Value, now: u64) -> Vec<String> {
-        let payload_str = payload.to_string();
-        let ids: Vec<String> = self.jobs.keys().cloned().collect();
-        let mut fired = Vec::new();
-        for id in ids {
-            let Some(job) = self.jobs.get(&id) else {
-                continue;
-            };
-            if !job.enabled || job.paused {
-                continue;
-            }
-            let TriggerSpec::Event { kind: k, filter } = &job.trigger else {
-                continue;
-            };
-            if *k != kind {
-                continue;
-            }
-            if !filter.is_empty() && !payload_str.contains(filter) {
-                continue;
-            }
-            if let Some(scope) = &job.policy.scope {
-                if !payload_str.contains(scope) {
-                    continue;
-                }
-            }
-            if let Some(cap) = job.policy.max_runs_per_hour {
-                let cutoff = now.saturating_sub(3600);
-                let in_window = job.recent_fires.iter().filter(|t| **t >= cutoff).count() as u32;
-                if in_window >= cap {
-                    continue;
-                }
-            }
-            let job = self.jobs.get_mut(&id).unwrap();
-            job.next_run_at = Some(now);
-            fired.push(id);
-        }
-        fired
+    /// Fire an event (Gartner kinds). This compatibility façade now uses the
+    /// same durable admission path as the host dispatcher; it returns the
+    /// registry ids for callers that only need an acknowledgement.
+    pub fn fire_event(
+        &mut self,
+        kind: EventKind,
+        payload: &Value,
+        now: u64,
+    ) -> Result<Vec<String>, String> {
+        let admitted = self.admit_event(kind, payload, now)?;
+        Ok(self.pending_job_ids_for_occurrences(&admitted))
     }
 
-    /// Webhook ingress (F11 loopback). Validates the path + required body keys
-    /// (schema), then fires the job as an event. `token` (optional) guards the
-    /// loopback listener — set via `scheduler/webhook_token`.
+    /// Webhook ingress (F11 loopback). Validate the path + required body keys
+    /// (schema), then durably admit the occurrence. `token` (optional) guards
+    /// the loopback listener — set via `scheduler/webhook_token`.
     pub fn fire_webhook(
         &mut self,
         path: &str,
@@ -868,44 +2125,14 @@ impl SchedulerService {
         now: u64,
         token: Option<&str>,
     ) -> Result<Vec<String>, String> {
-        if let Some(tok) = &self.webhook_token {
-            if token != Some(tok.as_str()) {
-                return Err("webhook: bad token".into());
-            }
-        }
-        let ids: Vec<String> = self.jobs.keys().cloned().collect();
-        let mut fired = Vec::new();
-        for id in ids {
-            let Some(job) = self.jobs.get(&id) else {
-                continue;
-            };
-            if !job.enabled || job.paused {
-                continue;
-            }
-            let TriggerSpec::Webhook { path: p, schema } = &job.trigger else {
-                continue;
-            };
-            if p != path {
-                continue;
-            }
-            // Schema validation: every required key must be present.
-            let obj = body
-                .as_object()
-                .ok_or_else(|| format!("webhook {path}: body must be a JSON object"))?;
-            for key in schema {
-                if !obj.contains_key(key) {
-                    return Err(format!("webhook {path}: missing required key {key:?}"));
-                }
-            }
-            let job = self.jobs.get_mut(&id).unwrap();
-            job.next_run_at = Some(now);
-            fired.push(id);
-        }
-        Ok(fired)
+        let admitted = self.admit_webhook(path, body, now, token)?;
+        Ok(self.pending_job_ids_for_occurrences(&admitted))
     }
 
     pub fn set_webhook_token(&mut self, token: Option<String>) {
-        self.webhook_token = token;
+        if self.load_error.is_none() {
+            self.webhook_token = token;
+        }
     }
 
     // -- nudge sentinels --------------------------------------------------------
@@ -1017,7 +2244,7 @@ impl SchedulerService {
             }
             if matches!(
                 job.trigger,
-                TriggerSpec::Event { .. } | TriggerSpec::Webhook { .. }
+                TriggerSpec::Event { .. } | TriggerSpec::Webhook { .. } | TriggerSpec::Manual
             ) {
                 continue; // event-driven jobs have no next_run_at
             }
@@ -1049,11 +2276,22 @@ impl SchedulerService {
     // -- JSON-RPC dispatch ------------------------------------------------------
 
     pub fn handle(&mut self, method: &str, params: &Value) -> Result<Value, String> {
-        let out = self.handle_inner(method, params)?;
-        // P50.3.3 — the coordinator drives due/fire/mark_fired/monitor through
-        // this funnel; write through after every successful mutation so a
-        // shell/coordinator restart preserves the trigger registry.
-        self.persist_quiet();
+        self.ensure_healthy()?;
+        let before = self.clone();
+        let out = match self.handle_inner(method, params) {
+            Ok(out) => out,
+            Err(error) => {
+                *self = before;
+                return Err(error);
+            }
+        };
+        if let Err(error) = self.persist() {
+            *self = before.clone();
+            // Best-effort repair keeps disk and memory aligned if a checked
+            // mutator had already written before the outer commit failed.
+            let _ = before.persist();
+            return Err(error);
+        }
         Ok(out)
     }
 
@@ -1074,7 +2312,11 @@ impl SchedulerService {
                     .iter()
                     .map(|j| serde_json::to_value(j).unwrap_or(Value::Null))
                     .collect();
-                Ok(json!({ "jobs": jobs, "onBattery": self.on_battery }))
+                Ok(json!({
+                    "jobs": jobs,
+                    "onBattery": self.on_battery,
+                    "occurrences": self.occurrences(),
+                }))
             }
             "scheduler/upsert" => {
                 let id = str_param(params, "id").ok_or("scheduler/upsert requires id")?;
@@ -1099,12 +2341,21 @@ impl SchedulerService {
                             .map_err(|e| format!("bad policy: {e}"))
                     })
                     .transpose()?;
-                self.upsert(id, name, session_id, trigger, steps, policy, now);
+                self.upsert_checked_with_enabled(
+                    id,
+                    name,
+                    session_id,
+                    trigger,
+                    steps,
+                    policy,
+                    params.get("enabled").and_then(Value::as_bool),
+                    now,
+                )?;
                 Ok(json!({ "ok": true, "id": id }))
             }
             "scheduler/delete" => {
                 let id = str_param(params, "id").ok_or("scheduler/delete requires id")?;
-                Ok(json!({ "ok": self.delete(id) }))
+                Ok(json!({ "ok": self.delete_checked(id)? }))
             }
             "scheduler/enable" => {
                 let id = str_param(params, "id").ok_or("scheduler/enable requires id")?;
@@ -1123,7 +2374,7 @@ impl SchedulerService {
             "scheduler/pause_session" => {
                 let session_id = str_param(params, "sessionId")
                     .ok_or("scheduler/pause_session requires sessionId")?;
-                let paused = self.pause_session(session_id);
+                let paused = self.pause_session_checked(session_id)?;
                 Ok(json!({ "ok": true, "paused": paused }))
             }
             "scheduler/resume" => {
@@ -1131,11 +2382,52 @@ impl SchedulerService {
                 self.resume(id, now)?;
                 Ok(json!({ "ok": true }))
             }
-            "scheduler/due" => Ok(json!({ "due": self.due(now), "now": now })),
+            "scheduler/due" => {
+                // A due query is also an admission boundary: the occurrence
+                // is durable before the host is told which ids need Work.
+                let occurrences = self.admit_due(now)?;
+                Ok(json!({
+                    "due": self.due(now),
+                    "occurrences": occurrences,
+                    "now": now,
+                }))
+            }
+            "scheduler/admit_due" => {
+                let admitted = self.admit_due(now)?;
+                Ok(json!({ "occurrences": admitted }))
+            }
+            "scheduler/pending_occurrences" => {
+                Ok(json!({ "occurrences": self.pending_occurrences() }))
+            }
+            "scheduler/occurrence_error" => {
+                let id = str_param(params, "id").ok_or("scheduler/occurrence_error requires id")?;
+                let reason = str_param(params, "reason").unwrap_or("admission uncertain");
+                self.mark_occurrence_uncertain(id, reason)?;
+                Ok(json!({ "ok": true, "id": id }))
+            }
+            "scheduler/mark_occurrence_fired" => {
+                let id =
+                    str_param(params, "id").ok_or("scheduler/mark_occurrence_fired requires id")?;
+                let receipt = params
+                    .get("receipt")
+                    .cloned()
+                    .ok_or("scheduler/mark_occurrence_fired requires a durable receipt")?;
+                let receipt: WorkRunAdmissionReceipt = serde_json::from_value(receipt)
+                    .map_err(|error| format!("bad admission receipt: {error}"))?;
+                self.mark_occurrence_fired_with_receipt(id, now, &receipt)?;
+                Ok(json!({ "ok": true, "id": id, "receipt": receipt }))
+            }
+            "scheduler/cancel_occurrence" => {
+                let id =
+                    str_param(params, "id").ok_or("scheduler/cancel_occurrence requires id")?;
+                let reason = str_param(params, "reason").unwrap_or("cancelled by host");
+                self.cancel_occurrence(id, reason)?;
+                Ok(json!({ "ok": true, "id": id }))
+            }
             "scheduler/mark_fired" => {
                 let id = str_param(params, "id").ok_or("scheduler/mark_fired requires id")?;
                 self.mark_fired(id, now)?;
-                Ok(json!({ "ok": true }))
+                Ok(json!({ "ok": true, "id": id }))
             }
             "scheduler/battery" => {
                 let on = params
@@ -1154,15 +2446,28 @@ impl SchedulerService {
                 )
                 .map_err(|e| format!("bad kind: {e}"))?;
                 let payload = params.get("payload").cloned().unwrap_or(Value::Null);
-                Ok(json!({ "fired": self.fire_event(kind, &payload, now) }))
+                let admitted = if let Some(key) = str_param(params, "idempotencyKey") {
+                    self.admit_event_with_key(kind, &payload, key, now)?
+                } else {
+                    let key = format!("event:payload:{}", digest_json(&payload));
+                    self.admit_event_with_key(kind, &payload, &key, now)?
+                };
+                let fired = self.pending_job_ids_for_occurrences(&admitted);
+                Ok(json!({ "fired": fired, "occurrences": admitted }))
             }
             "scheduler/fire_webhook" => {
                 let path =
                     str_param(params, "path").ok_or("scheduler/fire_webhook requires path")?;
                 let body = params.get("body").cloned().unwrap_or(Value::Null);
                 let token = params.get("token").and_then(Value::as_str);
-                let fired = self.fire_webhook(path, &body, now, token)?;
-                Ok(json!({ "fired": fired }))
+                let admitted = if let Some(key) = str_param(params, "idempotencyKey") {
+                    self.admit_webhook_with_key(path, &body, key, now, token)?
+                } else {
+                    let key = format!("webhook:payload:{}", digest_json(&body));
+                    self.admit_webhook_with_key(path, &body, &key, now, token)?
+                };
+                let fired = self.pending_job_ids_for_occurrences(&admitted);
+                Ok(json!({ "fired": fired, "occurrences": admitted }))
             }
             "scheduler/webhook_token" => {
                 let token = params
@@ -1181,12 +2486,13 @@ impl SchedulerService {
             "scheduler/nudges" => Ok(json!({ "suggestions": self.nudges() })),
             "scheduler/run_now" => {
                 let id = str_param(params, "id").ok_or("scheduler/run_now requires id")?;
-                let job = self
-                    .jobs
-                    .get_mut(id)
-                    .ok_or_else(|| format!("unknown job {id:?}"))?;
-                job.next_run_at = Some(now);
-                Ok(json!({ "ok": true, "id": id }))
+                let payload = params.get("payload").cloned().unwrap_or(Value::Null);
+                let occurrence = if let Some(key) = str_param(params, "idempotencyKey") {
+                    self.admit_manual_with_key(id, &payload, key, now)?
+                } else {
+                    self.admit_manual(id, &payload, now)?
+                };
+                Ok(json!({ "ok": true, "id": id, "occurrence": occurrence }))
             }
             "scheduler/monitor" => {
                 let id = str_param(params, "id").ok_or("scheduler/monitor requires id")?;
@@ -1220,6 +2526,429 @@ fn str_param<'a>(params: &'a Value, key: &str) -> Option<&'a str> {
     params.get(key).and_then(Value::as_str)
 }
 
+/// Canonical JSON used for all scheduler digests. Object keys are sorted so
+/// semantically identical values have one byte representation.
+fn canonical_json(value: &Value) -> String {
+    match value {
+        Value::Null => "null".into(),
+        Value::Bool(value) => value.to_string(),
+        Value::Number(value) => value.to_string(),
+        Value::String(value) => serde_json::to_string(value).unwrap_or_else(|_| "\"\"".into()),
+        Value::Array(values) => {
+            let parts: Vec<String> = values.iter().map(canonical_json).collect();
+            format!("[{}]", parts.join(","))
+        }
+        Value::Object(values) => {
+            let mut keys: Vec<&String> = values.keys().collect();
+            keys.sort();
+            let parts: Vec<String> = keys
+                .into_iter()
+                .map(|key| {
+                    format!(
+                        "{}:{}",
+                        serde_json::to_string(key).unwrap_or_else(|_| "\"\"".into()),
+                        canonical_json(&values[key])
+                    )
+                })
+                .collect();
+            format!("{{{}}}", parts.join(","))
+        }
+    }
+}
+
+fn digest_bytes(bytes: &[u8]) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(bytes);
+    hasher
+        .finalize()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
+}
+
+fn digest_json(value: &Value) -> String {
+    digest_bytes(canonical_json(value).as_bytes())
+}
+
+fn is_sha256_digest(value: &str) -> bool {
+    value.len() == 64
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+}
+
+/// A stable identity derived by Rust from the registry key. Callers may
+/// choose the human-facing key, but they cannot choose occurrence provenance.
+fn trusted_automation_id(registry_id: &str) -> String {
+    format!(
+        "automation:auto:{}",
+        digest_bytes(format!("everyaios.automation.v1\0{registry_id}").as_bytes())
+    )
+}
+
+fn validate_job_definition(job: &Job) -> Result<(), String> {
+    if job.id.trim().is_empty() || job.name.trim().is_empty() {
+        return Err(format!("scheduler job `{}` has an empty id/name", job.id));
+    }
+    if job.generation == 0 || job.revision == 0 {
+        return Err(format!(
+            "scheduler job `{}` has no generation/revision",
+            job.id
+        ));
+    }
+    match &job.trigger {
+        TriggerSpec::Cron { expr } => {
+            CronExpr::parse(expr)
+                .map_err(|error| format!("invalid cron for `{}`: {error}", job.id))?;
+        }
+        TriggerSpec::Interval { secs } if *secs == 0 => {
+            return Err(format!(
+                "scheduler interval for `{}` must be non-zero",
+                job.id
+            ));
+        }
+        TriggerSpec::Webhook { path, .. } if path.trim().is_empty() => {
+            return Err(format!(
+                "scheduler webhook for `{}` has an empty path",
+                job.id
+            ));
+        }
+        TriggerSpec::Event { .. }
+        | TriggerSpec::Interval { .. }
+        | TriggerSpec::Webhook { .. }
+        | TriggerSpec::Window { .. }
+        | TriggerSpec::Manual => {}
+    }
+    if matches!(job.trigger, TriggerSpec::Cron { .. })
+        && job.policy.misfire_policy == MisfirePolicy::CatchUp
+    {
+        return Err(format!(
+            "scheduler job `{}` uses unsupported catch_up misfire policy",
+            job.id
+        ));
+    }
+    Ok(())
+}
+
+fn revision_id_for(job: &Job, revision: u64) -> String {
+    let snapshot = revision_snapshot(job);
+    content_addressed_revision_id_for_generation(&snapshot.automation(), job.generation, revision)
+}
+
+fn revision_snapshot(job: &Job) -> AutomationRevision {
+    AutomationRevision {
+        automation_id: job.automation_id.clone(),
+        revision: job.revision,
+        revision_id: job.revision_id.clone(),
+        name: job.name.clone(),
+        session_id: job.session_id.clone(),
+        trigger: job.trigger.clone(),
+        steps: job.steps.clone(),
+        policy: job.policy.clone(),
+    }
+}
+
+fn legacy_definition_digest(job: &Job) -> String {
+    digest_json(&json!({
+        "automationId": job.automation_id,
+        "name": job.name,
+        "sessionId": job.session_id,
+        "trigger": job.trigger,
+        "steps": job.steps,
+        "policy": job.policy,
+    }))
+}
+
+fn legacy_revision_id_matches(job: &Job, revision_id: &str) -> bool {
+    revision_id == format!("{}:{}", job.revision, legacy_definition_digest(job))
+}
+
+fn legacy_revision_id_for_snapshot(revision: &AutomationRevision) -> String {
+    format!(
+        "{}:{}",
+        revision.revision,
+        digest_json(&json!({
+            "automationId": revision.automation_id,
+            "name": revision.name,
+            "sessionId": revision.session_id,
+            "trigger": revision.trigger,
+            "steps": revision.steps,
+            "policy": revision.policy,
+        }))
+    )
+}
+
+fn normalize_loaded_occurrence(occurrence: &mut AutomationOccurrence) -> Result<(), String> {
+    // Version-2 rows predate the generation-aware identity.  Migrate only an
+    // exact legacy digest; an arbitrary malformed identity remains a hard
+    // load failure rather than being silently repaired.
+    if parse_revision_id(&occurrence.revision_id).is_err() {
+        let legacy_id = legacy_revision_id_for_snapshot(&occurrence.revision);
+        if !occurrence.revision_id.is_empty() && occurrence.revision_id != legacy_id {
+            return Err(format!(
+                "scheduler occurrence `{}` has an invalid legacy revision id",
+                occurrence.trigger_occurrence_id
+            ));
+        }
+        let generation = occurrence.revision.generation().max(1);
+        let revision = occurrence.revision.revision.max(1);
+        let canonical = content_addressed_revision_id_for_generation(
+            &occurrence.revision.automation(),
+            generation,
+            revision,
+        );
+        occurrence.revision_id = canonical.clone();
+        occurrence.revision.revision_id = canonical;
+    } else if occurrence.revision.revision_id.trim().is_empty() {
+        occurrence.revision.revision_id = occurrence.revision_id.clone();
+    }
+
+    let had_key = !occurrence.idempotency_key.trim().is_empty();
+    if !had_key {
+        occurrence.idempotency_key = format!("legacy:{}", occurrence.dedup_digest);
+    }
+    if occurrence.state == OccurrenceState::Pending || occurrence.state == OccurrenceState::Terminal
+    {
+        occurrence.state = if occurrence.admission_receipt.is_some() {
+            OccurrenceState::Terminal
+        } else if !had_key
+            || occurrence.admission_error.is_some()
+            || occurrence.fired_at.is_some()
+            || occurrence.work_id.is_some()
+            || occurrence.run_id.is_some()
+        {
+            if occurrence.admission_error.is_none() {
+                occurrence.admission_error = Some(if had_key {
+                    "legacy firing lacks a durable Work/Run receipt".into()
+                } else {
+                    "legacy occurrence lacks a stable delivery key".into()
+                });
+            }
+            OccurrenceState::Uncertain
+        } else {
+            OccurrenceState::Pending
+        };
+    }
+    Ok(())
+}
+
+fn validate_occurrence_shape(occurrence: &AutomationOccurrence) -> Result<(), String> {
+    if !occurrence.trigger_occurrence_id.starts_with("occ:")
+        || occurrence.trigger_occurrence_id.len() != 36
+        || occurrence.automation_id.trim().is_empty()
+        || occurrence.revision_id.trim().is_empty()
+        || occurrence.idempotency_key.trim().is_empty()
+        || !is_sha256_digest(&occurrence.payload_digest)
+        || !is_sha256_digest(&occurrence.dedup_digest)
+    {
+        return Err("scheduler occurrence has an invalid identity/digest field".into());
+    }
+    let identity = parse_revision_id(&occurrence.revision_id)
+        .map_err(|error| format!("scheduler occurrence has invalid revision: {error}"))?;
+    if occurrence.revision.automation_id != occurrence.automation_id
+        || occurrence.revision.revision_id != occurrence.revision_id
+        || occurrence.revision.revision != identity.revision
+        || occurrence.revision.generation() != identity.generation
+        || occurrence.revision_id
+            != content_addressed_revision_id_for_generation(
+                &occurrence.revision.automation(),
+                identity.generation,
+                identity.revision,
+            )
+    {
+        return Err(format!(
+            "scheduler occurrence `{}` has inconsistent revision provenance",
+            occurrence.trigger_occurrence_id
+        ));
+    }
+    if !occurrence_trigger_matches_revision(&occurrence.trigger, &occurrence.revision.trigger) {
+        return Err(format!(
+            "scheduler occurrence `{}` trigger does not match its immutable revision",
+            occurrence.trigger_occurrence_id
+        ));
+    }
+    let expected_dedup = dedup_digest_for(
+        &occurrence.automation_id,
+        identity.generation,
+        &occurrence.trigger,
+        &occurrence.idempotency_key,
+    );
+    if !occurrence.idempotency_key.starts_with("legacy:")
+        && (expected_dedup != occurrence.dedup_digest
+            || occurrence.trigger_occurrence_id
+                != format!("occ:{}", &occurrence.dedup_digest[..32]))
+    {
+        return Err(format!(
+            "scheduler occurrence `{}` has inconsistent delivery identity",
+            occurrence.trigger_occurrence_id
+        ));
+    }
+    match occurrence.state {
+        OccurrenceState::Pending => {
+            if occurrence.fired_at.is_some()
+                || occurrence.work_id.is_some()
+                || occurrence.run_id.is_some()
+                || occurrence.admission_receipt.is_some()
+                || occurrence.admission_error.is_some()
+            {
+                return Err("pending occurrence contains terminal/admission metadata".into());
+            }
+        }
+        OccurrenceState::Uncertain => {
+            if occurrence.fired_at.is_some() || occurrence.admission_receipt.is_some() {
+                return Err("uncertain occurrence contains a terminal receipt".into());
+            }
+            if occurrence
+                .admission_error
+                .as_deref()
+                .is_none_or(|reason| reason.trim().is_empty())
+            {
+                return Err("uncertain occurrence requires a reconciliation reason".into());
+            }
+        }
+        OccurrenceState::Cancelled => {
+            if occurrence.fired_at.is_some()
+                || occurrence.work_id.is_some()
+                || occurrence.run_id.is_some()
+                || occurrence.admission_receipt.is_some()
+            {
+                return Err("cancelled occurrence contains an admission receipt".into());
+            }
+        }
+        OccurrenceState::Terminal => {
+            if occurrence.fired_at.is_none()
+                || occurrence.work_id.is_none()
+                || occurrence.run_id.is_none()
+                || occurrence.admission_error.is_some()
+            {
+                return Err("terminal occurrence lacks Work/Run admission metadata".into());
+            }
+            let receipt = occurrence
+                .admission_receipt
+                .as_ref()
+                .ok_or_else(|| "terminal occurrence lacks durable receipt".to_string())?;
+            validate_receipt_for(
+                occurrence,
+                receipt,
+                &format!(
+                    "automation-work:{}:{}",
+                    occurrence.automation_id, occurrence.trigger_occurrence_id
+                ),
+                &format!(
+                    "automation-run:{}:{}",
+                    occurrence.automation_id, occurrence.trigger_occurrence_id
+                ),
+            )?;
+        }
+    }
+    Ok(())
+}
+
+fn occurrence_trigger_matches_revision(
+    trigger: &OccurrenceTrigger,
+    revision_trigger: &TriggerSpec,
+) -> bool {
+    match (trigger, revision_trigger) {
+        (OccurrenceTrigger::Schedule { .. }, TriggerSpec::Cron { .. })
+        | (OccurrenceTrigger::Schedule { .. }, TriggerSpec::Interval { .. })
+        | (OccurrenceTrigger::Schedule { .. }, TriggerSpec::Window { .. }) => true,
+        (OccurrenceTrigger::Manual, TriggerSpec::Manual) => true,
+        (OccurrenceTrigger::Event { kind }, TriggerSpec::Event { kind: expected, .. }) => {
+            serde_json::to_value(expected)
+                .ok()
+                .and_then(|value| value.as_str().map(str::to_string))
+                .as_deref()
+                == Some(kind.as_str())
+        }
+        (OccurrenceTrigger::Webhook { path }, TriggerSpec::Webhook { path: expected, .. }) => {
+            path == expected
+        }
+        _ => false,
+    }
+}
+
+fn validate_receipt_for(
+    occurrence: &AutomationOccurrence,
+    receipt: &WorkRunAdmissionReceipt,
+    expected_work_id: &str,
+    expected_run_id: &str,
+) -> Result<(), String> {
+    if !receipt.durable {
+        return Err("Work/Run receipt is not marked durable".into());
+    }
+    if receipt.work_id != expected_work_id || receipt.run_id != expected_run_id {
+        return Err("Work/Run receipt ids do not match the deterministic occurrence owner".into());
+    }
+    if receipt.automation_id != occurrence.automation_id
+        || receipt.revision_id != occurrence.revision_id
+        || receipt.trigger_occurrence_id != occurrence.trigger_occurrence_id
+        || receipt.automation_generation != occurrence.revision.generation()
+    {
+        return Err("Work/Run receipt provenance does not match the occurrence".into());
+    }
+    Ok(())
+}
+
+fn normalize_idempotency_key(value: &str, kind: &str) -> Result<String, String> {
+    let key = value.trim();
+    if key.is_empty() {
+        return Err(format!(
+            "{kind} admission requires a stable idempotency key"
+        ));
+    }
+    if key.len() > 256 || key.chars().any(char::is_control) {
+        return Err(format!("{kind} idempotency key is invalid"));
+    }
+    Ok(key.to_string())
+}
+
+fn extract_idempotency_key(payload: &Value, kind: &str) -> Result<String, String> {
+    let object = payload
+        .as_object()
+        .ok_or_else(|| format!("{kind} admission requires an object payload"))?;
+    const KEYS: [&str; 8] = [
+        "deliveryId",
+        "delivery_id",
+        "idempotencyKey",
+        "idempotency_key",
+        "requestId",
+        "request_id",
+        "eventId",
+        "event_id",
+    ];
+    let mut found = None;
+    for key in KEYS {
+        if let Some(value) = object.get(key) {
+            if found.is_some() {
+                return Err(format!(
+                    "{kind} admission supplied multiple idempotency keys"
+                ));
+            }
+            found = Some(
+                value
+                    .as_str()
+                    .ok_or_else(|| format!("{kind} idempotency key must be a string"))?,
+            );
+        }
+    }
+    let key = found.ok_or_else(|| format!("{kind} admission requires a stable idempotency key"))?;
+    normalize_idempotency_key(key, kind)
+}
+
+fn dedup_digest_for(
+    automation_id: &str,
+    generation: u64,
+    trigger: &OccurrenceTrigger,
+    idempotency_key: &str,
+) -> String {
+    digest_json(&json!({
+        "automationId": automation_id,
+        "generation": generation,
+        "trigger": trigger,
+        "idempotencyKey": idempotency_key,
+    }))
+}
+
 /// First cron/interval fire = the next matching minute (interval: now + secs).
 fn compute_next_run(trigger: &TriggerSpec, now: u64, current: Option<u64>) -> Option<u64> {
     match trigger {
@@ -1227,7 +2956,7 @@ fn compute_next_run(trigger: &TriggerSpec, now: u64, current: Option<u64>) -> Op
             match CronExpr::parse(expr) {
                 Ok(c) => {
                     // Next minute that matches (scan up to 366 days).
-                    let mut t = now - (now % 60) + 60;
+                    let mut t = now.saturating_sub(now % 60).saturating_add(60);
                     for _ in 0..(366 * 1440) {
                         if c.matches(t) {
                             return Some(t);
@@ -1239,12 +2968,12 @@ fn compute_next_run(trigger: &TriggerSpec, now: u64, current: Option<u64>) -> Op
                 Err(_) => current,
             }
         }
-        TriggerSpec::Interval { secs } => Some(now + secs),
+        TriggerSpec::Interval { secs } => Some(now.saturating_add(*secs)),
         TriggerSpec::Window {
             window,
             utc_offset_minutes,
         } => Some(next_window_unix(now, *window, *utc_offset_minutes)),
-        TriggerSpec::Event { .. } | TriggerSpec::Webhook { .. } => None,
+        TriggerSpec::Event { .. } | TriggerSpec::Webhook { .. } | TriggerSpec::Manual => None,
     }
 }
 
@@ -1261,11 +2990,7 @@ pub fn next_window_unix(now: u64, window: DayWindow, utc_offset_minutes: i32) ->
         start_today + 86_400
     };
     let utc = start_local as i64 - offset;
-    if utc < 0 {
-        0
-    } else {
-        utc as u64
-    }
+    if utc < 0 { 0 } else { utc as u64 }
 }
 
 #[cfg(test)]
@@ -1288,6 +3013,260 @@ mod tests {
     fn mon_0915() -> u64 {
         let sunday_start = 1_750_000_000 - 1_750_000_000 % 86_400;
         sunday_start + 86_400 + 9 * 3600 + 15 * 60
+    }
+
+    #[test]
+    fn revision_identity_is_stable_until_definition_changes() {
+        let mut svc = SchedulerService::new();
+        svc.upsert(
+            "job",
+            "brief",
+            "source",
+            TriggerSpec::Manual,
+            vec![AutomationStep::RunCode {
+                language: "js".into(),
+                code: "return 1".into(),
+            }],
+            None,
+            now(),
+        );
+        let first = svc.get("job").unwrap();
+        let first_revision = first.revision;
+        let first_id = first.revision_id.clone();
+        let automation_id = first.automation_id.clone();
+        assert!(automation_id.starts_with("automation:auto:"));
+        assert_ne!(automation_id, "job");
+
+        svc.upsert(
+            "job",
+            "brief",
+            "source",
+            TriggerSpec::Manual,
+            vec![AutomationStep::RunCode {
+                language: "js".into(),
+                code: "return 1".into(),
+            }],
+            None,
+            now() + 1,
+        );
+        let unchanged = svc.get("job").unwrap();
+        assert_eq!(unchanged.revision, first_revision);
+        assert_eq!(unchanged.revision_id, first_id);
+
+        svc.upsert(
+            "job",
+            "brief edited",
+            "source",
+            TriggerSpec::Manual,
+            vec![AutomationStep::RunCode {
+                language: "js".into(),
+                code: "return 2".into(),
+            }],
+            None,
+            now() + 2,
+        );
+        let changed = svc.get("job").unwrap();
+        assert_eq!(changed.revision, first_revision + 1);
+        assert_ne!(changed.revision_id, first_id);
+    }
+
+    #[test]
+    fn schedule_occurrence_is_durable_and_idempotent() {
+        let dir = std::env::temp_dir().join(format!(
+            "everyaios-automation-occurrence-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("scheduler.json");
+        let occurrence_id = {
+            let mut svc = SchedulerService::load_or_new(path.clone());
+            svc.upsert(
+                "scheduled",
+                "brief",
+                "source",
+                TriggerSpec::Interval { secs: 60 },
+                vec![AutomationStep::OnlineSearch {
+                    query: "news".into(),
+                }],
+                None,
+                now(),
+            );
+            let admitted = svc.admit_due(now() + 61).unwrap();
+            assert_eq!(admitted.len(), 1);
+            let occurrence = admitted[0].clone();
+            assert!(occurrence.trigger_occurrence_id.starts_with("occ:"));
+            assert!(!occurrence.payload_digest.is_empty());
+            assert!(!occurrence.dedup_digest.is_empty());
+            assert!(occurrence.is_pending());
+            assert_eq!(
+                occurrence.automation_id,
+                svc.get("scheduled").unwrap().automation_id
+            );
+            assert_eq!(
+                occurrence.revision_id,
+                svc.get("scheduled").unwrap().revision_id
+            );
+
+            // Replaying the same due pass returns the same occurrence.
+            let replay = svc.admit_due(now() + 61).unwrap();
+            assert_eq!(replay.len(), 1);
+            assert_eq!(
+                replay[0].trigger_occurrence_id,
+                occurrence.trigger_occurrence_id
+            );
+            assert_eq!(svc.occurrences().len(), 1);
+
+            let admission = svc
+                .receipt_for_occurrence(&occurrence.trigger_occurrence_id)
+                .unwrap();
+            svc.mark_occurrence_fired_with_receipt(
+                &occurrence.trigger_occurrence_id,
+                now() + 61,
+                &admission,
+            )
+            .unwrap();
+            assert!(svc.due(now() + 61).is_empty());
+            occurrence.trigger_occurrence_id
+        };
+        let reloaded = SchedulerService::load_or_new(path);
+        let occurrence = reloaded.occurrence(&occurrence_id).unwrap();
+        let expected_work = reloaded.expected_work_id(occurrence);
+        let expected_run = reloaded.expected_run_id(occurrence);
+        assert_eq!(occurrence.work_id.as_deref(), Some(expected_work.as_str()));
+        assert_eq!(occurrence.run_id.as_deref(), Some(expected_run.as_str()));
+        assert!(!occurrence.is_pending());
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn event_webhook_and_manual_share_occurrence_admission() {
+        let mut svc = SchedulerService::new();
+        svc.upsert(
+            "event",
+            "event",
+            "source",
+            TriggerSpec::Event {
+                kind: EventKind::RepoChange,
+                filter: String::new(),
+            },
+            vec![],
+            None,
+            now(),
+        );
+        svc.upsert(
+            "hook",
+            "hook",
+            "source",
+            TriggerSpec::Webhook {
+                path: "/hook".into(),
+                schema: vec!["ref".into()],
+            },
+            vec![],
+            None,
+            now(),
+        );
+        svc.upsert(
+            "manual",
+            "manual",
+            "source",
+            TriggerSpec::Manual,
+            vec![],
+            None,
+            now(),
+        );
+
+        let event = svc
+            .admit_event(
+                EventKind::RepoChange,
+                &json!({ "deliveryId": "delivery-1" }),
+                now(),
+            )
+            .unwrap();
+        assert_eq!(event.len(), 1);
+        let event_replay = svc
+            .admit_event(
+                EventKind::RepoChange,
+                &json!({ "deliveryId": "delivery-1" }),
+                now(),
+            )
+            .unwrap();
+        assert_eq!(
+            event[0].trigger_occurrence_id,
+            event_replay[0].trigger_occurrence_id
+        );
+
+        let webhook = svc
+            .admit_webhook(
+                "/hook",
+                &json!({ "ref": "main", "deliveryId": "delivery-webhook" }),
+                now(),
+                None,
+            )
+            .unwrap();
+        assert_eq!(webhook.len(), 1);
+        assert!(
+            svc.admit_webhook(
+                "/hook",
+                &json!({ "deliveryId": "missing-ref" }),
+                now(),
+                None,
+            )
+            .is_err()
+        );
+
+        let manual = svc
+            .admit_manual("manual", &json!({ "requestId": "r-1" }), now())
+            .unwrap();
+        let manual_replay = svc
+            .admit_manual("manual", &json!({ "requestId": "r-1" }), now())
+            .unwrap();
+        assert_eq!(
+            manual.trigger_occurrence_id,
+            manual_replay.trigger_occurrence_id
+        );
+        assert_eq!(svc.occurrences().len(), 3);
+    }
+
+    #[test]
+    fn corrupt_scheduler_state_is_not_an_empty_registry() {
+        let path = std::env::temp_dir().join(format!(
+            "everyaios-automation-corrupt-{}.json",
+            std::process::id()
+        ));
+        std::fs::write(&path, b"not-json").unwrap();
+        let mut svc = SchedulerService::load_or_new(path.clone());
+        assert!(!svc.is_healthy());
+        assert!(svc.registry_error().is_some());
+        assert!(
+            svc.handle("scheduler/list", &json!({ "now": now() }))
+                .is_err()
+        );
+        assert!(svc.admit_due(now()).is_err());
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn uncertain_occurrence_stays_pending_until_work_admission() {
+        let mut svc = SchedulerService::new();
+        svc.upsert(
+            "manual",
+            "manual",
+            "source",
+            TriggerSpec::Manual,
+            vec![],
+            None,
+            now(),
+        );
+        let occurrence = svc
+            .admit_manual("manual", &json!({ "requestId": "r-uncertain" }), now())
+            .unwrap();
+        svc.mark_occurrence_uncertain(&occurrence.trigger_occurrence_id, "work gateway down")
+            .unwrap();
+        let row = svc.occurrence(&occurrence.trigger_occurrence_id).unwrap();
+        assert!(!row.is_pending());
+        assert!(row.is_uncertain());
+        assert_eq!(row.admission_error.as_deref(), Some("work gateway down"));
     }
 
     #[test]
@@ -1364,11 +3343,9 @@ mod tests {
         assert_eq!(svc.due(due_at), vec!["j1".to_string()]);
     }
 
-    /// The trigger-plane dedupe: a due job stays due until the host records
-    /// the firing (`mark_fired`), which advances next-run — so one firing is
-    /// never re-queued mid-flight, and the next fire is the next occurrence.
+    /// A schedule advances only after a matching Work/Run receipt.
     #[test]
-    fn mark_fired_advances_schedule_and_dedupes() {
+    fn receipt_advances_schedule_and_dedupes() {
         let mut svc = SchedulerService::new();
         svc.upsert(
             "j1",
@@ -1379,17 +3356,24 @@ mod tests {
             None,
             now(),
         );
-        // Due at now+61 and *stays* due every tick until the host marks it.
-        assert_eq!(svc.due(now() + 61), vec!["j1".to_string()]);
+        let occurrence = svc.admit_due(now() + 61).unwrap().pop().unwrap();
         assert_eq!(svc.due(now() + 62), vec!["j1".to_string()]);
-        svc.mark_fired("j1", now() + 62).unwrap();
-        assert!(svc.due(now() + 62).is_empty(), "marked → deduped");
+        let admission = svc
+            .receipt_for_occurrence(&occurrence.trigger_occurrence_id)
+            .unwrap();
+        svc.mark_occurrence_fired_with_receipt(
+            &occurrence.trigger_occurrence_id,
+            now() + 62,
+            &admission,
+        )
+        .unwrap();
+        assert!(svc.due(now() + 62).is_empty(), "receipt → deduped");
         assert!(svc.due(now() + 100).is_empty(), "next occurrence not yet");
         assert_eq!(svc.due(now() + 123), vec!["j1".to_string()]);
         let job = svc.get("j1").unwrap();
         assert_eq!(job.last_fired_at, Some(now() + 62));
         assert_eq!(job.recent_fires, vec![now() + 62]);
-        // Event triggers wait on their event again after a firing.
+
         svc.upsert(
             "j2",
             "ev",
@@ -1402,10 +3386,20 @@ mod tests {
             None,
             now(),
         );
-        svc.fire_event(EventKind::RepoChange, &json!({}), now())
-            .first()
+        let event = svc
+            .admit_event(
+                EventKind::RepoChange,
+                &json!({ "deliveryId": "event-1" }),
+                now(),
+            )
+            .unwrap()
+            .pop()
             .unwrap();
-        svc.mark_fired("j2", now()).unwrap();
+        let admission = svc
+            .receipt_for_occurrence(&event.trigger_occurrence_id)
+            .unwrap();
+        svc.mark_occurrence_fired_with_receipt(&event.trigger_occurrence_id, now(), &admission)
+            .unwrap();
         assert!(svc.get("j2").unwrap().next_run_at.is_none());
     }
 
@@ -1469,14 +3463,22 @@ mod tests {
             None,
             now(),
         );
-        let fired = svc.fire_event(
-            EventKind::CiBuildFail,
-            &json!({ "repo": "repo-a", "build": 42 }),
-            now(),
-        );
+        let fired = svc
+            .fire_event(
+                EventKind::CiBuildFail,
+                &json!({ "repo": "repo-a", "build": 42, "deliveryId": "e1" }),
+                now(),
+            )
+            .unwrap();
         assert_eq!(fired, vec!["j1".to_string()]);
         // Filter miss → nothing.
-        let fired2 = svc.fire_event(EventKind::CiBuildFail, &json!({ "repo": "repo-b" }), now());
+        let fired2 = svc
+            .fire_event(
+                EventKind::CiBuildFail,
+                &json!({ "repo": "repo-b", "deliveryId": "e2" }),
+                now(),
+            )
+            .unwrap();
         assert!(fired2.is_empty());
         // With scope policy.
         svc.upsert(
@@ -1492,17 +3494,21 @@ mod tests {
             now(),
         );
         svc.jobs.get_mut("j3").unwrap().policy.scope = Some("src/".into());
-        let fired3 = svc.fire_event(
-            EventKind::RepoChange,
-            &json!({ "path": "README.md" }),
-            now(),
-        );
+        let fired3 = svc
+            .fire_event(
+                EventKind::RepoChange,
+                &json!({ "path": "README.md", "deliveryId": "e3" }),
+                now(),
+            )
+            .unwrap();
         assert!(fired3.is_empty());
-        let fired4 = svc.fire_event(
-            EventKind::RepoChange,
-            &json!({ "path": "src/main.rs" }),
-            now(),
-        );
+        let fired4 = svc
+            .fire_event(
+                EventKind::RepoChange,
+                &json!({ "path": "src/main.rs", "deliveryId": "e4" }),
+                now(),
+            )
+            .unwrap();
         assert_eq!(fired4, vec!["j3".to_string()]);
     }
 
@@ -1523,23 +3529,25 @@ mod tests {
             now(),
         );
         // Bad token → error.
-        assert!(svc
-            .fire_webhook(
+        assert!(
+            svc.fire_webhook(
                 "/hooks/ci",
-                &json!({"ref":"main","sha":"x"}),
+                &json!({"ref":"main","sha":"x","deliveryId":"bad-token"}),
                 now(),
                 Some("nope")
             )
-            .is_err());
+            .is_err()
+        );
         // Missing key → error.
-        assert!(svc
-            .fire_webhook("/hooks/ci", &json!({"ref":"main"}), now(), Some("tok"))
-            .is_err());
+        assert!(
+            svc.fire_webhook("/hooks/ci", &json!({"ref":"main"}), now(), Some("tok"))
+                .is_err()
+        );
         // Good → fires.
         let fired = svc
             .fire_webhook(
                 "/hooks/ci",
-                &json!({"ref":"main","sha":"abc"}),
+                &json!({"ref":"main","sha":"abc","deliveryId":"good"}),
                 now(),
                 Some("tok"),
             )
@@ -1549,7 +3557,7 @@ mod tests {
         let fired2 = svc
             .fire_webhook(
                 "/hooks/nope",
-                &json!({"ref":"main","sha":"x"}),
+                &json!({"ref":"main","sha":"x","deliveryId":"bad-token"}),
                 now(),
                 Some("tok"),
             )
@@ -1557,7 +3565,7 @@ mod tests {
         assert!(fired2.is_empty());
     }
 
-    /// Frequency admission counts *firings* (`mark_fired`), not intent.
+    /// Frequency admission counts receipt-backed firings, not delivery intent.
     #[test]
     fn frequency_policy_caps_fires() {
         let mut svc = SchedulerService::new();
@@ -1574,27 +3582,56 @@ mod tests {
             now(),
         );
         svc.jobs.get_mut("j1").unwrap().policy.max_runs_per_hour = Some(2);
-        assert_eq!(
-            svc.fire_event(EventKind::TelemetryThreshold, &json!({}), now())
-                .len(),
-            1
+        let first = svc
+            .admit_event_with_key(
+                EventKind::TelemetryThreshold,
+                &json!({ "value": 1 }),
+                "delivery-1",
+                now(),
+            )
+            .unwrap()
+            .pop()
+            .unwrap();
+        let receipt = svc
+            .receipt_for_occurrence(&first.trigger_occurrence_id)
+            .unwrap();
+        svc.mark_occurrence_fired_with_receipt(&first.trigger_occurrence_id, now(), &receipt)
+            .unwrap();
+
+        let second = svc
+            .admit_event_with_key(
+                EventKind::TelemetryThreshold,
+                &json!({ "value": 2 }),
+                "delivery-2",
+                now(),
+            )
+            .unwrap()
+            .pop()
+            .unwrap();
+        let receipt = svc
+            .receipt_for_occurrence(&second.trigger_occurrence_id)
+            .unwrap();
+        svc.mark_occurrence_fired_with_receipt(&second.trigger_occurrence_id, now(), &receipt)
+            .unwrap();
+
+        assert!(
+            svc.fire_event(
+                EventKind::TelemetryThreshold,
+                &json!({ "deliveryId": "delivery-3" }),
+                now(),
+            )
+            .unwrap()
+            .is_empty()
         );
-        svc.mark_fired("j1", now()).unwrap();
-        assert_eq!(
-            svc.fire_event(EventKind::TelemetryThreshold, &json!({}), now())
-                .len(),
-            1
-        );
-        svc.mark_fired("j1", now()).unwrap();
-        // At cap → suppressed.
-        assert!(svc
-            .fire_event(EventKind::TelemetryThreshold, &json!({}), now())
-            .is_empty());
-        // After the hour window → allowed again.
         let later = now() + 3700;
         assert_eq!(
-            svc.fire_event(EventKind::TelemetryThreshold, &json!({}), later)
-                .len(),
+            svc.fire_event(
+                EventKind::TelemetryThreshold,
+                &json!({ "deliveryId": "delivery-4" }),
+                later,
+            )
+            .unwrap()
+            .len(),
             1
         );
     }
@@ -1682,16 +3719,25 @@ mod tests {
             .handle("scheduler/list", &json!({ "now": now() }))
             .unwrap();
         assert_eq!(list["jobs"].as_array().unwrap().len(), 1);
-        // run_now forces a due.
-        svc.handle("scheduler/run_now", &json!({ "id": "j1", "now": now() }))
+        // Run-now admits a manual occurrence without changing the recurring
+        // schedule.  Its receipt is required before terminal advancement.
+        let run = svc
+            .handle(
+                "scheduler/run_now",
+                &json!({ "id": "j1", "idempotencyKey": "run-1", "now": now() }),
+            )
             .unwrap();
-        let due = svc
-            .handle("scheduler/due", &json!({ "now": now() }))
-            .unwrap();
-        assert_eq!(due["due"], json!(["j1"]));
-        // The host records the firing through the funnel.
-        svc.handle("scheduler/mark_fired", &json!({ "id": "j1", "now": now() }))
-            .unwrap();
+        let occurrence_id = run["occurrence"]["triggerOccurrenceId"].as_str().unwrap();
+        let receipt = svc.receipt_for_occurrence(occurrence_id).unwrap();
+        svc.handle(
+            "scheduler/mark_occurrence_fired",
+            &json!({
+                "id": occurrence_id,
+                "receipt": receipt,
+                "now": now(),
+            }),
+        )
+        .unwrap();
         let due2 = svc
             .handle("scheduler/due", &json!({ "now": now() }))
             .unwrap();
@@ -1720,12 +3766,14 @@ mod tests {
     #[test]
     fn unknown_job_methods_error() {
         let mut svc = SchedulerService::new();
-        assert!(svc
-            .handle("scheduler/pause", &json!({ "id": "ghost" }))
-            .is_err());
-        assert!(svc
-            .handle("scheduler/mark_fired", &json!({ "id": "ghost" }))
-            .is_err());
+        assert!(
+            svc.handle("scheduler/pause", &json!({ "id": "ghost" }))
+                .is_err()
+        );
+        assert!(
+            svc.handle("scheduler/mark_fired", &json!({ "id": "ghost" }))
+                .is_err()
+        );
         assert!(svc.handle("scheduler/nope", &json!({})).is_err());
     }
 
@@ -1964,10 +4012,8 @@ mod tests {
         assert_eq!(out["paused"], 0, "already paused — no double count");
     }
 
-    /// P50.3.3 — the trigger registry survives a shell/coordinator restart,
-    /// and recovery is misfire-policy-by-construction: a job whose schedule
-    /// slipped past fires once on resume (`run_once_on_resume`), then
-    /// `mark_fired` advances it — never a replay of every missed occurrence.
+    /// The trigger registry survives a restart, and a slipped schedule admits
+    /// one occurrence on resume rather than replaying every missed tick.
     #[test]
     fn jobs_survive_restart_and_recover_run_once_on_resume() {
         let dir = std::env::temp_dir().join(format!("everyaios-schedsvc-{}", std::process::id()));
@@ -1995,33 +4041,42 @@ mod tests {
                 None,
                 now(),
             );
-            svc.mark_fired("j-slip", now()).unwrap();
+            let admitted = svc.admit_due(now() + 61).unwrap();
+            let slipped = admitted
+                .into_iter()
+                .find(|occurrence| {
+                    svc.job_id_for_automation(&occurrence.automation_id) == Some("j-slip")
+                })
+                .expect("one slipped occurrence");
+            let receipt = svc
+                .receipt_for_occurrence(&slipped.trigger_occurrence_id)
+                .unwrap();
+            svc.mark_occurrence_fired_with_receipt(
+                &slipped.trigger_occurrence_id,
+                now() + 61,
+                &receipt,
+            )
+            .unwrap();
         }
         {
             let mut svc = SchedulerService::load_or_new(path.clone());
             assert_eq!(svc.list().len(), 2, "both jobs survive the restart");
-            let done = svc.get("j-done").unwrap();
-            assert!(done.enabled, "enabled flag survives");
-            assert!(!done.paused);
-            // A job that fired before the restart kept its occurrence record…
-            let slipped = svc.get("j-slip").unwrap();
-            assert_eq!(slipped.last_fired_at, Some(now()));
-            // …so it is not due again until its next occurrence.
-            assert!(
-                svc.due(now() + 30).is_empty(),
-                "both jobs' next fire is now+60"
-            );
-            // Both jobs' next occurrence is now+60 — both fire once, then
-            // mark_fired advances each. No replay of every missed occurrence.
-            // (Order: both share next_run_at → registry insertion order.)
-            let both = svc.due(now() + 61);
-            assert!(both.contains(&"j-done".to_string()) && both.contains(&"j-slip".to_string()));
-            svc.mark_fired("j-done", now() + 61).unwrap();
-            assert_eq!(
-                svc.due(now() + 61),
-                vec!["j-slip".to_string()],
-                "marked job deduped; the unmarked one stays due"
-            );
+            assert!(svc.get("j-done").unwrap().enabled);
+            assert_eq!(svc.get("j-slip").unwrap().last_fired_at, Some(now() + 61));
+            assert!(svc.due(now() + 30).is_empty());
+            assert_eq!(svc.due(now() + 61), vec!["j-done".to_string()]);
+            let due = svc.admit_due(now() + 61).unwrap();
+            assert_eq!(due.len(), 1);
+            let receipt = svc
+                .receipt_for_occurrence(&due[0].trigger_occurrence_id)
+                .unwrap();
+            svc.mark_occurrence_fired_with_receipt(
+                &due[0].trigger_occurrence_id,
+                now() + 61,
+                &receipt,
+            )
+            .unwrap();
+            assert!(svc.due(now() + 61).is_empty());
         }
         let _ = std::fs::remove_dir_all(&dir);
     }

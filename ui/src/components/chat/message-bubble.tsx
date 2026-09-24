@@ -1,6 +1,6 @@
 'use client'
 
-import { memo, useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useEffect, useId, useMemo, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
@@ -9,11 +9,11 @@ import {
   AlertTriangle,
   Brain,
   Check,
+  ChevronDown,
   ChevronRight,
   Copy,
   Download,
   GitFork,
-  Hash,
   Pencil,
   Quote,
   RotateCw,
@@ -41,7 +41,7 @@ import ArtifactCard from './artifact-card'
 import { staggerStyle } from '@/lib/stagger'
 import McqInterruptCard from './mcq-interrupt-card'
 import ProgressSteps from './progress-steps'
-import ToolChips from './tool-chip'
+import ToolChips, { toolActivitySummary } from './tool-chip'
 import { TurnCheckpoint } from './turn-checkpoint'
 import { applyCitationMarks, citationAnchorId, formatCitationExport } from '@/lib/citations'
 import { speakText, speechSynthesisAvailable, stopSpeaking } from '@/lib/voice'
@@ -239,15 +239,72 @@ function TimeStamp({ ts }: { ts: string }) {
   return <span className="font-mono text-[9px] text-muted-foreground/80">{label}</span>
 }
 
+/** Raw diagnostics stay behind a named, keyboard-operable disclosure. */
+function TechnicalDetails({ children }: { children: React.ReactNode }) {
+  const [open, setOpen] = useState(false)
+  const generatedId = useId()
+  const id = `technical-details-${generatedId.replace(/:/g, '')}`
+  return (
+    <div className="mt-1.5">
+      <button
+        type="button"
+        className="inline-flex items-center gap-1 rounded px-1.5 py-1 text-[10px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-controls={id}
+        aria-label={`${open ? 'Hide' : 'Show'} technical details`}
+      >
+        Technical details
+        <ChevronDown
+          aria-hidden
+          className={cn('h-3 w-3 transition-transform motion-reduce:transition-none', open && 'rotate-180')}
+        />
+      </button>
+      {open && (
+        <div id={id} className="mt-1 rounded-md border border-border/60 bg-background/50 p-2 font-mono text-[10px] text-muted-foreground">
+          {children}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function rawJson(value: unknown): string {
+  if (typeof value === 'string') return value
+  try {
+    return JSON.stringify(value, null, 2) ?? String(value)
+  } catch {
+    return String(value)
+  }
+}
+
 /** P52.21 — one message rendered as Markdown (per-message export shares this). */
 export function messageMarkdown(m: ChatMessage): string {
   const role =
     m.role === 'user' ? '## You' : m.role === 'assistant' ? '## Assistant' : '## System'
   const body = formatCitationExport(m.content, m.citations ?? [])
   const lines = [role, '', body]
-  if (m.error) lines.push('', `> ⛔ ${m.error.layer} error: ${m.error.detail}`)
-  for (const t of m.toolCalls ?? []) {
-    lines.push('', `- tool \`${t.toolId}\` — ${t.status}${t.error ? `: ${t.error}` : ''}`)
+  const technical: string[] = []
+  if (m.error) {
+    lines.push('', `> The ${m.error.layer} step needs attention.`)
+    technical.push(`- layer: ${m.error.layer}`)
+    if (m.error.code) technical.push(`- code: ${m.error.code}`)
+    technical.push(`- detail: ${m.error.detail}`)
+    if (m.error.requestId) technical.push(`- request ID: ${m.error.requestId}`)
+  }
+  if (m.toolCalls?.length) {
+    lines.push('', '### Work activity')
+    for (const t of m.toolCalls) {
+      const summary = toolActivitySummary(t)
+      lines.push(`- ${summary.sentence} (${summary.status}${summary.duration ? `, ${summary.duration}` : ''})`)
+      technical.push(`- tool \`${t.toolId}\` — ${t.status}${t.risk ? ` · ${t.risk}` : ''}`)
+      if (t.args) technical.push(`  - arguments: \`${rawJson(t.args).replace(/\n/g, ' ')}\``)
+      if (t.error) technical.push(`  - error: ${t.error}`)
+      else if (t.result != null) technical.push(`  - result: ${rawJson(t.result).replace(/\n/g, ' ')}`)
+    }
+  }
+  if (technical.length > 0) {
+    lines.push('', '<details><summary>Technical details</summary>', '', ...technical, '', '</details>')
   }
   if (m.artifacts && m.artifacts.length > 0) {
     lines.push('', `- artifacts: ${m.artifacts.map((a) => a.name).join(', ')}`)
@@ -360,18 +417,20 @@ function TurnErrorCard({ message }: { message: ChatMessage }) {
         <span className="text-[10px] font-medium uppercase tracking-wider text-rose-300">
           {ERROR_LAYER_LABEL[err.layer]} error
         </span>
-        {err.code && (
-          <span className="rounded bg-rose-500/15 px-1 font-mono text-[9px] text-rose-300/80">
-            {err.code}
-          </span>
-        )}
       </div>
       {/* P51.2 — localized translation: a plain-language read of the code
-          plus a concrete recovery hint, per layer. The raw detail stays
-          visible below so no signal is lost. */}
+          plus a concrete recovery hint, per layer. The raw diagnostic stays
+          behind Technical details so the casual surface does not lead with
+          implementation text. */}
       {(() => {
         const x = explainError(err)
-        if (x.explain === err.detail) return null
+        if (x.explain === err.detail) {
+          return (
+            <p className="mt-1 text-[11px] leading-relaxed text-rose-100/70">
+              This step could not finish. Open technical details for the exact diagnostic, or try a different approach.
+            </p>
+          )
+        }
         return (
           <p className="mt-1 text-[11px] leading-relaxed text-rose-100/70">
             {x.explain}
@@ -384,9 +443,6 @@ function TurnErrorCard({ message }: { message: ChatMessage }) {
           </p>
         )
       })()}
-      <p className="mt-1 whitespace-pre-wrap text-[11px] leading-relaxed text-rose-100/80">
-        {err.detail}
-      </p>
       <div className="mt-1.5 flex items-center gap-1">
         {err.retryable && (
           <button
@@ -394,7 +450,7 @@ function TurnErrorCard({ message }: { message: ChatMessage }) {
             disabled={busy}
             className="inline-flex h-5 items-center gap-1 rounded bg-rose-500/20 px-1.5 text-[10px] text-rose-200 transition-colors hover:bg-rose-500/30 disabled:opacity-50"
           >
-            <RotateCw className={cn('h-2.5 w-2.5', busy && 'animate-spin')} />
+            <RotateCw className={cn('h-2.5 w-2.5', busy && 'animate-spin motion-reduce:animate-none')} />
             Retry
           </button>
         )}
@@ -438,20 +494,29 @@ function TurnErrorCard({ message }: { message: ChatMessage }) {
           {copied ? <Check className="h-2.5 w-2.5 text-emerald-400" /> : <Copy className="h-2.5 w-2.5" />}
           {copied ? 'Copied' : 'Copy error'}
         </button>
-        {err.requestId && (
-          <button
-            onClick={() => {
-              navigator.clipboard?.writeText(err.requestId!)
-              notify('Request id copied — include it when reporting this turn')
-            }}
-            title="Request id — the exact turn this failure belongs to (copy for support)"
-            className="inline-flex h-5 items-center gap-1 rounded bg-rose-500/10 px-1.5 font-mono text-[9px] text-rose-200/70 transition-colors hover:bg-rose-500/20"
-          >
-            <Hash className="h-2.5 w-2.5" />
-            {err.requestId.slice(0, 12)}…
-          </button>
-        )}
       </div>
+      <TechnicalDetails>
+        <div className="space-y-1">
+          <div>Layer: {err.layer}</div>
+          {err.code && <div>Code: {err.code}</div>}
+          <div className="whitespace-pre-wrap break-words">Detail: {err.detail}</div>
+          {err.requestId && (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="break-all">Request ID: {err.requestId}</span>
+              <button
+                type="button"
+                className="rounded border border-border px-1.5 py-0.5 text-[9px] text-foreground hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                onClick={() => {
+                  navigator.clipboard?.writeText(err.requestId!)
+                  notify('Request ID copied — include it when reporting this turn')
+                }}
+              >
+                Copy request ID
+              </button>
+            </div>
+          )}
+        </div>
+      </TechnicalDetails>
     </div>
   )
 }

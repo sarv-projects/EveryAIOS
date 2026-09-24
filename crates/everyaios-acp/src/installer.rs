@@ -155,11 +155,7 @@ impl Installer {
                 .ok()?;
         let binary_path = state.binary_path.map(|p| {
             let p = PathBuf::from(p);
-            if p.is_absolute() {
-                p
-            } else {
-                dir.join(p)
-            }
+            if p.is_absolute() { p } else { dir.join(p) }
         });
         Some(InstallOutcome {
             agent_id: agent_id.to_string(),

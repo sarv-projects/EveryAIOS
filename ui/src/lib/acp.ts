@@ -97,7 +97,18 @@ export interface AcpHandleInfo {
   handle: string;
   agentId: string;
   agentName: string;
+  /** Provider-native ACP session id (legacy wire name; not the app Session). */
   sessionId: string;
+  /** Provider-native ACP session id, explicit in the current shell projection. */
+  providerSessionId: string;
+  /** EveryAIOS application Session that owns the turn, once claimed. */
+  applicationSessionId: string;
+  /** Canonical Work id for the owning Session. */
+  workId: string;
+  /** Canonical AgentBinding id for the owning Work/Session. */
+  bindingId: string;
+  /** Current Run id, when a prompt has claimed the handle. */
+  runId: string;
   protocol: string;
   /** True when the agent needs sign-in before it accepts a session. */
   authRequired: boolean;
@@ -105,7 +116,118 @@ export interface AcpHandleInfo {
   /** P53.8 — the agent advertised `promptCapabilities.embeddedContext`. */
   embeddedContext: boolean;
   /** Complete agent-owned session options, including model when exposed. */
-  configOptions?: AcpConfigOption[]
+  configOptions: AcpConfigOption[];
+}
+
+/**
+ * The renderer's live handle record.  The map is keyed by
+ * `applicationSessionId + bindingId + workId + agentId`, never by agent alone:
+ * two chats may bind the same external CLI at the same time.
+ *
+ * `key` is deliberately explicit so the store can keep one ordinary handle
+ * table without introducing a second registry.  Empty `bindingId`/`workId`
+ * values are valid only between `acp_launch` and the first successful prompt.
+ */
+export interface AcpHandleRecord {
+  key: string;
+  handle: string;
+  applicationSessionId: string;
+  bindingId: string;
+  workId: string;
+  /** Catalog/binding id used by the UI (not necessarily the ACP registry id). */
+  agentId: string;
+  providerSessionId: string;
+  runId: string;
+}
+
+/** Opaque, collision-safe key for one Session/binding/Work handle record. */
+export function acpHandleKey(
+  applicationSessionId: string,
+  bindingId: string,
+  workId: string,
+  agentId: string,
+): string {
+  if (!applicationSessionId.trim() || !agentId.trim()) {
+    throw new Error('ACP handle records require an application Session and agent id');
+  }
+  return JSON.stringify([applicationSessionId, bindingId, workId, agentId]);
+}
+
+export type AcpHandleIdentity = Omit<
+  AcpHandleRecord,
+  'handle' | 'key' | 'providerSessionId' | 'runId'
+>
+
+export function parseAcpHandleKey(key: string): AcpHandleIdentity | null {
+  try {
+    const value: unknown = JSON.parse(key);
+    if (!Array.isArray(value) || value.length !== 4 || value.some((part) => typeof part !== 'string')) {
+      return null;
+    }
+    const [applicationSessionId, bindingId, workId, agentId] = value as [string, string, string, string];
+    if (!applicationSessionId || !agentId) return null;
+    return { applicationSessionId, bindingId, workId, agentId };
+  } catch {
+    return null;
+  }
+}
+
+/** Build the store record returned by `acp_launch` before ownership is claimed. */
+export function acpHandleRecordFromLaunch(
+  info: AcpHandleInfo,
+  applicationSessionId: string,
+  agentId: string,
+): AcpHandleRecord {
+  const bindingId = info.bindingId ?? ''
+  const workId = info.workId ?? ''
+  return {
+    key: acpHandleKey(applicationSessionId, bindingId, workId, agentId),
+    handle: info.handle,
+    applicationSessionId,
+    bindingId,
+    workId,
+    agentId,
+    providerSessionId: info.providerSessionId || info.sessionId,
+    runId: info.runId,
+  };
+}
+
+/**
+ * Resolve a handle only inside the requested application Session.  Canonical
+ * records (with binding/work identity) win over a launch-time provisional row.
+ */
+export function findAcpHandleRecord(
+  handles: Readonly<Record<string, string>>,
+  applicationSessionId: string,
+  agentId?: string,
+  bindingId?: string,
+  workId?: string,
+): AcpHandleRecord | undefined {
+  const matches: AcpHandleRecord[] = [];
+  for (const [key, handle] of Object.entries(handles)) {
+    const parsed = parseAcpHandleKey(key);
+    if (!parsed || parsed.applicationSessionId !== applicationSessionId) continue;
+    if (agentId !== undefined && parsed.agentId !== agentId) continue;
+    if (bindingId !== undefined && parsed.bindingId !== bindingId) continue;
+    if (workId !== undefined && parsed.workId !== workId) continue;
+    matches.push({
+      key,
+      handle,
+      ...parsed,
+      providerSessionId: '',
+      runId: '',
+    });
+  }
+  // `setAcpHandle` can retain more than one canonical binding for a Session.
+  // Prefer the newest canonical row, while still preferring any canonical row
+  // over a launch-time provisional row.
+  matches.reverse();
+  matches.sort((a, b) => {
+    const aOwned = a.bindingId !== '' && a.workId !== '' ? 1 : 0;
+    const bOwned = b.bindingId !== '' && b.workId !== '' ? 1 : 0;
+    return bOwned - aOwned;
+  });
+  return matches[0];
 }
 
 /** One live slash command advertised by the agent (P53.1). */
@@ -131,6 +253,12 @@ export interface AcpPromptUpdate {
 
 export interface AcpPromptResult {
   handle: string;
+  /** Canonical identity returned by the owner after the turn is admitted. */
+  applicationSessionId: string;
+  workId: string;
+  bindingId: string;
+  runId: string;
+  providerSessionId: string;
   stopReason: string;
   updateCount: number;
   permissionCount: number;
@@ -411,21 +539,27 @@ export async function acpAuthenticate(
 /** Drive one ACP turn. Returns the stop reason + any minted Guard-2 tickets. */
 export async function acpPrompt(
   handle: string,
+  sessionId: string,
   text: string,
   handoff?: string,
   refs?: string[],
-  sessionId?: string,
+  bindingId?: string,
 ): Promise<AcpPromptResult> {
-  // P71.2c — `sessionId` carries the EveryAIOS Session so the turn boundary can
-  // apply the J11 budget pre-flight and P71.3f readiness gate that used to guard
-  // the deleted `chat_stream` dispatch. It is optional: a turn with no session
-  // ledger to consult is not budget-gated.
+  // The application Session is the owner identity on every turn.  The ACP
+  // provider session id is private adapter state and must never be used as
+  // this argument. Once claimed, the binding id is sent as an additional
+  // ownership assertion; the first turn may omit it while Work/Binding are
+  // being established. A blank Session is refused before provider I/O.
+  if (!sessionId.trim()) {
+    throw new Error('ACP prompt requires an application Session id');
+  }
   return nativeCall('ACP prompt', () => invoke<AcpPromptResult>("acp_prompt", {
     handle,
+    sessionId,
     text,
     ...(handoff ? { handoff } : {}),
     ...(refs?.length ? { refs } : {}),
-    ...(sessionId ? { sessionId } : {}),
+    ...(bindingId ? { bindingId } : {}),
   }));
 }
 
@@ -517,9 +651,39 @@ export async function acpRegistryRefresh(): Promise<{
   return nativeCall('ACP registry refresh', () => invoke("acp_registry_refresh"));
 }
 
-/** Interrupt the ongoing ACP turn. */
-export async function acpCancel(handle: string): Promise<void> {
-  return nativeCall('ACP cancel', () => invoke("acp_cancel", { handle }));
+async function cancelOwnedAcpTurn(
+  handle: string,
+  sessionId: string,
+  bindingId: string,
+): Promise<void> {
+  if (!sessionId.trim() || !bindingId.trim()) {
+    throw new Error('ACP cancellation requires the owning Session and binding id');
+  }
+  return nativeCall('ACP cancel', () => invoke("acp_cancel", {
+    handle,
+    sessionId,
+    bindingId,
+  }));
+}
+
+/**
+ * Interrupt the ACP turn owned by one application Session/binding.
+ *
+ * The identity is mandatory. A one-argument overload remains in the type only
+ * for older picker/pause call sites to compile; it fails closed instead of
+ * guessing an owner from a bare handle.
+ */
+export function acpCancel(handle: string, sessionId: string, bindingId: string): Promise<void>;
+export function acpCancel(handle: string): Promise<void>;
+export async function acpCancel(
+  handle: string,
+  sessionId?: string,
+  bindingId?: string,
+): Promise<void> {
+  if (sessionId === undefined || bindingId === undefined) {
+    throw new Error('ACP cancellation requires the owning Session and binding id');
+  }
+  return cancelOwnedAcpTurn(handle, sessionId, bindingId);
 }
 
 /** Tear an ACP session down (kill + reap). */

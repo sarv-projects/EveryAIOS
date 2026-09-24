@@ -99,7 +99,7 @@ pub struct TokenResponse {
 pub trait HttpTransport: Send {
     fn get_json(&self, url: &str) -> Result<serde_json::Value, RemoteError>;
     fn post_form(&self, url: &str, form: &[(&str, &str)])
-        -> Result<serde_json::Value, RemoteError>;
+    -> Result<serde_json::Value, RemoteError>;
     fn post_json(
         &self,
         url: &str,
@@ -545,9 +545,10 @@ mod tests {
         let http = server();
         let t = connect("https://mcp.example.com", &http).unwrap();
         let flow = build_authorize_url(&t, "http://127.0.0.1:0/oauth/callback").unwrap();
-        assert!(flow
-            .auth_url
-            .starts_with("https://auth.example.com/authorize?"));
+        assert!(
+            flow.auth_url
+                .starts_with("https://auth.example.com/authorize?")
+        );
         assert!(flow.auth_url.contains("code_challenge="));
         assert!(flow.auth_url.contains("code_challenge_method=S256"));
         assert!(flow.auth_url.contains("state="));

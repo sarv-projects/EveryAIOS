@@ -33,37 +33,49 @@ pub mod registry_index;
 
 pub use a2a::{A2aError, AgentCard, AgentCardVerifier, AgentSkill, CardTrust, SignedAgentCard};
 pub use agent_backend::{
-    backend_spec, builtin_backend_specs, injected_names, plan_env, unexpressed, AgentBackendSpec,
-    BackendChannel, BackendError, ProviderBinding,
+    AgentBackendSpec, BackendChannel, BackendError, BaseUrlError, ProviderBinding, backend_spec,
+    builtin_backend_specs, injected_names, plan_env, redact_base_url, unexpressed,
+    validate_base_url, validate_model_id,
 };
 pub use chief::{
-    build_chief_prompt, build_chief_prompt_with_steering, governance_mode, AcpChief, Approval,
-    ChiefAdapter, ChiefCapabilities, ChiefError, ChiefEvent, DelegateChief, EventStream,
-    GovernedSession, PermissionRequest, SessionHandle, SessionOptions, SessionState, UserMessage,
-    COWORK_AFFINITY_STEERING,
+    AcpChief, Approval, COWORK_AFFINITY_STEERING, ChiefAdapter, ChiefCapabilities, ChiefError,
+    ChiefEvent, DelegateChief, EventStream, GovernedSession, PermissionRequest, SessionHandle,
+    SessionOptions, SessionState, UserMessage, build_chief_prompt,
+    build_chief_prompt_with_steering, governance_mode,
 };
 pub use client::{
-    AcpCancelHandle, AcpCancelSender, AcpError, AcpSession, AcpTransport, ProcessTransport,
-    PromptOutcome,
+    AcpCancelHandle, AcpCancelSender, AcpError, AcpSession, AcpShutdownSender, AcpTransport,
+    ChildEnvName, ProcessTransport, ProcessTransportError, PromptOutcome, SessionLoadOutcome,
 };
-pub use frame::{decode_messages, encode_message};
+pub use frame::{
+    MAX_ACP_FRAME_BYTES, decode_messages, encode_message, finish_decode, try_encode_message,
+};
 pub use harness_config::{
-    builtin_writers, ClaudeCodeConfig, CodexConfig, HarnessConfigError, HarnessConfigWriter,
-    OpenCodeConfig, ProviderConfig,
+    ClaudeCodeConfig, CodexConfig, HarnessConfigError, HarnessConfigWriter, OpenCodeConfig,
+    ProviderConfig, builtin_writers,
 };
 pub use installer::{InstallError, InstallOutcome, Installer, OwnershipMarker};
 pub use messages::{
     AgentCapabilities, AgentInfo, AuthMethod, AuthMethodType, AuthenticateParams,
     AuthenticateResult, AvailableCommand, ClientCapabilities, ClientInfo, ConfigOption,
-    ConfigOptionCapabilities, ConfigOptionValue, ContentBlock, EmbeddedResource, FsCapabilities,
-    InitializeParams, InitializeResult, Location, McpServer, PermissionDecision, PermissionOption,
-    PermissionOptionKind, PermissionOutcome, PermissionRequestParams, PermissionResult, Position,
-    PromptCapabilities, PromptContent, PromptUsage, SessionCapabilities, SessionNewParams,
+    ConfigOptionCapabilities, ConfigOptionValue, ContentBlock, EmbeddedResource, EnvVariable,
+    FsCapabilities, HttpHeader, HttpMcpServer, InitializeParams, InitializeResult, Location,
+    McpHttpLeaseBinding, McpServer, McpServerError, McpServerValidationError, PROTOCOL_VERSION,
+    PermissionDecision, PermissionOption, PermissionOptionKind, PermissionOutcome,
+    PermissionRequestParams, PermissionResult, Position, PromptCapabilities, PromptContent,
+    PromptUsage, SessionCapabilities, SessionLoadParams, SessionLoadResult, SessionNewParams,
     SessionNewResult, SessionPromptParams, SessionPromptResult, SessionUpdate,
     SetConfigOptionParams, SetConfigOptionResult, StopReason, TextRange, ToolCall, ToolKind,
-    ToolStatus, PROTOCOL_VERSION,
+    ToolStatus,
 };
-pub use prefix_guard::{fingerprint_stable_prefix, PrefixEvent, PrefixGuard};
+pub use messages::{
+    MAX_ACP_SESSION_ID_BYTES, MAX_MCP_SERVER_ARG_BYTES, MAX_MCP_SERVER_ARGS,
+    MAX_MCP_SERVER_COMMAND_BYTES, MAX_MCP_SERVER_ENV_ENTRIES, MAX_MCP_SERVER_ENV_VALUE_BYTES,
+    MAX_MCP_SERVER_HEADER_NAME_BYTES, MAX_MCP_SERVER_HEADER_VALUE_BYTES, MAX_MCP_SERVER_HEADERS,
+    MAX_MCP_SERVER_NAME_BYTES, MAX_MCP_SERVER_URL_BYTES, MAX_MCP_SERVERS_PER_REQUEST,
+    MAX_SESSION_ID_BYTES, SseMcpServer, StdioMcpServer,
+};
+pub use prefix_guard::{PrefixEvent, PrefixGuard, fingerprint_stable_prefix};
 pub use registry::{
     AuthMode, Distribution, HarnessManifest, HarnessProtocol, LaunchPlan, LaunchRegistry,
 };

@@ -8,8 +8,8 @@
 use everyaios_blueprint::DelegationGauge;
 pub use everyaios_types::AutonomyLevel;
 use everyaios_types::{
-    AgentBinding, BindingLifecycle, BindingUsage, RiskLevel, SessionKind, WaitCondition, WorkId,
-    WorkState,
+    AgentBinding, BindingLifecycle, BindingUsage, EffectUncertainty, IdempotencyClass, RiskLevel,
+    SessionKind, WaitCondition, WorkId, WorkState, CANONICAL_SCHEMA_VERSION,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -62,6 +62,116 @@ pub struct ChildWorkRef {
     pub agent_session_id: String,
 }
 
+/// Durable provenance attached to one Work.
+///
+/// This is deliberately a small, typed projection of the fields admitted by
+/// the automation trigger.  The scheduler's occurrence ledger remains the
+/// owner of admission metadata; Work carries the immutable identity needed to
+/// replay and explain that admission after a restart.  `None` across all
+/// identity fields is the explicit legacy-record path for Work rows written
+/// before provenance was added.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct WorkProvenance {
+    #[serde(alias = "automation_id", skip_serializing_if = "Option::is_none")]
+    pub automation_id: Option<String>,
+    #[serde(alias = "revision_id", skip_serializing_if = "Option::is_none")]
+    pub revision_id: Option<String>,
+    #[serde(alias = "automation_generation", skip_serializing_if = "Option::is_none")]
+    pub automation_generation: Option<u64>,
+    #[serde(alias = "trigger_occurrence_id", skip_serializing_if = "Option::is_none")]
+    pub trigger_occurrence_id: Option<String>,
+    #[serde(alias = "payload_digest", skip_serializing_if = "Option::is_none")]
+    pub payload_digest: Option<String>,
+    #[serde(alias = "dedup_digest", skip_serializing_if = "Option::is_none")]
+    pub dedup_digest: Option<String>,
+    #[serde(alias = "source_session_id", skip_serializing_if = "Option::is_none")]
+    pub source_session_id: Option<String>,
+}
+
+impl WorkProvenance {
+    /// Whether this is the explicit migration projection for a pre-provenance
+    /// record. It is not a claim that the record was interactive or safe to
+    /// replay as an automation; callers must still refuse an incomplete
+    /// automation identity before dispatching new work.
+    pub fn is_legacy(&self) -> bool {
+        self.automation_id.is_none()
+            && self.revision_id.is_none()
+            && self.automation_generation.is_none()
+            && self.trigger_occurrence_id.is_none()
+    }
+
+    /// Merge a durable `WorkUpdated` provenance patch. Repeated identical
+    /// patches are allowed (the host retries are idempotent); conflicting
+    /// values are journal corruption and fail closed.
+    pub fn merge_patch(&mut self, patch: &Value) -> Result<bool, String> {
+        let mut changed = false;
+        let mut merge_string = |key: &str, target: &mut Option<String>| -> Result<(), String> {
+            let Some(value) = patch.get(key) else {
+                return Ok(());
+            };
+            let value = value
+                .as_str()
+                .ok_or_else(|| format!("Work provenance field `{key}` must be a string"))?;
+            if value.is_empty() {
+                return Err(format!("Work provenance field `{key}` cannot be empty"));
+            }
+            if let Some(existing) = target {
+                if existing != value {
+                    return Err(format!(
+                        "Work provenance field `{key}` conflicts with an earlier event"
+                    ));
+                }
+            } else {
+                *target = Some(value.to_string());
+                changed = true;
+            }
+            Ok(())
+        };
+        merge_string("automationId", &mut self.automation_id)?;
+        merge_string("revisionId", &mut self.revision_id)?;
+        merge_string("triggerOccurrenceId", &mut self.trigger_occurrence_id)?;
+        merge_string("payloadDigest", &mut self.payload_digest)?;
+        merge_string("dedupDigest", &mut self.dedup_digest)?;
+        merge_string("sourceSessionId", &mut self.source_session_id)?;
+        if let Some(value) = patch.get("automationGeneration") {
+            let value = value
+                .as_u64()
+                .ok_or("Work provenance field `automationGeneration` must be an integer")?;
+            if let Some(existing) = self.automation_generation {
+                if existing != value {
+                    return Err(
+                        "Work provenance field `automationGeneration` conflicts with an earlier event"
+                            .into(),
+                    );
+                }
+            } else {
+                self.automation_generation = Some(value);
+                changed = true;
+            }
+        }
+        Ok(changed)
+    }
+
+    /// Validate the shape needed to safely identify an automation occurrence.
+    /// A partially populated identity is never treated as a legacy record.
+    pub fn validate_complete(&self) -> Result<(), String> {
+        let fields = [
+            self.automation_id.is_some(),
+            self.revision_id.is_some(),
+            self.automation_generation.is_some(),
+            self.trigger_occurrence_id.is_some(),
+        ];
+        if fields.iter().any(|present| *present) && !fields.iter().all(|present| *present) {
+            return Err("Work automation provenance is incomplete".into());
+        }
+        if self.automation_generation == Some(0) {
+            return Err("Work automation generation must be positive".into());
+        }
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkAddress {
@@ -75,6 +185,13 @@ pub struct WorkAddress {
     #[serde(default)]
     pub session_kind: SessionKind,
     pub owner_id: Option<String>,
+    /// The active binding for this Work, when one is known. The complete
+    /// binding history remains in the Work event stream; this is only the
+    /// current ownership projection used by recovery/read surfaces.
+    #[serde(default)]
+    pub binding_id: Option<String>,
+    #[serde(default, flatten)]
+    pub provenance: WorkProvenance,
     pub node_id: Option<String>,
     pub current_run_id: Option<String>,
     pub version: u64,
@@ -94,6 +211,8 @@ impl WorkAddress {
             session_id: None,
             session_kind: SessionKind::Interactive,
             owner_id: None,
+            binding_id: None,
+            provenance: WorkProvenance::default(),
             node_id: None,
             current_run_id: None,
             version: 1,
@@ -190,11 +309,36 @@ pub struct WorkPresence {
 pub enum DomainEvent {
     WorkCreated {
         objective: String,
+        #[serde(default, alias = "projectId")]
         project_id: Option<String>,
+        #[serde(default, alias = "sessionId")]
         session_id: Option<String>,
         /// P69.D14 — the delegating Work when this is a subagent child.
-        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[serde(default, alias = "parentWorkId", skip_serializing_if = "Option::is_none")]
         parent_work_id: Option<String>,
+        /// The owning Session kind. Rows written before this field existed use
+        /// the explicit `Interactive` migration default; they are not inferred
+        /// from whether a Chat happens to exist.
+        #[serde(default, alias = "sessionKind")]
+        session_kind: SessionKind,
+        #[serde(default, alias = "ownerId", skip_serializing_if = "Option::is_none")]
+        owner_id: Option<String>,
+        #[serde(default, alias = "bindingId", skip_serializing_if = "Option::is_none")]
+        binding_id: Option<String>,
+        /// Optional initial state for a migrated/imported Work. Normal Work
+        /// creation leaves it absent and starts at `Created`/`Ready` through
+        /// the subsequent Run events.
+        #[serde(default, alias = "initialState", skip_serializing_if = "Option::is_none")]
+        initial_state: Option<WorkState>,
+        /// A deterministic first Run, when the creator admits one atomically.
+        #[serde(default, alias = "runId", skip_serializing_if = "Option::is_none")]
+        run_id: Option<String>,
+        /// Trigger spelling used to reconstruct the ExecutionKernel projection.
+        #[serde(default, alias = "trigger", skip_serializing_if = "Option::is_none")]
+        trigger: Option<String>,
+        /// Automation identity, flattened into the event for stable replay.
+        #[serde(default, flatten)]
+        provenance: WorkProvenance,
     },
     WorkUpdated {
         patch: Value,
@@ -234,15 +378,36 @@ pub enum DomainEvent {
     },
     ApprovalRequested {
         ticket_id: String,
+        /// The Run that requested the approval.  This is optional only for
+        /// legacy rows written before Run identity was carried on the event;
+        /// replay then binds the request to the Work's current Run.
+        #[serde(default, alias = "runId", skip_serializing_if = "Option::is_none")]
+        run_id: Option<String>,
+        #[serde(default, alias = "toolId", skip_serializing_if = "Option::is_none")]
+        tool_id: Option<String>,
+        #[serde(default, alias = "argsHash", skip_serializing_if = "Option::is_none")]
+        args_hash: Option<String>,
+        #[serde(default, alias = "riskTier", skip_serializing_if = "Option::is_none")]
+        risk_tier: Option<String>,
+        #[serde(default, alias = "requestedAtMs", skip_serializing_if = "Option::is_none")]
+        requested_at_ms: Option<u64>,
     },
     ApprovalResolved {
         ticket_id: String,
+        /// See [`ApprovalRequested::run_id`].  Keeping the owner on the
+        /// resolution prevents a later Run from consuming an older ticket.
+        #[serde(default, alias = "runId", skip_serializing_if = "Option::is_none")]
+        run_id: Option<String>,
         approved: bool,
     },
     EffectAttempted {
         effect_id: String,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[serde(default, alias = "capabilityGrantId", skip_serializing_if = "Option::is_none")]
         capability_grant_id: Option<String>,
+        /// The capability's declared retry contract. Legacy attempts without
+        /// this field are treated as unknown/unsafe for recovery purposes.
+        #[serde(default, alias = "idempotencyClass", skip_serializing_if = "Option::is_none")]
+        idempotency_class: Option<IdempotencyClass>,
     },
     EffectObserved {
         effect_id: String,
@@ -251,6 +416,25 @@ pub enum DomainEvent {
     EffectVerified {
         effect_id: String,
         verified: bool,
+    },
+    /// The durable boundary where an attempted effect has no trustworthy
+    /// observation. This is intentionally distinct from `EffectObserved` with
+    /// a failure string and from `RunFailed`.
+    EffectUncertain {
+        effect_id: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        reason: Option<String>,
+        #[serde(default, alias = "idempotencyClass", skip_serializing_if = "Option::is_none")]
+        idempotency_class: Option<IdempotencyClass>,
+    },
+    /// Explicit reconciliation evidence for an uncertain effect. The outcome
+    /// is a fact supplied by the owner after inspecting the world; it is not a
+    /// synthetic success.
+    EffectReconciled {
+        effect_id: String,
+        outcome: String,
+        #[serde(default)]
+        retry_safe: bool,
     },
     ArtifactCreated {
         artifact_id: String,
@@ -271,6 +455,30 @@ pub enum DomainEvent {
     RunCancelled {
         run_id: String,
     },
+}
+
+fn run_event_state(event: &WorkEvent) -> Option<(String, WorkState)> {
+    let WorkEvent::Domain(event) = event else {
+        return None;
+    };
+    match event {
+        DomainEvent::RunQueued { run_id } => Some((run_id.clone(), WorkState::Ready)),
+        DomainEvent::RunStarted { run_id } => Some((run_id.clone(), WorkState::Running)),
+        DomainEvent::RunWaiting { run_id, reason, .. } => {
+            WorkState::try_parse(reason).map(|state| (run_id.clone(), state))
+        }
+        DomainEvent::RunCheckpointed { run_id, .. } => {
+            Some((run_id.clone(), WorkState::Checkpointed))
+        }
+        DomainEvent::RunPaused { run_id } => Some((run_id.clone(), WorkState::Paused)),
+        DomainEvent::RunInterrupted { run_id, .. } => {
+            Some((run_id.clone(), WorkState::Recoverable))
+        }
+        DomainEvent::RunCompleted { run_id } => Some((run_id.clone(), WorkState::Completed)),
+        DomainEvent::RunFailed { run_id, .. } => Some((run_id.clone(), WorkState::Failed)),
+        DomainEvent::RunCancelled { run_id } => Some((run_id.clone(), WorkState::Cancelled)),
+        _ => None,
+    }
 }
 
 /// P71.3g — the event one canonical [`WorkState`] transition appends. Kept
@@ -495,6 +703,46 @@ pub struct WorkEventEnvelope {
     pub timestamp: u64,
     pub trace_id: Option<String>,
     pub causal_parent: Option<u64>,
+    /// Versioned envelope marker. A missing field is the explicit legacy
+    /// migration path (version `0`); new appends use the canonical version.
+    #[serde(default)]
+    pub schema_version: u32,
+}
+
+/// The event-derived state of one requested effect. This is a projection, not
+/// a second effect log: every field is rebuilt from the Work event stream.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EffectProjection {
+    pub effect_id: String,
+    pub state: String,
+    pub uncertainty: EffectUncertainty,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub idempotency_class: Option<IdempotencyClass>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub grant_id: Option<String>,
+    pub last_sequence: u64,
+}
+
+impl EffectProjection {
+    fn new(effect_id: String, sequence: u64) -> Self {
+        Self {
+            effect_id,
+            state: "unknown".into(),
+            uncertainty: EffectUncertainty::UnknownOutcome,
+            idempotency_class: None,
+            reason: None,
+            grant_id: None,
+            last_sequence: sequence,
+        }
+    }
+
+    pub fn requires_reconciliation(&self) -> bool {
+        matches!(self.uncertainty, EffectUncertainty::UnknownOutcome | EffectUncertainty::Partial)
+            || self.state == "uncertain"
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -804,6 +1052,21 @@ pub struct WorkGateway {
     next_seq: u64,
     /// Canonical mapping to the existing ExecutionKernel Work record.
     execution_ids: HashMap<String, String>,
+    /// Every Run identity observed for a Work, in journal order. The current
+    /// mapping above is only the active pointer; history is never discarded.
+    run_ids: BTreeMap<String, Vec<String>>,
+    /// Per-Run lifecycle projection. A terminal Run remains terminal even if a
+    /// later historical event is encountered.
+    run_states: BTreeMap<String, BTreeMap<String, WorkState>>,
+    /// Durable Run metadata captured by `bind_execution_with_metadata`.
+    run_metadata: BTreeMap<String, BTreeMap<String, Value>>,
+    /// Effect projections rebuilt from domain events.
+    effect_projections: BTreeMap<String, BTreeMap<String, EffectProjection>>,
+    /// Pending approval projections reconstructed from the Work journal.
+    pending_approvals: BTreeMap<String, BTreeMap<String, Value>>,
+    /// The active binding pointer is a projection; complete binding history
+    /// remains in `agent_bindings` and the event stream.
+    active_binding_ids: BTreeMap<String, String>,
     subscribers: Vec<std::sync::mpsc::Sender<WorkEventEnvelope>>,
 }
 
@@ -841,6 +1104,7 @@ impl WorkGateway {
             subscribers: Vec::new(),
             ..Self::default()
         };
+        let mut last_sequence: Option<u64> = None;
         if path.exists() {
             let file = std::fs::File::open(&path).map_err(|e| format!("open work journal: {e}"))?;
             for line in BufReader::new(file).lines() {
@@ -848,8 +1112,28 @@ impl WorkGateway {
                 if line.trim().is_empty() {
                     continue;
                 }
-                let event: WorkEventEnvelope =
+                let mut event: WorkEventEnvelope =
                     serde_json::from_str(&line).map_err(|e| format!("parse work journal: {e}"))?;
+                if event.schema_version > CANONICAL_SCHEMA_VERSION {
+                    return Err(format!(
+                        "work journal event {} uses unsupported schema version {}",
+                        event.sequence, event.schema_version
+                    ));
+                }
+                // Version 0 is the explicit pre-version migration path. Keep
+                // the original bytes untouched; the projection applies the
+                // documented defaults while the next append uses version 1.
+                if event.schema_version == 0 {
+                    event.schema_version = CANONICAL_SCHEMA_VERSION;
+                }
+                if last_sequence.is_some_and(|previous| event.sequence <= previous) {
+                    return Err(format!(
+                        "work journal sequence is not strictly increasing: {} after {}",
+                        event.sequence,
+                        last_sequence.unwrap_or_default()
+                    ));
+                }
+                last_sequence = Some(event.sequence);
                 if event.sequence >= gateway.next_seq {
                     gateway.next_seq = event
                         .sequence
@@ -875,88 +1159,238 @@ impl WorkGateway {
                 gateway.apply_replayed_event(&event)?;
             }
         }
+        gateway.validate_replayed_graph()?;
         Ok(gateway)
     }
 
     fn apply_replayed_event(&mut self, event: &WorkEventEnvelope) -> Result<(), String> {
+        self.replay_event(event)
+    }
+
+    fn replay_event(&mut self, event: &WorkEventEnvelope) -> Result<(), String> {
         let work_id = event.work_id.clone();
+        if work_id.is_empty() {
+            return Err("work journal event has an empty work id".into());
+        }
+        if !matches!(&event.event, WorkEvent::Domain(DomainEvent::WorkCreated { .. }))
+            && !self.works.contains_key(&work_id)
+        {
+            return Err(format!(
+                "work journal event {} precedes WorkCreated for `{work_id}`",
+                event.sequence
+            ));
+        }
+
         match &event.event {
             WorkEvent::Domain(DomainEvent::WorkCreated {
                 project_id,
                 session_id,
                 parent_work_id,
+                session_kind,
+                owner_id,
+                binding_id,
+                initial_state,
+                run_id,
+                trigger,
+                provenance,
                 ..
             }) => {
-                let address = self
-                    .works
-                    .entry(work_id.clone())
-                    .or_insert_with(|| WorkAddress::new(work_id.clone()));
+                if self.works.contains_key(&work_id) {
+                    return Err(format!("duplicate WorkCreated for `{work_id}`"));
+                }
+                provenance.validate_complete()?;
+                if matches!(session_kind, SessionKind::Automation) && session_id.is_none() {
+                    return Err(format!(
+                        "automation Work `{work_id}` has no owning Session in its creation event"
+                    ));
+                }
+                let initial = initial_state.unwrap_or(WorkState::Created);
+                if initial.is_terminal() && run_id.is_none() {
+                    return Err(format!("terminal Work `{work_id}` has no durable Run"));
+                }
+                let mut address = WorkAddress::new(work_id.clone());
                 address.project_id = project_id.clone();
                 address.session_id = session_id.clone();
                 address.parent_work_id = parent_work_id.clone();
-                self.presence
-                    .entry(work_id.clone())
-                    .or_insert_with(|| WorkPresence {
-                        work_id,
-                        state: Some(WorkPresenceState::Running),
+                address.session_kind = *session_kind;
+                address.owner_id = owner_id.clone();
+                address.binding_id = binding_id.clone();
+                address.provenance = provenance.clone();
+                self.works.insert(work_id.clone(), address);
+                self.presence.insert(
+                    work_id.clone(),
+                    WorkPresence {
+                        work_id: work_id.clone(),
+                        state: Some(presence_projection(initial, None)),
+                        work_state: Some(initial),
                         ..Default::default()
-                    });
-            }
-            WorkEvent::Domain(DomainEvent::WorkUpdated { patch }) => {
-                if let Some(address) = self.works.get_mut(&work_id) {
-                    if patch.get("executionId").and_then(Value::as_str).is_some() {
-                        let execution_id = patch
-                            .get("executionId")
-                            .and_then(Value::as_str)
-                            .unwrap()
-                            .to_string();
-                        self.execution_ids
-                            .insert(work_id.clone(), execution_id.clone());
-                        address.current_run_id = Some(execution_id);
-                    }
-                    if patch.get("archived").and_then(Value::as_bool) == Some(true) {
-                        self.works.remove(&work_id);
-                    } else {
-                        address.version = address.version.saturating_add(1);
+                    },
+                );
+                if let Some(run_id) = run_id {
+                    self.note_run_reference(&work_id, run_id);
+                    if let Some(trigger) = trigger {
+                        self.run_metadata
+                            .entry(work_id.clone())
+                            .or_default()
+                            .insert(run_id.clone(), serde_json::json!({"trigger": trigger}));
                     }
                 }
             }
+            WorkEvent::Domain(DomainEvent::WorkUpdated { patch }) => {
+                self.apply_work_update(&work_id, patch, event.sequence)?;
+            }
+            WorkEvent::Domain(DomainEvent::RunQueued { run_id }) => {
+                self.note_run_reference(&work_id, run_id);
+                self.set_run_state(&work_id, run_id, WorkState::Ready, None)?;
+            }
             WorkEvent::Domain(DomainEvent::RunStarted { run_id }) => {
-                self.set_work_state(&work_id, run_id, WorkState::Running, None)
+                self.note_run_reference(&work_id, run_id);
+                self.set_run_state(&work_id, run_id, WorkState::Running, None)?;
             }
             WorkEvent::Domain(DomainEvent::RunWaiting {
                 run_id,
                 reason,
                 wait,
             }) => {
-                let state = WorkState::parse(reason);
-                self.set_work_state(&work_id, run_id, state, wait.clone())
+                let state = WorkState::try_parse(reason)
+                    .ok_or_else(|| format!("unknown Work state `{reason}` in journal"))?;
+                self.note_run_reference(&work_id, run_id);
+                self.set_run_state(&work_id, run_id, state, wait.clone())?;
             }
-            WorkEvent::Domain(DomainEvent::RunCheckpointed { run_id, .. }) => {
-                self.set_work_state(&work_id, run_id, WorkState::Checkpointed, None)
+            WorkEvent::Domain(DomainEvent::RunCheckpointed {
+                run_id,
+                checkpoint,
+            }) => {
+                self.note_run_reference(&work_id, run_id);
+                self.set_run_state(&work_id, run_id, WorkState::Checkpointed, None)?;
+                let metadata = self
+                    .run_metadata
+                    .entry(work_id.clone())
+                    .or_default()
+                    .entry(run_id.clone())
+                    .or_insert_with(|| Value::Object(Default::default()));
+                metadata
+                    .as_object_mut()
+                    .ok_or("run metadata is not an object")?
+                    .insert("checkpoint".into(), Value::from(*checkpoint));
             }
             WorkEvent::Domain(DomainEvent::RunPaused { run_id }) => {
-                self.set_work_state(&work_id, run_id, WorkState::Paused, None)
+                self.note_run_reference(&work_id, run_id);
+                self.set_run_state(&work_id, run_id, WorkState::Paused, None)?;
             }
             WorkEvent::Domain(DomainEvent::RunInterrupted { run_id, .. }) => {
-                self.set_work_state(&work_id, run_id, WorkState::Recoverable, None)
+                self.note_run_reference(&work_id, run_id);
+                self.set_run_state(&work_id, run_id, WorkState::Recoverable, None)?;
             }
             WorkEvent::Domain(DomainEvent::RunCompleted { run_id }) => {
-                self.set_work_state(&work_id, run_id, WorkState::Completed, None)
+                self.note_run_reference(&work_id, run_id);
+                self.set_run_state(&work_id, run_id, WorkState::Completed, None)?;
             }
             WorkEvent::Domain(DomainEvent::RunFailed { run_id, .. }) => {
-                self.set_work_state(&work_id, run_id, WorkState::Failed, None)
+                self.note_run_reference(&work_id, run_id);
+                self.set_run_state(&work_id, run_id, WorkState::Failed, None)?;
             }
             WorkEvent::Domain(DomainEvent::RunCancelled { run_id }) => {
-                self.set_work_state(&work_id, run_id, WorkState::Cancelled, None)
+                self.note_run_reference(&work_id, run_id);
+                self.set_run_state(&work_id, run_id, WorkState::Cancelled, None)?;
             }
             WorkEvent::Domain(DomainEvent::ApprovalResolved {
                 ticket_id,
+                run_id,
                 approved,
             }) => {
+                if ticket_id.trim().is_empty() {
+                    return Err("approval resolution has an empty ticket id".into());
+                }
+                if let Some(run_id) = run_id {
+                    if !self
+                        .run_ids
+                        .get(&work_id)
+                        .is_some_and(|runs| runs.iter().any(|candidate| candidate == run_id))
+                    {
+                        return Err(format!(
+                            "approval resolution references unknown Run `{run_id}`"
+                        ));
+                    }
+                }
+                let existing_run = self
+                    .pending_approval(&work_id, ticket_id)
+                    .and_then(|value| value.get("runId").and_then(Value::as_str))
+                    .map(str::to_string);
+                if let Some(existing_run) = existing_run.as_deref() {
+                    if let Some(expected) = run_id.as_deref() {
+                        if existing_run != expected {
+                            return Err(format!(
+                                "approval `{ticket_id}` belongs to Run `{existing_run}`, not `{expected}`"
+                            ));
+                        }
+                    }
+                    if self.run_state(&work_id, existing_run) != Some(WorkState::WaitingApproval) {
+                        return Err(format!(
+                            "approval `{ticket_id}` is not resolved from WaitingApproval"
+                        ));
+                    }
+                } else if self.pending_approval(&work_id, ticket_id).is_some() {
+                    return Err(format!("approval `{ticket_id}` has no durable Run owner"));
+                }
+                let mut remove_work_projection = false;
+                if let Some(pending) = self.pending_approvals.get_mut(&work_id) {
+                    if pending.remove(ticket_id).is_some() {
+                        remove_work_projection = pending.is_empty();
+                    }
+                }
+                if remove_work_projection {
+                    self.pending_approvals.remove(&work_id);
+                }
                 if let Some(review) = self.reviews.get_mut(ticket_id) {
                     review.state = if *approved { "approved" } else { "rejected" }.into();
                 }
+            }
+            WorkEvent::Domain(DomainEvent::ApprovalRequested {
+                ticket_id,
+                run_id,
+                tool_id,
+                args_hash,
+                risk_tier,
+                requested_at_ms,
+            }) => {
+                if ticket_id.trim().is_empty() {
+                    return Err("approval request has an empty ticket id".into());
+                }
+                let run_id = self.approval_event_run_id(&work_id, run_id.as_deref())?;
+                if self.run_state(&work_id, &run_id) != Some(WorkState::WaitingApproval) {
+                    return Err(format!(
+                        "approval request for `{ticket_id}` is not attached to a WaitingApproval Run"
+                    ));
+                }
+                let value = serde_json::json!({
+                    "ticketId": ticket_id,
+                    "toolId": tool_id,
+                    "argsHash": args_hash,
+                    "riskTier": risk_tier,
+                    "requestedAtMs": requested_at_ms,
+                    "runId": run_id,
+                });
+                let pending = self
+                    .pending_approvals
+                    .entry(work_id.clone())
+                    .or_default();
+                if pending.values().any(|value| {
+                    value.get("runId").and_then(Value::as_str) == Some(run_id.as_str())
+                }) {
+                    return Err(format!(
+                        "Run `{run_id}` already has a pending approval"
+                    ));
+                }
+                if let Some(existing) = pending.get(ticket_id) {
+                    if existing != &value {
+                        return Err(format!(
+                            "approval ticket `{ticket_id}` was requested with conflicting metadata"
+                        ));
+                    }
+                    return Err(format!("approval ticket `{ticket_id}` is already pending"));
+                }
+                pending.insert(ticket_id.clone(), value);
             }
             WorkEvent::Domain(DomainEvent::ReviewRequested { review_id }) => {
                 self.reviews
@@ -972,9 +1406,54 @@ impl WorkGateway {
                         effect_refs: vec![],
                     });
             }
+            WorkEvent::Domain(DomainEvent::EffectAttempted {
+                effect_id,
+                capability_grant_id,
+                idempotency_class,
+            }) => {
+                self.apply_effect_attempt(
+                    &work_id,
+                    effect_id,
+                    capability_grant_id.as_deref(),
+                    *idempotency_class,
+                    event.sequence,
+                );
+            }
+            WorkEvent::Domain(DomainEvent::EffectObserved { effect_id, outcome }) => {
+                self.apply_effect_observed(&work_id, effect_id, outcome, event.sequence)?;
+            }
+            WorkEvent::Domain(DomainEvent::EffectVerified { effect_id, verified }) => {
+                self.apply_effect_verified(&work_id, effect_id, *verified, event.sequence)?;
+            }
+            WorkEvent::Domain(DomainEvent::EffectUncertain {
+                effect_id,
+                reason,
+                idempotency_class,
+            }) => {
+                self.apply_effect_uncertain(
+                    &work_id,
+                    effect_id,
+                    reason.as_deref(),
+                    *idempotency_class,
+                    event.sequence,
+                )?;
+            }
+            WorkEvent::Domain(DomainEvent::EffectReconciled {
+                effect_id,
+                outcome,
+                retry_safe,
+            }) => {
+                self.apply_effect_reconciled(
+                    &work_id,
+                    effect_id,
+                    outcome,
+                    *retry_safe,
+                    event.sequence,
+                )?;
+            }
             WorkEvent::Operational(OperationalEvent::SessionAttached { client_id }) => {
                 let p = self.presence.entry(work_id.clone()).or_default();
-                p.work_id = work_id;
+                p.work_id = work_id.clone();
                 if !p.active_clients.contains(client_id) {
                     p.active_clients.push(client_id.clone());
                 }
@@ -984,11 +1463,14 @@ impl WorkGateway {
                     p.active_clients.retain(|id| id != client_id);
                 }
             }
-            // P69.B2 — bindings are durable: replay rebuilds the binding map
-            // from the journal so a restart re-attaches to live provider
-            // sessions instead of forgetting them.
             WorkEvent::Runtime(RuntimeEvent::AgentBindingCreated { binding }) => {
                 let mut binding = (**binding).clone();
+                if binding.work_id.as_str() != work_id {
+                    return Err(format!(
+                        "binding `{}` is attached to a different Work than its event",
+                        binding.binding_id
+                    ));
+                }
                 binding.last_event_seq = event.sequence;
                 self.agent_bindings
                     .insert(binding.binding_id.as_str().to_string(), binding);
@@ -1001,30 +1483,540 @@ impl WorkGateway {
                 binding_id,
                 provider_session_id,
             }) => {
-                if let Some(b) = self.agent_bindings.get_mut(binding_id) {
-                    b.state = BindingLifecycle::Active;
-                    if let Some(sid) = provider_session_id {
-                        b.provider_session_id = Some(sid.clone());
-                    }
-                    b.last_event_seq = event.sequence;
+                let Some(b) = self.agent_bindings.get_mut(binding_id) else {
+                    return Err(format!("journal references unknown binding `{binding_id}`"));
+                };
+                if b.work_id.as_str() != work_id {
+                    return Err(format!("binding `{binding_id}` is owned by another Work"));
+                }
+                b.state = BindingLifecycle::Active;
+                if let Some(sid) = provider_session_id {
+                    b.provider_session_id = Some(sid.clone());
+                }
+                b.last_event_seq = event.sequence;
+                self.active_binding_ids
+                    .insert(work_id.clone(), binding_id.clone());
+                if let Some(address) = self.works.get_mut(&work_id) {
+                    address.binding_id = Some(binding_id.clone());
                 }
             }
             WorkEvent::Runtime(RuntimeEvent::AgentBindingSuspended { binding_id }) => {
-                if let Some(b) = self.agent_bindings.get_mut(binding_id) {
-                    b.state = BindingLifecycle::Parked;
-                    b.last_event_seq = event.sequence;
+                let Some(b) = self.agent_bindings.get_mut(binding_id) else {
+                    return Err(format!("journal references unknown binding `{binding_id}`"));
+                };
+                if b.work_id.as_str() != work_id {
+                    return Err(format!("binding `{binding_id}` is owned by another Work"));
+                }
+                b.state = BindingLifecycle::Parked;
+                b.last_event_seq = event.sequence;
+                if self.active_binding_ids.get(&work_id).map(String::as_str)
+                    == Some(binding_id.as_str())
+                {
+                    self.active_binding_ids.remove(&work_id);
+                    if let Some(address) = self.works.get_mut(&work_id) {
+                        address.binding_id = None;
+                    }
                 }
             }
             WorkEvent::Runtime(RuntimeEvent::AgentBindingUsageRecorded { binding_id, usage }) => {
-                if let Some(b) = self.agent_bindings.get_mut(binding_id) {
-                    b.usage.input_tokens = b.usage.input_tokens.saturating_add(usage.input_tokens);
-                    b.usage.output_tokens =
-                        b.usage.output_tokens.saturating_add(usage.output_tokens);
-                    b.usage.cost_micros = b.usage.cost_micros.saturating_add(usage.cost_micros);
-                    b.last_event_seq = event.sequence;
+                let Some(b) = self.agent_bindings.get_mut(binding_id) else {
+                    return Err(format!("journal references unknown binding `{binding_id}`"));
+                };
+                if b.work_id.as_str() != work_id {
+                    return Err(format!("binding `{binding_id}` is owned by another Work"));
                 }
+                b.usage.input_tokens = b.usage.input_tokens.saturating_add(usage.input_tokens);
+                b.usage.output_tokens = b.usage.output_tokens.saturating_add(usage.output_tokens);
+                b.usage.cost_micros = b.usage.cost_micros.saturating_add(usage.cost_micros);
+                b.last_event_seq = event.sequence;
             }
             _ => {}
+        }
+        Ok(())
+    }
+
+    fn apply_work_update(
+        &mut self,
+        work_id: &str,
+        patch: &Value,
+        _sequence: u64,
+    ) -> Result<(), String> {
+        let mut address = self
+            .works
+            .get(work_id)
+            .cloned()
+            .ok_or_else(|| format!("WorkUpdated references unknown Work `{work_id}`"))?;
+        if let Some(value) = patch.get("executionId") {
+            let execution_id = value
+                .as_str()
+                .ok_or("WorkUpdated executionId must be a string")?;
+            if execution_id.is_empty() {
+                return Err("WorkUpdated executionId cannot be empty".into());
+            }
+            self.note_run_reference(work_id, execution_id);
+            address.current_run_id = Some(execution_id.to_string());
+        }
+        if let Some(run) = patch.get("run") {
+            if !run.is_object() {
+                return Err("WorkUpdated run projection must be an object".into());
+            }
+            let run_id = run
+                .get("runId")
+                .or_else(|| run.get("executionId"))
+                .and_then(Value::as_str)
+                .ok_or("WorkUpdated run projection requires runId")?;
+            self.note_run_reference(work_id, run_id);
+            let target = self
+                .run_metadata
+                .entry(work_id.to_string())
+                .or_default()
+                .entry(run_id.to_string())
+                .or_insert_with(|| Value::Object(Default::default()));
+            let object = target
+                .as_object_mut()
+                .ok_or("durable run metadata is not an object")?;
+            if let Value::Object(incoming) = run {
+                for (key, value) in incoming {
+                    if let Some(existing) = object.get(key) {
+                        if existing != value {
+                            return Err(format!(
+                                "run metadata field `{key}` conflicts with an earlier event"
+                            ));
+                        }
+                    } else {
+                        object.insert(key.clone(), value.clone());
+                    }
+                }
+            }
+        }
+        address.provenance.merge_patch(patch)?;
+        address.provenance.validate_complete()?;
+        if let Some(owner) = patch.get("ownerId").or_else(|| patch.get("owner_id")) {
+            address.owner_id = Some(
+                owner
+                    .as_str()
+                    .ok_or("WorkUpdated ownerId must be a string")?
+                    .to_string(),
+            );
+        }
+        if let Some(binding) = patch.get("bindingId").or_else(|| patch.get("binding_id")) {
+            address.binding_id = Some(
+                binding
+                    .as_str()
+                    .ok_or("WorkUpdated bindingId must be a string")?
+                    .to_string(),
+            );
+        }
+        if patch.get("archived").and_then(Value::as_bool) == Some(true) {
+            self.works.remove(work_id);
+        } else {
+            address.version = address.version.saturating_add(1);
+            self.works.insert(work_id.to_string(), address);
+        }
+        Ok(())
+    }
+
+    fn note_run_reference(&mut self, work_id: &str, run_id: &str) {
+        let runs = self.run_ids.entry(work_id.to_string()).or_default();
+        if !runs.iter().any(|id| id == run_id) {
+            runs.push(run_id.to_string());
+        }
+        self.execution_ids
+            .insert(work_id.to_string(), run_id.to_string());
+        if let Some(address) = self.works.get_mut(work_id) {
+            address.current_run_id = Some(run_id.to_string());
+        }
+    }
+
+    fn validate_run_transition(
+        &self,
+        work_id: &str,
+        run_id: &str,
+        state: WorkState,
+    ) -> Result<(), String> {
+        let previous = self
+            .run_states
+            .get(work_id)
+            .and_then(|runs| runs.get(run_id))
+            .copied();
+        if let Some(previous) = previous {
+            if !previous.can_transition(state) {
+                return Err(format!(
+                    "illegal Work transition {previous:?} → {state:?} for run `{run_id}`"
+                ));
+            }
+            // A pending approval is a durable gate; only its explicit
+            // resolution may move the Run out of WaitingApproval.
+            if previous == WorkState::WaitingApproval
+                && state != WorkState::WaitingApproval
+                && !self.pending_approvals_for_run(work_id, run_id).is_empty()
+            {
+                return Err(format!(
+                    "run `{run_id}` cannot leave WaitingApproval with an unresolved approval"
+                ));
+            }
+            if state == WorkState::Running
+                && previous == WorkState::Recoverable
+                && self.has_unresolved_uncertain_effect(work_id)
+            {
+                return Err(format!(
+                    "run `{run_id}` is Recoverable with an unresolved uncertain effect; reconcile before retry"
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    fn set_run_state(
+        &mut self,
+        work_id: &str,
+        run_id: &str,
+        state: WorkState,
+        wait: Option<WaitCondition>,
+    ) -> Result<(), String> {
+        self.note_run_reference(work_id, run_id);
+        let previous = self
+            .run_states
+            .get(work_id)
+            .and_then(|runs| runs.get(run_id))
+            .copied();
+        if previous.is_none() && state.is_terminal() {
+            return Err(format!(
+                "run `{run_id}` reached terminal state without a durable start/queue event"
+            ));
+        }
+        if let Some(previous) = previous {
+            if !previous.can_transition(state) {
+                return Err(format!(
+                    "illegal Work transition {previous:?} → {state:?} for run `{run_id}`"
+                ));
+            }
+            // A pending approval is a durable gate; only its explicit
+            // resolution may move the Run out of WaitingApproval.
+            if previous == WorkState::WaitingApproval
+                && state != WorkState::WaitingApproval
+                && !self.pending_approvals_for_run(work_id, run_id).is_empty()
+            {
+                return Err(format!(
+                    "run `{run_id}` cannot leave WaitingApproval with an unresolved approval"
+                ));
+            }
+            if state == WorkState::Running
+                && previous == WorkState::Recoverable
+                && self.has_unresolved_uncertain_effect(work_id)
+            {
+                return Err(format!(
+                    "run `{run_id}` is Recoverable with an unresolved uncertain effect; reconcile before retry"
+                ));
+            }
+        }
+        self.run_states
+            .entry(work_id.to_string())
+            .or_default()
+            .insert(run_id.to_string(), state);
+        if self.execution_id(work_id) == Some(run_id) {
+            let p = self.presence.entry(work_id.to_string()).or_default();
+            p.work_id = work_id.to_string();
+            p.active_run = Some(run_id.to_string());
+            p.work_state = Some(state);
+            p.state = Some(presence_projection(state, wait.as_ref()));
+            p.wait = if state.is_running() || matches!(state, WorkState::Paused) {
+                wait
+            } else {
+                None
+            };
+        }
+        Ok(())
+    }
+
+    fn apply_effect_attempt(
+        &mut self,
+        work_id: &str,
+        effect_id: &str,
+        grant_id: Option<&str>,
+        idempotency_class: Option<IdempotencyClass>,
+        sequence: u64,
+    ) {
+        let effects = self
+            .effect_projections
+            .entry(work_id.to_string())
+            .or_default();
+        let effect = effects
+            .entry(effect_id.to_string())
+            .or_insert_with(|| EffectProjection::new(effect_id.to_string(), sequence));
+        effect.state = "attempted".into();
+        effect.uncertainty = EffectUncertainty::UnknownOutcome;
+        effect.idempotency_class = idempotency_class;
+        effect.grant_id = grant_id.map(str::to_string);
+        effect.last_sequence = sequence;
+    }
+
+    fn apply_effect_observed(
+        &mut self,
+        work_id: &str,
+        effect_id: &str,
+        outcome: &str,
+        sequence: u64,
+    ) -> Result<(), String> {
+        let effects = self
+            .effect_projections
+            .entry(work_id.to_string())
+            .or_default();
+        let effect = effects
+            .get_mut(effect_id)
+            .ok_or_else(|| format!("effect `{effect_id}` observed before attempt"))?;
+        if matches!(outcome, "unknown" | "uncertain" | "partial") {
+            effect.state = "uncertain".into();
+            effect.uncertainty = if outcome == "partial" {
+                EffectUncertainty::Partial
+            } else {
+                EffectUncertainty::UnknownOutcome
+            };
+        } else {
+            effect.state = "observed".into();
+            effect.uncertainty = EffectUncertainty::None;
+        }
+        effect.reason = Some(outcome.to_string());
+        effect.last_sequence = sequence;
+        Ok(())
+    }
+
+    fn apply_effect_verified(
+        &mut self,
+        work_id: &str,
+        effect_id: &str,
+        verified: bool,
+        sequence: u64,
+    ) -> Result<(), String> {
+        let effect = self
+            .effect_projections
+            .get_mut(work_id)
+            .and_then(|effects| effects.get_mut(effect_id))
+            .ok_or_else(|| format!("effect `{effect_id}` verified before observation"))?;
+        effect.state = if verified { "verified" } else { "failed" }.into();
+        effect.uncertainty = EffectUncertainty::None;
+        effect.last_sequence = sequence;
+        Ok(())
+    }
+
+    fn apply_effect_uncertain(
+        &mut self,
+        work_id: &str,
+        effect_id: &str,
+        reason: Option<&str>,
+        idempotency_class: Option<IdempotencyClass>,
+        sequence: u64,
+    ) -> Result<(), String> {
+        let effects = self
+            .effect_projections
+            .get_mut(work_id)
+            .ok_or_else(|| format!("effect `{effect_id}` uncertain before a Work attempt"))?;
+        let effect = effects
+            .get_mut(effect_id)
+            .ok_or_else(|| format!("effect `{effect_id}` uncertain before an attempt"))?;
+        effect.state = "uncertain".into();
+        effect.uncertainty = EffectUncertainty::UnknownOutcome;
+        if idempotency_class.is_some() {
+            effect.idempotency_class = idempotency_class;
+        }
+        effect.reason = reason.map(str::to_string);
+        effect.last_sequence = sequence;
+        Ok(())
+    }
+
+    fn apply_effect_reconciled(
+        &mut self,
+        work_id: &str,
+        effect_id: &str,
+        outcome: &str,
+        retry_safe: bool,
+        sequence: u64,
+    ) -> Result<(), String> {
+        let effect = self
+            .effect_projections
+            .get(work_id)
+            .and_then(|effects| effects.get(effect_id))
+            .ok_or_else(|| format!("effect `{effect_id}` reconciled before an attempt"))?;
+        if !effect.requires_reconciliation() {
+            return Err(format!("effect `{effect_id}` is not uncertain"));
+        }
+        let effect = self
+            .effect_projections
+            .get_mut(work_id)
+            .and_then(|effects| effects.get_mut(effect_id))
+            .expect("checked above");
+        effect.state = if retry_safe { "retry_safe" } else { "reconciled" }.into();
+        effect.uncertainty = EffectUncertainty::None;
+        effect.reason = Some(outcome.to_string());
+        effect.last_sequence = sequence;
+        Ok(())
+    }
+
+    fn has_unresolved_uncertain_effect(&self, work_id: &str) -> bool {
+        self.effect_projections
+            .get(work_id)
+            .is_some_and(|effects| effects.values().any(EffectProjection::requires_reconciliation))
+    }
+
+    /// Resolve the Run owner of an approval event while replaying.  New rows
+    /// carry it explicitly; legacy rows are admitted only when the Work still
+    /// has one unambiguous current Run.
+    fn approval_event_run_id(
+        &self,
+        work_id: &str,
+        explicit: Option<&str>,
+    ) -> Result<String, String> {
+        let run_id = explicit
+            .map(str::to_string)
+            .or_else(|| self.execution_id(work_id).map(str::to_string))
+            .ok_or_else(|| format!("Work `{work_id}` approval event has no Run owner"))?;
+        if !self
+            .run_ids
+            .get(work_id)
+            .is_some_and(|runs| runs.iter().any(|candidate| candidate == &run_id))
+        {
+            return Err(format!(
+                "Work `{work_id}` approval event references unknown Run `{run_id}`"
+            ));
+        }
+        Ok(run_id)
+    }
+
+    fn validate_replayed_graph(&self) -> Result<(), String> {
+        for (work_id, address) in &self.works {
+            if address.work_id.as_str() != work_id {
+                return Err(format!("Work `{work_id}` has a mismatched address id"));
+            }
+            if matches!(address.session_kind, SessionKind::Automation)
+                && address.session_id.is_none()
+            {
+                return Err(format!("automation Work `{work_id}` has no owning Session"));
+            }
+            if let Some(parent) = &address.parent_work_id {
+                let parent_address = self
+                    .works
+                    .get(parent)
+                    .ok_or_else(|| format!("Work `{work_id}` references unknown parent `{parent}`"))?;
+                if parent_address.session_id != address.session_id
+                    || parent_address.session_kind != address.session_kind
+                {
+                    return Err(format!("Work `{work_id}` does not inherit its parent Session scope"));
+                }
+            }
+            let runs = self.run_ids.get(work_id).map(Vec::as_slice).unwrap_or(&[]);
+            if let Some(current) = &address.current_run_id {
+                if !runs.iter().any(|run| run == current) {
+                    return Err(format!("Work `{work_id}` points at an unjournaled Run `{current}`"));
+                }
+            }
+            if let Some(binding_id) = self.active_binding_ids.get(work_id) {
+                if address.binding_id.as_deref() != Some(binding_id.as_str())
+                    || !self.agent_bindings.contains_key(binding_id)
+                {
+                    return Err(format!("Work `{work_id}` has an invalid active binding pointer"));
+                }
+            }
+            for binding in self
+                .agent_bindings
+                .values()
+                .filter(|binding| binding.work_id.as_str() == work_id)
+            {
+                if address.session_id.as_deref() != Some(binding.session_id.as_str()) {
+                    return Err(format!(
+                        "binding `{}` is not owned by the Work Session",
+                        binding.binding_id
+                    ));
+                }
+                if binding.state == BindingLifecycle::Active
+                    && self.active_binding_ids.get(work_id).map(String::as_str)
+                        != Some(binding.binding_id.as_str())
+                {
+                    return Err(format!(
+                        "active binding `{}` has no Work ownership pointer",
+                        binding.binding_id
+                    ));
+                }
+            }
+        }
+        for (session_id, count) in self
+            .agent_bindings
+            .values()
+            .filter(|binding| binding.state == BindingLifecycle::Active)
+            .fold(BTreeMap::<String, usize>::new(), |mut counts, binding| {
+                *counts
+                    .entry(binding.session_id.as_str().to_string())
+                    .or_default() += 1;
+                counts
+            })
+        {
+            if count > 1 {
+                return Err(format!(
+                    "Session `{session_id}` has {count} active bindings; ownership is ambiguous"
+                ));
+            }
+        }
+        for (work_id, pending) in &self.pending_approvals {
+            if !self.works.contains_key(work_id) {
+                return Err(format!("pending approval references unknown Work `{work_id}`"));
+            }
+            if pending.is_empty() {
+                return Err(format!("Work `{work_id}` has an empty pending-approval projection"));
+            }
+            for (ticket_id, value) in pending {
+                if value.get("ticketId").and_then(Value::as_str) != Some(ticket_id.as_str()) {
+                    return Err(format!(
+                        "Work `{work_id}` pending approval has a mismatched ticket id"
+                    ));
+                }
+                for field in ["toolId", "argsHash", "riskTier"] {
+                    if value
+                        .get(field)
+                        .is_some_and(|field| !field.is_null() && !field.is_string())
+                    {
+                        return Err(format!(
+                            "pending approval `{ticket_id}` has a non-string `{field}`"
+                        ));
+                    }
+                }
+                if value
+                    .get("requestedAtMs")
+                    .is_some_and(|timestamp| !timestamp.is_null() && !timestamp.is_u64())
+                {
+                    return Err(format!(
+                        "pending approval `{ticket_id}` has an invalid requestedAtMs"
+                    ));
+                }
+                let run_id = value
+                    .get("runId")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| {
+                        format!("Work `{work_id}` pending approval `{ticket_id}` has no Run owner")
+                    })?;
+                if !self
+                    .run_ids
+                    .get(work_id)
+                    .is_some_and(|runs| runs.iter().any(|candidate| candidate == run_id))
+                {
+                    return Err(format!(
+                        "pending approval `{ticket_id}` references unknown Run `{run_id}`"
+                    ));
+                }
+                if self.run_state(work_id, run_id) != Some(WorkState::WaitingApproval) {
+                    return Err(format!(
+                        "pending approval `{ticket_id}` is not attached to WaitingApproval"
+                    ));
+                }
+            }
+        }
+        for (work_id, effects) in &self.effect_projections {
+            if !self.works.contains_key(work_id) {
+                return Err(format!("effect projection references unknown Work `{work_id}`"));
+            }
+            for effect in effects.values() {
+                if effect.effect_id.is_empty() {
+                    return Err(format!("Work `{work_id}` has an empty effect id"));
+                }
+            }
         }
         Ok(())
     }
@@ -1039,17 +2031,8 @@ impl WorkGateway {
         run_id: &str,
         state: WorkState,
         wait: Option<everyaios_types::WaitCondition>,
-    ) {
-        let p = self.presence.entry(work_id.to_string()).or_default();
-        p.work_id = work_id.to_string();
-        p.active_run = Some(run_id.to_string());
-        p.work_state = Some(state);
-        p.state = Some(presence_projection(state, wait.as_ref()));
-        p.wait = if state.is_running() || matches!(state, WorkState::Paused) {
-            wait
-        } else {
-            None
-        };
+    ) -> Result<(), String> {
+        self.set_run_state(work_id, run_id, state, wait)
     }
 
     pub fn create_work(
@@ -1098,6 +2081,11 @@ impl WorkGateway {
         address.session_id = session_id;
         address.session_kind = session_kind;
         if let Some(existing) = self.works.get(&id) {
+            if existing.session_id != address.session_id
+                || existing.session_kind != address.session_kind
+            {
+                return Err(format!("Work `{id}` already exists with a different Session owner/kind"));
+            }
             return Ok(existing.clone());
         }
         self.works.insert(id.clone(), address.clone());
@@ -1106,6 +2094,7 @@ impl WorkGateway {
             WorkPresence {
                 work_id: id.clone(),
                 state: Some(WorkPresenceState::Running),
+                work_state: Some(WorkState::Created),
                 ..Default::default()
             },
         );
@@ -1116,6 +2105,13 @@ impl WorkGateway {
                 project_id: address.project_id.clone(),
                 session_id: address.session_id.clone(),
                 parent_work_id: None,
+                session_kind: address.session_kind,
+                owner_id: address.owner_id.clone(),
+                binding_id: address.binding_id.clone(),
+                initial_state: Some(WorkState::Created),
+                run_id: None,
+                trigger: None,
+                provenance: address.provenance.clone(),
             }),
             None,
         ) {
@@ -1150,6 +2146,16 @@ impl WorkGateway {
         }
         let id = work_id.into();
         if let Some(existing) = self.works.get(&id) {
+            let parent = self
+                .works
+                .get(parent_work_id)
+                .ok_or("unknown parent work")?;
+            if existing.parent_work_id.as_deref() != Some(parent_work_id)
+                || existing.session_id != parent.session_id
+                || existing.session_kind != parent.session_kind
+            {
+                return Err(format!("child Work `{id}` already exists with a different owner"));
+            }
             return Ok(existing.clone());
         }
         let parent_kind = self
@@ -1176,6 +2182,7 @@ impl WorkGateway {
             WorkPresence {
                 work_id: id.clone(),
                 state: Some(WorkPresenceState::Running),
+                work_state: Some(WorkState::Created),
                 ..Default::default()
             },
         );
@@ -1186,6 +2193,13 @@ impl WorkGateway {
                 project_id: address.project_id.clone(),
                 session_id: address.session_id.clone(),
                 parent_work_id: Some(parent_work_id.to_string()),
+                session_kind: address.session_kind,
+                owner_id: address.owner_id.clone(),
+                binding_id: address.binding_id.clone(),
+                initial_state: Some(WorkState::Created),
+                run_id: None,
+                trigger: Some("subagent".into()),
+                provenance: address.provenance.clone(),
             }),
             None,
         ) {
@@ -1368,6 +2382,20 @@ impl WorkGateway {
         let child = Self::child_work_id(parent_work_id, task_id);
         let run = Self::child_run_id(parent_work_id, task_id);
         let session = Self::child_agent_session_id(parent_work_id, task_id);
+        if let Some(current) = self.run_state(&child, &run) {
+            if current.is_terminal() {
+                if current == outcome {
+                    return Ok(ChildWorkRef {
+                        work_id: child,
+                        run_id: run,
+                        agent_session_id: session,
+                    });
+                }
+                return Err(format!(
+                    "child Work `{child}` is already terminal ({current:?}), refusing {outcome:?}"
+                ));
+            }
+        }
         let event = match outcome {
             WorkState::Failed => WorkEvent::Domain(DomainEvent::RunFailed {
                 run_id: run.clone(),
@@ -1381,7 +2409,7 @@ impl WorkGateway {
             }),
         };
         self.append(&child, event, None)?;
-        self.set_work_state(&child, &run, outcome, None);
+        self.set_work_state(&child, &run, outcome, None)?;
         self.terminate_agent_session(&child, &session)?;
         Ok(ChildWorkRef {
             work_id: child,
@@ -1390,27 +2418,191 @@ impl WorkGateway {
         })
     }
 
-    pub fn bind_execution(&mut self, work_id: &str, execution_id: &str) -> Result<(), String> {
-        if !self.works.contains_key(work_id) {
-            return Err("unknown work".into());
+    /// Bind a Run and persist the projection metadata needed to rebuild the
+    /// ExecutionKernel after a restart. The Work event stream, rather than the
+    /// caller's in-memory kernel, is the source of truth for this record.
+    pub fn bind_execution_with_metadata(
+        &mut self,
+        work_id: &str,
+        execution_id: &str,
+        metadata: &Value,
+    ) -> Result<WorkEventEnvelope, String> {
+        let address = self
+            .works
+            .get(work_id)
+            .cloned()
+            .ok_or_else(|| "unknown work".to_string())?;
+        if execution_id.trim().is_empty() {
+            return Err("execution id cannot be empty".into());
         }
-        self.append(
+        if !metadata.is_object() {
+            return Err("execution metadata must be an object".into());
+        }
+        if let Some(current) = address.current_run_id.as_deref() {
+            if current != execution_id {
+                if let Some(state) = self
+                    .run_states
+                    .get(work_id)
+                    .and_then(|runs| runs.get(current))
+                    .copied()
+                {
+                    if state.is_terminal() {
+                        return Err(format!(
+                            "Work `{work_id}` is terminal ({state:?}); a replacement Run cannot overwrite it"
+                        ));
+                    }
+                }
+            }
+        }
+        let mut run = metadata.as_object().cloned().unwrap_or_default();
+        run.insert("runId".into(), Value::String(execution_id.to_string()));
+        run.insert("executionId".into(), Value::String(execution_id.to_string()));
+        if !run.contains_key("sessionId") {
+            if let Some(session_id) = &address.session_id {
+                run.insert("sessionId".into(), Value::String(session_id.clone()));
+            }
+        }
+        if !run.contains_key("objective") {
+            if let Some(objective) = self.work_objective(work_id) {
+                run.insert("objective".into(), Value::String(objective));
+            }
+        }
+        // The host may bind a Run after it has already admitted the Work but
+        // before it can pass a structured context object. Reconstruct the
+        // minimum durable context from the Work provenance/binding events so
+        // scheduler and ACP history do not depend on an in-memory kernel.
+        if !run.contains_key("contextSnapshot") {
+            let mut context = serde_json::Map::new();
+            for (key, value) in [
+                ("automationId", &address.provenance.automation_id),
+                ("revisionId", &address.provenance.revision_id),
+                ("triggerOccurrenceId", &address.provenance.trigger_occurrence_id),
+                ("sourceSessionId", &address.provenance.source_session_id),
+            ] {
+                if let Some(value) = value {
+                    context.insert(key.into(), Value::String(value.clone()));
+                }
+            }
+            if let Some(generation) = address.provenance.automation_generation {
+                context.insert("automationGeneration".into(), Value::from(generation));
+            }
+            if let Some(binding) = self
+                .active_binding_ids
+                .get(work_id)
+                .and_then(|binding_id| self.agent_bindings.get(binding_id))
+                .or_else(|| {
+                    self.agent_bindings
+                        .values()
+                        .find(|binding| binding.work_id.as_str() == work_id)
+                })
+            {
+                context.insert("bindingId".into(), Value::String(binding.binding_id.as_str().into()));
+                context.insert("agentId".into(), Value::String(binding.agent_id.as_str().into()));
+                if let Some(provider) = &binding.provider_session_id {
+                    context.insert("providerSessionId".into(), Value::String(provider.clone()));
+                }
+                run.insert("bindingId".into(), Value::String(binding.binding_id.as_str().into()));
+            }
+            if !context.is_empty() {
+                run.insert(
+                    "contextSnapshot".into(),
+                    Value::String(Value::Object(context).to_string()),
+                );
+            }
+        }
+        let mut patch = run.clone();
+        patch.insert("run".into(), Value::Object(run));
+        let envelope = self.append(
             work_id,
             WorkEvent::Domain(DomainEvent::WorkUpdated {
-                patch: serde_json::json!({"executionId": execution_id}),
+                patch: Value::Object(patch.clone()),
             }),
             None,
         )?;
-        self.execution_ids
-            .insert(work_id.to_string(), execution_id.to_string());
-        if let Some(address) = self.works.get_mut(work_id) {
-            address.current_run_id = Some(execution_id.to_string());
-            address.version = address.version.saturating_add(1);
+        if !self
+            .run_states
+            .get(work_id)
+            .is_some_and(|runs| runs.contains_key(execution_id))
+        {
+            self.run_states
+                .entry(work_id.to_string())
+                .or_default()
+                .insert(execution_id.to_string(), WorkState::Ready);
         }
-        Ok(())
+        Ok(envelope)
     }
+
+    /// Compatibility door for callers that do not yet have a structured Run
+    /// projection. It still writes a complete, replayable Run identity.
+    pub fn bind_execution(&mut self, work_id: &str, execution_id: &str) -> Result<(), String> {
+        let trigger = self.inferred_trigger(work_id);
+        self.bind_execution_with_metadata(
+            work_id,
+            execution_id,
+            &serde_json::json!({"trigger": trigger}),
+        )
+        .map(|_| ())
+    }
+
+    fn work_objective(&self, work_id: &str) -> Option<String> {
+        self.events(work_id).iter().find_map(|envelope| match &envelope.event {
+            WorkEvent::Domain(DomainEvent::WorkCreated { objective, .. }) => Some(objective.clone()),
+            _ => None,
+        })
+    }
+
+    fn inferred_trigger(&self, work_id: &str) -> &'static str {
+        let Some(address) = self.works.get(work_id) else {
+            return "chat";
+        };
+        if address.parent_work_id.is_some() {
+            "subagent"
+        } else if matches!(address.session_kind, SessionKind::Automation) {
+            "scheduler"
+        } else if self
+            .agent_bindings
+            .values()
+            .any(|binding| binding.work_id.as_str() == work_id)
+        {
+            "acp"
+        } else {
+            "chat"
+        }
+    }
+
     pub fn execution_id(&self, work_id: &str) -> Option<&str> {
         self.execution_ids.get(work_id).map(String::as_str)
+    }
+    pub fn execution_ids(&self, work_id: &str) -> Vec<String> {
+        self.run_ids
+            .get(work_id)
+            .cloned()
+            .unwrap_or_default()
+    }
+    pub fn run_state(&self, work_id: &str, run_id: &str) -> Option<WorkState> {
+        self.run_states
+            .get(work_id)
+            .and_then(|runs| runs.get(run_id))
+            .copied()
+    }
+    pub fn run_metadata(&self, work_id: &str, run_id: &str) -> Option<&Value> {
+        self.run_metadata
+            .get(work_id)
+            .and_then(|runs| runs.get(run_id))
+    }
+    pub fn effect_status(&self, work_id: &str, effect_id: &str) -> Option<&EffectProjection> {
+        self.effect_projections
+            .get(work_id)
+            .and_then(|effects| effects.get(effect_id))
+    }
+    pub fn effect_statuses(&self, work_id: &str) -> Vec<&EffectProjection> {
+        self.effect_projections
+            .get(work_id)
+            .map(|effects| effects.values().collect())
+            .unwrap_or_default()
+    }
+    pub fn has_unresolved_uncertain_effects(&self, work_id: &str) -> bool {
+        self.has_unresolved_uncertain_effect(work_id)
     }
     pub fn get_work(&self, id: &str) -> Option<&WorkAddress> {
         self.works.get(id)
@@ -1963,8 +3155,11 @@ impl WorkGateway {
         &mut self,
         mut binding: AgentBinding,
     ) -> Result<WorkEventEnvelope, String> {
-        if !self.works.contains_key(binding.work_id.as_str()) {
+        let Some(address) = self.works.get(binding.work_id.as_str()) else {
             return Err("unknown work for agent binding".into());
+        };
+        if address.session_id.as_deref() != Some(binding.session_id.as_str()) {
+            return Err("agent binding Session does not own this Work".into());
         }
         let binding_id = binding.binding_id.as_str().to_string();
         if self.agent_bindings.contains_key(&binding_id) {
@@ -1973,16 +3168,14 @@ impl WorkGateway {
         binding.state = BindingLifecycle::Parked;
         binding.last_event_seq = 0;
         let work_id = binding.work_id.as_str().to_string();
-        let envelope = self
-            .append(
-                &work_id,
-                WorkEvent::Runtime(RuntimeEvent::AgentBindingCreated {
-                    binding: Box::new(binding.clone()),
-                }),
-                None,
+        let envelope = self.append(
+            &work_id,
+            WorkEvent::Runtime(RuntimeEvent::AgentBindingCreated {
+                binding: Box::new(binding.clone()),
+            }),
+            None,
         )?;
-        binding.last_event_seq = envelope.sequence;
-        self.agent_bindings.insert(binding_id, binding);
+        self.replay_event(&envelope)?;
         Ok(envelope)
     }
 
@@ -2047,17 +3240,8 @@ impl WorkGateway {
                 ));
             }
         }
-        let envelope = self
-            .append(&work_id, event, None)?;
-        let binding = self
-            .agent_bindings
-            .get_mut(binding_id)
-            .ok_or("unknown agent binding")?;
-        binding.state = state;
-        if let Some(sid) = provider_session_id {
-            binding.provider_session_id = Some(sid);
-        }
-        binding.last_event_seq = envelope.sequence;
+        let envelope = self.append(&work_id, event, None)?;
+        self.replay_event(&envelope)?;
         Ok(envelope)
     }
 
@@ -2074,29 +3258,15 @@ impl WorkGateway {
             .get(binding_id)
             .ok_or("unknown agent binding")?;
         let work_id = binding.work_id.as_str().to_string();
-        let envelope = self
-            .append(
-                &work_id,
-                WorkEvent::Runtime(RuntimeEvent::AgentBindingUsageRecorded {
-                    binding_id: binding_id.to_string(),
-                    usage,
-                }),
-                None,
-            )?;
-        let binding = self
-            .agent_bindings
-            .get_mut(binding_id)
-            .ok_or("unknown agent binding")?;
-        binding.usage.input_tokens = binding
-            .usage
-            .input_tokens
-            .saturating_add(usage.input_tokens);
-        binding.usage.output_tokens = binding
-            .usage
-            .output_tokens
-            .saturating_add(usage.output_tokens);
-        binding.usage.cost_micros = binding.usage.cost_micros.saturating_add(usage.cost_micros);
-        binding.last_event_seq = envelope.sequence;
+        let envelope = self.append(
+            &work_id,
+            WorkEvent::Runtime(RuntimeEvent::AgentBindingUsageRecorded {
+                binding_id: binding_id.to_string(),
+                usage,
+            }),
+            None,
+        )?;
+        self.replay_event(&envelope)?;
         Ok(envelope)
     }
 
@@ -2563,6 +3733,12 @@ impl WorkGateway {
         if !self.works.contains_key(work_id) {
             return Err("unknown work".into());
         }
+        if let Some((run_id, state)) = run_event_state(&event) {
+            if let Some(reason) = matches!(&event, WorkEvent::Domain(DomainEvent::RunWaiting { reason, .. }) if WorkState::try_parse(reason).is_none()).then(|| "unknown Work state") {
+                return Err(format!("{reason} in journal event"));
+            }
+            self.validate_run_transition(work_id, &run_id, state)?;
+        }
         let sequence = self.next_seq;
         let next_sequence = sequence
             .checked_add(1)
@@ -2575,6 +3751,7 @@ impl WorkGateway {
             timestamp: now_ms(),
             trace_id: None,
             causal_parent,
+            schema_version: CANONICAL_SCHEMA_VERSION,
         };
         if let Some(path) = &self.journal {
             let mut file = OpenOptions::new()
@@ -2595,6 +3772,12 @@ impl WorkGateway {
             .entry(work_id.into())
             .or_default()
             .push(envelope.clone());
+        if let WorkEvent::Domain(DomainEvent::WorkUpdated { patch }) = &envelope.event {
+            // Project canonical Work fields from the durable patch as part of
+            // the same acknowledgement. This keeps host paths that append a
+            // provenance update (without a second owner call) replayable.
+            self.apply_work_update(work_id, patch, envelope.sequence)?;
+        }
         self.subscribers
             .retain(|subscriber| subscriber.send(envelope.clone()).is_ok());
         Ok(envelope)
@@ -2614,6 +3797,11 @@ impl WorkGateway {
         self.events.get(work_id).map(Vec::as_slice).unwrap_or(&[])
     }
 
+    /// The durable journal path, when this gateway is file-backed.
+    pub fn journal_path(&self) -> Option<&Path> {
+        self.journal.as_deref()
+    }
+
     /// Return the opaque capability grant attached to an attempted effect, if
     /// present. This is audit metadata only and never resolves credentials.
     pub fn effect_grant_id(&self, work_id: &str, effect_id: &str) -> Option<&str> {
@@ -2623,24 +3811,189 @@ impl WorkGateway {
                 WorkEvent::Domain(DomainEvent::EffectAttempted {
                     effect_id: candidate,
                     capability_grant_id,
+                    ..
                 }) if candidate == effect_id => capability_grant_id.as_deref(),
                 _ => None,
             })
     }
+    pub fn record_pending_approval(
+        &mut self,
+        work_id: &str,
+        ticket_id: &str,
+        tool_id: &str,
+        args_hash: &str,
+        risk_tier: &str,
+        requested_at_ms: u64,
+    ) -> Result<WorkEventEnvelope, String> {
+        let run_id = self
+            .execution_id(work_id)
+            .ok_or_else(|| format!("Work `{work_id}` has no current Run for approval"))?
+            .to_string();
+        self.record_pending_approval_for_run(
+            work_id,
+            &run_id,
+            ticket_id,
+            tool_id,
+            args_hash,
+            risk_tier,
+            requested_at_ms,
+        )
+    }
+
+    /// Record an approval request against an explicitly owned Run.  The Run
+    /// gate is checked before the journal append so an invalid request cannot
+    /// leave a durable fact that recovery would have to guess about.
+    pub fn record_pending_approval_for_run(
+        &mut self,
+        work_id: &str,
+        run_id: &str,
+        ticket_id: &str,
+        tool_id: &str,
+        args_hash: &str,
+        risk_tier: &str,
+        requested_at_ms: u64,
+    ) -> Result<WorkEventEnvelope, String> {
+        if ticket_id.trim().is_empty() {
+            return Err("approval ticket id cannot be empty".into());
+        }
+        if self.execution_id(work_id) != Some(run_id) {
+            return Err("approval request execution/work binding mismatch".into());
+        }
+        if self.run_state(work_id, run_id) != Some(WorkState::WaitingApproval) {
+            return Err(format!(
+                "approval request for Run `{run_id}` requires WaitingApproval"
+            ));
+        }
+        if self.pending_approval(work_id, ticket_id).is_some() {
+            return Err(format!("approval ticket `{ticket_id}` is already pending"));
+        }
+        if self
+            .pending_approvals
+            .get(work_id)
+            .is_some_and(|pending| !pending.is_empty())
+        {
+            return Err(format!("Work `{work_id}` already has a pending approval"));
+        }
+        let envelope = self.append(
+            work_id,
+            WorkEvent::Domain(DomainEvent::ApprovalRequested {
+                ticket_id: ticket_id.into(),
+                run_id: Some(run_id.into()),
+                tool_id: (!tool_id.is_empty()).then(|| tool_id.into()),
+                args_hash: (!args_hash.is_empty()).then(|| args_hash.into()),
+                risk_tier: (!risk_tier.is_empty()).then(|| risk_tier.into()),
+                requested_at_ms: Some(requested_at_ms),
+            }),
+            None,
+        )?;
+        self.replay_event(&envelope)?;
+        Ok(envelope)
+    }
+
+    pub fn pending_approval(&self, work_id: &str, ticket_id: &str) -> Option<&Value> {
+        self.pending_approvals
+            .get(work_id)
+            .and_then(|pending| pending.get(ticket_id))
+    }
+
+    /// Return unresolved approval requests owned by one Run.  The Work
+    /// projection may contain historical Runs, so callers must not use the
+    /// Work's current pointer as an implicit ownership check.
+    pub fn pending_approvals_for_run(
+        &self,
+        work_id: &str,
+        run_id: &str,
+    ) -> Vec<(&str, &Value)> {
+        self.pending_approvals
+            .get(work_id)
+            .map(|pending| {
+                pending
+                    .iter()
+                    .filter(|(_, value)| {
+                        value.get("runId").and_then(Value::as_str) == Some(run_id)
+                    })
+                    .map(|(ticket, value)| (ticket.as_str(), value))
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    /// Resolve a pending approval and durably move its Run to the resulting
+    /// lifecycle state.  The two events are validated before either is
+    /// appended; a later filesystem failure therefore leaves an incomplete
+    /// journal that recovery refuses rather than a forged success.
+    pub fn resolve_pending_approval_for_run(
+        &mut self,
+        work_id: &str,
+        run_id: &str,
+        ticket_id: &str,
+        approved: bool,
+    ) -> Result<WorkEventEnvelope, String> {
+        if ticket_id.trim().is_empty() {
+            return Err("approval ticket id cannot be empty".into());
+        }
+        if self.execution_id(work_id) != Some(run_id) {
+            return Err("approval resolution execution/work binding mismatch".into());
+        }
+        let pending = self
+            .pending_approval(work_id, ticket_id)
+            .cloned()
+            .ok_or_else(|| format!("approval ticket `{ticket_id}` is not pending"))?;
+        if pending.get("ticketId").and_then(Value::as_str) != Some(ticket_id) {
+            return Err(format!("approval ticket `{ticket_id}` has mismatched metadata"));
+        }
+        if pending.get("runId").and_then(Value::as_str) != Some(run_id) {
+            return Err(format!("approval ticket `{ticket_id}` belongs to another Run"));
+        }
+        if self.run_state(work_id, run_id) != Some(WorkState::WaitingApproval) {
+            return Err(format!(
+                "approval resolution for Run `{run_id}` requires WaitingApproval"
+            ));
+        }
+        let next = if approved {
+            WorkState::Running
+        } else {
+            WorkState::Failed
+        };
+        // The pending approval is intentionally still present at this point;
+        // its resolution is the transition that removes it.  The normal
+        // transition door runs after the durable resolution has been replayed.
+        let envelope = self.append(
+            work_id,
+            WorkEvent::Domain(DomainEvent::ApprovalResolved {
+                ticket_id: ticket_id.into(),
+                run_id: Some(run_id.into()),
+                approved,
+            }),
+            None,
+        )?;
+        self.replay_event(&envelope)?;
+        self.record_execution_transition(work_id, run_id, next)?;
+        Ok(envelope)
+    }
+
+    /// Resolve a generic review/approval fact.  This compatibility door does
+    /// not imply that a pending execution approval exists; the strict Run-aware
+    /// door above is used by the execution RPC path.
     pub fn record_approval(
         &mut self,
         work_id: &str,
         ticket_id: &str,
         approved: bool,
     ) -> Result<(), String> {
-        self.append(
+        if ticket_id.trim().is_empty() {
+            return Err("approval ticket id cannot be empty".into());
+        }
+        let envelope = self.append(
             work_id,
             WorkEvent::Domain(DomainEvent::ApprovalResolved {
                 ticket_id: ticket_id.into(),
+                run_id: None,
                 approved,
             }),
             None,
         )?;
+        self.replay_event(&envelope)?;
         Ok(())
     }
 
@@ -2652,10 +4005,53 @@ impl WorkGateway {
         detail: &str,
         capability_grant_id: Option<&str>,
     ) -> Result<(), String> {
+        self.record_effect_with_class(
+            work_id,
+            effect_id,
+            phase,
+            detail,
+            capability_grant_id,
+            None,
+        )
+    }
+
+    /// Record an effect boundary with its declared idempotency class. A missing
+    /// class is intentionally treated as unknown/unsafe by recovery; callers
+    /// that know the capability contract should pass it explicitly.
+    pub fn record_effect_with_class(
+        &mut self,
+        work_id: &str,
+        effect_id: &str,
+        phase: &str,
+        detail: &str,
+        capability_grant_id: Option<&str>,
+        idempotency_class: Option<IdempotencyClass>,
+    ) -> Result<(), String> {
+        if effect_id.trim().is_empty() {
+            return Err("effect id cannot be empty".into());
+        }
+        if matches!(phase, "observed" | "verified" | "uncertain" | "unknown") {
+            let Some(existing) = self.effect_status(work_id, effect_id) else {
+                return Err(format!("effect `{effect_id}` has no durable attempt"));
+            };
+            if matches!(phase, "observed")
+                && existing.state == "uncertain"
+            {
+                return Err(format!(
+                    "effect `{effect_id}` is uncertain; use explicit reconciliation before observing a retry"
+                ));
+            }
+            if matches!(phase, "verified")
+                && !matches!(existing.state.as_str(), "observed" | "verified")
+            {
+                return Err(format!("effect `{effect_id}` has no durable observation"));
+            }
+        }
         let event = match phase {
             "attempted" => WorkEvent::Domain(DomainEvent::EffectAttempted {
                 effect_id: effect_id.into(),
                 capability_grant_id: capability_grant_id.map(str::to_string),
+                idempotency_class,
             }),
             "observed" => WorkEvent::Domain(DomainEvent::EffectObserved {
                 effect_id: effect_id.into(),
@@ -2665,10 +4061,15 @@ impl WorkGateway {
                 effect_id: effect_id.into(),
                 verified: detail == "true",
             }),
+            "uncertain" | "unknown" => WorkEvent::Domain(DomainEvent::EffectUncertain {
+                effect_id: effect_id.into(),
+                reason: (!detail.is_empty()).then(|| detail.to_string()),
+                idempotency_class,
+            }),
             _ => return Err("unknown effect phase".into()),
         };
-        self.append(work_id, event, None)?;
-        Ok(())
+        let envelope = self.append(work_id, event, None)?;
+        self.replay_event(&envelope)
     }
 
     pub fn record_effect(
@@ -2679,6 +4080,80 @@ impl WorkGateway {
         detail: &str,
     ) -> Result<(), String> {
         self.record_effect_with_grant(work_id, effect_id, phase, detail, None)
+    }
+
+    /// Mark an attempted effect as having an unknown outcome. This is a
+    /// durable event, not an in-memory flag, so restart recovery sees the same
+    /// uncertainty before a new prompt is admitted.
+    pub fn record_uncertain_effect(
+        &mut self,
+        work_id: &str,
+        effect_id: &str,
+        reason: &str,
+        idempotency_class: Option<IdempotencyClass>,
+    ) -> Result<WorkEventEnvelope, String> {
+        self.record_effect_with_class(
+            work_id,
+            effect_id,
+            "uncertain",
+            reason,
+            None,
+            idempotency_class,
+        )?;
+        Ok(self
+            .events(work_id)
+            .last()
+            .cloned()
+            .ok_or("uncertain effect event was not recorded")?)
+    }
+
+    /// Record explicit reconciliation for an uncertain effect. `retry_safe` is
+    /// an assertion made by the owner after inspecting the external world; it
+    /// is never inferred from a retry attempt.
+    pub fn reconcile_uncertain_effect(
+        &mut self,
+        work_id: &str,
+        effect_id: &str,
+        outcome: &str,
+        retry_safe: bool,
+    ) -> Result<WorkEventEnvelope, String> {
+        if outcome.trim().is_empty() {
+            return Err("effect reconciliation requires an outcome".into());
+        }
+        let Some(effect) = self.effect_status(work_id, effect_id) else {
+            return Err(format!("unknown effect `{effect_id}`"));
+        };
+        if !effect.requires_reconciliation() {
+            return Err(format!("effect `{effect_id}` is not uncertain"));
+        }
+        let envelope = self.append(
+            work_id,
+            WorkEvent::Domain(DomainEvent::EffectReconciled {
+                effect_id: effect_id.into(),
+                outcome: outcome.into(),
+                retry_safe,
+            }),
+            None,
+        )?;
+        self.replay_event(&envelope)?;
+        Ok(envelope)
+    }
+
+    pub fn reconcile_uncertain_effects(
+        &mut self,
+        work_id: &str,
+        outcome: &str,
+        retry_safe: bool,
+    ) -> Result<Vec<WorkEventEnvelope>, String> {
+        let ids: Vec<String> = self
+            .effect_statuses(work_id)
+            .into_iter()
+            .filter(|effect| effect.requires_reconciliation())
+            .map(|effect| effect.effect_id.clone())
+            .collect();
+        ids.into_iter()
+            .map(|effect_id| self.reconcile_uncertain_effect(work_id, &effect_id, outcome, retry_safe))
+            .collect()
     }
 
     /// P51.14 — record a live agent-thought summary (the headline the UI
@@ -2742,9 +4217,10 @@ impl WorkGateway {
         if self.execution_id(work_id) != Some(execution_id) {
             return Err("execution/work binding mismatch".into());
         }
+        self.validate_run_transition(work_id, execution_id, state)?;
         let event = transition_event(execution_id, state, None);
         self.append(work_id, event, None)?;
-        self.set_work_state(work_id, execution_id, state, None);
+        self.set_work_state(work_id, execution_id, state, None)?;
         Ok(())
     }
 
@@ -2762,9 +4238,10 @@ impl WorkGateway {
             return Err("execution/work binding mismatch".into());
         }
         let state = wait.work_state();
+        self.validate_run_transition(work_id, execution_id, state)?;
         let event = transition_event(execution_id, state, Some(wait.clone()));
         self.append(work_id, event, None)?;
-        self.set_work_state(work_id, execution_id, state, Some(wait.clone()));
+        self.set_work_state(work_id, execution_id, state, Some(wait.clone()))?;
         Ok(())
     }
     pub fn presence(&self, work_id: &str) -> Option<&WorkPresence> {
@@ -3345,10 +4822,12 @@ impl WorkGateway {
             &review.work_id,
             WorkEvent::Domain(DomainEvent::ApprovalResolved {
                 ticket_id: review_id.into(),
+                run_id: None,
                 approved: state == "approved",
             }),
             None,
         )?;
+        self.replay_event(&envelope)?;
         if let Some(item) = self.reviews.get_mut(review_id) {
             item.state = state.to_string();
         }

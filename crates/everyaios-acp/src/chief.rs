@@ -23,7 +23,7 @@ use crate::messages::{
 };
 use crate::registry::AuthMode;
 use std::collections::HashMap;
-use std::sync::mpsc::{channel, Receiver, Sender};
+use std::sync::mpsc::{Receiver, Sender, channel};
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 

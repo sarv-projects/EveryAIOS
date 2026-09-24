@@ -330,6 +330,10 @@ pub enum ChatRelayError {
     /// safe in-memory substitute for it.
     #[error("work gateway startup failed: {0}")]
     WorkGateway(String),
+    /// Recovery/reconciliation refused a new turn. This is deliberately a
+    /// startup/prompt error rather than a best-effort warning.
+    #[error("work recovery refused: {0}")]
+    Recovery(String),
     /// J11 pre-flight refusal — the message carries the UI surface string.
     #[error("session '{session}' stopped: ${limit:.2} limit (spent ${spent:.2})")]
     BudgetExceeded {
@@ -1124,10 +1128,21 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
         let delegation = everyaios_blueprint::DelegationPolicy::new(
             everyaios_blueprint::SubAgentLimits::default(),
         );
-        let work_gateway = Arc::new(Mutex::new(
-            crate::work_gateway::WorkGateway::open_default()
-                .map_err(ChatRelayError::WorkGateway)?,
-        ));
+        let work_gateway = crate::work_gateway::WorkGateway::open_default()
+            .map_err(ChatRelayError::WorkGateway)?;
+        // The journal is authoritative. An ExecutionKernel snapshot is only a
+        // cache and is accepted solely after its identities/states validate
+        // against the replayed Work events.
+        let checkpoint_path = crate::default_data_dir()
+            .join("work")
+            .join("execution-kernel.checkpoint.json");
+        let recovered_executions =
+            ExecutionKernel::recover_from_work_gateway_with_checkpoint(
+                &work_gateway,
+                Some(&checkpoint_path),
+            )
+            .map_err(ChatRelayError::Recovery)?;
+        let work_gateway = Arc::new(Mutex::new(work_gateway));
         // P71.3f — one readiness handle shared by the delegation seam and the
         // relay's own gates. The shell mounts the facts (`mount_readiness`);
         // until then every read is `Unknown` and nothing is admitted.
@@ -1150,7 +1165,7 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
             ))),
             tools,
             evals: Arc::new(Mutex::new(EvalService::new())),
-            executions: Arc::new(Mutex::new(ExecutionKernel::new())),
+            executions: Arc::new(Mutex::new(recovered_executions)),
             delegation,
             readiness,
             skill_store: Arc::new(Mutex::new(everyaios_blueprint::SkillStore::new(
@@ -1730,26 +1745,196 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
                         } else {
                             None
                         };
-                        let mut svc = executions.lock().unwrap_or_else(|e| e.into_inner());
-                        let result = svc.handle(method, rooted.as_ref().unwrap_or(&params));
-                        let mut event_error: Option<String> = None;
-                        if let Ok(out) = &result {
-                            if method == "execution/record_approval" {
-                                if let (Some(work_id), Some(ticket_id), Some(approved)) = (
-                                    params.get("workId").and_then(|v| v.as_str()),
-                                    params.get("ticketId").and_then(|v| v.as_str()),
-                                    params.get("approved").and_then(|v| v.as_bool()),
-                                ) {
-                                    if let Err(error) = work_gateway
-                                        .lock()
-                                        .unwrap_or_else(|e| e.into_inner())
-                                        .record_approval(work_id, ticket_id, approved)
-                                    {
-                                        event_error = Some(error);
-                                    }
+                        // Validate the kernel edge before either owner mutates;
+                        // this keeps a refused Work transition from advancing a
+                        // cache that the journal would reject.
+                        if method == "execution/transition" {
+                            if let (Some(execution_id), Some(state)) = (
+                                params.get("id").and_then(Value::as_str),
+                                params
+                                    .get("wait")
+                                    .filter(|value| !value.is_null())
+                                    .and_then(|value| {
+                                        serde_json::from_value::<everyaios_types::WaitCondition>(
+                                            value.clone(),
+                                        )
+                                        .ok()
+                                    })
+                                    .map(|wait| wait.work_state())
+                                    .or_else(|| {
+                                        params
+                                            .get("state")
+                                            .and_then(Value::as_str)
+                                            .and_then(everyaios_types::WorkState::try_parse)
+                                    })
+                                    .map(crate::execution::ExecutionPhase::from_work_state),
+                            ) {
+                                let check = executions.lock().unwrap_or_else(|e| e.into_inner());
+                                if let Err(error) = check.validate_transition(execution_id, state) {
+                                    let _ = writer.reply_error(id, &error);
+                                    continue;
                                 }
                             }
-                            if event_error.is_none() && method == "execution/attach_receipt" {
+                        }
+                        let mut transition_committed = false;
+                        if method == "execution/transition" {
+                            if let (Some(work_id), Some(execution_id), Some(state)) = (
+                                params.get("workId").and_then(Value::as_str),
+                                params.get("id").and_then(Value::as_str),
+                                params.get("state").and_then(Value::as_str),
+                            ) {
+                                if let Some(parsed) = everyaios_types::WorkState::try_parse(state) {
+                                    let wait = params
+                                        .get("wait")
+                                        .filter(|value| !value.is_null())
+                                        .and_then(|value| {
+                                            serde_json::from_value::<everyaios_types::WaitCondition>(
+                                                value.clone(),
+                                            )
+                                            .ok()
+                                        });
+                                    let outcome = {
+                                        let mut gateway = work_gateway
+                                            .lock()
+                                            .unwrap_or_else(|e| e.into_inner());
+                                        match wait {
+                                            Some(condition) => gateway.record_wait(
+                                                work_id,
+                                                execution_id,
+                                                &condition,
+                                            ),
+                                            None => gateway.record_execution_transition(
+                                                work_id,
+                                                execution_id,
+                                                parsed,
+                                            ),
+                                        }
+                                    };
+                                    if let Err(error) = outcome {
+                                        let _ = writer.reply_error(id, &error);
+                                        continue;
+                                    }
+                                    transition_committed = true;
+                                }
+                            }
+                        }
+                        // Approval facts are owned by the Work journal.  The
+                        // in-memory ExecutionKernel is only its validated
+                        // projection, so journal-first is required here rather
+                        // than a post-hoc best-effort annotation.
+                        let mut execution_params = params.clone();
+                        if method == "execution/record_approval" {
+                            let Some(work_id) = params.get("workId").and_then(Value::as_str) else {
+                                let _ = writer.reply_error(
+                                    id,
+                                    "execution/record_approval requires workId for durable recovery",
+                                );
+                                continue;
+                            };
+                            let Some(execution_id) = params.get("id").and_then(Value::as_str) else {
+                                let _ = writer.reply_error(id, "execution/record_approval requires id");
+                                continue;
+                            };
+                            let Some(ticket_id) = params.get("ticketId").and_then(Value::as_str) else {
+                                let _ = writer.reply_error(id, "execution/record_approval requires ticketId");
+                                continue;
+                            };
+                            {
+                                let check = executions.lock().unwrap_or_else(|e| e.into_inner());
+                                if let Err(error) =
+                                    check.validate_pending_approval_request(execution_id, ticket_id)
+                                {
+                                    let _ = writer.reply_error(id, &error);
+                                    continue;
+                                }
+                            }
+                            let requested_at_ms = execution_params
+                                .get("requestedAtMs")
+                                .and_then(Value::as_u64)
+                                .unwrap_or_else(|| {
+                                    std::time::SystemTime::now()
+                                        .duration_since(std::time::UNIX_EPOCH)
+                                        .map(|duration| duration.as_millis() as u64)
+                                        .unwrap_or_default()
+                                });
+                            if let Some(object) = execution_params.as_object_mut() {
+                                object.insert(
+                                    "requestedAtMs".into(),
+                                    serde_json::Value::from(requested_at_ms),
+                                );
+                            }
+                            let outcome = {
+                                let mut gateway =
+                                    work_gateway.lock().unwrap_or_else(|e| e.into_inner());
+                                gateway.record_pending_approval_for_run(
+                                    work_id,
+                                    execution_id,
+                                    ticket_id,
+                                    execution_params.get("toolId").and_then(Value::as_str).unwrap_or(""),
+                                    execution_params.get("argsHash").and_then(Value::as_str).unwrap_or(""),
+                                    execution_params.get("riskTier").and_then(Value::as_str).unwrap_or("R1"),
+                                    requested_at_ms,
+                                )
+                            };
+                            if let Err(error) = outcome {
+                                let _ = writer.reply_error(id, &error);
+                                continue;
+                            }
+                        }
+                        if method == "execution/resolve_approval" {
+                            let Some(work_id) = params.get("workId").and_then(Value::as_str) else {
+                                let _ = writer.reply_error(
+                                    id,
+                                    "execution/resolve_approval requires workId for durable recovery",
+                                );
+                                continue;
+                            };
+                            let Some(execution_id) = params.get("id").and_then(Value::as_str) else {
+                                let _ = writer.reply_error(id, "execution/resolve_approval requires id");
+                                continue;
+                            };
+                            let Some(ticket_id) = params.get("ticketId").and_then(Value::as_str) else {
+                                let _ = writer.reply_error(id, "execution/resolve_approval requires ticketId");
+                                continue;
+                            };
+                            let Some(approved) = params.get("approved").and_then(Value::as_bool) else {
+                                let _ = writer.reply_error(
+                                    id,
+                                    "execution/resolve_approval requires approved (bool)",
+                                );
+                                continue;
+                            };
+                            {
+                                let check = executions.lock().unwrap_or_else(|e| e.into_inner());
+                                if let Err(error) =
+                                    check.validate_pending_approval_resolution(execution_id, ticket_id)
+                                {
+                                    let _ = writer.reply_error(id, &error);
+                                    continue;
+                                }
+                            }
+                            let outcome = {
+                                let mut gateway =
+                                    work_gateway.lock().unwrap_or_else(|e| e.into_inner());
+                                gateway.resolve_pending_approval_for_run(
+                                    work_id,
+                                    execution_id,
+                                    ticket_id,
+                                    approved,
+                                )
+                            };
+                            if let Err(error) = outcome {
+                                let _ = writer.reply_error(id, &error);
+                                continue;
+                            }
+                        }
+                        let result = {
+                            let mut svc = executions.lock().unwrap_or_else(|e| e.into_inner());
+                            svc.handle(method, rooted.as_ref().unwrap_or(&execution_params))
+                        };
+                        let mut event_error: Option<String> = None;
+                        if let Ok(out) = &result {
+                            if method == "execution/attach_receipt" {
                                 if let (Some(work_id), Some(receipt_id)) = (
                                     params.get("workId").and_then(|v| v.as_str()),
                                     params.get("receiptId").and_then(|v| v.as_str()),
@@ -1771,13 +1956,28 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
                                     if let Err(error) = work_gateway
                                         .lock()
                                         .unwrap_or_else(|e| e.into_inner())
-                                        .bind_execution(work_id, execution_id)
+                                        .bind_execution_with_metadata(
+                                            work_id,
+                                            execution_id,
+                                            &serde_json::json!({
+                                                "trigger": params.get("trigger").and_then(Value::as_str).unwrap_or("chat"),
+                                                "sessionId": params.get("sessionId").and_then(Value::as_str),
+                                                "objective": out.get("objective").and_then(Value::as_str),
+                                                "policySnapshot": params.get("policySnapshot").and_then(Value::as_str),
+                                                "contextSnapshot": params.get("contextSnapshot").and_then(Value::as_str),
+                                                "capabilityScope": params.get("capabilityScope").cloned().unwrap_or_else(|| serde_json::json!([])),
+                                                "idempotencyKey": out.get("idempotencyKey").and_then(Value::as_str),
+                                            }),
+                                        )
                                     {
                                         event_error = Some(error);
                                     }
                                 }
                             }
-                            if event_error.is_none() && method == "execution/transition" {
+                            if event_error.is_none()
+                                && !transition_committed
+                                && method == "execution/transition"
+                            {
                                 // P71.3g — the wire state is the canonical
                                 // `WorkState` spelling; an unknown spelling is
                                 // refused (never silently coerced into a made-up
@@ -2499,6 +2699,79 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
         crate::tools::read_agent_readiness(&self.readiness, agent_id)
     }
 
+    /// Refuse a new prompt while the durable Work is waiting on recovery. An
+    /// uncertain effect is never treated as a failed call and is never retried
+    /// merely because a fresh process happened to start.
+    pub fn reconcile_before_prompt(&self, session_id: &str) -> Result<(), ChatRelayError> {
+        let gateway = self
+            .work_gateway
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let work_id = gateway
+            .get_work(session_id)
+            .map(|address| address.work_id.as_str().to_string())
+            .or_else(|| {
+                gateway
+                    .list_work()
+                    .into_iter()
+                    .find(|address| address.session_id.as_deref() == Some(session_id))
+                    .map(|address| address.work_id.as_str().to_string())
+            });
+        let Some(work_id) = work_id else {
+            return Ok(());
+        };
+        let Some(address) = gateway.get_work(&work_id) else {
+            return Err(ChatRelayError::Recovery(format!(
+                "Work `{work_id}` disappeared during recovery"
+            )));
+        };
+        if matches!(address.session_kind, everyaios_types::SessionKind::Automation)
+            && address.provenance.is_legacy()
+        {
+            return Err(ChatRelayError::Recovery(format!(
+                "automation Work `{work_id}` has only legacy provenance; reconcile its admission before prompting"
+            )));
+        }
+        if gateway.has_unresolved_uncertain_effects(&work_id) {
+            return Err(ChatRelayError::Recovery(format!(
+                "Work `{work_id}` has an unresolved uncertain effect; reconcile it before prompting"
+            )));
+        }
+        let Some(run_id) = gateway.execution_id(&work_id) else {
+            return Ok(());
+        };
+        let executions = self
+            .executions
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let Some(work) = executions.get(run_id) else {
+            return Err(ChatRelayError::Recovery(format!(
+                "Work `{work_id}` points at missing Run `{run_id}`"
+            )));
+        };
+        if work.state.is_terminal() && address.binding_id.is_some() {
+            return Err(ChatRelayError::Recovery(format!(
+                "Work `{work_id}` is terminal ({:?}); a new prompt cannot overwrite its bound Run",
+                work.state
+            )));
+        }
+        if matches!(
+            work.state,
+            crate::execution::ExecutionPhase::Recoverable
+                | crate::execution::ExecutionPhase::Paused
+                | crate::execution::ExecutionPhase::Checkpointed
+                | crate::execution::ExecutionPhase::WaitingTool
+                | crate::execution::ExecutionPhase::WaitingApproval
+                | crate::execution::ExecutionPhase::WaitingUser
+        ) {
+            return Err(ChatRelayError::Recovery(format!(
+                "Work `{work_id}` is {:?}; explicit reconciliation/resume is required",
+                work.state
+            )));
+        }
+        Ok(())
+    }
+
     /// **J11** — the session budget pre-flight, **re-homed** by `P71.2c`.
     ///
     /// It used to run at the top of `start_stream`; that dispatch is deleted
@@ -2509,6 +2782,7 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
     /// hard budget refuses **before** anything is dispatched, with the J11
     /// "stopped: $X limit" surface the UI already renders.
     pub fn preflight_session_budget(&self, session_id: &str) -> Result<(), ChatRelayError> {
+        self.reconcile_before_prompt(session_id)?;
         let spent = self
             .vault
             .lock()

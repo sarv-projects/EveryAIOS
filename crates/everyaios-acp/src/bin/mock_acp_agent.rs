@@ -21,6 +21,7 @@ fn main() {
     let stdin = io::stdin();
     let mut stdout = io::stdout();
     let mut session_counter = 0u64;
+    let mut session_id: Option<String> = None;
 
     for line in stdin.lock().lines() {
         let Ok(line) = line else { break };
@@ -29,7 +30,10 @@ fn main() {
             continue;
         }
         let Ok(req) = serde_json::from_str::<serde_json::Value>(line) else {
-            let _ = writeln!(stdout, "{{\"jsonrpc\":\"2.0\",\"id\":null,\"error\":{{\"code\":-32700,\"message\":\"parse error\"}}}}");
+            let _ = writeln!(
+                stdout,
+                "{{\"jsonrpc\":\"2.0\",\"id\":null,\"error\":{{\"code\":-32700,\"message\":\"parse error\"}}}}"
+            );
             let _ = stdout.flush();
             continue;
         };
@@ -43,7 +47,10 @@ fn main() {
                     "id": id,
                     "result": {
                         "protocolVersion": 1,
-                        "agentCapabilities": { "loadSession": true },
+                        "agentCapabilities": {
+                            "loadSession": true,
+                            "mcpCapabilities": { "http": true, "sse": false }
+                        },
                         "agentInfo": { "name": "mock-acp", "title": "Mock ACP Agent", "version": "0.0.1" },
                         "authMethods": []
                     }
@@ -52,10 +59,36 @@ fn main() {
             }
             "session/new" => {
                 session_counter += 1;
+                let created = format!("mock-session-{session_counter}");
+                session_id = Some(created.clone());
                 let resp = serde_json::json!({
                     "jsonrpc": "2.0",
                     "id": id,
-                    "result": { "sessionId": format!("mock-session-{session_counter}") }
+                    "result": { "sessionId": created }
+                });
+                let _ = writeln!(stdout, "{resp}");
+            }
+            "session/load" => {
+                let requested = req["params"]["sessionId"].as_str().unwrap_or("");
+                let update = serde_json::json!({
+                    "jsonrpc": "2.0",
+                    "method": "session/update",
+                    "params": {
+                        "sessionId": requested,
+                        "update": {
+                            "sessionUpdate": "agent_message_chunk",
+                            "content": [{ "type": "text", "text": "loaded" }]
+                        }
+                    }
+                });
+                let _ = writeln!(stdout, "{update}");
+                let _ = stdout.flush();
+                // ACP v1 permits an empty/options-only load result. The
+                // client must retain the requested provider id.
+                let resp = serde_json::json!({
+                    "jsonrpc": "2.0",
+                    "id": id,
+                    "result": {}
                 });
                 let _ = writeln!(stdout, "{resp}");
             }
@@ -67,15 +100,17 @@ fn main() {
                     .and_then(|blocks| blocks.iter().find_map(|b| b["text"].as_str()))
                     .or_else(|| req["params"]["text"].as_str())
                     .unwrap_or("");
-                // Notification: params IS the SessionUpdate shape (camelCase).
+                // Official ACP v1 notification envelope: `params.update`
+                // carries the update discriminator and content.
                 let notif = serde_json::json!({
                     "jsonrpc": "2.0",
                     "method": "session/update",
                     "params": {
-                        "sessionId": "mock-session",
-                        "sessionUpdate": "agent_message_chunk",
-                        "title": "message",
-                        "content": [{ "type": "text", "text": format!("echo: {text}") }]
+                        "sessionId": session_id.as_deref().unwrap_or(""),
+                        "update": {
+                            "sessionUpdate": "agent_message_chunk",
+                            "content": [{ "type": "text", "text": format!("echo: {text}") }]
+                        }
                     }
                 });
                 let _ = writeln!(stdout, "{notif}");

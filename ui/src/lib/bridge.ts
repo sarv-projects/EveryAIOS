@@ -12,6 +12,8 @@ import {
   acpInstallStatus,
   acpLaunch,
   acpPrompt,
+  acpHandleKey,
+  acpHandleRecordFromLaunch,
   agentDirectoryList,
   currentBinding,
   isAgentReady,
@@ -986,19 +988,22 @@ export async function sendUserMessage(
       // handle send no bundle (the agent already holds the context).
       const chiefId = boundAgent;
       const acpId = acpIdFor(chiefId);
-      const handleKey = boundAgent;
-      let handle = st.acpHandles[handleKey];
+      // Handle identity uses the canonical ACP registry id. The catalog id is
+      // retained only for the agent-owned config projection below.
+      const handleKey = acpId;
+      const configKey = chiefId;
+      let handleRecord = st.getAcpHandle(sessionId, handleKey);
       let firstTurn = false;
-      if (!handle) {
+      if (!handleRecord) {
         const folder =
           st.sessions.find((s) => s.id === sessionId)?.folder ?? "~";
         const info = await acpLaunch(acpId, folder);
-        handle = info.handle;
-        st.setAcpHandle(handleKey, handle);
+        handleRecord = acpHandleRecordFromLaunch(info, sessionId, handleKey);
+        st.setAcpHandle(handleRecord);
         // P60 — the session-new response carries the agent's own config
         // vocabulary (model/mode/reasoning). Keep it keyed by the agent so the
         // composer can show what that agent actually exposes.
-        if (info.configOptions) st.setAcpConfigOptions(handleKey, info.configOptions);
+        if (info.configOptions) st.setAcpConfigOptions(configKey, info.configOptions);
         firstTurn = true;
       }
       let handoff: string | undefined;
@@ -1006,6 +1011,7 @@ export async function sendUserMessage(
         const { buildChiefHandoff } = await import("./chief-handoff");
         handoff = buildChiefHandoff(sessionId) ?? undefined;
       }
+      const handle = handleRecord.handle;
       // P53.8 — refs are sent separately so an ACP agent with
       // `embeddedContext` receives resource blocks. P33 — a chat scoped to an
       // open document travels as labelled prompt text, because the native
@@ -1016,7 +1022,37 @@ export async function sendUserMessage(
       const promptText = effectiveContext
         ? `${trimmed}\n\nDocument in scope — ${effectiveContext.title}:\n${effectiveContext.content}`
         : trimmed;
-      const result = await acpPrompt(handle, promptText, handoff, refPaths, sessionId);
+      const result = await acpPrompt(
+        handle,
+        sessionId,
+        promptText,
+        handoff,
+        refPaths,
+        handleRecord?.bindingId || undefined,
+      );
+      if (result.handle !== handle || (result.applicationSessionId && result.applicationSessionId !== sessionId)) {
+        throw new Error('ACP prompt returned a handle owned by another application Session');
+      }
+      // The shell returns the canonical owner after durable Work/Binding/Run
+      // admission. Re-key the live record from its provisional launch identity
+      // to that explicit tuple before the next turn can resolve it.
+      if (result.applicationSessionId && result.workId && result.bindingId && handleRecord) {
+        handleRecord = {
+          ...handleRecord,
+          applicationSessionId: result.applicationSessionId,
+          workId: result.workId,
+          bindingId: result.bindingId,
+          runId: result.runId,
+          providerSessionId: result.providerSessionId,
+          key: acpHandleKey(
+            result.applicationSessionId,
+            result.bindingId,
+            result.workId,
+            handleRecord.agentId,
+          ),
+        };
+        st.setAcpHandle(handleRecord);
+      }
       // P53.5 — visible assistant text folds into the compacted session;
       // tool history stays in the per-session observability file (never
       // imported into chat context). Refresh the cached live slash vocab
@@ -1038,7 +1074,7 @@ export async function sendUserMessage(
           (u.configOptions?.length ?? 0) > 0,
       );
       if (configUpdate?.configOptions) {
-        st.setAcpConfigOptions(handleKey, configUpdate.configOptions);
+        st.setAcpConfigOptions(configKey, configUpdate.configOptions);
       }
       const pending = result.pendingTickets?.length
         ? ` · ${result.pendingTickets.length} approval(s)`
@@ -1064,8 +1100,8 @@ export async function sendUserMessage(
     // cursor so a resume replays byte-continuously (the chip auto-clears when
     // the next batch lands via streamAppend).
     const stNow = useAppStore.getState();
-    const activeSess = stNow.sessions.find((s) => s.id === stNow.activeSessionId);
-    const running = activeSess?.status === "running";
+    const targetSess = stNow.sessions.find((s) => s.id === sessionId);
+    const running = targetSess?.status === "running";
     if (running) {
       stNow.setReconnect({
         show: true,
@@ -1076,6 +1112,6 @@ export async function sendUserMessage(
     }
     const message = err instanceof Error ? err.message : "Failed to reach the agent";
     setRuntimeState('degraded', `chat stream: ${message}`);
-    st.streamFail(message);
+    st.streamFail(message, sessionId);
   }
 }

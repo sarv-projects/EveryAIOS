@@ -8,6 +8,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
+use std::path::Path;
+
+use crate::work_gateway::{DomainEvent, WorkAddress, WorkEvent, WorkGateway};
 
 /// v3.39 — immutable runtime manifest binding model / provider / permissions /
 /// tools / environment to an execution. Computed once at `bind_runtime` time
@@ -116,6 +119,30 @@ pub enum ExecutionPhase {
 }
 
 impl ExecutionPhase {
+    pub fn is_terminal(self) -> bool {
+        matches!(self, Self::Completed | Self::Failed | Self::Cancelled)
+    }
+
+    pub fn from_work_state(state: everyaios_types::WorkState) -> Self {
+        use everyaios_types::WorkState;
+        match state {
+            WorkState::Created => Self::Created,
+            WorkState::Planning => Self::Planning,
+            WorkState::Ready => Self::Ready,
+            WorkState::Running => Self::Running,
+            WorkState::WaitingTool => Self::WaitingTool,
+            WorkState::WaitingApproval => Self::WaitingApproval,
+            WorkState::WaitingUser => Self::WaitingUser,
+            WorkState::Checkpointed => Self::Checkpointed,
+            WorkState::Verifying => Self::Verifying,
+            WorkState::Completed => Self::Completed,
+            WorkState::Failed => Self::Failed,
+            WorkState::Cancelled => Self::Cancelled,
+            WorkState::Paused => Self::Paused,
+            WorkState::Recoverable => Self::Recoverable,
+        }
+    }
+
     pub fn can_transition(self, next: Self) -> bool {
         use ExecutionPhase::*;
         matches!(
@@ -184,6 +211,10 @@ pub struct Work {
     /// would otherwise lose the pending request.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pending_approval: Option<PendingApproval>,
+    /// Highest Work-journal sequence incorporated into this projection. It is
+    /// a cache cursor, never a replacement event history.
+    #[serde(default)]
+    pub journal_sequence: u64,
 }
 
 impl Work {
@@ -217,6 +248,7 @@ impl Work {
             config_hash: String::new(),
             runtime_manifest: None,
             pending_approval: None,
+            journal_sequence: 0,
         }
     }
 
@@ -240,31 +272,71 @@ impl Work {
                 self.state
             ));
         }
+        if let Some(existing) = &self.pending_approval {
+            if existing.ticket_id != approval.ticket_id || existing != &approval {
+                return Err(format!(
+                    "execution `{}` already has a different pending approval",
+                    self.id
+                ));
+            }
+            return Ok(());
+        }
         self.approval_refs.push(approval.ticket_id.clone());
         self.pending_approval = Some(approval);
         Ok(())
     }
 
-    /// v3.39 — resolve (approve or reject) a pending approval. Clears the
-    /// pending field and transitions back to Running on approval, or Failed
-    /// on rejection. Returns the approval for the caller to forward.
+    /// v3.39 — resolve (approve or reject) the currently pending approval.
+    /// Clears the pending field and transitions back to Running on approval,
+    /// or Failed on rejection. Returns the approval for the caller to forward.
     pub fn resolve_pending_approval(&mut self, approved: bool) -> Result<PendingApproval, String> {
-        let approval = self
-            .pending_approval
-            .take()
-            .ok_or("no pending approval to resolve")?;
+        self.resolve_pending_approval_for(None, approved)
+    }
+
+    /// Resolve a specific ticket without allowing a caller to accidentally
+    /// consume a different pending request on the same Run.
+    pub fn resolve_pending_approval_for(
+        &mut self,
+        ticket_id: Option<&str>,
+        approved: bool,
+    ) -> Result<PendingApproval, String> {
         let next = if approved {
             ExecutionPhase::Running
         } else {
             ExecutionPhase::Failed
         };
+        // Validate before taking the field so a rejected transition cannot
+        // silently erase the durable cache projection.
         if !self.state.can_transition(next) {
             return Err(format!("illegal transition {:?} → {next:?}", self.state));
         }
+        let approval = self
+            .pending_approval
+            .as_ref()
+            .ok_or("no pending approval to resolve")?;
+        if let Some(expected) = ticket_id {
+            if approval.ticket_id != expected {
+                return Err(format!(
+                    "pending approval ticket `{}` does not match `{expected}`",
+                    approval.ticket_id
+                ));
+            }
+        }
+        let approval = self.pending_approval.take().expect("checked above");
         self.state = next;
         self.event_stream.push(format!("{next:?}"));
         Ok(approval)
     }
+}
+
+/// Facts surfaced while rebuilding the execution projection from the Work
+/// journal. The report is diagnostic only; a caller must still refuse new
+/// dispatch when it contains an unresolved uncertainty.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct RecoveryReport {
+    pub legacy_works: Vec<String>,
+    pub uncertain_effects: Vec<String>,
+    pub warnings: Vec<String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -285,6 +357,502 @@ pub struct ExecutionKernel {
 impl ExecutionKernel {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Open one journal and rebuild its execution projection. This convenience
+    /// keeps tests and maintenance tools on the same production path as the
+    /// live relay constructor.
+    pub fn recover_from_work_journal(path: &Path) -> Result<Self, String> {
+        let gateway = WorkGateway::open(path)?;
+        Self::recover_from_work_gateway(&gateway)
+    }
+
+    /// Rebuild the execution projection from the one durable Work journal.
+    /// No replacement Run id is ever minted: a Work→Run reference without a
+    /// journaled Run record is a hard recovery error.
+    pub fn recover_from_work_gateway(gateway: &WorkGateway) -> Result<Self, String> {
+        Self::recover_from_work_gateway_with_report(gateway).map(|(kernel, _)| kernel)
+    }
+
+    /// Recover from the journal and return non-fatal migration/uncertainty
+    /// facts for the host's admission gate.
+    pub fn recover_from_work_gateway_with_report(
+        gateway: &WorkGateway,
+    ) -> Result<(Self, RecoveryReport), String> {
+        let mut kernel = Self::default();
+        let mut report = RecoveryReport::default();
+
+        for address in gateway.list_work() {
+            let work_id = address.work_id.as_str();
+            let events = gateway.events(work_id);
+            let created: Vec<&crate::work_gateway::WorkEventEnvelope> = events
+                .iter()
+                .filter(|envelope| {
+                    matches!(
+                        &envelope.event,
+                        WorkEvent::Domain(DomainEvent::WorkCreated { .. })
+                    )
+                })
+                .collect();
+            if created.len() != 1 {
+                return Err(format!(
+                    "Work `{work_id}` must have exactly one WorkCreated event"
+                ));
+            }
+            let run_ids = gateway.execution_ids(work_id);
+            if run_ids.is_empty() {
+                if gateway
+                    .presence(work_id)
+                    .and_then(|presence| presence.work_state)
+                    .is_some_and(|state| state.is_terminal())
+                {
+                    return Err(format!("terminal Work `{work_id}` has no durable Run"));
+                }
+                if address.provenance.is_legacy() {
+                    report.legacy_works.push(work_id.to_string());
+                }
+                continue;
+            }
+            for run_id in run_ids {
+                let recovered = Self::recover_one_run(address, events, gateway, &run_id, &mut report)?;
+                if kernel.executions.insert(run_id.clone(), recovered).is_some() {
+                    return Err(format!("duplicate recovered Run `{run_id}`"));
+                }
+                kernel.counter = kernel.counter.max(parse_ex_counter(&run_id));
+                kernel.alias(work_id, &run_id);
+            }
+        }
+
+        for address in gateway.list_work() {
+            if let Some(run_id) = gateway.execution_id(address.work_id.as_str()) {
+                let recovered_state = kernel
+                    .get(run_id)
+                    .ok_or_else(|| format!("Work `{}` points at missing Run `{run_id}`", address.work_id))?
+                    .state;
+                if let Some(projected) = gateway
+                    .presence(address.work_id.as_str())
+                    .and_then(|presence| presence.work_state)
+                {
+                    if crate::execution::ExecutionPhase::from_work_state(projected) != recovered_state {
+                        return Err(format!(
+                            "Work `{}` presence state disagrees with Run `{run_id}`",
+                            address.work_id
+                        ));
+                    }
+                }
+            }
+        }
+        kernel.validate_recovered_bindings(gateway)?;
+        kernel.validate()?;
+        Ok((kernel, report))
+    }
+
+    /// The production constructor path: replay the journal first, then treat
+    /// an optional kernel snapshot as a validated cache. A present corrupt or
+    /// mismatched cache fails closed; a missing cache is simply rebuilt.
+    pub fn recover_from_work_gateway_with_checkpoint(
+        gateway: &WorkGateway,
+        checkpoint: Option<&Path>,
+    ) -> Result<Self, String> {
+        let (kernel, _) = Self::recover_from_work_gateway_with_report(gateway)?;
+        if let Some(path) = checkpoint {
+            if path.exists() {
+                let cached = Self::recover_from(path)?;
+                kernel.validate_checkpoint_cache(&cached)?;
+            }
+        }
+        Ok(kernel)
+    }
+
+    fn recover_one_run(
+        address: &WorkAddress,
+        events: &[crate::work_gateway::WorkEventEnvelope],
+        gateway: &WorkGateway,
+        run_id: &str,
+        report: &mut RecoveryReport,
+    ) -> Result<Work, String> {
+        let metadata = gateway
+            .run_metadata(address.work_id.as_str(), run_id)
+            .cloned()
+            .unwrap_or_else(|| Value::Object(Default::default()));
+        let trigger = metadata_trigger(&metadata, address);
+        let session_id = metadata_string(&metadata, "sessionId")
+            .or_else(|| address.session_id.clone())
+            .unwrap_or_default();
+        let objective = metadata_string(&metadata, "objective")
+            .or_else(|| work_created_objective(events))
+            .unwrap_or_default();
+        let context_snapshot = metadata_value_as_string(&metadata, "contextSnapshot");
+        if !address.provenance.is_legacy() && context_snapshot.trim_start().starts_with('{') {
+            let context: Value = serde_json::from_str(&context_snapshot)
+                .map_err(|error| format!("Run `{run_id}` has corrupt provenance context: {error}"))?;
+            let matches_field = |field: &str, expected: Option<&str>| {
+                expected.is_none_or(|value| context.get(field).and_then(Value::as_str) == Some(value))
+            };
+            if !matches_field("automationId", address.provenance.automation_id.as_deref())
+                || !matches_field("revisionId", address.provenance.revision_id.as_deref())
+                || !matches_field("triggerOccurrenceId", address.provenance.trigger_occurrence_id.as_deref())
+                || address
+                    .provenance
+                    .automation_generation
+                    .is_some_and(|generation| {
+                        context.get("automationGeneration").and_then(Value::as_u64) != Some(generation)
+                    })
+            {
+                return Err(format!("Run `{run_id}` context provenance conflicts with Work"));
+            }
+        }
+
+        let mut state: Option<ExecutionPhase> = None;
+        let mut state_history: Vec<String> = Vec::new();
+        let mut checkpoint = 0u32;
+        // The cursor covers every event incorporated into this Work projection,
+        // including approvals and effect evidence, not just lifecycle rows.
+        let mut journal_sequence = 0u64;
+        let mut created_at_ms = 0u64;
+        let mut saw_run_event = false;
+        let mut saw_start = false;
+        let mut active_run_id: Option<String> = None;
+        let mut approval_refs = metadata_string_list(&metadata, "approvalRefs");
+        let mut pending_approvals: BTreeMap<String, PendingApproval> = BTreeMap::new();
+        let mut approval_resolution: Option<(String, ExecutionPhase)> = None;
+
+        for envelope in events {
+            created_at_ms = created_at_ms.max(envelope.timestamp);
+            journal_sequence = journal_sequence.max(envelope.sequence);
+
+            // Legacy approval rows did not carry runId.  Reconstruct the
+            // current pointer as the event stream is walked, while new rows
+            // carry an explicit owner and never depend on this inference.
+            match &envelope.event {
+                WorkEvent::Domain(DomainEvent::WorkCreated {
+                    run_id: Some(bound_run),
+                    ..
+                }) => active_run_id = Some(bound_run.clone()),
+                WorkEvent::Domain(DomainEvent::WorkUpdated { patch }) => {
+                    if let Some(bound_run) = patch
+                        .get("executionId")
+                        .and_then(Value::as_str)
+                        .or_else(|| {
+                            patch
+                                .get("run")
+                                .and_then(|run| {
+                                    run.get("runId").or_else(|| run.get("executionId"))
+                                })
+                                .and_then(Value::as_str)
+                        })
+                    {
+                        active_run_id = Some(bound_run.to_string());
+                    }
+                }
+                _ => {}
+            }
+
+            let event_run_id = match &envelope.event {
+                WorkEvent::Domain(DomainEvent::RunQueued { run_id })
+                | WorkEvent::Domain(DomainEvent::RunStarted { run_id })
+                | WorkEvent::Domain(DomainEvent::RunWaiting { run_id, .. })
+                | WorkEvent::Domain(DomainEvent::RunCheckpointed { run_id, .. })
+                | WorkEvent::Domain(DomainEvent::RunPaused { run_id })
+                | WorkEvent::Domain(DomainEvent::RunInterrupted { run_id, .. })
+                | WorkEvent::Domain(DomainEvent::RunCompleted { run_id })
+                | WorkEvent::Domain(DomainEvent::RunFailed { run_id, .. })
+                | WorkEvent::Domain(DomainEvent::RunCancelled { run_id }) => Some(run_id),
+                _ => None,
+            };
+            if let Some(event_run_id) = event_run_id {
+                if event_run_id != run_id {
+                    continue;
+                }
+                saw_run_event = true;
+                if matches!(
+                    &envelope.event,
+                    WorkEvent::Domain(DomainEvent::RunQueued { .. })
+                        | WorkEvent::Domain(DomainEvent::RunStarted { .. })
+                ) {
+                    saw_start = true;
+                }
+                let next = match &envelope.event {
+                    WorkEvent::Domain(DomainEvent::RunQueued { .. }) => ExecutionPhase::Ready,
+                    WorkEvent::Domain(DomainEvent::RunStarted { .. }) => ExecutionPhase::Running,
+                    WorkEvent::Domain(DomainEvent::RunWaiting { reason, .. }) => {
+                        let state = everyaios_types::WorkState::try_parse(reason)
+                            .ok_or_else(|| {
+                                format!("unknown Work state `{reason}` in Run `{run_id}`")
+                            })?;
+                        ExecutionPhase::from_work_state(state)
+                    }
+                    WorkEvent::Domain(DomainEvent::RunCheckpointed { checkpoint: value, .. }) => {
+                        checkpoint = checkpoint.max(*value);
+                        ExecutionPhase::Checkpointed
+                    }
+                    WorkEvent::Domain(DomainEvent::RunPaused { .. }) => ExecutionPhase::Paused,
+                    WorkEvent::Domain(DomainEvent::RunInterrupted { .. }) => {
+                        ExecutionPhase::Recoverable
+                    }
+                    WorkEvent::Domain(DomainEvent::RunCompleted { .. }) => ExecutionPhase::Completed,
+                    WorkEvent::Domain(DomainEvent::RunFailed { .. }) => ExecutionPhase::Failed,
+                    WorkEvent::Domain(DomainEvent::RunCancelled { .. }) => ExecutionPhase::Cancelled,
+                    _ => continue,
+                };
+                if let Some((ticket_id, expected)) = approval_resolution.take() {
+                    if next != expected {
+                        return Err(format!(
+                            "approval `{ticket_id}` resolved Run `{run_id}` to {expected:?}, then journal moved it to {next:?}"
+                        ));
+                    }
+                }
+                if let Some(previous) = state {
+                    if previous != next && !phase_transition_legal(previous, next) {
+                        return Err(format!(
+                            "illegal recovered Run transition {previous:?} → {next:?} for `{run_id}`"
+                        ));
+                    }
+                }
+                state = Some(next);
+                state_history.push(format!("{next:?}"));
+                continue;
+            }
+
+            match &envelope.event {
+                WorkEvent::Domain(DomainEvent::ApprovalRequested {
+                    ticket_id,
+                    run_id: event_run_id,
+                    tool_id,
+                    args_hash,
+                    risk_tier,
+                    requested_at_ms,
+                }) => {
+                    let owner = event_run_id
+                        .clone()
+                        .or_else(|| active_run_id.clone())
+                        .or_else(|| {
+                            gateway
+                                .execution_id(address.work_id.as_str())
+                                .map(str::to_string)
+                        })
+                        .ok_or_else(|| {
+                            format!("approval `{ticket_id}` has no durable Run owner")
+                        })?;
+                    if owner != run_id {
+                        continue;
+                    }
+                    if approval_resolution.is_some() {
+                        return Err(format!(
+                            "approval `{ticket_id}` was requested before the prior resolution completed"
+                        ));
+                    }
+                    if state != Some(ExecutionPhase::WaitingApproval) {
+                        return Err(format!(
+                            "approval `{ticket_id}` is not attached to a WaitingApproval Run `{run_id}`"
+                        ));
+                    }
+                    if pending_approvals.contains_key(ticket_id) {
+                        return Err(format!("approval ticket `{ticket_id}` is already pending"));
+                    }
+                    let approval = PendingApproval {
+                        ticket_id: ticket_id.clone(),
+                        tool_id: tool_id.clone().unwrap_or_default(),
+                        args_hash: args_hash.clone().unwrap_or_default(),
+                        requested_at_ms: requested_at_ms.unwrap_or(envelope.timestamp),
+                        risk_tier: risk_tier.clone().unwrap_or_default(),
+                    };
+                    pending_approvals.insert(ticket_id.clone(), approval);
+                    if !approval_refs.iter().any(|existing| existing == ticket_id) {
+                        approval_refs.push(ticket_id.clone());
+                    }
+                }
+                WorkEvent::Domain(DomainEvent::ApprovalResolved {
+                    ticket_id,
+                    run_id: event_run_id,
+                    approved,
+                }) => {
+                    let owner = event_run_id
+                        .clone()
+                        .or_else(|| active_run_id.clone())
+                        .or_else(|| {
+                            gateway
+                                .execution_id(address.work_id.as_str())
+                                .map(str::to_string)
+                        });
+                    if let Some(owner) = owner {
+                        if owner != run_id {
+                            continue;
+                        }
+                    } else if pending_approvals.contains_key(ticket_id) {
+                        return Err(format!(
+                            "approval resolution `{ticket_id}` has no durable Run owner"
+                        ));
+                    } else {
+                        // A review approval can be journaled without owning an
+                        // execution Run; it has no cache projection to rebuild.
+                        continue;
+                    }
+                    if pending_approvals.remove(ticket_id).is_some() {
+                        if state != Some(ExecutionPhase::WaitingApproval) {
+                            return Err(format!(
+                                "approval `{ticket_id}` is resolved from a non-WaitingApproval Run `{run_id}`"
+                            ));
+                        }
+                        let expected = if *approved {
+                            ExecutionPhase::Running
+                        } else {
+                            ExecutionPhase::Failed
+                        };
+                        approval_resolution = Some((ticket_id.clone(), expected));
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        if let Some((ticket_id, _)) = approval_resolution {
+            return Err(format!(
+                "approval `{ticket_id}` was resolved without a subsequent Run transition for `{run_id}`"
+            ));
+        }
+        if !saw_run_event {
+            return Err(format!("Run `{run_id}` has no durable lifecycle event"));
+        }
+        if !saw_start && state.is_some_and(ExecutionPhase::is_terminal) {
+            return Err(format!(
+                "Run `{run_id}` has a terminal event without a durable start/queue event"
+            ));
+        }
+        let state = state.ok_or_else(|| format!("Run `{run_id}` has no recovered state"))?;
+        if pending_approvals.len() > 1 {
+            return Err(format!(
+                "Run `{run_id}` has multiple unresolved pending approvals"
+            ));
+        }
+        if !pending_approvals.is_empty() && state != ExecutionPhase::WaitingApproval {
+            return Err(format!(
+                "Run `{run_id}` has a pending approval outside WaitingApproval"
+            ));
+        }
+        let gateway_pending = gateway.pending_approvals_for_run(address.work_id.as_str(), run_id);
+        if gateway_pending.len() != pending_approvals.len() {
+            return Err(format!(
+                "Run `{run_id}` pending-approval projection disagrees with the Work journal"
+            ));
+        }
+        if state.is_terminal() && gateway.has_unresolved_uncertain_effects(address.work_id.as_str()) {
+            return Err(format!(
+                "terminal Run `{run_id}` still has an unresolved uncertain effect"
+            ));
+        }
+        let uncertain: Vec<String> = gateway
+            .effect_statuses(address.work_id.as_str())
+            .into_iter()
+            .filter(|effect| effect.requires_reconciliation())
+            .map(|effect| format!("{}:{}", address.work_id.as_str(), effect.effect_id))
+            .collect();
+        report.uncertain_effects.extend(uncertain);
+        if address.provenance.is_legacy() {
+            report.legacy_works.push(address.work_id.as_str().to_string());
+        }
+
+        let mut work = Work::new(run_id.to_string(), trigger, session_id, objective);
+        work.parent_id = metadata_string(&metadata, "parentId").or_else(|| address.parent_work_id.clone());
+        work.workspace = metadata_string(&metadata, "workspace").unwrap_or_default();
+        work.plan = metadata_string(&metadata, "plan");
+        work.policy_snapshot = metadata_string(&metadata, "policySnapshot").unwrap_or_default();
+        work.context_snapshot = metadata_value_as_string(&metadata, "contextSnapshot");
+        work.capability_scope = metadata_string_list(&metadata, "capabilityScope");
+        work.state = state;
+        work.checkpoint = checkpoint;
+        work.event_stream = if state_history.is_empty() {
+            vec![format!("{state:?}")]
+        } else {
+            state_history
+        };
+        work.artifact_refs = metadata_string_list(&metadata, "artifactRefs");
+        work.approval_refs = approval_refs;
+        work.pending_approval = pending_approvals.into_values().next();
+        work.verification = metadata.get("verification").cloned();
+        work.receipt = recovered_receipt(gateway, address.work_id.as_str());
+        work.idempotency_key = metadata_string(&metadata, "idempotencyKey")
+            .unwrap_or_else(|| format!("exec:{run_id}"));
+        work.created_at_ms = if created_at_ms == 0 { now_ms() } else { created_at_ms };
+        work.config_hash = metadata_string(&metadata, "configHash").unwrap_or_default();
+        work.journal_sequence = journal_sequence;
+        if let Some(manifest) = metadata.get("runtimeManifest") {
+            work.runtime_manifest = serde_json::from_value(manifest.clone()).ok();
+        }
+        Ok(work)
+    }
+
+    fn validate_recovered_bindings(&self, gateway: &WorkGateway) -> Result<(), String> {
+        for work in gateway.list_work() {
+            for binding in gateway.bindings_for(work.work_id.as_str()) {
+                if binding.work_id.as_str() != work.work_id.as_str()
+                    || Some(binding.session_id.as_str()) != work.session_id.as_deref()
+                {
+                    return Err(format!(
+                        "binding `{}` ownership does not match Work `{}`",
+                        binding.binding_id, work.work_id
+                    ));
+                }
+                if binding.state == everyaios_types::BindingLifecycle::Active
+                    && binding.provider_session_id.as_deref().is_none()
+                {
+                    return Err(format!(
+                        "active binding `{}` has no provider-session reference",
+                        binding.binding_id
+                    ));
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn validate(&self) -> Result<(), String> {
+        for (id, work) in &self.executions {
+            if work.id != *id {
+                return Err(format!("execution map key `{id}` disagrees with Work id `{}`", work.id));
+            }
+            if work.id.trim().is_empty() || work.session_id.trim().is_empty() {
+                return Err(format!("execution `{id}` is missing durable identity"));
+            }
+            if work.event_stream.is_empty() {
+                return Err(format!("execution `{id}` has no event projection"));
+            }
+        }
+        Ok(())
+    }
+
+    fn validate_checkpoint_cache(&self, cached: &Self) -> Result<(), String> {
+        for (id, cached_work) in &cached.executions {
+            let Some(journal_work) = self.executions.get(id) else {
+                return Err(format!("checkpoint contains Run `{id}` absent from Work journal"));
+            };
+            if cached_work.session_id != journal_work.session_id
+                || cached_work.trigger != journal_work.trigger
+                || cached_work.objective != journal_work.objective
+                || cached_work.idempotency_key != journal_work.idempotency_key
+                || cached_work.receipt != journal_work.receipt
+                || cached_work.verification != journal_work.verification
+                || cached_work.pending_approval != journal_work.pending_approval
+                || cached_work.approval_refs != journal_work.approval_refs
+            {
+                return Err(format!("checkpoint identity/effect mismatch for Run `{id}`"));
+            }
+            if cached_work.checkpoint > journal_work.checkpoint {
+                return Err(format!("checkpoint is ahead of the journal for Run `{id}`"));
+            }
+            if cached_work.state.is_terminal() && !journal_work.state.is_terminal() {
+                return Err(format!("checkpoint is ahead of the journal for Run `{id}`"));
+            }
+            if cached_work.journal_sequence >= journal_work.journal_sequence
+                && cached_work.state != journal_work.state
+            {
+                return Err(format!("checkpoint state mismatch for Run `{id}`"));
+            }
+            if cached_work.journal_sequence > journal_work.journal_sequence {
+                return Err(format!("checkpoint sequence is ahead of the journal for Run `{id}`"));
+            }
+        }
+        Ok(())
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -352,6 +920,90 @@ impl ExecutionKernel {
         self.executions.get(id)
     }
 
+    /// Validate a transition without mutating the projection. Callers that
+    /// also journal through WorkGateway use this to preserve lock order and
+    /// avoid advancing the cache when the durable event door refuses.
+    pub fn validate_transition(&self, id: &str, next: ExecutionPhase) -> Result<(), String> {
+        let work = self
+            .executions
+            .get(id)
+            .ok_or_else(|| format!("unknown execution {id}"))?;
+        if work.state == next {
+            return Ok(());
+        }
+        if !work.state.can_transition(next) {
+            return Err(format!("illegal transition {:?} → {next:?}", work.state));
+        }
+        if work.state == ExecutionPhase::WaitingApproval
+            && next != ExecutionPhase::WaitingApproval
+            && work.pending_approval.is_some()
+        {
+            return Err(format!(
+                "execution `{id}` cannot leave WaitingApproval with an unresolved approval"
+            ));
+        }
+        Ok(())
+    }
+
+    /// Validate a pending-approval request before the Work journal appends its
+    /// durable fact.  The journal remains authoritative, but rejecting a stale
+    /// cache here avoids creating a request that the live projection cannot
+    /// represent.
+    pub fn validate_pending_approval_request(
+        &self,
+        id: &str,
+        ticket_id: &str,
+    ) -> Result<(), String> {
+        if ticket_id.trim().is_empty() {
+            return Err("execution/record_approval requires a non-empty ticketId".into());
+        }
+        let work = self
+            .executions
+            .get(id)
+            .ok_or_else(|| format!("unknown execution {id}"))?;
+        if work.state != ExecutionPhase::WaitingApproval {
+            return Err(format!(
+                "cannot record pending approval in state {:?} (must be WaitingApproval)",
+                work.state
+            ));
+        }
+        if let Some(existing) = &work.pending_approval {
+            if existing.ticket_id != ticket_id {
+                return Err(format!(
+                    "execution `{id}` already has a different pending approval"
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    /// Validate a ticket-scoped approval resolution before the journal moves
+    /// the Run out of WaitingApproval.
+    pub fn validate_pending_approval_resolution(
+        &self,
+        id: &str,
+        ticket_id: &str,
+    ) -> Result<(), String> {
+        if ticket_id.trim().is_empty() {
+            return Err("execution/resolve_approval requires a non-empty ticketId".into());
+        }
+        let work = self
+            .executions
+            .get(id)
+            .ok_or_else(|| format!("unknown execution {id}"))?;
+        let pending = work
+            .pending_approval
+            .as_ref()
+            .ok_or_else(|| format!("execution `{id}` has no pending approval"))?;
+        if pending.ticket_id != ticket_id {
+            return Err(format!(
+                "pending approval ticket `{}` does not match `{ticket_id}`",
+                pending.ticket_id
+            ));
+        }
+        Ok(())
+    }
+
     pub fn transition(&mut self, id: &str, next: ExecutionPhase) -> Result<ExecutionPhase, String> {
         let ex = self
             .executions
@@ -359,6 +1011,14 @@ impl ExecutionKernel {
             .ok_or_else(|| format!("unknown execution {id}"))?;
         if !ex.state.can_transition(next) {
             return Err(format!("illegal transition {:?} → {next:?}", ex.state));
+        }
+        if ex.state == ExecutionPhase::WaitingApproval
+            && next != ExecutionPhase::WaitingApproval
+            && ex.pending_approval.is_some()
+        {
+            return Err(format!(
+                "execution `{id}` cannot leave WaitingApproval with an unresolved approval"
+            ));
         }
         ex.state = next;
         ex.event_stream.push(format!("{next:?}"));
@@ -397,6 +1057,7 @@ impl ExecutionKernel {
     /// P48.4 — atomically persist the kernel to `path` via temp-file + rename
     /// so a crash mid-write can never leave a torn checkpoint on disk.
     pub fn persist_to(&self, path: &std::path::Path) -> Result<(), String> {
+        self.validate()?;
         let data = self.snapshot_to_string()?;
         let tmp = path.with_extension(format!("tmp{}x", std::process::id()));
         std::fs::write(&tmp, data).map_err(|e| format!("write checkpoint: {e}"))?;
@@ -415,7 +1076,10 @@ impl ExecutionKernel {
             }
             Err(e) => return Err(format!("read checkpoint: {e}")),
         };
-        serde_json::from_str(&data).map_err(|e| format!("parse checkpoint: {e}"))
+        let kernel: Self = serde_json::from_str(&data)
+            .map_err(|e| format!("parse checkpoint: {e}"))?;
+        kernel.validate()?;
+        Ok(kernel)
     }
 
     /// Number of live work records (drives the fork/replay surface + tests).
@@ -565,7 +1229,9 @@ impl ExecutionKernel {
                 let hash = ex.bind_runtime(manifest);
                 Ok(json!({ "id": id, "configHash": hash }))
             }
-            // v3.39 — record a pending HITL approval inside the execution checkpoint.
+            // v3.39 — record a pending HITL approval inside the execution
+            // checkpoint.  The chat relay journals the same request first;
+            // this handler remains usable by the hermetic kernel API as well.
             "execution/record_approval" => {
                 let id = params
                     .get("id")
@@ -574,7 +1240,7 @@ impl ExecutionKernel {
                 let ticket_id = params
                     .get("ticketId")
                     .and_then(Value::as_str)
-                    .unwrap_or("")
+                    .ok_or("execution/record_approval requires ticketId")?
                     .to_string();
                 let tool_id = params
                     .get("toolId")
@@ -591,6 +1257,11 @@ impl ExecutionKernel {
                     .and_then(Value::as_str)
                     .unwrap_or("R1")
                     .to_string();
+                let requested_at_ms = params
+                    .get("requestedAtMs")
+                    .and_then(Value::as_u64)
+                    .unwrap_or_else(now_ms);
+                self.validate_pending_approval_request(id, &ticket_id)?;
                 let ex = self
                     .get_mut(id)
                     .ok_or_else(|| format!("unknown execution {id}"))?;
@@ -598,7 +1269,7 @@ impl ExecutionKernel {
                     ticket_id,
                     tool_id,
                     args_hash,
-                    requested_at_ms: now_ms(),
+                    requested_at_ms,
                     risk_tier,
                 };
                 ex.record_pending_approval(approval)?;
@@ -611,14 +1282,20 @@ impl ExecutionKernel {
                     .get("id")
                     .and_then(Value::as_str)
                     .ok_or("execution/resolve_approval requires id")?;
+                let ticket_id = params
+                    .get("ticketId")
+                    .and_then(Value::as_str)
+                    .ok_or("execution/resolve_approval requires ticketId")?
+                    .to_string();
                 let approved = params
                     .get("approved")
                     .and_then(Value::as_bool)
                     .ok_or("execution/resolve_approval requires approved (bool)")?;
+                self.validate_pending_approval_resolution(id, &ticket_id)?;
                 let ex = self
                     .get_mut(id)
                     .ok_or_else(|| format!("unknown execution {id}"))?;
-                let approval = ex.resolve_pending_approval(approved)?;
+                let approval = ex.resolve_pending_approval_for(Some(&ticket_id), approved)?;
                 Ok(json!({
                     "id": id,
                     "state": ex.state,
@@ -1274,6 +1951,106 @@ impl ExecutionKernel {
     fn get_mut(&mut self, id: &str) -> Option<&mut Work> {
         self.executions.get_mut(id)
     }
+}
+
+fn parse_ex_counter(id: &str) -> u64 {
+    id.strip_prefix("ex:")
+        .and_then(|value| value.parse::<u64>().ok())
+        .unwrap_or(0)
+}
+
+fn metadata_string(metadata: &Value, key: &str) -> Option<String> {
+    metadata
+        .get(key)
+        .and_then(Value::as_str)
+        .map(str::to_string)
+}
+
+fn metadata_value_as_string(metadata: &Value, key: &str) -> String {
+    match metadata.get(key) {
+        Some(Value::String(value)) => value.clone(),
+        Some(value) => value.to_string(),
+        None => String::new(),
+    }
+}
+
+fn metadata_string_list(metadata: &Value, key: &str) -> Vec<String> {
+    metadata
+        .get(key)
+        .and_then(Value::as_array)
+        .map(|values| {
+            values
+                .iter()
+                .filter_map(Value::as_str)
+                .map(str::to_string)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn metadata_trigger(metadata: &Value, address: &WorkAddress) -> ExecutionTrigger {
+    match metadata.get("trigger").and_then(Value::as_str) {
+        Some("plan") => ExecutionTrigger::Plan,
+        Some("scheduler") => ExecutionTrigger::Scheduler,
+        Some("acp") => ExecutionTrigger::Acp,
+        Some("subagent") => ExecutionTrigger::Subagent,
+        Some("chat") | None => {
+            if address.parent_work_id.is_some() {
+                ExecutionTrigger::Subagent
+            } else if matches!(address.session_kind, everyaios_types::SessionKind::Automation) {
+                ExecutionTrigger::Scheduler
+            } else {
+                ExecutionTrigger::Chat
+            }
+        }
+        Some(other) => {
+            // Unknown trigger metadata is not silently coerced into a new
+            // runtime. The caller will fail closed on the resulting projection
+            // only if the string cannot be represented; retain Chat as the
+            // explicit legacy migration default for old records.
+            let _ = other;
+            ExecutionTrigger::Chat
+        }
+    }
+}
+
+fn work_created_objective(events: &[crate::work_gateway::WorkEventEnvelope]) -> Option<String> {
+    events.iter().find_map(|envelope| match &envelope.event {
+        WorkEvent::Domain(DomainEvent::WorkCreated { objective, .. }) => Some(objective.clone()),
+        _ => None,
+    })
+}
+
+fn phase_transition_legal(previous: ExecutionPhase, next: ExecutionPhase) -> bool {
+    if previous == next {
+        return true;
+    }
+    if previous.is_terminal() {
+        return false;
+    }
+    if previous == ExecutionPhase::Ready
+        && matches!(
+            next,
+            ExecutionPhase::WaitingTool
+                | ExecutionPhase::WaitingApproval
+                | ExecutionPhase::WaitingUser
+                | ExecutionPhase::Checkpointed
+        )
+    {
+        return true;
+    }
+    previous.can_transition(next)
+}
+
+fn recovered_receipt(gateway: &WorkGateway, work_id: &str) -> Option<Value> {
+    let effects = gateway.effect_statuses(work_id);
+    if effects.is_empty() || effects.iter().any(|effect| effect.requires_reconciliation()) {
+        return None;
+    }
+    Some(json!({
+        "source": "work_journal",
+        "effects": effects,
+    }))
 }
 
 fn parse_phase(s: &str) -> Option<ExecutionPhase> {

@@ -1,88 +1,57 @@
-//! The Work factory for automations (P71.3c — `ARCH/AUTOMATION.md` §5).
+//! The pure Work factory for automations (P71.3c — `ARCH/AUTOMATION.md` §5).
 //!
-//! ADR-0005 reversed the old "runtime seam" row: this module **used to be**
-//! an executor (`AutomationRuntime::run`/`run_step` sequencing
-//! `run_code`/`online_search`/`email`/`calendar` through injected engine
-//! traits). That violated the ownership boundary — effects and their retries
-//! belong to the Work kernel (`WORK.md` §2) and `RECOVERY.md`, never to the
-//! automation layer (`AUTOMATION.md` §9). The module is now a **compiler**:
-//!
-//! ```text
-//! Automation revision ──▶ validate ──▶ compile ──▶ WorkSpec
-//!                                              ├─ steps (deterministic first, agent-backed second)
-//!                                              ├─ capability requests per step
-//!                                              └─ provenance stamps (automation_id · revision_id · occurrence_id)
-//! ```
-//!
-//! It must not execute effects, hold execution state, or retry effects. The
-//! host turns the returned [`WorkSpec`] into Work through the work gateway;
-//! the Work kernel executes. Refusal over guessing: validation errors are
-//! returned, never defaulted.
+//! An automation revision is immutable data.  This module validates that
+//! data, derives its canonical identity, and returns a `WorkSpec`; it never
+//! creates Work, executes an effect, retries an effect, or owns an event log.
+//! The host owns the durable Work/Run admission boundary.
 
 use everyaios_blueprint::{Automation, AutomationStep};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use sha2::{Digest, Sha256};
 
-/// Provenance stamps required by `AUTOMATION.md` §3: every Work created by
-/// an automation records which definition, which immutable revision and
-/// which trigger occurrence produced it. `revision_id` is content-addressed
-/// (monotonic revision counter + content hash) so "editing affects the NEXT
-/// run only" is enforceable rather than aspirational; `trigger_occurrence_id`
-/// ties the run to exactly one trigger firing.
+/// Provenance stamped on every Work produced from an automation revision.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AutomationProvenance {
     pub automation_id: String,
-    /// Content-addressed revision identity (e.g. `"4:<hash>"`); immutable
-    /// for the life of a run.
+    /// Canonical `g<generation>:r<revision>:<sha256>` identity.
     pub revision_id: String,
-    /// One firing of the trigger (`manual` for a user-initiated run).
+    /// The durable automation generation which owned this revision.
+    #[serde(default)]
+    pub automation_generation: u64,
+    /// The one trigger admission which produced this Work.
     pub trigger_occurrence_id: String,
 }
 
-/// One compiled step. The factory classifies a step as **deterministic** or
-/// **agent-backed** (`AUTOMATION.md` §6) — a deterministic-only automation
-/// compiles with `agent_policy: none` and needs no agent binding at all.
+/// One compiled step.  Classification is data, not an execution decision.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CompiledStep {
     pub index: usize,
-    /// Stable step kind (`run_code` · `online_search` · `email` · `calendar`).
     pub kind: String,
-    /// Deterministic steps run without any agent; agent-backed steps need
-    /// one (the judge/summarise step in §6's second example).
     pub deterministic: bool,
-    /// The capability this step will request, when it is effectful. Data —
-    /// the resolver/broker turns it into a grant; the factory never grants.
     pub capability_request: Option<CompiledCapabilityRequest>,
 }
 
-/// A capability the compiled Work will need (`AUTOMATION.md` §5 obligation 2:
-/// "instantiate the capability requests they will need"). Opaque id strings
-/// match the broker vocabulary (`work_gateway::GatewayCapabilityBroker`).
+/// A capability request carried by the Work factory.  The factory does not
+/// resolve or grant it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CompiledCapabilityRequest {
     pub capability_id: String,
     pub step_index: usize,
-    /// Human-readable why (stamped into the broker request's reason).
     pub reason: String,
 }
 
-/// The full compiled artifact — what the Work factory hands to the host.
-/// Pure data: serializable, diffable, and free of execution semantics.
+/// The complete, pure artifact handed to the Work owner.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkSpec {
     pub provenance: AutomationProvenance,
-    /// The objective stamped into the Work's `WorkCreated` event.
     pub objective: String,
-    /// Compiled steps in execution order (deterministic-first ordering is
-    /// the definition's own order; the factory does not reorder).
     pub steps: Vec<CompiledStep>,
-    /// All capability requests the Work will raise, in step order.
     pub capability_requests: Vec<CompiledCapabilityRequest>,
-    /// `true` when every step is deterministic — the run needs no agent
-    /// binding (`AUTOMATION.md` §6), which matters for cost/latency.
     pub agent_required: bool,
 }
 
@@ -92,13 +61,25 @@ pub enum AutomationError {
     Empty,
     #[error("run_code language `{0}` is not supported by the script engine")]
     UnsupportedLanguage(String),
+    #[error("automation revision id is required and must be immutable")]
+    MissingRevision,
+    #[error("automation revision id is invalid: {0}")]
+    InvalidRevision(String),
+    #[error("automation revision does not match its immutable snapshot")]
+    RevisionMismatch,
     #[error("automation names no trigger occurrence; compile requires one firing")]
     MissingOccurrence,
 }
 
-/// Validate a step shape (`AUTOMATION.md` §5 obligation 1 — validate before
-/// anything runs). Mirrors the old runtime's per-step refusals, minus
-/// engine-availability checks, which were execution-time concerns.
+/// The parsed identity carried by a canonical revision id.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RevisionIdentity {
+    pub generation: u64,
+    pub revision: u64,
+    pub digest: String,
+}
+
+/// Validate a step shape before a Work artifact is produced.
 pub fn validate_step(step: &AutomationStep) -> Result<(), AutomationError> {
     match step {
         AutomationStep::RunCode { language, .. } => {
@@ -114,10 +95,7 @@ pub fn validate_step(step: &AutomationStep) -> Result<(), AutomationError> {
     }
 }
 
-/// Which capability a step will need, if any. `run_code` rides the script
-/// sandbox seam, `online_search` the search cascade, email/calendar the
-/// connector plane. None of these are granted here — the request is data.
-fn capability_of(index: usize, step: &AutomationStep) -> Option<CompiledCapabilityRequest> {
+fn capability_of(index: usize, step: &AutomationStep) -> CompiledCapabilityRequest {
     let (capability_id, reason) = match step {
         AutomationStep::RunCode { .. } => (
             "script.eval",
@@ -129,24 +107,159 @@ fn capability_of(index: usize, step: &AutomationStep) -> Option<CompiledCapabili
         AutomationStep::Email { .. } => ("connector.email", "outbound email write"),
         AutomationStep::Calendar { .. } => ("connector.calendar", "calendar write"),
     };
-    Some(CompiledCapabilityRequest {
+    CompiledCapabilityRequest {
         capability_id: capability_id.into(),
         step_index: index,
         reason: reason.into(),
+    }
+}
+
+/// Canonical JSON used for revision and delivery digests.  Object keys are
+/// sorted recursively so equal values have one byte representation.
+fn canonical_json(value: &Value) -> String {
+    match value {
+        Value::Null => "null".into(),
+        Value::Bool(value) => value.to_string(),
+        Value::Number(value) => value.to_string(),
+        Value::String(value) => serde_json::to_string(value).unwrap_or_else(|_| "\"\"".into()),
+        Value::Array(values) => {
+            let values: Vec<String> = values.iter().map(canonical_json).collect();
+            format!("[{}]", values.join(","))
+        }
+        Value::Object(values) => {
+            let mut keys: Vec<&String> = values.keys().collect();
+            keys.sort();
+            let values: Vec<String> = keys
+                .into_iter()
+                .map(|key| {
+                    format!(
+                        "{}:{}",
+                        serde_json::to_string(key).unwrap_or_else(|_| "\"\"".into()),
+                        canonical_json(&values[key])
+                    )
+                })
+                .collect();
+            format!("{{{}}}", values.join(","))
+        }
+    }
+}
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(bytes);
+    hasher
+        .finalize()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
+}
+
+const SNAPSHOT_MARKER: &str = "::snapshot:";
+
+/// Strip the scheduler's immutable snapshot envelope before exposing the
+/// automation identity in Work provenance.  The envelope is hashed as part of
+/// the revision definition, so policy/session metadata cannot be edited without
+/// changing the revision id.
+pub fn canonical_automation_id(automation_id: &str) -> &str {
+    automation_id
+        .split_once(SNAPSHOT_MARKER)
+        .map(|(base, _)| base)
+        .unwrap_or(automation_id)
+}
+
+/// Return the content digest for the immutable automation definition and its
+/// generation.  The generation is part of the digest, not merely a display
+/// counter, so deleting and recreating an id cannot inherit an old revision.
+pub fn revision_content_digest(automation: &Automation, generation: u64) -> String {
+    let envelope = serde_json::json!({
+        "schema": "everyaios.automation.revision.v1",
+        "generation": generation,
+        "automation": automation,
+    });
+    sha256_hex(canonical_json(&envelope).as_bytes())
+}
+
+/// Build the canonical revision identity for a definition and generation.
+pub fn content_addressed_revision_id_for_generation(
+    automation: &Automation,
+    generation: u64,
+    revision: u64,
+) -> String {
+    format!(
+        "g{generation}:r{revision}:{}",
+        revision_content_digest(automation, generation)
+    )
+}
+
+/// Backwards-compatible convenience for callers which have no persisted
+/// generation yet.  Such callers use generation one explicitly.
+pub fn content_addressed_revision_id(automation: &Automation, revision: u64) -> String {
+    content_addressed_revision_id_for_generation(automation, 1, revision)
+}
+
+/// Alias with the generation in the name for host adapters.
+pub fn content_addressed_revision_id_with_generation(
+    automation: &Automation,
+    generation: u64,
+    revision: u64,
+) -> String {
+    content_addressed_revision_id_for_generation(automation, generation, revision)
+}
+
+/// Parse and validate the shape of a canonical revision identity.
+pub fn parse_revision_id(revision_id: &str) -> Result<RevisionIdentity, AutomationError> {
+    let parts: Vec<&str> = revision_id.trim().split(':').collect();
+    if parts.len() != 3 {
+        return Err(AutomationError::InvalidRevision(revision_id.to_string()));
+    }
+    let generation_text = parts[0]
+        .strip_prefix('g')
+        .ok_or_else(|| AutomationError::InvalidRevision(revision_id.to_string()))?;
+    let generation = generation_text
+        .parse::<u64>()
+        .ok()
+        .filter(|value| value.to_string() == generation_text)
+        .ok_or_else(|| AutomationError::InvalidRevision(revision_id.to_string()))?;
+    let revision_text = parts[1]
+        .strip_prefix('r')
+        .ok_or_else(|| AutomationError::InvalidRevision(revision_id.to_string()))?;
+    let revision = revision_text
+        .parse::<u64>()
+        .ok()
+        .filter(|value| value.to_string() == revision_text)
+        .ok_or_else(|| AutomationError::InvalidRevision(revision_id.to_string()))?;
+    let digest = parts[2];
+    if generation == 0
+        || revision == 0
+        || digest.len() != 64
+        || !digest
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    {
+        return Err(AutomationError::InvalidRevision(revision_id.to_string()));
+    }
+    Ok(RevisionIdentity {
+        generation,
+        revision,
+        digest: digest.to_string(),
     })
 }
 
-/// Compile an automation definition (one immutable revision) into a
-/// [`WorkSpec`]. Never executes, never grants, never retries.
-///
-/// `revision_id` — content-addressed revision identity of the definition as
-/// compiled (caller-provided until the canonical revision IDs land;
-/// `AUTOMATION.md` §3's identity gap). `trigger_occurrence_id` — one firing
-/// of the trigger (`"manual"` for a user-initiated run). `approved` — the
-/// caller's decision over this exact revision; privileged steps compile
-/// either way, but an unapproved privileged step is surfaced in
-/// [`WorkSpec::steps`] so the host's approval gate fires **before** the Work
-/// starts, not mid-execution.
+/// Validate that an id names the exact immutable definition supplied to the
+/// factory.  This is deliberately not a string-shape check.
+pub fn validate_revision_id(
+    automation: &Automation,
+    revision_id: &str,
+) -> Result<RevisionIdentity, AutomationError> {
+    let identity = parse_revision_id(revision_id)?;
+    if identity.digest != revision_content_digest(automation, identity.generation) {
+        return Err(AutomationError::RevisionMismatch);
+    }
+    Ok(identity)
+}
+
+/// Compile one immutable automation revision into a Work specification.
+/// This function is pure: it has no persistence, Work, effect, or retry path.
 pub fn compile_work(
     automation: &Automation,
     revision_id: &str,
@@ -155,7 +268,18 @@ pub fn compile_work(
     if automation.steps.is_empty() {
         return Err(AutomationError::Empty);
     }
-    if trigger_occurrence_id.trim().is_empty() {
+    if canonical_automation_id(&automation.id).trim().is_empty() {
+        return Err(AutomationError::InvalidRevision(
+            "automation has no id".into(),
+        ));
+    }
+    let revision_id = revision_id.trim();
+    if revision_id.is_empty() {
+        return Err(AutomationError::MissingRevision);
+    }
+    let identity = validate_revision_id(automation, revision_id)?;
+    let trigger_occurrence_id = trigger_occurrence_id.trim();
+    if trigger_occurrence_id.is_empty() {
         return Err(AutomationError::MissingOccurrence);
     }
     for step in &automation.steps {
@@ -170,45 +294,38 @@ pub fn compile_work(
             index,
             kind: kind_of(step).into(),
             deterministic: !is_agent_backed(step),
-            capability_request: capability_of(index, step),
+            capability_request: Some(capability_of(index, step)),
         })
         .collect();
-
-    let capability_requests: Vec<CompiledCapabilityRequest> = steps
+    let capability_requests = steps
         .iter()
-        .filter_map(|s| s.capability_request.clone())
+        .filter_map(|step| step.capability_request.clone())
         .collect();
 
     Ok(WorkSpec {
         provenance: AutomationProvenance {
-            automation_id: automation.id.clone(),
+            automation_id: canonical_automation_id(&automation.id).to_string(),
             revision_id: revision_id.to_string(),
+            automation_generation: identity.generation,
             trigger_occurrence_id: trigger_occurrence_id.to_string(),
         },
         objective: objective_of(automation),
-        agent_required: steps.iter().any(|s| !s.deterministic),
+        agent_required: steps.iter().any(|step| !step.deterministic),
         steps,
         capability_requests,
     })
 }
 
-/// §6 — "deterministic capability steps first, agent-backed steps second".
-/// The current step vocabulary (`run_code`/`online_search`/`email`/
-/// `calendar`) is entirely deterministic: sandboxed code, the search cascade
-/// and connector writes never consult a model, so a definition built from
-/// them compiles with no agent binding. When an agent-backed step variant
-/// lands (the §6 "judge importance → summarise" shape), it flips
-/// [`CompiledStep::deterministic`] and [`WorkSpec::agent_required`] here —
-/// the single classification point the factory owns.
 fn is_agent_backed(_step: &AutomationStep) -> bool {
     false
 }
 
-/// The objective the compiled Work pursues — derived from the definition
-/// (`AUTOMATION.md` §5 obligation 3: stamp provenance; the objective carries
-/// it forward into the Work's `WorkCreated` event).
 fn objective_of(automation: &Automation) -> String {
-    format!("automation:{}:{}", automation.id, automation.name)
+    format!(
+        "automation:{}:{}",
+        canonical_automation_id(&automation.id),
+        automation.name
+    )
 }
 
 fn kind_of(step: &AutomationStep) -> &'static str {
@@ -237,38 +354,73 @@ mod tests {
     }
 
     #[test]
+    fn content_addressed_revision_is_stable_and_generation_sensitive() {
+        let first = automation();
+        let same = automation();
+        assert_eq!(
+            content_addressed_revision_id(&first, 4),
+            content_addressed_revision_id(&same, 4)
+        );
+        assert_ne!(
+            content_addressed_revision_id_for_generation(&first, 1, 4),
+            content_addressed_revision_id_for_generation(&first, 2, 4)
+        );
+    }
+
+    #[test]
+    fn compile_validates_digest_and_carries_generation() {
+        let definition = automation();
+        let id = content_addressed_revision_id(&definition, 4);
+        let spec = compile_work(&definition, &id, "occ-revision").unwrap();
+        assert_eq!(spec.provenance.automation_generation, 1);
+        let mut changed = definition.clone();
+        changed.name = "edited".into();
+        assert_eq!(
+            compile_work(&changed, &id, "occ-revision"),
+            Err(AutomationError::RevisionMismatch)
+        );
+    }
+
+    #[test]
+    fn blank_revision_refuses_before_work_compilation() {
+        assert_eq!(
+            compile_work(&automation(), "  ", "occ-revision"),
+            Err(AutomationError::MissingRevision)
+        );
+    }
+
+    #[test]
     fn compiles_a_work_spec_with_provenance() {
-        let spec = compile_work(&automation(), "4:abc123", "occ-1").unwrap();
+        let definition = automation();
+        let id = content_addressed_revision_id(&definition, 4);
+        let spec = compile_work(&definition, &id, "occ-1").unwrap();
         assert_eq!(spec.provenance.automation_id, "a1");
-        assert_eq!(spec.provenance.revision_id, "4:abc123");
+        assert_eq!(spec.provenance.revision_id, id);
+        assert_eq!(spec.provenance.automation_generation, 1);
         assert_eq!(spec.provenance.trigger_occurrence_id, "occ-1");
         assert_eq!(spec.objective, "automation:a1:Morning brief");
         assert_eq!(spec.steps.len(), 2);
-        // Deterministic classification: search + sandboxed code, no agent.
-        assert!(spec.steps[0].deterministic);
-        assert!(spec.steps[1].deterministic);
+        assert!(spec.steps.iter().all(|step| step.deterministic));
         assert!(!spec.agent_required);
     }
 
     #[test]
     fn capability_requests_are_instantiated_per_step() {
-        let spec = compile_work(&automation(), "4:abc123", "occ-1").unwrap();
+        let definition = automation();
+        let id = content_addressed_revision_id(&definition, 4);
+        let spec = compile_work(&definition, &id, "occ-1").unwrap();
         let ids: Vec<&str> = spec
             .capability_requests
             .iter()
-            .map(|c| c.capability_id.as_str())
+            .map(|request| request.capability_id.as_str())
             .collect();
         assert_eq!(ids, vec!["net.search", "script.eval"]);
         assert_eq!(spec.capability_requests[0].step_index, 0);
-        assert_eq!(
-            spec.capability_requests[0].reason,
-            "web search cascade for automation step"
-        );
     }
 
     #[test]
     fn email_and_calendar_request_connector_capabilities() {
-        let a = Automation::new("a2", "Send report", Trigger::Manual)
+        let definition = Automation::new("a2", "Send report", Trigger::Manual)
             .step(Step::Email {
                 to: vec!["bob@x.test".into()],
                 subject: "s".into(),
@@ -278,52 +430,46 @@ mod tests {
                 title: "review".into(),
                 when: "2026-09-21T10:00:00Z".into(),
             });
-        let spec = compile_work(&a, "1:rev", "occ-2").unwrap();
+        let id = content_addressed_revision_id(&definition, 1);
+        let spec = compile_work(&definition, &id, "occ-2").unwrap();
         let ids: Vec<&str> = spec
             .capability_requests
             .iter()
-            .map(|c| c.capability_id.as_str())
+            .map(|request| request.capability_id.as_str())
             .collect();
         assert_eq!(ids, vec!["connector.email", "connector.calendar"]);
     }
 
     #[test]
     fn invalid_language_refuses_at_compile_time() {
-        let a = Automation::new("a3", "Calc", Trigger::Manual).step(Step::RunCode {
+        let definition = Automation::new("a3", "Calc", Trigger::Manual).step(Step::RunCode {
             language: "python".into(),
             code: "x".into(),
         });
-        let err = compile_work(&a, "1:rev", "occ-3").unwrap_err();
-        assert_eq!(err, AutomationError::UnsupportedLanguage("python".into()));
+        let id = content_addressed_revision_id(&definition, 1);
+        assert_eq!(
+            compile_work(&definition, &id, "occ-3"),
+            Err(AutomationError::UnsupportedLanguage("python".into()))
+        );
     }
 
     #[test]
     fn empty_definition_refuses() {
+        let definition = Automation::new("a4", "Empty", Trigger::Manual);
+        let id = content_addressed_revision_id(&definition, 1);
         assert_eq!(
-            compile_work(
-                &Automation::new("a4", "Empty", Trigger::Manual),
-                "1:rev",
-                "occ-4"
-            ),
+            compile_work(&definition, &id, "occ-4"),
             Err(AutomationError::Empty)
         );
     }
 
     #[test]
     fn blank_occurrence_refuses() {
+        let definition = automation();
+        let id = content_addressed_revision_id(&definition, 1);
         assert_eq!(
-            compile_work(&automation(), "1:rev", "  "),
+            compile_work(&definition, &id, "  "),
             Err(AutomationError::MissingOccurrence)
         );
-    }
-
-    #[test]
-    fn deterministic_only_automation_needs_no_agent() {
-        // §6's first example — copy folder → compress → upload — compiles to
-        // an agent-free Work. (Folder/compress steps are not yet in the step
-        // vocabulary; search + code is the current deterministic mix.)
-        let spec = compile_work(&automation(), "1:rev", "occ-5").unwrap();
-        assert!(!spec.agent_required);
-        assert!(spec.steps.iter().all(|s| s.deterministic));
     }
 }

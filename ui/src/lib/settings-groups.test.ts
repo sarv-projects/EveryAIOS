@@ -1,11 +1,14 @@
 import { describe, expect, test } from 'bun:test'
 import {
+  agentAuthenticationLabel,
   assertNoAgentConfigWrite,
   assertSettingsCommandDoesNotWriteAgentConfig,
   chooseAfterMutation,
   groupConnectionRecords,
+  hasHostLaunchOverride,
   mutationLooksLive,
   nativeSurfaceNotReplaced,
+  projectModelOwner,
   SETTINGS_IPC_MATRIX,
   type AgentSettings,
   type ConnectionRecord,
@@ -120,9 +123,46 @@ function acpRow(over: Partial<AgentSettings> = {}): AgentSettings {
 }
 
 describe('P65.2 native surface stays owned by the external agent', () => {
-  test('ACP/MCP model and tools are not replaced by EveryAIOS occupancy', () => {
+  test('a managed label without a non-empty host launch input projects back to the agent', () => {
+    const vaultOnly = acpRow({ modelOwner: 'managed' })
+    expect(hasHostLaunchOverride(vaultOnly.backendBinding)).toBe(false)
+    expect(projectModelOwner(vaultOnly)).toBe('agent')
+    expect(nativeSurfaceNotReplaced(vaultOnly)).toBe(true)
+
+    // Even the deprecated compatibility flag cannot turn an empty override
+    // into host model management.
+    const legacyVaultObservation = acpRow({
+      modelOwner: 'managed',
+      backendBinding: {
+        ...vaultOnly.backendBinding!,
+        keyPresent: true,
+      },
+    })
+    expect(projectModelOwner(legacyVaultObservation)).toBe('agent')
+    expect(nativeSurfaceNotReplaced(legacyVaultObservation)).toBe(true)
+  })
+
+  test('a real credential-free host launch input may be shown as managed', () => {
+    const hostOverride = acpRow({
+      modelOwner: 'managed',
+      backendBinding: {
+        ...acpRow().backendBinding!,
+        injectedEnvNames: ['ANTHROPIC_MODEL', 'ANTHROPIC_BASE_URL'],
+      },
+    })
+    expect(hasHostLaunchOverride(hostOverride.backendBinding)).toBe(true)
+    expect(projectModelOwner(hostOverride)).toBe('managed')
+    expect(nativeSurfaceNotReplaced(hostOverride)).toBe(false)
+  })
+
+  test('authentication is always presented as agent-owned, including unknown methods', () => {
+    expect(agentAuthenticationLabel('subscription')).toBe('agent-owned · subscription')
+    expect(agentAuthenticationLabel('api_key')).toBe('agent-owned · API key')
+    expect(agentAuthenticationLabel(undefined)).toBe('agent-owned · method not verified')
+  })
+
+  test('shared capabilities still cannot replace the native surface', () => {
     expect(nativeSurfaceNotReplaced(acpRow())).toBe(true)
-    expect(nativeSurfaceNotReplaced(acpRow({ modelOwner: 'managed' }))).toBe(false)
     expect(nativeSurfaceNotReplaced(acpRow({ modelOwner: 'native' }))).toBe(false)
     expect(
       nativeSurfaceNotReplaced(
@@ -131,16 +171,6 @@ describe('P65.2 native surface stays owned by the external agent', () => {
         }),
       ),
     ).toBe(false)
-    expect(
-      nativeSurfaceNotReplaced(
-        acpRow({
-          protocol: 'inbuilt',
-          modelOwner: 'native',
-          nativeCapabilities: ['file_ops.read'],
-          sharedCapabilities: [],
-        }),
-      ),
-    ).toBe(true)
   })
 })
 

@@ -44,7 +44,10 @@ fn main() {
             "initialize" => {
                 reply["result"] = serde_json::json!({
                     "protocolVersion": 1,
-                    "agentCapabilities": { "loadSession": true },
+                    "agentCapabilities": {
+                        "loadSession": true,
+                        "mcpCapabilities": { "http": true, "sse": false }
+                    },
                     "agentInfo": { "name": name.clone(), "title": name.clone(), "version": "0.0.1" },
                     "authMethods": []
                 });
@@ -62,7 +65,10 @@ fn main() {
                     "method": "session/update",
                     "params": {
                         "sessionId": session_id.as_deref().unwrap_or(""),
-                        "update": { "type": "agent_message", "content": [{ "type": "text", "text": "done" }] }
+                        "update": {
+                            "sessionUpdate": "agent_message_chunk",
+                            "content": [{ "type": "text", "text": "done" }]
+                        }
                     }
                 });
                 let _ = writeln!(stdout, "{}", notify);
@@ -74,8 +80,27 @@ fn main() {
                 continue;
             }
             "session/load" => {
-                reply["result"] =
-                    serde_json::json!({ "sessionId": session_id.as_deref().unwrap_or("") });
+                let requested = v
+                    .get("params")
+                    .and_then(|params| params.get("sessionId"))
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or("");
+                session_id = Some(requested.to_string());
+                let notify = serde_json::json!({
+                    "jsonrpc": "2.0",
+                    "method": "session/update",
+                    "params": {
+                        "sessionId": requested,
+                        "update": {
+                            "sessionUpdate": "agent_message_chunk",
+                            "content": [{ "type": "text", "text": "loaded" }]
+                        }
+                    }
+                });
+                let _ = writeln!(stdout, "{}", notify);
+                let _ = stdout.flush();
+                // ACP v1 permits an empty load result; retain the requested id.
+                reply["result"] = serde_json::json!({});
             }
             _ if id.is_some() => {
                 reply["error"] = serde_json::json!({ "code": -32601, "message": format!("method not found: {method}") });

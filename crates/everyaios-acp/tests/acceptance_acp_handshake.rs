@@ -19,8 +19,8 @@
 //! TODO P65.8.
 
 use everyaios_acp::{
-    decode_messages, encode_message, AcpSession, ClientCapabilities, ClientInfo, FsCapabilities,
-    PermissionDecision, ProcessTransport, PROTOCOL_VERSION,
+    AcpSession, ClientCapabilities, ClientInfo, FsCapabilities, PROTOCOL_VERSION,
+    PermissionDecision, ProcessTransport, decode_messages, encode_message,
 };
 
 fn client_info() -> ClientInfo {
@@ -116,6 +116,13 @@ fn spawned_agent_full_handshake_and_capability_negotiation() {
     // session/new: a fresh session id comes back.
     let sid = session.session_new("/tmp", vec![]).expect("session/new");
     assert!(sid.starts_with("mock-session-"), "got {sid}");
+    assert_eq!(session.session_id(), Some(sid.as_str()));
+
+    // ACP v1's official empty session/load result retains the requested id.
+    let loaded = session
+        .session_load(&sid, "/tmp", vec![])
+        .expect("session/load with an empty official result");
+    assert_eq!(loaded, sid);
     assert_eq!(session.session_id(), Some(sid.as_str()));
 
     // session/prompt: the turn streams a session/update and ends cleanly.

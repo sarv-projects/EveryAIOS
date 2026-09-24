@@ -44,6 +44,7 @@ import {
   agentBackendProviders,
   agentBackendSet,
   channelLabel,
+  hasLegacyVaultKeyRequest,
   type AgentBackendState,
   type AgentProviderRow,
   type ProviderProbeResult,
@@ -52,8 +53,11 @@ import { refreshAgentCatalog } from '@/lib/bridge'
 import { inTauri } from '@/lib/tauri'
 import { cn } from '@/lib/utils'
 import {
+  agentAuthenticationLabel,
   assertNoAgentConfigWrite,
+  hasHostLaunchOverride,
   nativeSurfaceNotReplaced,
+  projectModelOwner,
   settingsAgentGet,
   type AgentSettings,
 } from '@/lib/settings'
@@ -69,15 +73,14 @@ function formatTokens(n: number): string {
 // === P63 — per-agent model backend ==========================================
 
 /**
- * The post-install control: point this agent at one of the user's own
- * providers.
+ * The compatibility disclosure: an optional credential-free host launch
+ * override, such as a model or base URL.
  *
- * Nothing here writes the agent's config file. The choice is handed to the
- * shell, which injects the provider's env vars (and, when asked, the key from
- * the EveryAIOS vault) when the agent is spawned — so the override lasts one
- * child process and is undone by not injecting it. The panel therefore shows
- * the variable *names* a launch will carry, never values, and reports anything
- * the chosen agent has no variable for instead of silently dropping it.
+ * Authentication remains self-contained in the external agent. Nothing here
+ * writes its config, delegates a host-vault key, or turns vault presence into
+ * readiness. A non-secret override lasts only for the child launch; the panel
+ * shows variable names, never values, and reports settings the agent cannot
+ * express instead of silently dropping them.
  */
 function AgentBackendPanel({ agentId }: { agentId: string }) {
   const notify = useAppStore((s) => s.notify)
@@ -94,9 +97,9 @@ function AgentBackendPanel({ agentId }: { agentId: string }) {
         agentBackendProviders(agentId),
       ])
       setState(s)
-      // Providers already holding a vault key first — those are the ones the
-      // user can actually switch on in one click.
-      setProviders([...p].sort((a, b) => Number(b.keyInVault) - Number(a.keyInVault)))
+      // Host-vault presence is inventory only, never an agent-auth or
+      // readiness signal, so it must not rank or enable provider choices.
+      setProviders(p)
     } catch (e) {
       notify(e instanceof Error ? e.message : 'Could not read this agent\u2019s backend', 'error')
     }
@@ -114,13 +117,10 @@ function AgentBackendPanel({ agentId }: { agentId: string }) {
       const next = await agentBackendSet({
         agentId,
         provider: row.id,
-        useVaultKey: row.keyInVault,
       })
       setState(next)
       notify(
-        row.keyInVault
-          ? `${row.name} set — its key is injected from the EveryAIOS vault at launch`
-          : `${row.name} set — add a key in Settings \u2192 Providers for it to work`,
+        `${row.name} host override set — the agent keeps its own sign-in and credentials`,
       )
     } catch (e) {
       notify(e instanceof Error ? e.message : 'Could not set the provider', 'error')
@@ -131,9 +131,14 @@ function AgentBackendPanel({ agentId }: { agentId: string }) {
 
   const clear = async () => {
     setBusy(true)
+    const wasLegacyRequest = state?.configured?.useVaultKey === true
     try {
       setState(await agentBackendClear(agentId))
-      notify(`${agentId} returns to its own configuration`)
+      notify(
+        wasLegacyRequest
+          ? `Legacy host-vault request cleared — sign in or configure ${agentId} in its own interface`
+          : `${agentId} host override cleared — the agent returns to its own configuration`,
+      )
     } catch (e) {
       notify(e instanceof Error ? e.message : 'Could not clear the binding', 'error')
     } finally {
@@ -171,6 +176,7 @@ function AgentBackendPanel({ agentId }: { agentId: string }) {
       )
     : providers
   ).slice(0, 8)
+  const legacyVaultKeyRequest = hasLegacyVaultKeyRequest(state)
 
   return (
     <div
@@ -187,69 +193,89 @@ function AgentBackendPanel({ agentId }: { agentId: string }) {
         )}
       </div>
 
-      {state.injectable ? (
-        <>
-          <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
-            {state.note}
-          </p>
+      <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
+        {state.note}
+      </p>
+      <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
+        Authentication: agent-owned / self-contained. Host-vault injection: unavailable.
+      </p>
 
-          {state.configured && (
-            <div className="mt-2 rounded border border-emerald-500/20 bg-emerald-500/5 px-2 py-1.5 text-[10px] text-emerald-100/90">
-              <div className="flex items-center gap-1.5">
+        {state.configured && (
+          <div
+            className={cn(
+              'mt-2 rounded border px-2 py-1.5 text-[10px]',
+              legacyVaultKeyRequest
+                ? 'border-warning/40 bg-warning/5 text-warning'
+                : 'border-emerald-500/20 bg-emerald-500/5 text-emerald-100/90',
+            )}
+          >
+            <div className="flex items-center gap-1.5">
+              {legacyVaultKeyRequest ? (
+                <KeyRound className="h-2.5 w-2.5" />
+              ) : (
                 <Check className="h-2.5 w-2.5 text-emerald-300" />
-                <span className="font-mono">
-                  {state.configured.provider}
-                  {state.configured.model ? ` \u00b7 ${state.configured.model}` : ''}
-                </span>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="ml-auto h-5 px-1 text-[9px]"
-                  disabled={busy}
-                  onClick={() => void clear()}
-                >
-                  <X className="h-2.5 w-2.5" /> clear
-                </Button>
-              </div>
-              <div className="mt-0.5 text-emerald-100/70">
-                {state.injectedEnv.length > 0
-                  ? `Injected at launch: ${state.injectedEnv.join(', ')}`
-                  : 'No variable can be injected for this choice.'}
-              </div>
-              {state.keyPresent ? (
-                <div className="text-emerald-100/70">
-                  Key: from the EveryAIOS vault (read in Rust at spawn)
-                </div>
-              ) : state.configured ? (
-                <div className="text-warning/80">
-                  No vault key for this provider \u2014 the agent will use whatever it has.
-                </div>
-              ) : null}
-              {state.unexpressed.length > 0 && (
-                <div className="text-warning/80">
-                  Not expressible by env for this agent: {state.unexpressed.join(', ')}
-                </div>
               )}
-              <div className="mt-0.5 text-emerald-100/50">
-                Nothing is written to this agent’s own config file.
-              </div>
+              <span className="font-mono">
+                {legacyVaultKeyRequest && 'legacy host-vault request · '}
+                {state.configured.provider}
+                {state.configured.model ? ` \u00b7 ${state.configured.model}` : ''}
+              </span>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="ml-auto h-5 px-1 text-[9px]"
+                aria-label={
+                  legacyVaultKeyRequest
+                    ? `Clear legacy host-vault request for ${agentId}`
+                    : `Clear host launch override for ${agentId}`
+                }
+                disabled={busy}
+                onClick={() => void clear()}
+              >
+                <X className="h-2.5 w-2.5" /> {legacyVaultKeyRequest ? 'clear legacy' : 'clear'}
+              </Button>
             </div>
-          )}
+            {legacyVaultKeyRequest ? (
+              <div className="mt-0.5">
+                No host vault key was or will be injected. Clear this legacy record, then sign in
+                or configure {agentId} in its own interface.
+              </div>
+            ) : (
+              <>
+                <div className="mt-0.5 text-emerald-100/70">
+                  {state.injectedEnv.length > 0
+                    ? `Credential-free host launch inputs: ${state.injectedEnv.join(', ')}`
+                    : 'This choice adds no non-secret host launch input; the agent remains model-owned.'}
+                </div>
+                {state.unexpressed.length > 0 && (
+                  <div className="text-warning/80">
+                    Not expressible by this agent: {state.unexpressed.join(', ')}
+                  </div>
+                )}
+                <div className="mt-0.5 text-emerald-100/50">
+                  No credential is copied, and nothing is written to this agent’s own config file.
+                </div>
+              </>
+            )}
+          </div>
+        )}
 
-          {state.refusal && (
-            <div className="mt-2 text-[10px] text-warning/80">{state.refusal}</div>
-          )}
+        {state.refusal && (
+          <div className="mt-2 text-[10px] text-warning/80">{state.refusal}</div>
+        )}
 
-          <input
-            type="search"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search providers…"
-            aria-label={`Provider for ${agentId}`}
-            className="mt-2 h-7 w-full rounded border border-border bg-background px-2 font-mono text-[10px] text-foreground placeholder:text-muted-foreground/60"
-          />
+        {state.injectable ? (
+          <>
+            <input
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search host override providers…"
+              aria-label={`Credential-free host override provider for ${agentId}`}
+              className="mt-2 h-7 w-full rounded border border-border bg-background px-2 font-mono text-[10px] text-foreground placeholder:text-muted-foreground/60"
+            />
 
-          <div className="mt-1.5 space-y-1">
+            <div className="mt-1.5 space-y-1">
             {visible.length === 0 && (
               <div className="px-1 text-[10px] text-muted-foreground">
                 No provider matches “{query}”.
@@ -270,14 +296,12 @@ function AgentBackendPanel({ agentId }: { agentId: string }) {
                 >
                   <span className="truncate text-foreground">{p.name}</span>
                   {p.env && (
-                    <span className="truncate font-mono text-[8px] text-muted-foreground/70">
+                    <span
+                      className="truncate font-mono text-[8px] text-muted-foreground/70"
+                      title="Agent-owned provider convention; not a host-vault credential"
+                    >
                       {p.env}
                     </span>
-                  )}
-                  {p.keyInVault && (
-                    <Badge className="bg-emerald-500/15 text-[8px] text-emerald-300">
-                      vault key
-                    </Badge>
                   )}
                   {p.local && (
                     <Badge className="bg-blue-500/15 text-[8px] text-blue-300">local</Badge>
@@ -303,6 +327,7 @@ function AgentBackendPanel({ agentId }: { agentId: string }) {
                     size="sm"
                     variant="ghost"
                     className="ml-auto h-5 px-1 text-[9px]"
+                    aria-label={`Test provider endpoint reachability for ${p.name}`}
                     onClick={() => void test(p)}
                   >
                     <Gauge className="h-2.5 w-2.5" /> test
@@ -311,6 +336,7 @@ function AgentBackendPanel({ agentId }: { agentId: string }) {
                     size="sm"
                     variant="outline"
                     className="h-5 px-1.5 text-[9px]"
+                    aria-label={`${active ? 'Using' : 'Use'} credential-free host override for ${p.name}`}
                     disabled={busy || active}
                     onClick={() => void choose(p)}
                   >
@@ -323,7 +349,7 @@ function AgentBackendPanel({ agentId }: { agentId: string }) {
         </>
       ) : (
         <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
-          {state.refusal ?? state.note}
+          {state.refusal && !state.configured ? state.refusal : state.note}
           {state.channel === 'config_file' && state.configFile
             ? ` (${state.configFile})`
             : ''}
@@ -420,22 +446,22 @@ function readinessTone(state: AgentReadiness): string {
   }
 }
 
-function ModelOwnerBadge({ agent }: { agent: AgentRuntime }) {
-  // P71.2d — every runtime owns its own model and keys; EveryAIOS owns no model
-  // surface to label here (the catalogue/vault/usage surfaces are observation).
+function AuthOwnerBadge({ agent }: { agent: AgentRuntime }) {
+  // Authentication and the baseline model stay with the external agent. A
+  // credential-free host launch override, when one exists, is named separately
+  // in the detail rather than being called ownership of the agent's model.
   return (
     <Badge
       className="bg-zinc-500/15 text-zinc-300 text-[9px]"
-      title={`This agent owns its model and keys — EveryAIOS never copies them here`}
+      title={`${agent.name} owns its authentication, credentials, and baseline model; the host never injects a vault-held provider key`}
     >
-      {`model owner: ${agent.name}`}
+      {`auth owner: ${agent.name}`}
     </Badge>
   )
 }
 
 function AgentDetailCards({ agent }: { agent: AgentRuntime }) {
   const acpOptions = useAppStore((s) => s.acpConfigOptions[agent.id])
-  const readiness = agentReadiness(agent)
   const [live, setLive] = useState<AgentSettings | null>(null)
   useEffect(() => {
     let cancelled = false
@@ -450,6 +476,8 @@ function AgentDetailCards({ agent }: { agent: AgentRuntime }) {
       cancelled = true
     }
   }, [agent.id])
+  const effectiveModelOwner = live ? projectModelOwner(live) : 'agent'
+  const hostLaunchOverride = hasHostLaunchOverride(live?.backendBinding)
   return (
     <div className="mt-2 grid gap-2 sm:grid-cols-2 [contain-intrinsic-size:auto_120px]">
       {/* Native capabilities — owned by the agent itself. */}
@@ -461,8 +489,8 @@ function AgentDetailCards({ agent }: { agent: AgentRuntime }) {
           </Badge>
         </div>
         <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
-          What this runtime itself exposes. Model, sign-in, and routing stay in its own config —
-          managed here only by reference.
+          What this runtime itself exposes. Authentication is self-contained; model, sign-in, and
+          routing stay in the agent and are observed here only by reference.
         </p>
         <div className="mt-1.5 flex flex-wrap gap-1">
           {((live && nativeSurfaceNotReplaced(live) && live.nativeCapabilities?.length
@@ -476,10 +504,14 @@ function AgentDetailCards({ agent }: { agent: AgentRuntime }) {
         </div>
         <dl className="mt-1.5 space-y-0.5 font-mono text-[9px] text-muted-foreground">
           <div className="flex justify-between gap-2">
-            <dt>readiness</dt>
+            <dt>ACP readiness</dt>
             <dd className="text-foreground/80">
-              {live?.readiness ?? `${readiness.state} — ${readiness.reason}`}
+              {live?.readiness ?? 'unknown — live agent state unavailable'}
             </dd>
+          </div>
+          <div className="flex justify-between gap-2">
+            <dt>authentication</dt>
+            <dd className="text-foreground/80">{agentAuthenticationLabel(live?.authMode)}</dd>
           </div>
           {live?.backendBinding && (
             <div className="flex justify-between gap-2">
@@ -504,13 +536,16 @@ function AgentDetailCards({ agent }: { agent: AgentRuntime }) {
             <dd className="text-foreground/80">
               {acpOptions?.length
                 ? `${acpOptions.length} agent-owned options`
-                : 'managed by the agent — no EveryAIOS copy'}
+                : effectiveModelOwner === 'managed' && hostLaunchOverride
+                  ? `host override · ${live?.backendBinding?.injectedEnvNames.length ?? 0} non-secret inputs`
+                  : 'agent-owned · no host override'}
             </dd>
           </div>
         </dl>
         <p className="mt-1.5 rounded border border-border/40 bg-background/40 px-1.5 py-1 text-[9px] leading-relaxed text-muted-foreground">
-          Keys stay in the agent&apos;s own sign-in. EveryAIOS injects provider env <em>names</em> at
-          launch only — values are never copied into this surface.
+          Authentication stays in the agent&apos;s own sign-in. EveryAIOS can add only
+          credential-free launch inputs such as model or base URL; it never copies or injects a
+          host-vault credential.
         </p>
       </div>
       {/* Shared cowork — EveryAIOS grants, next-turn only. */}
@@ -573,8 +608,8 @@ function AgentCard({
   const acpOptions = useAppStore((s) => s.acpConfigOptions[agent.id])
   const [busyInstall, setBusyInstall] = useState(false)
   const [busyScan, setBusyScan] = useState(false)
-  // P63 — the per-agent model-backend control is a disclosure, not a permanent
-  // control on all 46 rows.
+  // P63 — the legacy per-agent host override is a disclosure, not a permanent
+  // control on every runtime row. It never carries a credential.
   const [configOpen, setConfigOpen] = useState(false)
   // P65.2 — dual-card detail is a disclosure (open by default for the active
   // runtime so its ownership boundary is visible without a click).
@@ -657,7 +692,7 @@ function AgentCard({
             <Badge className={cn('text-[9px]', readinessTone(readiness.state))} aria-label={`Readiness: ${readiness.state} — ${readiness.reason}`}>
               {readiness.state}
             </Badge>
-            <ModelOwnerBadge agent={agent} />
+            <AuthOwnerBadge agent={agent} />
             {isSelected && (
               <Badge className="bg-sky-500/20 text-[9px] text-sky-300">active</Badge>
             )}
@@ -694,7 +729,7 @@ function AgentCard({
           {usable
             ? acpOptions?.length
               ? `agent-owned · ${acpOptions.length} options`
-              : 'own model config'
+              : 'agent-owned · own config'
             : 'models on install'}
         </span>
         <span className="text-muted-foreground/30">|</span>
@@ -783,6 +818,7 @@ function AgentCard({
             variant="outline"
             className="h-7 px-2 text-[10px]"
             aria-expanded={configOpen}
+            aria-label={`${configOpen ? 'Hide' : 'Configure'} credential-free host override for ${agent.id}`}
             data-testid={`agent-configure-${agent.id}`}
             onClick={() => setConfigOpen((v) => !v)}
           >
@@ -791,7 +827,7 @@ function AgentCard({
             ) : (
               <ChevronRight className="h-3 w-3" />
             )}
-            Configure model
+            Host model override
           </Button>
         )}
         <Button

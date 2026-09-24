@@ -24,11 +24,11 @@
 //!
 //! # What is deliberately absent
 //!
-//! No secret ever appears in a type this module returns to a caller that could
-//! serialize it: [`plan_env`] takes the secret as an input and returns the env
-//! pairs the *spawn* consumes. The Tauri layer never sends the pairs, or the
-//! secret, back over IPC — only a boolean "key present" and the list of var
-//! *names* that will be injected (for the UI's honesty line).
+//! No secret-bearing planner API exists here. [`ProviderBinding`] carries
+//! non-secret metadata only, and [`plan_env`] can emit only reviewed
+//! non-secret child variables. The Tauri layer never sends values back over
+//! IPC — only the list of variable *names* that can be injected (for the UI's
+//! honesty line). External-agent authentication remains agent-owned.
 //!
 //! # Provenance of the provider-side names
 //!
@@ -103,25 +103,195 @@ pub struct AgentBackendSpec {
 
 /// What the caller resolved for one `(agent, provider, model)` binding.
 ///
-/// `secret` is the raw key, read from the vault **in Rust**. It is an input
-/// only; nothing here returns it.
-#[derive(Debug, Clone, Copy)]
+/// This type is deliberately metadata-only. It has no field that can carry a
+/// vault value, so even a future caller cannot turn the compatibility planner
+/// into a secret-injection path. Authentication is owned by the external
+/// agent and is established through its own sign-in/configuration flow.
+#[derive(Clone, Copy)]
 pub struct ProviderBinding<'a> {
     /// Catalog provider id (`anthropic`, `openai`, `deepseek`, …).
     pub provider: &'a str,
     /// Model id, forwarded only when the agent has a model env var.
     pub model: &'a str,
     /// The provider's API-key env name from the catalog
-    /// (`ProviderRecord::api_key_env[0]`).
+    /// (`ProviderRecord::api_key_env[0]`). It is metadata only and is never
+    /// emitted by this module.
     pub key_env: &'a str,
-    /// The provider's base URL, if known.
+    /// The provider's base URL, if known. It is validated before it can be
+    /// returned as a child variable.
     pub base_url: Option<&'a str>,
     /// The provider's own base-URL override env name
     /// (`ProviderRecord::base_url_env`), if it declares one.
     pub base_url_env: Option<&'a str>,
-    /// The raw secret from the vault. `None` = "no key stored" (a keyless
-    /// local runtime is a legitimate case).
-    pub secret: Option<&'a str>,
+}
+
+impl std::fmt::Debug for ProviderBinding<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ProviderBinding")
+            .field("provider", &self.provider)
+            .field("model", &self.model)
+            .field("key_env", &self.key_env)
+            .field("base_url", &self.base_url.as_deref().map(|_| "<redacted>"))
+            .field("base_url_env", &self.base_url_env)
+            .finish()
+    }
+}
+
+/// A safe, typed explanation for a rejected custom endpoint.
+///
+/// The variants intentionally contain no raw URL or user input. This keeps
+/// errors safe to put in IPC, audit records, and logs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BaseUrlError {
+    /// The input was empty, malformed, or contained ambiguous whitespace.
+    Malformed,
+    /// Only `http` and `https` may be used for a model endpoint.
+    UnsafeScheme,
+    /// Userinfo (`user:password@host`) is never accepted.
+    UserInfo,
+    /// Query strings and fragments are not valid base-URL components here.
+    QueryOrFragment,
+    /// The parsed host is private, link-local/metadata, reserved, or another
+    /// destination refused by the canonical Guard netfloor.
+    PrivateDestination,
+    /// The host spelling is syntactically ambiguous (for example a trailing
+    /// dot or an empty label).
+    AmbiguousHost,
+}
+
+impl std::fmt::Display for BaseUrlError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let message = match self {
+            Self::Malformed => "malformed base URL",
+            Self::UnsafeScheme => "unsafe URL scheme",
+            Self::UserInfo => "userinfo is not allowed",
+            Self::QueryOrFragment => "query and fragment components are not allowed",
+            Self::PrivateDestination => "private or metadata destination is not allowed",
+            Self::AmbiguousHost => "ambiguous URL host",
+        };
+        f.write_str(message)
+    }
+}
+
+impl std::error::Error for BaseUrlError {}
+
+fn authority_contains_userinfo(raw: &str) -> bool {
+    let Some(scheme_end) = raw.find("://").map(|index| index + 3) else {
+        return false;
+    };
+    let rest = &raw[scheme_end..];
+    let authority_end = rest.find(['/', '?', '#']).unwrap_or(rest.len());
+    rest[..authority_end].contains('@')
+}
+
+fn raw_authority_host(raw: &str) -> Option<&str> {
+    let scheme_end = raw.find("://").map(|index| index + 3)?;
+    let rest = &raw[scheme_end..];
+    let authority_end = rest.find(['/', '?', '#']).unwrap_or(rest.len());
+    let authority = rest[..authority_end].split('@').next_back()?;
+    if authority.starts_with('[') {
+        let close = authority.find(']')?;
+        return Some(&authority[..=close]);
+    }
+    Some(authority.split(':').next().unwrap_or(authority))
+}
+
+fn valid_domain_name(host: &str) -> bool {
+    !host.is_empty()
+        && host.len() <= 253
+        && host.split('.').all(|label| {
+            !label.is_empty()
+                && label.len() <= 63
+                && !label.starts_with('-')
+                && !label.ends_with('-')
+                && label
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+        })
+}
+
+fn looks_like_noncanonical_ip_literal(host: &str) -> bool {
+    let lower = host.to_ascii_lowercase();
+    (lower.starts_with("0x") || lower.starts_with('0'))
+        && lower
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit() || byte == b'x' || byte == b'.')
+        || (lower.bytes().all(|byte| byte.is_ascii_digit()) && !lower.is_empty())
+}
+
+/// Parse, canonicalize, and apply the existing Guard URL/netfloor policy to a
+/// model endpoint.
+///
+/// The returned string is the only URL form the backend planner can emit. No
+/// caller-provided spelling is retained on an error path. Loopback remains
+/// allowed by the desktop netfloor default for local model runtimes; private,
+/// link-local/metadata, CGNAT, local-discovery, multicast, unspecified, and
+/// reserved destinations are refused.
+pub fn validate_base_url(raw: &str) -> Result<String, BaseUrlError> {
+    if raw.is_empty()
+        || raw
+            .chars()
+            .any(|character| character.is_control() || character.is_whitespace())
+        || raw.contains('\\')
+    {
+        return Err(BaseUrlError::Malformed);
+    }
+
+    let parsed = url::Url::parse(raw).map_err(|_| BaseUrlError::Malformed)?;
+    if !matches!(parsed.scheme(), "http" | "https") {
+        return Err(BaseUrlError::UnsafeScheme);
+    }
+    if parsed.cannot_be_a_base()
+        || authority_contains_userinfo(raw)
+        || !parsed.username().is_empty()
+        || parsed.password().is_some()
+    {
+        return Err(if parsed.cannot_be_a_base() {
+            BaseUrlError::Malformed
+        } else {
+            BaseUrlError::UserInfo
+        });
+    }
+    if parsed.query().is_some() || parsed.fragment().is_some() {
+        return Err(BaseUrlError::QueryOrFragment);
+    }
+
+    let Some(host) = parsed.host() else {
+        return Err(BaseUrlError::Malformed);
+    };
+    if let Some(raw_host) = raw_authority_host(raw) {
+        let raw_host = raw_host.trim_start_matches('[').trim_end_matches(']');
+        if looks_like_noncanonical_ip_literal(raw_host) {
+            return Err(BaseUrlError::AmbiguousHost);
+        }
+    }
+    if let url::Host::Domain(domain) = host
+        && !valid_domain_name(domain)
+    {
+        return Err(BaseUrlError::AmbiguousHost);
+    }
+
+    let canonical = parsed.to_string();
+    let policy = everyaios_guard::netfloor::NetPolicy::default();
+    let Some(host) = parsed.host() else {
+        return Err(BaseUrlError::Malformed);
+    };
+    if !policy.allows(everyaios_guard::netfloor::classify_url_host(&host)) {
+        return Err(BaseUrlError::PrivateDestination);
+    }
+    if everyaios_guard::urlfloor::check_url_with_policy(&canonical, &[], policy)
+        != everyaios_guard::urlfloor::UrlVerdict::Allowed
+    {
+        return Err(BaseUrlError::PrivateDestination);
+    }
+    Ok(canonical)
+}
+
+/// Return a safe endpoint projection for IPC. Valid endpoints are already
+/// canonical and contain no userinfo/query/fragment; anything else is replaced
+/// by a non-sensitive marker rather than echoed back to the renderer.
+pub fn redact_base_url(raw: &str) -> String {
+    validate_base_url(raw).unwrap_or_else(|_| "<redacted>".to_string())
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -135,6 +305,8 @@ pub enum BackendError {
     ConfigFileOnly { agent: String, file: String },
     /// An env name or value failed validation (never a silent bad spawn).
     InvalidEnv(String),
+    /// A custom endpoint failed the canonical URL/netfloor policy.
+    InvalidBaseUrl { reason: BaseUrlError },
 }
 
 impl std::fmt::Display for BackendError {
@@ -153,14 +325,18 @@ impl std::fmt::Display for BackendError {
                 "{agent} routes providers through {file} — that write needs approval (not an env override)"
             ),
             BackendError::InvalidEnv(m) => write!(f, "invalid env override: {m}"),
+            BackendError::InvalidBaseUrl { reason } => {
+                write!(f, "invalid base URL: {reason}")
+            }
         }
     }
 }
 
 impl std::error::Error for BackendError {}
 
-/// An env-var name must be a POSIX-ish identifier. Values must be single-line
-/// and NUL-free; a spawn env is not a place for smuggled newlines.
+/// An env-var name must be a POSIX-ish identifier. Values are deliberately
+/// conservative: a child environment is not a place for smuggled newlines,
+/// control characters, or unbounded metadata.
 fn valid_env_name(name: &str) -> bool {
     !name.is_empty()
         && name
@@ -169,34 +345,78 @@ fn valid_env_name(name: &str) -> bool {
 }
 
 fn valid_env_value(value: &str) -> bool {
-    !value.is_empty() && !value.contains('\n') && !value.contains('\r') && !value.contains('\0')
+    !value.is_empty()
+        && value.len() <= 8192
+        && !value.chars().any(|character| character.is_control())
 }
 
-/// Decide the env pairs a spawn should carry. Pure.
+fn valid_model_value(value: &str) -> bool {
+    let lower = value.to_ascii_lowercase();
+    let secret_shaped = lower.starts_with("sk-")
+        || lower.starts_with("sk_")
+        || lower.starts_with("ghp_")
+        || lower.starts_with("github_pat_")
+        || lower.starts_with("xoxb-")
+        || lower.starts_with("bearer ");
+    !secret_shaped
+        && !value.is_empty()
+        && value.len() <= 256
+        && !value.contains("://")
+        && value.chars().all(|character| {
+            character.is_ascii_alphanumeric() || matches!(character, '-' | '_' | '.' | ':' | '/')
+        })
+}
+
+/// Validate a model identifier before it can be persisted or emitted as a
+/// child variable. Model IDs are bounded ASCII identifiers, never URI-shaped
+/// metadata or a place to smuggle a credential.
+pub fn validate_model_id(model: &str) -> Result<(), BackendError> {
+    if valid_model_value(model) {
+        Ok(())
+    } else {
+        Err(BackendError::InvalidEnv(
+            "model value is not a bounded identifier".into(),
+        ))
+    }
+}
+
+/// Decide the non-secret env pairs a spawn should carry. Pure.
 ///
-/// Returns `Err` (never a silent empty list) when the agent's channel cannot
-/// express a provider binding, so the caller reports the honest reason.
+/// The key variable is intentionally never emitted: this planner has no
+/// secret input. Only names present in the reviewed child-environment
+/// allowlist can produce a pair, and every endpoint is parsed and checked
+/// against Guard's URL/netfloor policy before it is returned.
 pub fn plan_env(
     spec: &AgentBackendSpec,
     binding: &ProviderBinding<'_>,
 ) -> Result<Vec<(String, String)>, BackendError> {
     match spec.channel {
         BackendChannel::Unknown => {
-            return Err(BackendError::UnknownAgent(spec.agent_id.to_string()))
+            return Err(BackendError::UnknownAgent(spec.agent_id.to_string()));
         }
         BackendChannel::Subscription => {
-            return Err(BackendError::Subscription(spec.agent_id.to_string()))
+            return Err(BackendError::Subscription(spec.agent_id.to_string()));
         }
         BackendChannel::ConfigFileOnly => {
             return Err(BackendError::ConfigFileOnly {
                 agent: spec.agent_id.to_string(),
                 file: spec.config_file.unwrap_or("<unknown>").to_string(),
-            })
+            });
         }
         BackendChannel::ProviderEnv | BackendChannel::FixedEnv => {}
     }
 
-    // Which names does this agent actually read?
+    // Validate a configured endpoint even when this particular agent has no
+    // variable for it. That prevents a future caller from treating an unsafe
+    // value as harmless merely because it is currently unexpressed.
+    let canonical_base_url = binding
+        .base_url
+        .map(validate_base_url)
+        .transpose()
+        .map_err(|reason| BackendError::InvalidBaseUrl { reason })?;
+
+    // Which names does this agent actually read? The key name is metadata
+    // only; unlike the old compatibility API it can never produce a value.
     let (key_env, base_env, model_env): (Option<&str>, Option<&str>, Option<&str>) =
         match spec.channel {
             BackendChannel::FixedEnv => (
@@ -214,53 +434,51 @@ pub fn plan_env(
 
     let mut out: Vec<(String, String)> = Vec::new();
 
-    if let Some(name) = key_env {
-        if !valid_env_name(name) {
-            return Err(BackendError::InvalidEnv(format!(
-                "bad key var name {name:?}"
-            )));
-        }
-        if let Some(secret) = binding.secret {
-            if !valid_env_value(secret) {
-                return Err(BackendError::InvalidEnv(format!(
-                    "key for {} is not a single-line value",
-                    binding.provider
-                )));
-            }
-            out.push((name.to_string(), secret.to_string()));
-        }
-        // No secret: omit the var entirely rather than injecting an empty
-        // string, which some CLIs treat as "configured but blank".
+    if let Some(name) = key_env
+        && !valid_env_name(name)
+    {
+        return Err(BackendError::InvalidEnv(
+            "the provider key variable name is malformed".into(),
+        ));
     }
+    // No secret is accepted or emitted. An external agent authenticates
+    // through its own store/sign-in flow.
 
     // Base URL: prefer the agent's fixed var; otherwise the provider's own
-    // override var. Only when we actually have a URL to write.
-    if let Some(url) = binding.base_url {
-        if let Some(name) = base_env {
-            if !valid_env_name(name) {
-                return Err(BackendError::InvalidEnv(format!(
-                    "bad base var name {name:?}"
-                )));
-            }
-            if !valid_env_value(url) {
-                return Err(BackendError::InvalidEnv("bad base URL value".into()));
-            }
-            out.push((name.to_string(), url.to_string()));
+    // override var. Only a reviewed, non-secret name and a canonical safe URL
+    // can produce a pair.
+    if let (Some(url), Some(name)) = (canonical_base_url.as_deref(), base_env) {
+        if !valid_env_name(name) {
+            return Err(BackendError::InvalidEnv(
+                "the base URL variable name is malformed".into(),
+            ));
         }
+        let reviewed = crate::client::ChildEnvName::from_explicit_name(name).map_err(|_| {
+            BackendError::InvalidEnv(
+                "the base URL variable is not in the reviewed child allowlist".into(),
+            )
+        })?;
+        if !valid_env_value(url) {
+            return Err(BackendError::InvalidEnv("bad base URL value".into()));
+        }
+        out.push((reviewed.as_str().to_string(), url.to_string()));
     }
 
-    if let Some(m) = model_env {
-        if !binding.model.is_empty() {
-            if !valid_env_name(m) {
-                return Err(BackendError::InvalidEnv(format!(
-                    "bad model var name {m:?}"
-                )));
-            }
-            if !valid_env_value(binding.model) {
-                return Err(BackendError::InvalidEnv("bad model value".into()));
-            }
-            out.push((m.to_string(), binding.model.to_string()));
+    if let Some(m) = model_env
+        && !binding.model.is_empty()
+    {
+        if !valid_env_name(m) {
+            return Err(BackendError::InvalidEnv(
+                "the model variable name is malformed".into(),
+            ));
         }
+        let reviewed = crate::client::ChildEnvName::from_explicit_name(m).map_err(|_| {
+            BackendError::InvalidEnv(
+                "the model variable is not in the reviewed child allowlist".into(),
+            )
+        })?;
+        validate_model_id(binding.model)?;
+        out.push((reviewed.as_str().to_string(), binding.model.to_string()));
     }
 
     Ok(out)
@@ -492,7 +710,6 @@ mod tests {
         key_env: &'a str,
         base_url: Option<&'a str>,
         base_url_env: Option<&'a str>,
-        secret: Option<&'a str>,
     ) -> ProviderBinding<'a> {
         ProviderBinding {
             provider,
@@ -500,95 +717,74 @@ mod tests {
             key_env,
             base_url,
             base_url_env,
-            secret,
         }
     }
 
     #[test]
-    fn claude_fixed_env_injects_the_anthropic_triple() {
+    fn fixed_env_plans_only_reviewed_non_secret_pairs() {
         let b = binding(
             "anthropic",
             "ANTHROPIC_API_KEY",
-            Some("https://api.anthropic.com"),
+            Some("https://api.anthropic.com/v1"),
             None,
-            Some("sk-ant-1"),
         );
         let pairs = plan_env(&CLAUDE, &b).unwrap();
         assert_eq!(
             pairs,
             vec![
-                ("ANTHROPIC_API_KEY".to_string(), "sk-ant-1".to_string()),
                 (
                     "ANTHROPIC_BASE_URL".to_string(),
-                    "https://api.anthropic.com".to_string()
+                    "https://api.anthropic.com/v1".to_string()
                 ),
                 ("ANTHROPIC_MODEL".to_string(), "some-model".to_string()),
             ]
         );
+        assert!(pairs.iter().all(|(name, _)| name != "ANTHROPIC_API_KEY"));
     }
 
     #[test]
-    fn claude_can_be_pointed_at_a_non_anthropic_endpoint() {
-        // The cc-switch case: a proxy provider whose own env name is different.
+    fn provider_env_uses_a_reviewed_non_secret_name_only() {
         let b = binding(
-            "my-proxy",
-            "MYPROXY_API_KEY",
-            Some("https://proxy.internal/v1"),
-            Some("MYPROXY_BASE_URL"),
-            Some("sk-proxy"),
-        );
-        let pairs = plan_env(&CLAUDE, &b).unwrap();
-        // Fixed: the agent's own names win, never the provider's.
-        assert!(pairs.iter().any(|(k, _)| k == "ANTHROPIC_API_KEY"));
-        assert!(pairs.iter().any(|(k, _)| k == "ANTHROPIC_BASE_URL"));
-        assert!(!pairs.iter().any(|(k, _)| k == "MYPROXY_API_KEY"));
-    }
-
-    #[test]
-    fn provider_env_agents_use_the_providers_own_names() {
-        let b = binding(
-            "deepseek",
-            "DEEPSEEK_API_KEY",
-            Some("https://api.deepseek.com/v1"),
-            Some("DEEPSEEK_BASE_URL"),
-            Some("sk-ds"),
-        );
-        let pairs = plan_env(&OPENCODE, &b).unwrap();
-        assert_eq!(
-            pairs,
-            vec![
-                ("DEEPSEEK_API_KEY".to_string(), "sk-ds".to_string()),
-                (
-                    "DEEPSEEK_BASE_URL".to_string(),
-                    "https://api.deepseek.com/v1".to_string()
-                ),
-            ]
-        );
-    }
-
-    #[test]
-    fn no_secret_omits_the_key_var_but_keeps_the_base_url() {
-        // A keyless local runtime is legitimate — never inject an empty key.
-        let b = binding(
-            "ollama",
-            "OLLAMA_API_KEY",
-            Some("http://127.0.0.1:11434/v1"),
-            Some("OLLAMA_BASE_URL"),
-            None,
+            "groq",
+            "GROQ_API_KEY",
+            Some("https://api.groq.com/openai/v1"),
+            Some("GROQ_BASE_URL"),
         );
         let pairs = plan_env(&OPENCODE, &b).unwrap();
         assert_eq!(
             pairs,
             vec![(
-                "OLLAMA_BASE_URL".to_string(),
-                "http://127.0.0.1:11434/v1".to_string()
+                "GROQ_BASE_URL".to_string(),
+                "https://api.groq.com/openai/v1".to_string()
             )]
+        );
+        assert!(pairs.iter().all(|(name, _)| name != "GROQ_API_KEY"));
+    }
+
+    #[test]
+    fn no_key_pair_is_emitted_for_a_keyless_binding() {
+        let b = binding(
+            "anthropic",
+            "ANTHROPIC_API_KEY",
+            Some("http://127.0.0.1:11434/v1"),
+            None,
+        );
+        let pairs = plan_env(&CLAUDE, &b).unwrap();
+        assert_eq!(
+            pairs,
+            vec![
+                (
+                    "ANTHROPIC_BASE_URL".to_string(),
+                    "http://127.0.0.1:11434/v1".to_string()
+                ),
+                ("ANTHROPIC_MODEL".to_string(), "some-model".to_string())
+            ]
         );
     }
 
     #[test]
     fn config_file_agents_refuse_with_the_path() {
-        let b = binding("openai", "OPENAI_API_KEY", None, None, Some("sk-1"));
+        let b = binding("openai", "OPENAI_API_KEY", None, None);
         let err = plan_env(&CODEX, &b).unwrap_err();
         match err {
             BackendError::ConfigFileOnly { file, .. } => {
@@ -601,7 +797,7 @@ mod tests {
 
     #[test]
     fn subscription_agents_are_refused() {
-        let b = binding("xai", "XAI_API_KEY", None, None, Some("sk-1"));
+        let b = binding("xai", "XAI_API_KEY", None, None);
         assert!(matches!(
             plan_env(&GROK, &b).unwrap_err(),
             BackendError::Subscription(_)
@@ -610,8 +806,7 @@ mod tests {
 
     #[test]
     fn unknown_agents_are_refused_not_guessed() {
-        let b = binding("anthropic", "ANTHROPIC_API_KEY", None, None, Some("sk-1"));
-        // An agent with no row at all is Unknown, so no control is offered.
+        let b = binding("anthropic", "ANTHROPIC_API_KEY", None, None);
         let spec = backend_spec("who-is-this");
         assert_eq!(spec.channel, BackendChannel::Unknown);
         assert!(matches!(
@@ -622,67 +817,139 @@ mod tests {
 
     #[test]
     fn pi_is_config_file_only_with_its_real_settings_path() {
-        // Evidence: pi-acp README — "Configure pi separately for your model
-        // providers/API keys" and Terminal Auth via `pi-acp --terminal-login`.
         assert_eq!(PI.channel, BackendChannel::ConfigFileOnly);
         assert_eq!(PI.config_file, Some("~/.pi/agent/settings.json"));
         assert!(PI.note.contains("terminal-login"));
     }
 
     #[test]
-    fn multiline_secrets_and_values_are_refused() {
+    fn unsafe_base_urls_fail_closed_without_echoing_input() {
+        for (raw, expected) in [
+            ("not a url", BaseUrlError::Malformed),
+            ("file:///etc/passwd", BaseUrlError::UnsafeScheme),
+            (
+                "https://user:password@example.invalid/v1",
+                BaseUrlError::UserInfo,
+            ),
+            (
+                "https://example.invalid/v1?token=exfiltrate",
+                BaseUrlError::QueryOrFragment,
+            ),
+            (
+                "https://example.invalid/v1#token=exfiltrate",
+                BaseUrlError::QueryOrFragment,
+            ),
+            (
+                "http://169.254.169.254/latest/meta-data/",
+                BaseUrlError::PrivateDestination,
+            ),
+            ("http://192.168.1.10/v1", BaseUrlError::PrivateDestination),
+            ("http://2130706433/v1", BaseUrlError::AmbiguousHost),
+            ("http://0x7f000001/v1", BaseUrlError::AmbiguousHost),
+            ("http://0177.0.0.1/v1", BaseUrlError::AmbiguousHost),
+            ("https://@example.invalid/v1", BaseUrlError::UserInfo),
+            ("ftp://example.invalid/v1", BaseUrlError::UnsafeScheme),
+            ("https://-example.invalid/v1", BaseUrlError::AmbiguousHost),
+            ("https://example..invalid/v1", BaseUrlError::AmbiguousHost),
+            ("https://example.invalid./v1", BaseUrlError::AmbiguousHost),
+        ] {
+            assert_eq!(validate_base_url(raw), Err(expected), "raw={raw}");
+            let rendered = validate_base_url(raw).unwrap_err().to_string();
+            assert!(!rendered.contains("password"));
+            assert!(!rendered.contains("exfiltrate"));
+            assert_eq!(redact_base_url(raw), "<redacted>");
+        }
+    }
+
+    #[test]
+    fn debug_binding_redacts_endpoint_before_logging() {
+        let b = binding(
+            "anthropic",
+            "ANTHROPIC_API_KEY",
+            Some("https://user:password@example.invalid/v1?token=exfiltrate"),
+            None,
+        );
+        let rendered = format!("{b:?}");
+        assert!(!rendered.contains("password"));
+        assert!(!rendered.contains("exfiltrate"));
+        assert!(rendered.contains("<redacted>"));
+    }
+
+    #[test]
+    fn safe_public_and_loopback_urls_are_canonicalized() {
+        assert_eq!(
+            validate_base_url("https://api.example.test/v1"),
+            Ok("https://api.example.test/v1".to_string())
+        );
+        assert_eq!(
+            validate_base_url("http://127.0.0.1:11434/v1"),
+            Ok("http://127.0.0.1:11434/v1".to_string())
+        );
+    }
+
+    #[test]
+    fn unsafe_url_is_rejected_even_when_the_agent_has_no_base_variable() {
         let b = binding(
             "openai",
             "OPENAI_API_KEY",
-            Some("https://api.openai.com/v1"),
+            Some("https://example.invalid/v1?token=exfiltrate"),
             None,
-            Some("sk-bad\nINJECTED=1"),
         );
         assert!(matches!(
-            plan_env(&OPENCODE, &b).unwrap_err(),
-            BackendError::InvalidEnv(_)
+            plan_env(&OPENCODE, &b),
+            Err(BackendError::InvalidBaseUrl {
+                reason: BaseUrlError::QueryOrFragment
+            })
         ));
-        // A newline smuggled through a base URL this agent *does* read is
-        // refused the same way (Claude Code reads ANTHROPIC_BASE_URL).
-        let b2 = binding(
-            "anthropic",
-            "ANTHROPIC_API_KEY",
-            Some("https://x/v1\nEVIL=1"),
-            None,
-            Some("sk-ok"),
+    }
+
+    #[test]
+    fn unreviewed_backend_env_names_fail_closed() {
+        let b = binding(
+            "custom",
+            "CUSTOM_API_KEY",
+            Some("https://api.example.test/v1"),
+            Some("CUSTOM_BASE_URL"),
         );
         assert!(matches!(
-            plan_env(&CLAUDE, &b2).unwrap_err(),
-            BackendError::InvalidEnv(_)
+            plan_env(&OPENCODE, &b),
+            Err(BackendError::InvalidEnv(_))
+        ));
+    }
+
+    #[test]
+    fn malformed_metadata_names_and_values_are_refused() {
+        let b = ProviderBinding {
+            provider: "anthropic",
+            model: "model\nINJECTED=1",
+            key_env: "ANTHROPIC_API_KEY",
+            base_url: None,
+            base_url_env: None,
+        };
+        assert!(matches!(
+            plan_env(&CLAUDE, &b),
+            Err(BackendError::InvalidEnv(_))
         ));
     }
 
     #[test]
     fn a_base_url_with_no_var_for_it_is_reported_not_silently_dropped() {
-        // OpenCode declares no base-URL env var, so a URL cannot be expressed.
         let b = binding(
             "openai",
             "OPENAI_API_KEY",
-            Some("https://proxy.internal/v1"),
+            Some("https://gateway.example.test/v1"),
             None,
-            Some("sk-1"),
         );
         let pairs = plan_env(&OPENCODE, &b).unwrap();
-        assert_eq!(
-            pairs,
-            vec![("OPENAI_API_KEY".to_string(), "sk-1".to_string())]
-        );
+        assert!(pairs.is_empty());
         assert_eq!(unexpressed(&OPENCODE, &b), vec!["base_url", "model"]);
-        // Claude Code can carry all three, so nothing is unexpressed.
         let b2 = binding(
             "anthropic",
             "ANTHROPIC_API_KEY",
-            Some("https://api.anthropic.com"),
+            Some("https://api.anthropic.com/v1"),
             None,
-            Some("sk-ant"),
         );
         assert!(unexpressed(&CLAUDE, &b2).is_empty());
-        // Non-injectable channels report nothing (the channel error speaks).
         assert!(unexpressed(&CODEX, &b2).is_empty());
     }
 
@@ -694,27 +961,22 @@ mod tests {
             key_env: "ANTHROPIC_API_KEY",
             base_url: None,
             base_url_env: None,
-            secret: Some("sk-ant"),
         };
         let pairs = plan_env(&CLAUDE, &b).unwrap();
-        assert_eq!(
-            pairs,
-            vec![("ANTHROPIC_API_KEY".to_string(), "sk-ant".to_string())]
-        );
+        assert!(pairs.is_empty());
     }
 
     #[test]
-    fn names_only_surface_never_carries_a_value() {
+    fn names_only_surface_never_carries_a_key_value() {
         let b = binding(
             "anthropic",
             "ANTHROPIC_API_KEY",
-            Some("https://api.anthropic.com"),
+            Some("https://api.anthropic.com/v1"),
             None,
-            Some("sk-secret-value"),
         );
         let names = injected_names(&CLAUDE, &b);
-        assert!(names.iter().all(|n| !n.contains("sk-")));
-        assert_eq!(names.len(), 3);
+        assert_eq!(names, vec!["ANTHROPIC_BASE_URL", "ANTHROPIC_MODEL"]);
+        assert!(names.iter().all(|name| !name.contains("KEY")));
     }
 
     #[test]
@@ -725,14 +987,17 @@ mod tests {
         ids.sort();
         ids.dedup();
         assert_eq!(ids.len(), n, "duplicate agent id in the matrix");
-        // The three channels that offer a control are all represented.
-        assert!(specs
-            .iter()
-            .any(|s| s.channel == BackendChannel::ProviderEnv));
+        assert!(
+            specs
+                .iter()
+                .any(|s| s.channel == BackendChannel::ProviderEnv)
+        );
         assert!(specs.iter().any(|s| s.channel == BackendChannel::FixedEnv));
-        assert!(specs
-            .iter()
-            .any(|s| s.channel == BackendChannel::ConfigFileOnly));
+        assert!(
+            specs
+                .iter()
+                .any(|s| s.channel == BackendChannel::ConfigFileOnly)
+        );
     }
 
     #[test]

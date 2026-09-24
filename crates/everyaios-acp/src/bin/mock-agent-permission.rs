@@ -48,7 +48,10 @@ fn main() {
             "initialize" => {
                 reply["result"] = serde_json::json!({
                     "protocolVersion": 1,
-                    "agentCapabilities": { "loadSession": true },
+                    "agentCapabilities": {
+                        "loadSession": true,
+                        "mcpCapabilities": { "http": true, "sse": false }
+                    },
                     "agentInfo": { "name": name.clone(), "title": name.clone(), "version": "0.0.1" },
                     "authMethods": []
                 });
@@ -103,11 +106,13 @@ fn main() {
                     "method": "session/update",
                     "params": {
                         "sessionId": session_id.as_deref().unwrap_or(""),
-                        "sessionUpdate": "agent_message",
-                        "content": [{
-                            "type": "text",
-                            "text": format!("permission resolved: {option_id}")
-                        }]
+                        "update": {
+                            "sessionUpdate": "agent_message_chunk",
+                            "content": [{
+                                "type": "text",
+                                "text": format!("permission resolved: {option_id}")
+                            }]
+                        }
                     }
                 });
                 let _ = writeln!(stdout, "{}", notify);

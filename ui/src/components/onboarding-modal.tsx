@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion, AnimatePresence, MotionConfig, useReducedMotion } from 'framer-motion'
 import {
   Sparkles,
   FileSpreadsheet,
@@ -28,6 +28,7 @@ import { Badge } from '@/components/ui/badge'
 import { useAppStore } from '@/lib/store'
 import { ACCENT_PRESETS, useTheme } from '@/components/theme-provider'
 import { inTauri, invoke } from '@/lib/tauri'
+import { useRuntimeState } from '@/lib/runtime'
 import {
   acpInstallStatus,
   acpInstallRequest,
@@ -41,6 +42,7 @@ import {
 } from '@/lib/acp'
 import { AGENTS } from '@/lib/agents'
 import { cn } from '@/lib/utils'
+import { FIRST_TASKS } from '@/lib/first-run'
 
 type VaultSetupReceipt = { ok?: boolean; needsSetup?: boolean }
 type VaultInvoker = <T>(command: string, args?: Record<string, unknown>) => Promise<T>
@@ -154,6 +156,12 @@ export function OnboardingModal() {
   const onboardingDone = useAppStore((s) => s.onboardingDone)
   const setOnboardingDone = useAppStore((s) => s.setOnboardingDone)
   const notify = useAppStore((s) => s.notify)
+  const closeSetup = useAppStore((s) => s.closeSetup)
+  const setCenterScreen = useAppStore((s) => s.setCenterScreen)
+  const setComposerValue = useAppStore((s) => s.setComposerValue)
+  const newSession = useAppStore((s) => s.newSession)
+  const runtime = useRuntimeState()
+  const reduceMotion = useReducedMotion()
   const { theme, setTheme, accent, setAccent } = useTheme()
 
   const [step, setStep] = useState(0)
@@ -170,6 +178,7 @@ export function OnboardingModal() {
   const liveAgents = useAppStore((s) => s.liveAgents)
   const [scanning, setScanning] = useState(false)
   const [installingAgent, setInstallingAgent] = useState<string | null>(null)
+  const [firstTaskDraft, setFirstTaskDraft] = useState(FIRST_TASKS[0]?.prompt ?? '')
 
   // Optional Passphrase state
   const [passphrase, setPassphrase] = useState('')
@@ -225,12 +234,27 @@ export function OnboardingModal() {
   if (onboardingDone) return null
 
   const finish = () => {
+    closeSetup()
     setOnboardingDone(true)
     notify(
       boundId
         ? 'Welcome to EveryAIOS — your agent is bound and ready.'
         : 'Welcome to EveryAIOS. No agent is bound yet, so the first message will ask you to pick one.',
     )
+  }
+
+  const boundRuntime = boundId
+    ? liveAgents.find((agent) => acpIdFor(agent.id) === boundId)
+    : undefined
+  const firstTaskReady = Boolean(boundId && isAgentReady(boundRuntime?.readiness as AgentReadiness))
+
+  const startFirstTask = () => {
+    if (!firstTaskReady) return
+    const prompt = firstTaskDraft.trim() || FIRST_TASKS[0]?.prompt || 'Help me with my first task.'
+    if (useAppStore.getState().sessions.length === 0) newSession()
+    setComposerValue(prompt)
+    setCenterScreen('chat')
+    finish()
   }
 
   // F8 / P69.C12 — the same plan-before-touch handshake the picker and the
@@ -325,8 +349,14 @@ export function OnboardingModal() {
   }
 
   return (
-    <Dialog open onOpenChange={() => {}}>
-      <DialogContent className="max-w-2xl gap-0 overflow-hidden border border-border/70 bg-card/95 p-0 shadow-2xl backdrop-blur-xl" showCloseButton={false}>
+    <MotionConfig reducedMotion="user">
+      <Dialog open onOpenChange={() => {}}>
+      <DialogContent
+        data-first-run-owner="onboarding"
+        onEscapeKeyDown={(event) => { event.preventDefault(); event.stopPropagation() }}
+        className="max-h-[calc(100vh-2rem)] max-w-2xl gap-0 overflow-x-hidden overflow-y-auto border border-border/70 bg-card/95 p-0 shadow-2xl backdrop-blur-xl"
+        showCloseButton={false}
+      >
         {/* Progress Bar Top */}
         <div className="flex h-1.5 w-full bg-muted/40">
           {[0, 1, 2, 3].map((i) => (
@@ -349,7 +379,7 @@ export function OnboardingModal() {
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -12 }}
-                transition={{ duration: 0.3 }}
+                transition={reduceMotion ? { duration: 0 } : { duration: 0.3 }}
                 className="flex flex-1 flex-col items-center justify-center text-center"
               >
                 <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-brand/30 bg-brand/10 px-3 py-1 text-[11px] font-medium text-brand shadow-sm">
@@ -364,7 +394,7 @@ export function OnboardingModal() {
                       initial={{ opacity: 0, y: 16, filter: 'blur(4px)' }}
                       animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
                       exit={{ opacity: 0, y: -16, filter: 'blur(4px)' }}
-                      transition={{ duration: 0.35, ease: 'easeOut' }}
+                      transition={reduceMotion ? { duration: 0 } : { duration: 0.35, ease: 'easeOut' }}
                       className="bg-gradient-to-r from-foreground via-foreground/90 to-brand bg-clip-text text-4xl font-extrabold tracking-tight text-transparent sm:text-5xl"
                     >
                       {BRAND_WORDS[brandIndex]}
@@ -376,7 +406,28 @@ export function OnboardingModal() {
                   An AI coworker on <span className="font-semibold text-foreground">your computer</span>. It uses your files, apps, browser, documents, and tools to finish real work—while you approve anything that changes the world.
                 </p>
 
-                <div className="mt-8 grid w-full max-w-lg grid-cols-3 gap-3">
+                <div
+                  role="status"
+                  className="mx-auto mt-5 flex max-w-lg items-start gap-2 rounded-lg border border-border/70 bg-background/50 px-3 py-2 text-left"
+                >
+                  <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-brand" aria-hidden="true" />
+                  <div className="text-[11px] leading-relaxed text-muted-foreground">
+                    <span className="font-medium text-foreground">Safety state: </span>
+                    {runtime.status === 'preview'
+                      ? 'Preview only — no external agent or vault can run here.'
+                      : runtime.status === 'vault-locked' || runtime.status === 'vault-setup'
+                        ? 'The vault still needs attention before work can start.'
+                        : runtime.status === 'live'
+                          ? 'The desktop is live. Guard still asks before consequential effects.'
+                          : 'The desktop is starting. No agent is claimed ready until the shell reports it.'}
+                  </div>
+                </div>
+
+                <details className="mt-8 w-full max-w-lg rounded-xl border border-border/60 bg-card/40 px-3 py-2 text-left">
+                  <summary className="cursor-pointer list-none text-[11px] font-medium text-foreground marker:hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60">
+                    See what EveryAIOS can do later
+                  </summary>
+                  <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
                   <div className="rounded-xl border border-border/60 bg-card/60 p-3 text-left">
                     <div className="text-xs font-semibold text-foreground">100% Local-First</div>
                     <div className="mt-0.5 text-[10px] text-muted-foreground">SQLCipher AES-256 vault. Zero founder servers.</div>
@@ -389,7 +440,8 @@ export function OnboardingModal() {
                     <div className="text-xs font-semibold text-foreground">Guard-2 Safety</div>
                     <div className="mt-0.5 text-[10px] text-muted-foreground">No file changes or deletions without consent.</div>
                   </div>
-                </div>
+                  </div>
+                </details>
               </motion.div>
             )}
 
@@ -400,12 +452,12 @@ export function OnboardingModal() {
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -12 }}
-                transition={{ duration: 0.3 }}
+                transition={reduceMotion ? { duration: 0 } : { duration: 0.3 }}
                 className="flex flex-1 flex-col space-y-4"
               >
                 <div>
                   <h2 className="text-xl font-bold tracking-tight text-foreground">Capabilities & Appearance</h2>
-                  <p className="text-xs text-muted-foreground">Tailor your cockpit experience and explore the native full-stack engines.</p>
+                  <p className="text-xs text-muted-foreground">Explore advanced capabilities and tune your cockpit later.</p>
                 </div>
 
                 {/* Capabilities Grid */}
@@ -501,7 +553,7 @@ export function OnboardingModal() {
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -12 }}
-                transition={{ duration: 0.3 }}
+                transition={reduceMotion ? { duration: 0 } : { duration: 0.3 }}
                 className="flex flex-1 flex-col space-y-4"
               >
                 <div className="flex items-center justify-between">
@@ -612,22 +664,70 @@ export function OnboardingModal() {
                     )
                   })}
                 </div>
+
+                {firstTaskReady && (
+                  <div
+                    data-testid="onboarding-first-task"
+                    className="rounded-xl border border-brand/35 bg-brand/5 p-3"
+                  >
+                    <div className="flex items-start gap-2">
+                      <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-brand" aria-hidden="true" />
+                      <div className="min-w-0 flex-1">
+                        <div className="text-xs font-semibold text-foreground">Your first task is ready</div>
+                        <p className="mt-0.5 text-[10px] leading-relaxed text-muted-foreground">
+                          Keep it small. You can change the wording before the first send; the agent owns the work, while Guard explains anything consequential.
+                        </p>
+                      </div>
+                    </div>
+                    <label htmlFor="onboarding-first-task" className="mt-3 block text-[10px] font-medium text-foreground">
+                      What should it do first?
+                    </label>
+                    <Input
+                      id="onboarding-first-task"
+                      value={firstTaskDraft}
+                      onChange={(event) => setFirstTaskDraft(event.target.value)}
+                      className="mt-1 h-8 text-xs"
+                      placeholder="Describe one small outcome…"
+                    />
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {FIRST_TASKS.slice(0, 3).map((task) => (
+                        <button
+                          key={task.id}
+                          type="button"
+                          onClick={() => setFirstTaskDraft(task.prompt)}
+                          className="rounded-full border border-border bg-background/60 px-2 py-1 text-[10px] text-muted-foreground hover:border-brand/40 hover:bg-accent/40 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
+                        >
+                          {task.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex items-start gap-2 rounded-lg border border-border/60 bg-background/40 px-3 py-2 text-[10px] leading-relaxed text-muted-foreground">
+                  <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-brand" aria-hidden="true" />
+                  <span>
+                    {boundId && !firstTaskReady
+                      ? 'The binding is recorded, but the shell has not confirmed this agent is runnable yet. Finish its sign-in or rescan before sending.'
+                      : 'Every consequential action still passes the desktop safety gate. The agent keeps its own account; EveryAIOS does not claim a model is ready before the shell verifies it.'}
+                  </span>
+                </div>
               </motion.div>
             )}
 
-            {/* STEP 3: Security & Passphrase (OPTIONAL) */}
+            {/* STEP 3: Security & Passphrase (deferred until requested) */}
             {step === 3 && (
               <motion.div
                 key="step-3"
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -12 }}
-                transition={{ duration: 0.3 }}
+                transition={reduceMotion ? { duration: 0 } : { duration: 0.3 }}
                 className="flex flex-1 flex-col space-y-4"
               >
                 <div>
-                  <h2 className="text-xl font-bold tracking-tight text-foreground">Encrypted Vault Setup (Optional)</h2>
-                  <p className="text-xs text-muted-foreground">Your keys and history are encrypted with SQLCipher AES-256 on your disk.</p>
+                  <h2 className="text-xl font-bold tracking-tight text-foreground">Finish safety setup</h2>
+                  <p className="text-xs text-muted-foreground">The desktop verifies the device key before it lets setup finish. You can also choose a passphrase for a custom vault.</p>
                 </div>
 
                 <div className="rounded-xl border border-border/70 bg-card/50 p-4 space-y-3">
@@ -697,7 +797,7 @@ export function OnboardingModal() {
 
                 <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3 flex items-center gap-2 text-emerald-400 text-xs">
                   <ShieldCheck className="h-4 w-4 shrink-0" />
-                  <span>Guard-2 Casual Mode active: Benign workspace reads & edits run seamlessly without micro-interruptions.</span>
+                  <span>Guard remains the approval boundary: routine work can proceed, while consequential actions still ask.</span>
                 </div>
               </motion.div>
             )}
@@ -715,17 +815,61 @@ export function OnboardingModal() {
             </div>
 
             <div className="flex items-center gap-2">
-              {step < 3 ? (
+              {step === 0 && (
                 <>
-                  <Button variant="ghost" size="sm" onClick={finish} className="text-muted-foreground">
-                    Skip All
+                  <Button variant="ghost" size="sm" onClick={() => setStep(1)} className="text-muted-foreground">
+                    Customize later
                   </Button>
-                  <Button size="sm" onClick={() => setStep(step + 1)} className="bg-brand text-black hover:bg-brand/90 font-medium">
-                    Next
+                  <Button
+                    size="sm"
+                    data-testid="onboarding-find-agent"
+                    onClick={() => setStep(2)}
+                    className="bg-brand text-black hover:bg-brand/90 font-medium"
+                  >
+                    Find my agent
                     <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
                   </Button>
                 </>
-              ) : (
+              )}
+              {step === 1 && (
+                <>
+                  <Button variant="ghost" size="sm" onClick={finish} className="text-muted-foreground">
+                    Do this later
+                  </Button>
+                  <Button size="sm" onClick={() => setStep(2)} className="bg-brand text-black hover:bg-brand/90 font-medium">
+                    Continue to agent
+                    <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
+                  </Button>
+                </>
+              )}
+              {step === 2 && firstTaskReady && (
+                <>
+                  <Button variant="ghost" size="sm" onClick={() => setStep(3)} className="text-muted-foreground">
+                    Set up vault later
+                  </Button>
+                  <Button
+                    size="sm"
+                    data-testid="onboarding-start-task"
+                    onClick={startFirstTask}
+                    className="bg-brand text-black hover:bg-brand/90 font-semibold"
+                  >
+                    Start first task
+                    <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
+                  </Button>
+                </>
+              )}
+              {step === 2 && !firstTaskReady && (
+                <>
+                  <Button variant="ghost" size="sm" onClick={finish} className="text-muted-foreground">
+                    I&apos;ll choose later
+                  </Button>
+                  <Button size="sm" onClick={() => setStep(3)} className="bg-brand text-black hover:bg-brand/90 font-medium">
+                    Review safety setup
+                    <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
+                  </Button>
+                </>
+              )}
+              {step === 3 && (
                 <Button
                   size="sm"
                   disabled={vaultBusy}
@@ -746,7 +890,8 @@ export function OnboardingModal() {
           </div>
         </div>
       </DialogContent>
-    </Dialog>
+      </Dialog>
+    </MotionConfig>
   )
 }
 

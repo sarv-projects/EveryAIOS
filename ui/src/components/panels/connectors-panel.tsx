@@ -1,9 +1,17 @@
 'use client'
 
 import { useEffect, useState, type ReactNode } from 'react'
-import { motion } from 'framer-motion'
+import { motion, useReducedMotion } from 'framer-motion'
 import {
-  Check, Cloud, Plug, Plus, Search, Server, Zap, Wrench,
+  AlertCircle,
+  Check,
+  Cloud,
+  Plug,
+  Plus,
+  Search,
+  Server,
+  Zap,
+  Wrench,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -138,12 +146,60 @@ const AUTH_LABEL: Record<NonNullable<Connector['type']>, string> = {
   http: 'http',
 }
 
+export type StoreGroup = 'Ready' | 'Needs sign-in' | 'Available'
+
+export interface StoreGroupEntry {
+  entry: StoreEntry
+  group: StoreGroup
+  connected: boolean
+  error?: string
+}
+
+/** Put the connection list into the order a person can act on. */
+export function storeGroupFor(entry: StoreEntry, connected: boolean, error?: string): StoreGroup {
+  if (connected) return 'Ready'
+  if (error || entry.flow !== 'api-key') return 'Needs sign-in'
+  return 'Available'
+}
+
+export function groupStoreEntries(
+  entries: StoreEntry[],
+  connected: ReadonlySet<string>,
+  errors: Readonly<Record<string, string>> = {},
+): Record<StoreGroup, StoreGroupEntry[]> {
+  const grouped: Record<StoreGroup, StoreGroupEntry[]> = {
+    Ready: [],
+    'Needs sign-in': [],
+    Available: [],
+  }
+  for (const entry of entries) {
+    const isConnected = connected.has(entry.id)
+    const error = errors[entry.id]
+    const group = storeGroupFor(entry, isConnected, error)
+    grouped[group].push({
+      entry,
+      group,
+      connected: isConnected,
+      ...(error ? { error } : {}),
+    })
+  }
+  return grouped
+}
+
+export function storeActionLabel(entry: StoreEntry, connected: boolean, error?: string): string {
+  if (connected || error) return 'Reconnect'
+  if (entry.flow === 'api-key') return 'Add key'
+  return entry.kind === 'remote-mcp' ? 'Sign in' : 'Connect'
+}
+
 function initials(name: string) {
   const parts = name.split(/\s+/)
   return (parts[0]?.[0] ?? '') + (parts[1]?.[0] ?? '')
 }
 
 export default function ConnectorsPanel() {
+  const powerMode = useAppStore((s) => s.powerMode)
+  const reduceMotion = useReducedMotion()
   const [tab, setTab] = useState('store')
   const [catalog, setCatalog] = useState<McpCatalog | null>(null)
   const [catalogError, setCatalogError] = useState<string | null>(null)
@@ -157,7 +213,27 @@ export default function ConnectorsPanel() {
   const [connectingId, setConnectingId] = useState<string | null>(null)
   const [channels, setChannels] = useState<ConnectionRecord[]>([])
 
+  // Casual mode never leaves an advanced tab mounted after a mode switch.
+  useEffect(() => {
+    if (!powerMode && tab !== 'store') setTab('store')
+  }, [powerMode, tab])
+
   // Connect Store — the curated "click → sign in → use" list (ARCH/15).
+  const retryStore = () => {
+    setStoreLoading(true)
+    setStoreError(null)
+    storeCatalog()
+      .then((entries) => {
+        setStore(entries)
+        setStoreLoading(false)
+      })
+      .catch((error) => {
+        setStore([])
+        setStoreError(error instanceof Error ? error.message : 'Store unavailable')
+        setStoreLoading(false)
+      })
+  }
+
   useEffect(() => {
     let alive = true
     setStoreLoading(true)
@@ -227,6 +303,8 @@ export default function ConnectorsPanel() {
   const [mcpList, setMcpList] = useState<McpServerRow[]>([])
   const [mcpLoading, setMcpLoading] = useState(true)
   const [mcpError, setMcpError] = useState<string | null>(null)
+  const [mcpActionErrors, setMcpActionErrors] = useState<Record<string, string>>({})
+  const [mcpBusy, setMcpBusy] = useState<string | null>(null)
   // P55.11 — the tools the attach handshake actually discovered, so the count
   // and the names come from the same live source (never a hopeful estimate).
   const [external, setExternal] = useState<McpExternalCatalog>(EMPTY_EXTERNAL_CATALOG)
@@ -273,6 +351,30 @@ export default function ConnectorsPanel() {
     }
   }
 
+  const runMcpAction = async (
+    name: string,
+    action: () => Promise<unknown>,
+    success: string,
+  ) => {
+    setMcpBusy(name)
+    setMcpActionErrors((errors) => {
+      const next = { ...errors }
+      delete next[name]
+      return next
+    })
+    try {
+      await action()
+      notify(success)
+      await refreshMcp()
+    } catch (e) {
+      const detail = e instanceof Error ? e.message : String(e)
+      setMcpActionErrors((errors) => ({ ...errors, [name]: detail }))
+      notify(`MCP ${name}: ${detail}`, 'error')
+    } finally {
+      setMcpBusy(null)
+    }
+  }
+
   const attachMcp = async () => {
     if (!attachName.trim() || !attachCmd.trim()) {
       notify('MCP attach: name and command are required')
@@ -314,6 +416,8 @@ export default function ConnectorsPanel() {
     }
   }
 
+  const visibleTab = powerMode ? tab : 'store'
+
   const startOauth = async (provider: string, kind: 'pkce' | 'device') => {
     try {
       if (kind === 'pkce') {
@@ -350,39 +454,52 @@ export default function ConnectorsPanel() {
       <header className="border-b border-border px-4 py-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <Plug className="h-4 w-4 text-primary" aria-hidden />
-            <h2 className="text-sm font-semibold text-foreground">Connectors</h2>
+            <Plug aria-hidden className="h-4 w-4 text-primary" />
+            <h2 className="text-sm font-semibold text-foreground">
+              {powerMode ? 'Connectors' : 'Connections'}
+            </h2>
             <Badge variant="secondary" className="text-[9px]">
-              MCP-first · BYO keys · local vault
+              {powerMode ? 'MCP-first · BYO keys · local vault' : 'Ready when you sign in'}
             </Badge>
           </div>
-          <div className="flex gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-8 text-xs"
-              onClick={() => {
-                setTab('mcp')
-                notify('Browsing the MCP registry (live fetch in the shell)')
-              }}
-            >
-              <Search className="h-3.5 w-3.5" />
-              Browse MCP servers
-            </Button>
-            <Button
-              size="sm"
-              className="h-8 bg-primary text-primary-foreground hover:bg-primary/90"
-              onClick={() => notify('Add native connector — opens the OAuth flow in the shell')}
-            >
-              <Plus className="h-3.5 w-3.5" />
-              Add native connector
-            </Button>
-          </div>
+          {powerMode && (
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 text-xs"
+                onClick={() => setTab('mcp')}
+              >
+                <Search aria-hidden className="h-3.5 w-3.5" />
+                Browse MCP servers
+              </Button>
+            </div>
+          )}
         </div>
+        {!powerMode && (
+          <p className="mt-1.5 max-w-2xl text-[10px] leading-relaxed text-muted-foreground">
+            Connect the services you want to use. The list starts with what is ready, then what needs your sign-in.
+          </p>
+        )}
       </header>
 
-      <div className="border-b border-border px-4 py-3">
-        <div className="mb-2 flex items-center justify-between">
+      {storeError && (
+        <div className="flex flex-wrap items-center gap-2 border-b border-rose-500/30 bg-rose-500/5 px-4 py-2 text-[10px] text-rose-200" role="alert">
+          <AlertCircle aria-hidden className="h-3.5 w-3.5 shrink-0" />
+          <span className="min-w-0 flex-1">
+            {powerMode
+              ? `Connection store unavailable: ${storeError}`
+              : 'Connection store unavailable. Try again to refresh the list.'}
+          </span>
+          <Button size="sm" variant="outline" className="h-6 text-[9px]" onClick={retryStore}>
+            Retry
+          </Button>
+        </div>
+      )}
+
+      {powerMode && (
+        <div className="border-b border-border px-4 py-3">
+          <div className="mb-2 flex items-center justify-between">
           <span className="text-[11px] font-medium text-foreground">Subscription OAuth</span>
           <Badge className={oauthOn ? 'bg-emerald-500/20 text-[9px] text-emerald-300' : 'bg-zinc-700 text-[9px] text-zinc-300'}>
             {oauthOn ? 'EVERYAIOS_OAUTH=1' : 'flag off'}
@@ -409,13 +526,15 @@ export default function ConnectorsPanel() {
             ))}
           </ul>
         )}
-      </div>
+        </div>
+      )}
 
       {/* Stats strip — live-derived values only in the shell; the preview
           fixture appears solely in a plain-browser run (P50.2.6). Connected
           counts vault OAuth accounts + live MCP rows; Available counts the
           curated store entries (never a hardcoded demo number). */}
-      <div className="grid grid-cols-2 gap-2 border-b border-border p-3 sm:grid-cols-4">
+      {powerMode && (
+        <div className="grid grid-cols-2 gap-2 border-b border-border p-3 sm:grid-cols-4">
         {inTauri()
           ? [
               { label: 'Connected', value: String(oauthAccts.length + mcpList.filter((s) => s.status === 'connected').length), tone: oauthAccts.length + mcpList.filter((s) => s.status === 'connected').length > 0 ? 'text-emerald-300' : 'text-zinc-500' },
@@ -436,30 +555,38 @@ export default function ConnectorsPanel() {
                 </div>
               </div>
             ))}
-      </div>
+        </div>
+      )}
 
-      <div className="border-b border-border px-4 py-2">
-        <Tabs value={tab} onValueChange={setTab}>
-          <TabsList className="h-7">
-            <TabsTrigger value="store" className="text-xs">Connect Store</TabsTrigger>
-            <TabsTrigger value="mcp" className="text-xs">MCP Servers</TabsTrigger>
-            <TabsTrigger value="skills" className="text-xs">Skills</TabsTrigger>
-            <TabsTrigger value="native" className="text-xs">Native</TabsTrigger>
-            <TabsTrigger value="catalog" className="text-xs">Tool Catalog</TabsTrigger>
-          </TabsList>
-        </Tabs>
-      </div>
+      {powerMode ? (
+        <div className="border-b border-border px-4 py-2">
+          <Tabs value={tab} onValueChange={setTab}>
+            <TabsList className="h-7">
+              <TabsTrigger value="store" className="text-xs">Connect Store</TabsTrigger>
+              <TabsTrigger value="mcp" className="text-xs">MCP Servers</TabsTrigger>
+              <TabsTrigger value="skills" className="text-xs">Skills</TabsTrigger>
+              <TabsTrigger value="native" className="text-xs">Native</TabsTrigger>
+              <TabsTrigger value="catalog" className="text-xs">Tool Catalog</TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </div>
+      ) : (
+        <div className="flex items-center justify-between border-b border-border px-4 py-2">
+          <span className="text-xs font-medium text-foreground">Your connections</span>
+          <span className="text-[10px] text-muted-foreground">Grouped by what you can do next</span>
+        </div>
+      )}
 
       {/* P45.6 — content-visibility: auto skips offscreen connector rows. */}
       <div className="scroll-thin min-h-0 flex-1 overflow-y-auto [content-visibility:auto] [contain-intrinsic-size:auto_64px]">
         <motion.div
-          key={tab}
-          initial={{ opacity: 0, y: 6 }}
+          key={visibleTab}
+          initial={reduceMotion ? false : { opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }}
+          transition={reduceMotion ? { duration: 0 } : { duration: 0.18, ease: [0.4, 0, 0.2, 1] }}
           className="space-y-4 p-4"
         >
-          {channels.length > 0 && (
+          {powerMode && channels.length > 0 && (
             <section className="mb-3 rounded-md border border-border/60 bg-card/40 p-2">
               <div className="mb-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
                 Channels (live settings inventory)
@@ -483,18 +610,20 @@ export default function ConnectorsPanel() {
               })}
             </section>
           )}
-          {tab === 'store' ? (
+          {visibleTab === 'store' ? (
             <StoreSection
               store={store}
               connectingId={connectingId}
               setConnectingId={setConnectingId}
               notify={notify}
+              powerMode={powerMode}
+              storeLoading={storeLoading}
             />
-          ) : tab === 'skills' ? (
+          ) : visibleTab === 'skills' ? (
             <SkillsPanel />
-          ) : tab === 'catalog' ? (
+          ) : visibleTab === 'catalog' ? (
             <ToolCatalogSection catalog={catalog} />
-          ) : tab === 'native' ? (
+          ) : visibleTab === 'native' ? (
             <>
               <section>
                 <div className="mb-2 flex items-center gap-1.5">
@@ -674,6 +803,21 @@ export default function ConnectorsPanel() {
                 </div>
               )}
 
+              {mcpError && (
+                <div className="mb-3 flex flex-wrap items-center gap-2 rounded-md border border-rose-500/30 bg-rose-500/5 px-3 py-2 text-[10px] text-rose-200" role="alert">
+                  <AlertCircle aria-hidden className="h-3.5 w-3.5 shrink-0" />
+                  <span className="min-w-0 flex-1">MCP list unavailable: {mcpError}</span>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-6 text-[9px]"
+                    onClick={() => void refreshMcp()}
+                  >
+                    Retry
+                  </Button>
+                </div>
+              )}
+
               {external.external > 0 && !external.agentVisible && (
                 <div className="rounded-md border border-warning/30 bg-warning/5 px-3 py-2 font-mono text-[10px] text-warning/90">
                   {external.external} external tools are discovered but the agent runtime is not
@@ -681,12 +825,18 @@ export default function ConnectorsPanel() {
                 </div>
               )}
 
-              <ul className="space-y-1.5">
-                {mcpList.map((s, i) => {
+              {mcpLoading ? (
+                <ListSkeleton label="Loading MCP servers" />
+              ) : (
+                <ul className="space-y-1.5">
+                  {mcpList.map((s) => {
                   const connected = s.status === 'connected'
+                  const handshakeMissing = connected && s.transport !== 'native' && s.toolNames.length === 0
+                  const rowError = mcpActionErrors[s.name]
+                  const busy = mcpBusy === s.name
                   return (
                     <li
-                      key={i}
+                      key={s.name}
                       className="flex items-center gap-3 rounded-md border border-border/50 bg-background/30 px-3 py-2"
                     >
                       <span
@@ -741,47 +891,55 @@ export default function ConnectorsPanel() {
                           </div>
                         ) : (
                           <div className="mt-0.5 font-mono text-[9px] text-warning/80">
-                            no handshake on record — re-attach to discover tools
+                            no handshake on record — reconnect to discover tools
+                          </div>
+                        )}
+                        {rowError && (
+                          <div className="mt-1 text-[9px] text-rose-300" role="alert">
+                            {rowError} Try reconnecting.
                           </div>
                         )}
                       </div>
                       {connected ? (
                         <div className="flex items-center gap-1.5">
-                          <Badge className="bg-emerald-500/15 text-[9px] text-emerald-300">
-                            <Check className="h-3 w-3" />
-                            connected
+                          <Badge
+                            className={cn(
+                              'text-[9px]',
+                              handshakeMissing
+                                ? 'bg-warning/15 text-warning'
+                                : 'bg-emerald-500/15 text-emerald-300',
+                            )}
+                          >
+                            {handshakeMissing ? 'Needs attention' : <><Check aria-hidden className="h-3 w-3" /> connected</>}
                           </Badge>
                           {s.transport !== 'native' && (
                             <>
+                              {handshakeMissing && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-7 border-warning/40 text-[10px] text-warning hover:bg-warning/10"
+                                  disabled={busy}
+                                  onClick={() => void runMcpAction(s.name, () => mcpStart(s.name), `MCP: reconnected “${s.name}”`)}
+                                >
+                                  {busy ? 'Reconnecting…' : 'Reconnect'}
+                                </Button>
+                              )}
                               <Button
                                 size="sm"
                                 variant="outline"
                                 className="h-7 text-[10px] text-muted-foreground hover:text-foreground"
-                                onClick={() => void (async () => {
-                                  try {
-                                    await mcpStop(s.name)
-                                    notify(`MCP: stopped “${s.name}” (identity kept)`)
-                                    await refreshMcp()
-                                  } catch (e) {
-                                    notify(`MCP stop failed: ${String(e)}`)
-                                  }
-                                })()}
+                                disabled={busy}
+                                onClick={() => void runMcpAction(s.name, () => mcpStop(s.name), `MCP: stopped “${s.name}” (identity kept)`)}
                               >
-                                Stop
+                                {busy ? 'Working…' : 'Stop'}
                               </Button>
                               <Button
                                 size="sm"
                                 variant="outline"
                                 className="h-7 text-[10px] text-muted-foreground hover:text-foreground"
-                                onClick={() => void (async () => {
-                                  try {
-                                    await mcpDetach(s.name)
-                                    notify(`MCP: detached “${s.name}”`)
-                                    await refreshMcp()
-                                  } catch (e) {
-                                    notify(`MCP detach failed: ${String(e)}`)
-                                  }
-                                })()}
+                                disabled={busy}
+                                onClick={() => void runMcpAction(s.name, () => mcpDetach(s.name), `MCP: detached “${s.name}”`)}
                               >
                                 Detach
                               </Button>
@@ -789,46 +947,40 @@ export default function ConnectorsPanel() {
                           )}
                         </div>
                       ) : s.transport !== 'native' ? (
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex flex-wrap items-center gap-1.5">
                           {s.command ? (
                             <Button
                               size="sm"
                               variant="outline"
                               className="h-7 border-brand/40 text-[10px] text-brand hover:bg-brand/10"
-                              onClick={() => void (async () => {
-                                try {
-                                  await mcpStart(s.name)
-                                  notify(`MCP: started “${s.name}”`)
-                                  await refreshMcp()
-                                } catch (e) {
-                                  notify(`MCP start failed: ${String(e)}`)
-                                }
-                              })()}
+                              disabled={busy}
+                              onClick={() => void runMcpAction(s.name, () => mcpStart(s.name), `MCP: reconnected “${s.name}”`)}
                             >
-                              Start
+                              {busy ? 'Reconnecting…' : rowError ? 'Retry' : 'Reconnect'}
                             </Button>
                           ) : (
                             <Button
                               size="sm"
                               variant="outline"
                               className="h-7 border-brand/40 text-[10px] text-brand hover:bg-brand/10"
-                              onClick={() => notify(`Connect ${s.name} — use the attach form above`)}
+                              onClick={() => {
+                                setAttachName(s.name)
+                                setAttachCmd('')
+                                setAttachOpen(true)
+                              }}
                             >
-                              Connect
+                              Attach server
                             </Button>
                           )}
                           <label className="flex items-center gap-1 font-mono text-[9px] text-muted-foreground">
                             <input
                               type="checkbox"
                               checked={s.autoStart !== false}
-                              onChange={(ev) => void (async () => {
-                                try {
-                                  await mcpSetAutostart(s.name, ev.target.checked)
-                                  await refreshMcp()
-                                } catch (e) {
-                                  notify(`MCP autoStart failed: ${String(e)}`)
-                                }
-                              })()}
+                              onChange={(ev) => void runMcpAction(
+                                s.name,
+                                () => mcpSetAutostart(s.name, ev.target.checked),
+                                `MCP: updated startup for “${s.name}”`,
+                              )}
                             />
                             autoStart
                           </label>
@@ -836,15 +988,8 @@ export default function ConnectorsPanel() {
                             size="sm"
                             variant="outline"
                             className="h-7 text-[10px] text-muted-foreground hover:text-foreground"
-                            onClick={() => void (async () => {
-                              try {
-                                await mcpDetach(s.name)
-                                notify(`MCP: detached “${s.name}”`)
-                                await refreshMcp()
-                              } catch (e) {
-                                notify(`MCP detach failed: ${String(e)}`)
-                              }
-                            })()}
+                            disabled={busy}
+                            onClick={() => void runMcpAction(s.name, () => mcpDetach(s.name), `MCP: detached “${s.name}”`)}
                           >
                             Detach
                           </Button>
@@ -853,12 +998,13 @@ export default function ConnectorsPanel() {
                     </li>
                   )
                 })}
-                {mcpList.length === 0 && (
-                  <li className="rounded-md border border-dashed border-border/60 px-3 py-3 text-center font-mono text-[10px] text-muted-foreground">
-                    No servers attached yet — use “attach” to spawn a user-supplied MCP server.
-                  </li>
-                )}
-              </ul>
+                  {mcpList.length === 0 && (
+                    <li className="rounded-md border border-dashed border-border/60 px-3 py-3 text-center font-mono text-[10px] text-muted-foreground">
+                      No servers attached yet — use “attach” to spawn a user-supplied MCP server.
+                    </li>
+                  )}
+                </ul>
+              )}
             </section>
           )}
         </motion.div>
@@ -867,8 +1013,9 @@ export default function ConnectorsPanel() {
       <footer className="border-t border-border bg-card px-4 py-2">
         <p className="text-[10px] text-muted-foreground">
           <Cloud className="mr-1 inline h-3 w-3" />
-          Connectors use OAuth tokens stored in your local vault (SQLCipher).
-          The agent never sees raw tokens.
+          {powerMode
+            ? 'Connectors use OAuth tokens stored in your local vault (SQLCipher). The agent never sees raw tokens.'
+            : 'Sign-in details stay in your secure vault. The agent never sees raw tokens.'}
         </p>
       </footer>
     </div>
@@ -880,13 +1027,27 @@ function StoreSection({
   connectingId,
   setConnectingId,
   notify,
+  powerMode,
+  storeLoading,
 }: {
   store: StoreEntry[]
   connectingId: string | null
   setConnectingId: (id: string | null) => void
-  notify: (msg: string) => void
+  notify: (msg: string, kind?: 'default' | 'error') => void
+  powerMode: boolean
+  storeLoading: boolean
 }) {
   const [connected, setConnected] = useState<Set<string>>(new Set())
+  const [errors, setErrors] = useState<Record<string, string>>({})
+
+  const setEntryError = (id: string, detail?: string) => {
+    setErrors((current) => {
+      const next = { ...current }
+      if (detail) next[id] = detail
+      else delete next[id]
+      return next
+    })
+  }
 
   // P50.2.6 — hydrate live connected state from the shell: remote-MCP rows
   // via mcp_remote_status (vault token present?), flat connectors via the
@@ -897,194 +1058,295 @@ function StoreSection({
     let alive = true
     void (async () => {
       try {
-        const accts = await oauthAccounts()
-        const byProvider = new Set(accts.map((a) => a.provider))
+        const accounts = await oauthAccounts()
+        const byProvider = new Set(accounts.map((account) => account.provider))
         const next = new Set<string>()
-        await Promise.all(store.map(async (e) => {
-          try {
-            if (e.kind === 'remote-mcp') {
-              const st = await mcpRemoteStatus(e.id)
-              if (st.connected) next.add(e.id)
-            } else if (byProvider.has(e.vaultProvider)) {
-              next.add(e.id)
+        const nextErrors: Record<string, string> = {}
+        await Promise.all(
+          store.map(async (entry) => {
+            try {
+              if (entry.kind === 'remote-mcp') {
+                const status = await mcpRemoteStatus(entry.id)
+                if (status.connected) next.add(entry.id)
+              } else if (byProvider.has(entry.vaultProvider)) {
+                next.add(entry.id)
+              }
+            } catch (error) {
+              nextErrors[entry.id] = error instanceof Error ? error.message : 'Connection check failed'
             }
-          } catch {
-            /* leave not-connected */
-          }
-        }))
-        if (alive) setConnected(next)
-      } catch {
-        /* leave not-connected */
+          }),
+        )
+        if (alive) {
+          setConnected(next)
+          setErrors(nextErrors)
+        }
+      } catch (error) {
+        if (!alive) return
+        const detail = error instanceof Error ? error.message : 'Connection check failed'
+        setErrors(Object.fromEntries(store.map((entry) => [entry.id, detail])))
       }
     })()
-    return () => { alive = false }
+    return () => {
+      alive = false
+    }
   }, [store])
 
-  async function refreshConnected(e: StoreEntry) {
+  async function refreshConnected(entry: StoreEntry) {
     try {
-      if (e.kind === 'remote-mcp') {
-        const st = await mcpRemoteStatus(e.id)
-        setConnected((s) => { const n = new Set(s); if (st.connected) n.add(e.id); else n.delete(e.id); return n })
+      if (entry.kind === 'remote-mcp') {
+        const status = await mcpRemoteStatus(entry.id)
+        setConnected((current) => {
+          const next = new Set(current)
+          if (status.connected) next.add(entry.id)
+          else next.delete(entry.id)
+          return next
+        })
       } else {
-        const accts = await oauthAccounts()
-        const has = accts.some((a) => a.provider === e.vaultProvider)
-        setConnected((s) => { const n = new Set(s); if (has) n.add(e.id); else n.delete(e.id); return n })
+        const accounts = await oauthAccounts()
+        const has = accounts.some((account) => account.provider === entry.vaultProvider)
+        setConnected((current) => {
+          const next = new Set(current)
+          if (has) next.add(entry.id)
+          else next.delete(entry.id)
+          return next
+        })
       }
-    } catch {
-      /* leave not-connected */
+      setEntryError(entry.id)
+    } catch (error) {
+      setEntryError(entry.id, error instanceof Error ? error.message : 'Connection check failed')
     }
   }
 
-  async function disconnect(e: StoreEntry) {
+  async function disconnect(entry: StoreEntry) {
     try {
-      if (e.kind === 'remote-mcp') {
+      if (entry.kind === 'remote-mcp') {
         // No dedicated remote-disconnect command: revoke the stored vault
         // token path via oauth revoke when the provider matches, then
-        // re-probe. The row renders not-connected until the probe passes.
-        try { await oauthRevoke(e.vaultProvider, e.id) } catch { /* token may be keyring-scoped */ }
+        // re-probe. If revocation cannot be proven, keep the row visible
+        // as connected with an actionable error rather than claiming a
+        // disconnect that may not have happened.
+        await oauthRevoke(entry.vaultProvider, entry.id)
       } else {
-        const accts = await oauthAccounts()
-        const hit = accts.find((a) => a.provider === e.vaultProvider)
+        const accounts = await oauthAccounts()
+        const hit = accounts.find((account) => account.provider === entry.vaultProvider)
         if (hit) await oauthRevoke(hit.provider, hit.accountId)
       }
-      setConnected((s) => { const n = new Set(s); n.delete(e.id); return n })
-      notify(`${e.name} — disconnected (vault token revoked)`)
-    } catch (err) {
-      notify(`Disconnect ${e.name}: ${String(err)}`)
+      setConnected((current) => {
+        const next = new Set(current)
+        next.delete(entry.id)
+        return next
+      })
+      setEntryError(entry.id)
+      notify(`${entry.name} — disconnected (vault token revoked)`)
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error)
+      setEntryError(entry.id, detail)
+      notify(`Disconnect ${entry.name}: ${detail}`, 'error')
     }
   }
 
-  async function connect(e: StoreEntry) {
-    setConnectingId(e.id)
+  async function connect(entry: StoreEntry) {
+    setConnectingId(entry.id)
+    setEntryError(entry.id)
     try {
-      // Flat connectors (gmail, github-raw) have no MCP server URL — route them
-      // through the vault's OAuth provider (the Connect Store names vaultProvider).
-      if (e.kind === 'connector') {
-        if (e.flow === 'device-code') {
-          const d = await oauthStartDevice(e.vaultProvider)
-          notify(`${e.name} — open ${d.verificationUri} and enter code ${d.userCode}`)
-        } else if (e.flow === 'api-key') {
-          notify(`${e.name} — paste your API key in the shell`)
-        } else {
-          const r = await oauthStartPkce(e.vaultProvider)
-          window.open(r.authUrl, '_blank')
-          notify(`${e.name} — authorize in the browser that just opened`)
-        }
-      } else {
-        const r = await mcpConnectStart(e.id)
-        window.open(r.authUrl, '_blank')
-        notify(`${e.name} — authorize in the browser that just opened`)
+      if (entry.flow === 'api-key') {
+        // The key editor lives in Settings; route there instead of pretending
+        // that this panel accepted a secret.
+        const state = useAppStore.getState()
+        state.setCenterScreen('settings')
+        state.setSettingsSection('apikeys')
+        notify(`${entry.name}: opening API key settings`)
+        return
       }
-      await refreshConnected(e)
-    } catch (err) {
-      notify(`Connect ${e.name}: ${String(err)}`)
+      if (entry.kind === 'connector' && entry.flow === 'device-code') {
+        const device = await oauthStartDevice(entry.vaultProvider)
+        window.open(device.verificationUriComplete || device.verificationUri, '_blank')
+        notify(`${entry.name} — open the sign-in page and enter code ${device.userCode}`)
+      } else if (entry.kind === 'connector') {
+        const result = await oauthStartPkce(entry.vaultProvider)
+        window.open(result.authUrl, '_blank')
+        notify(`${entry.name} — authorize in the browser that just opened`)
+      } else {
+        const result = await mcpConnectStart(entry.id)
+        window.open(result.authUrl, '_blank')
+        notify(`${entry.name} — authorize in the browser that just opened`)
+      }
+      await refreshConnected(entry)
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error)
+      setEntryError(entry.id, detail)
+      notify(`Connect ${entry.name}: ${detail}`, 'error')
     } finally {
       setConnectingId(null)
     }
   }
 
+  const groups = groupStoreEntries(store, connected, errors)
+  const groupDescriptions: Record<StoreGroup, string> = {
+    Ready: 'Connected and ready to use.',
+    'Needs sign-in': 'Sign in or reconnect when you are ready.',
+    Available: 'Available after you add the required key.',
+  }
+  const groupOrder: StoreGroup[] = ['Ready', 'Needs sign-in', 'Available']
+
   return (
-    <>
-      <section>
-        <div className="mb-2 flex items-center gap-1.5">
-          <Plug className="h-3.5 w-3.5 text-brand" />
-          <span className="text-xs font-medium text-foreground">Connect Store</span>
-          <Badge variant="secondary" className="text-[9px]">
-            click → sign in → use
-          </Badge>
+    <section aria-labelledby="connections-heading">
+      <div className="mb-2 flex items-center gap-1.5">
+        <Plug aria-hidden className="h-3.5 w-3.5 text-brand" />
+        <h3 id="connections-heading" className="text-xs font-medium text-foreground">
+          {powerMode ? 'Connect Store' : 'Your connections'}
+        </h3>
+        {!powerMode && <Badge variant="secondary" className="text-[9px]">Grouped by next step</Badge>}
+      </div>
+      <p className="mb-3 text-[10px] leading-relaxed text-muted-foreground/70">
+        Choose a service, sign in once, and use it from your chats. Credentials stay in the local vault.
+      </p>
+      {storeLoading && <ListSkeleton label="Loading connections" />}
+      {store.length === 0 && !storeLoading && (
+        <div className="mb-3 rounded-md border border-dashed border-border/60 px-3 py-4 text-center">
+          <Plug aria-hidden className="mx-auto h-4 w-4 text-muted-foreground/50" />
+          <p className="mt-1 font-mono text-[10px] text-muted-foreground">No connections are available yet.</p>
         </div>
-        <p className="mb-3 text-[10px] text-muted-foreground/70">
-          Curated remote MCP servers + OAuth connectors (ARCH/15). Each connect
-          runs OAuth 2.1 (PKCE/device flow) with your consent — tokens stay in
-          the local vault.
-        </p>
-        {store.length === 0 ? (
-          <div className="rounded-md border border-dashed border-border/60 px-3 py-6 text-center">
-            <Plug className="mx-auto h-4 w-4 text-muted-foreground/50" />
-            <p className="mt-1 font-mono text-[10px] text-muted-foreground">
-              Store empty — no curated entries.
-            </p>
-          </div>
-        ) : (
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            {store.map((e, i) => {
-              const isConnected = connected.has(e.id)
-              return (
-                <div
-                  key={e.id}
-                  className="enter-stagger flex flex-col gap-2 rounded-lg border border-border bg-card p-3"
-                  style={staggerStyle(i)}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex min-w-0 items-center gap-2">
-                      <div
-                        className={cn(
-                          'flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[10px] font-bold text-background',
-                          LOGO_COLORS[i % LOGO_COLORS.length],
-                        )}
-                      >
-                        {initials(e.name)}
-                      </div>
-                      <div className="min-w-0">
-                        <div className="truncate text-[12px] font-medium text-foreground">
-                          {e.name}
-                        </div>
-                        <div className="text-[9px] text-muted-foreground/60">
-                          {e.kind === 'remote-mcp' ? 'remote MCP' : 'connector'} · {e.flow}
-                        </div>
-                      </div>
-                    </div>
-                    <Badge
-                      variant={isConnected ? 'secondary' : 'outline'}
-                      className={cn('shrink-0 text-[8px]', isConnected && 'text-emerald-300')}
-                    >
-                      {isConnected ? 'connected' : 'not connected'}
-                    </Badge>
-                  </div>
-                  <p className="text-[10px] leading-relaxed text-muted-foreground/80">
-                    {e.description}
-                  </p>
-                  {/* The Guard-2 consent surface: plain-language scopes. */}
-                  <ul className="space-y-0.5">
-                    {e.scopesPlain.map((s) => (
-                      <li key={s} className="flex items-start gap-1.5 text-[10px]">
-                        <span
-                          className={cn(
-                            'mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full',
-                            e.canMutate ? 'bg-warning' : 'bg-emerald-400/70',
-                          )}
-                        />
-                        <span className="text-muted-foreground/70">{s}</span>
-                      </li>
-                    ))}
-                  </ul>
-                  {e.toolHint > 0 && (
-                    <div className="font-mono text-[9px] text-muted-foreground/50">
-                      ~{e.toolHint} tools once connected
-                    </div>
-                  )}
-                  <Button
-                    size="sm"
-                    variant={isConnected ? 'outline' : 'default'}
-                    className="mt-auto h-7 gap-1.5 text-[11px]"
-                    disabled={connectingId !== null}
-                    onClick={() => (isConnected ? void disconnect(e) : void connect(e))}
-                  >
-                    {connectingId === e.id ? (
-                      <>Connecting…</>
-                    ) : isConnected ? (
-                      <><Check className="h-3 w-3" /> Disconnect</>
-                    ) : (
-                      <><Plug className="h-3 w-3" /> Connect</>
-                    )}
-                  </Button>
+      )}
+      {!storeLoading && (
+        <div className="space-y-4">
+          {groupOrder.map((group) => {
+            const rows = groups[group]
+            const groupId = `connection-group-${group.replace(/\s+/g, '-').toLowerCase()}`
+            return (
+              <section key={group} aria-labelledby={groupId} data-connection-group={group}>
+                <div className="mb-1.5 flex items-center justify-between gap-2">
+                  <h4 id={groupId} className="text-[11px] font-medium text-foreground">{group}</h4>
+                  <Badge variant="outline" className="text-[9px]">{rows.length}</Badge>
                 </div>
-              )
-            })}
-          </div>
-        )}
-      </section>
-    </>
+                <p className="mb-2 text-[9px] text-muted-foreground">{groupDescriptions[group]}</p>
+                {rows.length === 0 ? (
+                  <p className="rounded-md border border-dashed border-border/60 px-3 py-2 text-[9px] text-muted-foreground">
+                    Nothing here yet.
+                  </p>
+                ) : (
+                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                  {rows.map(({ entry, connected: isConnected, error }, i) => {
+                    const busy = connectingId === entry.id
+                    const action = storeActionLabel(entry, isConnected, error)
+                    const errorLabel = powerMode
+                      ? error
+                      : error
+                        ? 'Connection check failed — try reconnecting.'
+                        : undefined
+                    return (
+                      <div
+                        key={entry.id}
+                        data-connection-id={entry.id}
+                        data-connection-state={error ? 'error' : isConnected ? 'ready' : group === 'Available' ? 'available' : 'needs-sign-in'}
+                        className="enter-stagger flex flex-col gap-2 rounded-lg border border-border bg-card p-3"
+                        style={staggerStyle(i)}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex min-w-0 items-center gap-2">
+                            <div
+                              className={cn(
+                                'flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[10px] font-bold text-background',
+                                LOGO_COLORS[i % LOGO_COLORS.length],
+                              )}
+                            >
+                              {initials(entry.name)}
+                            </div>
+                            <div className="min-w-0">
+                              <div className="truncate text-[12px] font-medium text-foreground">{entry.name}</div>
+                              <div className="text-[9px] text-muted-foreground/60">
+                                {powerMode
+                                  ? `${entry.kind === 'remote-mcp' ? 'remote MCP' : 'connector'} · ${entry.flow}`
+                                  : entry.flow === 'api-key'
+                                    ? 'Key setup'
+                                    : 'Sign-in connection'}
+                              </div>
+                            </div>
+                          </div>
+                          <Badge
+                            variant="outline"
+                            className={cn(
+                              'shrink-0 text-[8px]',
+                              error
+                                ? 'border-rose-500/40 text-rose-300'
+                                : isConnected
+                                  ? 'border-emerald-500/40 text-emerald-300'
+                                  : 'text-muted-foreground',
+                            )}
+                            aria-label={`${entry.name}: ${error ? 'Needs attention' : isConnected ? 'Ready' : group}`}
+                          >
+                            {error ? 'Needs attention' : isConnected ? 'Ready' : group === 'Available' ? 'Available' : 'Sign-in needed'}
+                          </Badge>
+                        </div>
+                        <p className="text-[10px] leading-relaxed text-muted-foreground/80">{entry.description}</p>
+                        <ul className="space-y-0.5">
+                          {entry.scopesPlain.map((scope) => (
+                            <li key={scope} className="flex items-start gap-1.5 text-[10px]">
+                              <span
+                                aria-hidden
+                                className={cn(
+                                  'mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full',
+                                  entry.canMutate ? 'bg-warning' : 'bg-emerald-400/70',
+                                )}
+                              />
+                              <span className="text-muted-foreground/70">{scope}</span>
+                            </li>
+                          ))}
+                        </ul>
+                        {entry.toolHint > 0 && (
+                          <div className="font-mono text-[9px] text-muted-foreground/50">
+                            {entry.toolHint} tools when ready
+                          </div>
+                        )}
+                        {errorLabel && (
+                          <div className="rounded-md border border-rose-500/30 bg-rose-500/5 px-2 py-1.5 text-[9px] text-rose-200" role="alert">
+                            {errorLabel}
+                          </div>
+                        )}
+                        {powerMode && (
+                          <details className="rounded-md border border-border/60 bg-background/40 px-2 py-1.5">
+                            <summary className="cursor-pointer text-[9px] text-muted-foreground">Technical details</summary>
+                            <dl className="mt-1 space-y-0.5 font-mono text-[9px] text-muted-foreground">
+                              <div>Provider: {entry.vaultProvider}</div>
+                              <div>Flow: {entry.flow}</div>
+                              {entry.url && <div className="break-all">Endpoint: {entry.url}</div>}
+                              <div>Indexes into memory: {entry.indexesIntoMemory ? 'yes' : 'no'}</div>
+                            </dl>
+                          </details>
+                        )}
+                        <div className="mt-auto flex flex-wrap items-center gap-1.5">
+                          <Button
+                            size="sm"
+                            variant={isConnected || error ? 'outline' : 'default'}
+                            className="h-7 gap-1.5 text-[11px]"
+                            disabled={connectingId !== null}
+                            onClick={() => void connect(entry)}
+                          >
+                            {busy ? 'Connecting…' : <><Plug aria-hidden className="h-3 w-3" /> {action}</>}
+                          </Button>
+                          {isConnected && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 text-[10px] text-muted-foreground"
+                              disabled={connectingId !== null}
+                              onClick={() => void disconnect(entry)}
+                            >
+                              Disconnect
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+                  </div>
+                )}
+              </section>
+            )
+          })}
+        </div>
+      )}
+    </section>
   )
 }
 
