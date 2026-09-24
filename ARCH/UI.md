@@ -24,6 +24,44 @@ The UI does **not** subscribe directly to raw kernel, session, executor, provide
 **presentation-oriented event contract** sits between them, so a change in an internal event shape does not
 ripple into components.
 
+### 1.1 Chat Presentation Projection & Collapsible Sub-boxes Contract
+
+The primary chat interface renders agent turns as a strictly ordered, clean chronological narrative. Raw CLI streams, ANSI sequences, tool execution chatter, and intermediate chain-of-thought blocks must never spill into unmanaged, sprawling chat transcripts.
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ 1. [ 🧠 Reasoning Sub-box (Closed by default once settled) ▾]│
+├─────────────────────────────────────────────────────────────┤
+│ 2. [ 🔧 Grouped Tool Sub-box (Closed by default settled)  ▾]│
+│    ┌──────────────────────────────────────────────────────┐ │
+│    │ (Nested drawer: args, status, logs, spooled refs)    │ │
+│    └──────────────────────────────────────────────────────┘ │
+├─────────────────────────────────────────────────────────────┤
+│ 3. 💬 Assistant Markdown & LaTeX Response Body               │
+├─────────────────────────────────────────────────────────────┤
+│ 4. 📄 Artifact Cards & Guard-2 Approval Cards               │
+└─────────────────────────────────────────────────────────────┘
+```
+
+1. **Chronological Hierarchy & Auto-Collapse Lifecycle:**
+   - **Reasoning (`<ReasoningSubbox />`):** Shows a live ticking stopwatch during streaming (`Thinking... 1.8s`). Upon turn completion/settlement, it immediately and unconditionally auto-collapses to a compact pill: `[ 🧠 Thought for 4.2s ▾ ]`. Clicking smoothly expands the sequenced thought steps without layout displacement.
+   - **Tool Execution (`<ToolExecutionBox />`):** Single-tool actions render as `[ ✓ Read file.rs (120ms) ▾ ]`. Multi-tool sequences (2+ operations) group into a unified compact drawer: `[ 🔧 Executed N actions (Read, Terminal, Patch) · 1.8s ▾ ]`. Auto-collapses on completion to keep user focus on the final response. Expanding reveals itemized tool cards (risk level, execution latency, formatted parameters, stdout/diff results, inline retry affordances).
+   - **Response Body:** Clean Markdown, KaTeX math blocks, and highlighted syntax code blocks.
+   - **Artifact & Approval Cards:** Visual previews of generated/modified files (dockable into right-rail Drafting Table viewports) and Guard-2 interactive approval/diff prompts.
+
+2. **CLI Terminal Stream Normalization:**
+   - External CLI agents communicate over stdio emitting ANSI escapes, terminal clearing sequences, spinners, and raw stderr dumps.
+   - The ACP adapter layer (`everyaios-acp`) normalizes raw stdout/stderr into typed `UIEventEnvelope` structures. Raw terminal output is strictly quarantined inside the collapsible tool execution drawer; the chat surface remains clean, semantic markdown.
+
+3. **Large Payload Spooling & Zero CLS Bounding:**
+   - Tool outputs exceeding 2,000 tokens are spooled to content-addressed disk storage (`retrieve_original(hash)`). A compact **Spooled Blob Card** renders in the drawer with summary statistics and an `[Inspect in Right Rail ↗]` action to open Monaco diff or data viewers.
+   - Pre-allocated min-height bounding boxes and skeleton loaders prevent layout shift during high-frequency token streaming (maintaining CLS = 0).
+
+4. **Context Passport & Specialist Attribution:**
+   - An optional `<memory_passport>` inspector pill in the turn header allows auditing injected memory items, skills, and governance policies.
+   - Delegated operations display explicit attribution badges (`@Codex CLI`, `@Claude Code`, `@Aider`, etc.) identifying the executing specialist agent.
+
+
 ---
 
 ## 2. What the UI may own — and may not

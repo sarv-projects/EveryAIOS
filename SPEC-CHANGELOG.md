@@ -17,6 +17,31 @@ Each entry records the date or release marker, change category, affected section
 - A citation or implementation detail may remain in the spec only when it is itself a current behavioral constraint; its historical or evidentiary explanation belongs here.
 
 ---
+## 2026-09-24 — Chat Presentation Projection & External Subagent Roster Specification (P64.11, P64.12, P63.12)
+
+**Change category:** specification, architecture, and UI/control plane contracts.
+
+**Decision:**
+1. **Chat Presentation Projection (Collapsible Sub-boxes Contract):** Specified the strict 4-tier chronological visual projection for agent turns:
+   - `<ReasoningSubbox />`: live ticking stopwatch during streaming, auto-collapsing unconditionally upon turn completion to a compact pill `[ 🧠 Thought for 4.2s ▾ ]`.
+   - `<ToolExecutionBox />`: groups multi-tool turns into a single compact drawer `[ 🔧 Executed N actions · 1.8s ▾ ]`, closed by default once settled, with itemized action inspection and retry affordances.
+   - Clean Markdown and KaTeX body.
+   - Artifact and Guard-2 approval cards.
+   - CLI stream normalization (`everyaios-acp` normalizes stdio ANSI/spinners into `UIEventEnvelope`), spooled payload cards (`retrieve_original(hash)`) with `[Inspect in Right Rail ↗]`, and zero cumulative layout shift (CLS = 0) min-height bounding.
+2. **Context Passport & Specialist Attribution:** `<memory_passport>` visual inspector pill in turn headers and inline specialist attribution badges (`@Agent`) on delegated sub-steps.
+3. **External Subagents Configuration Plane (Settings → Agents & Models):** Explicit configuration cards for external CLI agents (Codex CLI, Claude Code, OpenCode, Aider, Grok Build, Cline) with:
+   - Dual-role eligibility toggles (`allow_as_primary` and `enable_as_subagent`).
+   - Specialist domain routing tags (`coding`, `architecture`, `research`, `scraping`, `office`).
+   - Concurrency bounds (`max_concurrent_instances`, default 2).
+   - Per-turn cost and token budget ceilings (`max_dollars_per_turn`, `max_tokens_per_turn`).
+   - Ephemeral git worktree sandboxing for coding domains.
+4. **Subagent Delegation Lifecycle:** Documented `delegate.spawn` execution path over loopback MCP Channel B and ACP stdio supervised child processes.
+
+**Affected Documents:** `ARCH/12-UI-SPEC.md` (§3.2a, §3.2b), `ARCH/UI.md` (§1.1), `ARCH/AGENT.md` (§5.4), `ARCH/EXTERNAL-AGENTS.md` (§3.1), `DESKTOP-APP-SPEC.md` (§4.1, §4.3), `TODO.md` (P63.12, P64.11, P64.12; census 1649 = 1353 done + 296 open).
+
+**Verification:** `node scripts/check-doc-sync.mjs` **PASS**; `wsl -e node scripts/check-doc-refs.mjs` **PASS**.
+
+---
 ## 2026-09-24 — ADR-0007: Windows-first v1 scope and qualification amendment
 
 **Change category:** scope, qualification policy, and delivery-status documentation only. No capability identity,

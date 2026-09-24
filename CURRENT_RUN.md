@@ -1,5 +1,41 @@
 # CURRENT RUN STATE — Task Handover & Checkpoint
 
+## Chat Presentation Projection & External Subagent Roster Specification Handover — 2026-09-24
+
+### Active Goal
+- Fully specify and permanently reconcile the Chat Presentation Projection contract (collapsible closed-by-default sub-boxes, multi-tool drawers, CLI stream normalization, large payload spooling, zero CLS bounding, memory passport pill, specialist attribution) and the External Subagents Roster Plane in Settings across all architectural documents, spec, changelog, and delivery tracker (`TODO.md`).
+
+### Where We Stopped
+- Updated `ARCH/12-UI-SPEC.md` (§3.2a, §3.2b): Defined chronological collapsible sub-boxes hierarchy (`<ReasoningSubbox />` auto-collapse to `[ 🧠 Thought for 4.2s ▾ ]`, `<ToolExecutionBox />` grouped drawers `[ 🔧 Executed N actions · 1.8s ▾ ]`, Spooled Blob Cards `retrieve_original(hash)`, CLS = 0 bounding, `<memory_passport>` pill, specialist attribution badges).
+- Updated `ARCH/UI.md` (§1.1): Added Chat Presentation Projection and Collapsible Sub-boxes Contract detailing the 4-tier projection, stdio stream normalization, and drawer lifecycle.
+- Updated `ARCH/AGENT.md` (§5.4): Added External Subagents & Settings Roster Configuration Plane detailing dual role toggles (`allow_as_primary` and `enable_as_subagent`), specialist domain routing, concurrency caps, and budget ceilings.
+- Updated `ARCH/EXTERNAL-AGENTS.md` (§3.1): Detailed external agent delegation lifecycle and resolution for `delegate.spawn` over loopback MCP Channel B and ACP stdio supervised child processes.
+- Updated `DESKTOP-APP-SPEC.md` (§4.1, §4.3): Added Chat Presentation and Settings Subagents rows to the UI reconciliation table, and detailed both contracts in the final control plane section.
+- Updated `TODO.md`: Added `P63.12` [Settings] External Subagent Roster Management UI, `P64.11` [UI] Chat Collapsible Sub-boxes & CLI Stream Normalization, and `P64.12` [UI] Context Passport Visual Inspection & Specialist Attribution. Reconciled header census to **1649 total = 1353 done + 296 open**.
+- Updated `SPEC-CHANGELOG.md`: Added dated entry for Chat Presentation Projection & External Subagent Roster Specification.
+- Regenerated `CODEBASE-MAP.md` via `scripts/gen-codebase-map.mjs`.
+
+### Validation
+- `node scripts/check-doc-sync.mjs` — **PASS** (166 capabilities in sync; TODO.md 1649 = 1353 done + 296 open matches header; shell chrome v4.06 matches changelog).
+- `wsl -e node scripts/check-doc-refs.mjs` — **PASS** (all links and section references resolve; 0 broken references).
+- `wsl -e node scripts/gen-codebase-map.mjs --check` — **PASS** (inventory up to date for 1510 tracked files).
+- `wsl -e git diff --check` — **PASS** (clean diff, no whitespace or conflict errors).
+- `wsl -e node scripts/check-arch-invariants.mjs` — **10 known concurrent source violations** (5 E3-MCP, 5 E4-WORK-CREATION; unchanged by this documentation wave).
+
+### Next Exact Steps
+1. Implement `P64.11` in `ui/src/components/chat/message-bubble.tsx` and `ui/src/components/chat/tool-chip.tsx` (restructure turn order to Reasoning Subbox [closed on complete] → Tool Execution Box [closed on complete] → Markdown Body → Artifact Cards).
+2. Implement `P64.12` in `ui/src/components/chat/message-bubble.tsx` (`<memory_passport>` pill and subagent attribution badges).
+3. Implement `P63.12` in `ui/src/components/panels/agents-models-section.tsx` (subagent configuration cards with primary/subagent toggles, domain tags, concurrency, and budgets).
+4. Reconcile the ten architecture-invariant findings in `everyaios-mcp` and `everyaios-core`/`acp_cmds`.
+
+### Decisions & Gotchas
+- Subagents are external CLI agents (Codex, Claude Code, OpenCode, Aider, Grok Build, Cline), never an internal mock loop or second scheduler.
+- In-flight reasoning auto-collapses immediately upon turn settlement; user clicks expand without layout shift.
+- Multi-tool executions must group into a single compact drawer rather than displacing the viewport with separate cards.
+- Raw CLI stdout/stderr (ANSI escapes, spinners) is quarantined inside tool drawers; the chat surface remains clean Markdown.
+
+---
+
 ## Final Comparative Audit Reconciliation — 2026-09-24
 
 ### Active Goal

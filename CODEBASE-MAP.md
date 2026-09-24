@@ -8308,16 +8308,16 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 | .agents/skills/codebase-intelligence/references/ | 7 | 466 |
 | .agents/skills/skill-creator/ | 1 | 85 |
 | .agents/templates/ | 1 | 169 |
-| ARCH — the design set (+ DIAGRAMS & ADR) | 42 | 11,183 |
+| ARCH — the design set (+ DIAGRAMS & ADR) | 42 | 11,366 |
 | RESEARCH/2026-ai-landscape — other research | 11 | 970 |
 | RESEARCH/desktop_app — the prior-art & competitor corpus | 93 | 12,987 |
 | deploy/ — deployment docs | 1 | 105 |
 | docs/ | 4 | 376 |
 | docs/codebase/ | 10 | 977 |
 | docs/release/ | 4 | 208 |
-| root — specs, handover, and this map | 17 | 14,124 |
+| root — specs, handover, and this map | 17 | 14,198 |
 | ui/ — UI design docs | 1 | 83 |
-| **TOTAL** | **200** | **42,659** |
+| **TOTAL** | **200** | **42,916** |
 
 ### 14.1 .agents/
 
@@ -8473,7 +8473,7 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 
 - opening: **Split done — see [`CORE.md`](ARCH/CORE.md) and [`AGENT.md`](ARCH/AGENT.md) first (`P69.A22`, 2026-09-20).** The AI-architecture rationale here is superseded wherever it describes an EveryAIOS-owned reasoning
 
-#### `ARCH/12-UI-SPEC.md` — 968 lines · 82.6 KB
+#### `ARCH/12-UI-SPEC.md` — 1,030 lines · 88.4 KB
 > 12 — UI/UX Specification: Desktop Layout & Interaction Design
 
 - opening: **Derived from [`CORE.md`](ARCH/CORE.md) — the root authority; this document specializes, never restates, it.** **CONTRACT RE-SCOPED — see [`UI.md`](ARCH/UI.md) first.** This document remains the authority for layout and interaction *detail*.
@@ -8528,7 +8528,7 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 
 - opening: - **Status:** accepted; implementation and qualification are pending - **Date:** 2026-09-24 - **Applies to:** [`CORE.md`](ARCH/ADR/../CORE.md) · [`SESSION.md`](ARCH/ADR/../SESSION.md) · [`WORK.md`](ARCH/ADR/../WORK.md) · [`AGEN
 
-#### `ARCH/AGENT.md` — 374 lines · 22.4 KB
+#### `ARCH/AGENT.md` — 412 lines · 26.0 KB
 > ARCH/AGENT — the agent model: binding, adapter, bridge
 
 - opening: **Status:** Subsystem contract, derived from [`CORE.md`](ARCH/CORE.md).
@@ -8563,7 +8563,7 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 
 - opening: **Generated:** 2026-09-23 · **Spec version:** v3.96 (current contract; the two-plane content in diagram 27 froze at v3.75 — see `SPEC-CHANGELOG.md`) · **Diagrams:** 30 (diagram 0 is the canonical back
 
-#### `ARCH/EXTERNAL-AGENTS.md` — 501 lines · 29.2 KB
+#### `ARCH/EXTERNAL-AGENTS.md` — 546 lines · 32.2 KB
 > ARCH/EXTERNAL-AGENTS — protocol surfaces and the shared plane
 
 - opening: **Status:** Subsystem contract, derived from [`CORE.md`](ARCH/CORE.md).
@@ -8593,7 +8593,7 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 
 - opening: **Status:** Subsystem contract, derived from [`CORE.md`](ARCH/CORE.md).
 
-#### `ARCH/UI.md` — 214 lines · 13.6 KB
+#### `ARCH/UI.md` — 252 lines · 17.9 KB
 > ARCH/UI — the cockpit as a projection, and the File Workbench
 
 - opening: **Status:** Subsystem contract, derived from [`CORE.md`](ARCH/CORE.md) §3 and §5.
@@ -9270,12 +9270,12 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 
 - opening: Read [`ARCH/CORE.md`](ARCH/CORE.md) — the root architecture authority — and [`AGENTS.md`](AGENTS.md), which is the durable contract for any agent or human working here.
 
-#### `CURRENT_RUN.md` — 2,512 lines · 292.3 KB
+#### `CURRENT_RUN.md` — 2,552 lines · 296.3 KB
 > CURRENT RUN STATE — Task Handover & Checkpoint
 
-- opening: - Record the adopted `SessionWorkbenchProjection` and typed Work/Run-owned `ResourceLease`/fencing contract across the architecture and delivery surfaces without implementing the projection or Channel B.
+- opening: - Complete the requested read-only audit of the 20 `BRIEFS`, the permitted `clone2` comparator repositories, and the relevant `clone3` comparator areas, then produce one evidence-backed add/upgrade/optimize/reject disposition for EveryAIOS.
 
-#### `DESKTOP-APP-SPEC.md` — 1,589 lines · 339.6 KB
+#### `DESKTOP-APP-SPEC.md` — 1,595 lines · 341.8 KB
 > DESKTOP-APP-SPEC.md — Complete Product Specification
 
 - opening: **Architecture authority: [`ARCH/CORE.md`](ARCH/CORE.md).** This document is the **product contract** — behavior, UI, schemas, invariants.
@@ -9300,7 +9300,7 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 
 - opening: EveryAIOS runs AI agents with real authority over the user's machine, so the security contract is the product.
 
-#### `SPEC-CHANGELOG.md` — 2,830 lines · 582.8 KB
+#### `SPEC-CHANGELOG.md` — 2,855 lines · 585.1 KB
 > DESKTOP-APP-SPEC.md — Specification Changelog
 
 - opening: This file records historical decisions, research transfers, implementation updates, and verification evidence for `DESKTOP-APP-SPEC.md`.
@@ -9320,7 +9320,7 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 
 - opening: Generated by `scripts/check-licences.mjs --write-notices` from the lockfiles.
 
-#### `TODO.md` — 2,847 lines · 926.7 KB
+#### `TODO.md` — 2,850 lines · 929.2 KB
 > EveryAIOS — Master Implementation TODO
 
 - opening: **Documentation ownership:** `DESKTOP-APP-SPEC.md` is the **product contract only** (behavior, schemas, UI layouts, invariants — not a build plan).
@@ -9938,7 +9938,7 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 | `.css` | 1 |
 | **TOTAL tracked** | **1510** |
 
-Lines counted across the 1503 tracked text files at generation time: **440,924** (this map excluded — self-referential).
+Lines counted across the 1503 tracked text files at generation time: **441,181** (this map excluded — self-referential).
 
 ### 15.5 Coverage audit — is any tracked file unaccounted for?
 

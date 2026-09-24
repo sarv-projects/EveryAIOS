@@ -260,6 +260,68 @@ Displayed when the agent creates/edits a file. Shows:
 - Coordinator holds in-flight stream state → auto-resume from the **last token/id** (LibreChat pattern); the reply continues in place, never restarts
 - Idempotent retry semantics per ARCH/03 (retry idempotent calls)
 
+### 3.2a Chronological Collapsible Sub-boxes Hierarchy (Closed-by-Default Contract)
+
+The chat conversation represents the primary chronological narrative of an agent turn. To eliminate visual clutter and avoid sprawling transcripts when external CLI agents execute complex operations, every assistant turn strictly enforces a 4-tier chronological visual hierarchy:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ 1. [ 🧠 Reasoning Sub-box (Closed by default once settled) ▾]│
+├─────────────────────────────────────────────────────────────┤
+│ 2. [ 🔧 Grouped Tool Sub-box (Closed by default settled)  ▾]│
+│    ┌──────────────────────────────────────────────────────┐ │
+│    │ (Nested drawer: args, status, logs, spooled refs)    │ │
+│    └──────────────────────────────────────────────────────┘ │
+├─────────────────────────────────────────────────────────────┤
+│ 3. 💬 Assistant Markdown & LaTeX Response Body               │
+├─────────────────────────────────────────────────────────────┤
+│ 4. 📄 Artifact Cards & Guard-2 Approval Cards               │
+└─────────────────────────────────────────────────────────────┘
+```
+
+1. **Reasoning Sub-box (`<ReasoningSubbox />`):**
+   - **Streaming / In-Flight:** Displays a pulsing indicator (`Thinking... 1.8s`) with an active ~4Hz live ticking stopwatch (`useLiveElapsed`). May auto-expand while the agent is actively thinking.
+   - **Settled / Completed:** **Immediately and unconditionally auto-collapses** to a sleek, compact summary pill: `[ 🧠 Thought for 4.2s ▾ ]` with a subtle violet tint and tabular monospace figures.
+   - **Expanded State (On Click):** Smoothly discloses the sequential thought steps (`Thought 1`, `Thought 2`, ...) without shifting surrounding layout.
+
+2. **Grouped Tool Execution Sub-box (`<ToolExecutionBox />`):**
+   - **Single-Tool Turn:** Collapses to `[ ✓ Read src-tauri/src/main.rs (120ms) ▾ ]`.
+   - **Multi-Tool Turn (2+ actions):** Compares and groups all tool executions into **one compact sub-box**: `[ 🔧 Executed N actions (Read, Terminal, Patch) · 1.8s ▾ ]`.
+   - **Settled State (Closed):** Always closed by default once execution finishes so the user's primary focus remains on the final response text.
+   - **Expanded Drawer (On Click):** Opens a sleek nested drawer with itemized action rows:
+     - **Header:** Tool name, risk rating (`low`, `medium`, `destructive`), and execution latency.
+     - **Input Parameters:** Formatted JSON syntax-highlighted block.
+     - **Execution Output:** Formatted result, error message, or spooled disk handle with `[Inspect in Right Rail ↗]`.
+     - **Retry Action:** Inline `Retry` affordance for failed executions.
+
+3. **Assistant Response Body:**
+   - Real-time Markdown, KaTeX math rendering, and `highlight.js` syntax-highlighted code blocks with language tags and copy buttons.
+   - Footnote citations (`applyCitationMarks`, `[^1]`) linked to verified references.
+
+4. **Artifact & Approval Cards:**
+   - Rendered previews of created/modified files (`quarterly_report.xlsx`). Clicking any card automatically focuses that file in the right rail viewport.
+   - Guard-2 human-in-the-loop MCQ approval cards and diff comparisons before any destructive mutation executes.
+
+### 3.2b CLI Stream Normalization, Spooled Payloads & Zero CLS Bounding
+
+1. **CLI Terminal Stream Normalization:**
+   - External CLI agents output continuous raw terminal streams containing ANSI color codes, spinner lines, tool call prompts, diff blocks, and grep traces.
+   - The desktop ACP harness (`everyaios-acp`) parses raw stdout into structured `UIEventEnvelope` blocks. Under no circumstances may raw, unformatted terminal dumps spill into the main chat bubble. All CLI execution details are contained inside the closed tool sub-boxes.
+
+2. **Spooled Big-Payload Tool Card:**
+   - When a tool result exceeds 2,000 tokens, it is spooled to content-addressed storage on disk (`retrieve_original(hash)`).
+   - In the tool sub-box drawer, the result renders as a **Spooled Blob Card** with a concise AI summary and a direct `[Inspect in Right Rail ↗]` action to view the raw data in Monaco diff or spreadsheet view without bloating the chat thread.
+
+3. **Zero Cumulative Layout Shift (CLS = 0) Bounds:**
+   - Pre-allocates min-height CSS bounds and skeleton placeholders for in-flight tool chips and reasoning blocks. Prevents vertical layout jumping during fast token and tool streaming (Linear/Apple standard).
+
+4. **Context Passport Visual Inspection Pill:**
+   - Renders a discreet `<memory_passport>` pill in the assistant bubble header.
+   - Clicking opens an inspector drawer displaying the exact warm memory facts, active skills, and governance constraints injected into that turn.
+
+5. **Subagent / Specialist Attribution Badges:**
+   - Every delegated sub-step inside the tool execution drawer explicitly displays an attribution badge identifying the external agent that performed the task (e.g., `@Codex CLI`, `@Claude Code`, `@Aider`).
+
 ### 3.3 Chat Input Bar
 
 | Element | Function |

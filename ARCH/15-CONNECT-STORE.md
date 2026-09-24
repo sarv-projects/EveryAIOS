@@ -7,6 +7,12 @@
 > independent effect commit, or connector-scoped Work state.
 > **Consolidation `P69.D17` landed in code 2026-09-20 (implemented, not verified):** connector actions produce
 > a canonical `EffectRequest` through the one ticketed executor — the contract section below is the landed shape.
+>
+> **v1 scope clarification (2026-09-24):** [`ADR/0007`](ADR/0007-windows-first-v1-qualification.md)
+> keeps the Connect Store and MCP shared plane in v1 as part of Channel B, with one Work-scoped bridge,
+> one Guard/executor/audit path, and no raw OAuth token in a sidecar, agent, or renderer. The live ACP
+> launch currently passes an empty `mcpServers` list, so Channel B is **unverified/open**, not a ready
+> capability. Voice/STT/TTS/wake-word/audio remain post-v1.
 
 ## Capability-pack contract — connectors under CORE (`P69.D17`)
 

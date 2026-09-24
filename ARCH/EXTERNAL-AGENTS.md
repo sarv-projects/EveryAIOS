@@ -118,6 +118,51 @@ private ability** — the primary agent chooses, EveryAIOS validates, and a dele
 Work in the one Work graph (`P71.1`). Memory deliberately exposes no algorithms — no ACT-R, no FSRS, no
 BM25, no graph traversal. Those are strategies behind `recall`/`remember`/`forget`.
 
+### 3.1 External Agent Delegation Lifecycle & Resolution (Loopback Channel B)
+
+When a bound external primary agent invokes `delegate.spawn` across loopback MCP Channel B, EveryAIOS mediates the delegation as a first-class platform capability rather than an unmonitored sub-process:
+
+```
+Primary Agent (ACP)
+       │
+       │ calls `delegate.spawn { task, domain, target_agent, budget }`
+       ▼
+Loopback MCP Channel B (Host Custody)
+       │
+       ├─ 1. Validate Target / Resolve Specialist by Domain (Settings Roster)
+       ├─ 2. Create Child WorkId + Child RunId + AgentBinding in Work Graph
+       ├─ 3. Allocate Ephemeral Git Worktree (for coding domain)
+       ├─ 4. Guard-2 Policy Enforcement & Per-Turn Budget Fence
+       ▼
+Subagent CLI Process (ACP Stdio)
+       │
+       │ streams progress, tool calls, diffs
+       ▼
+Completion Receipt & Artifact Rollup → Return to Primary Agent
+       │
+       ▼
+UI Chat Presentation: Rendered as Collapsed Tool Sub-box with Attribution Badge (`@Agent`)
+```
+
+1. **Invocation Contract (`delegate.spawn`):**
+   - Arguments: `task` (prompt string), `domain` (`coding` | `architecture` | `research` | `scraping` | `office`), optional `target_agent` (specific agent ID), `budget` (`max_dollars`, `max_tokens`), and `timeout_ms`.
+   - Resolution: Checks the Settings Roster Configuration Plane ([`ARCH/AGENT.md`](AGENT.md) §5.4). If `target_agent` is specified, verifies `enable_as_subagent: true` and readiness `Ready`. If omitted, dynamically selects the highest-priority ready external agent matching `domain`.
+
+2. **Durable Identity & Concurrency Fencing:**
+   - Spawns a child `WorkId` linked to parent `WorkId` in the canonical Work spine. Assigns a distinct `RunId` and `AgentBindingId`.
+   - Enforces `max_concurrent_instances` configured in Settings for that subagent. If at capacity, queues in the Work graph or returns a retryable backpressure status.
+
+3. **Workspace Isolation & Sandboxing:**
+   - Coding specialists run inside an ephemeral git worktree (`everyaios-core::worktree`) branched off the current HEAD. Subagent mutations cannot directly alter the user's primary working branch without human verification and explicit patch application.
+
+4. **Supervised Execution & Loopback Capabilities:**
+   - The subagent process communicates over supervised ACP stdio. If the subagent makes tool calls (e.g. `office.inspect`, `browser.research`), they route through the same host Guard and ToolService pipeline over Channel B.
+   - Guard-2 prevents privilege escalation: a subagent cannot exceed the capabilities or permissions granted to the parent run.
+
+5. **Receipts & UI Presentation:**
+   - Once the subagent finishes or hits its budget ceiling, a verified audit receipt is appended to the execution log, and the rollup (summary, diff, artifacts) is returned to the parent agent.
+   - In the frontend chat projection, all subagent tool calls and logs are encapsulated inside the primary turn's `<ToolExecutionBox />` collapsible drawer, prominently badged with the specialist identifier (e.g. `@Codex CLI`, `@Claude Code`).
+
 ---
 
 ## 4. Onboarding **any** registry agent — the unified contract

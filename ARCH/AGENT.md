@@ -295,6 +295,44 @@ Two notes that prevent this table from becoming a lie:
   the EveryAIOS **context engine**, but the seam is per-agent and negotiated. Hook names belong in the
   adapter as **data**; a hook name appearing as a condition in the kernel is a defect.
 
+### 5.4 External Subagents & Settings Roster Configuration Plane
+
+Subagents in EveryAIOS are **not** an isolated internal mock loop or a second orchestration engine; **subagents are real external CLI agents** (e.g. Codex CLI, Claude Code, OpenCode, Aider, Grok Build, Cline) managed under the unified Agent Communication Protocol (ACP) and supervised by the kernel.
+
+In **Settings → Agents & Models**, each discovered or configured external agent exposes a dedicated Subagent Configuration card within the roster plane:
+
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│ 🤖 Claude Code (v1.0.12)                         [ Status: Ready  ● ] │
+├────────────────────────────────────────────────────────────────────────┤
+│ Roles:           [✓] Allow as Primary      [✓] Enable as Subagent      │
+│ Domain Tags:     [✓] Coding   [✓] Architecture  [ ] Scraping  [ ] Office│
+│ Max Concurrency: [ 2 ] parallel instances                              │
+│ Per-Turn Budget: [ $0.50 max / 50k tokens ]                           │
+│ Sandbox Scope:   [ Worktree Isolated (Ephemeral) ▾ ]                   │
+└────────────────────────────────────────────────────────────────────────┘
+```
+
+1. **Dual Role Eligibility (`allow_as_primary` & `enable_as_subagent`):**
+   - **Primary Role:** The agent can be chosen in the top-bar agent selector as the chief conversational and reasoning engine for the active Session.
+   - **Subagent Role:** The agent can be dynamically hired by the primary agent (via `delegate.spawn` over ACP / loopback MCP Channel B) as a subordinate specialist to execute discrete, bounded tasks.
+   - An external agent can be configured for both roles, primary-only, subagent-only, or disabled completely.
+
+2. **Specialist Domain Routing:**
+   - External agents register or are configured with domain strengths: `coding` (deep implementation, refactoring), `architecture` (spec audits, structural design), `research` (web search, docs synthesis), `scraping` (browser automation, data extraction), and `office` (spreadsheet modeling, document drafting).
+   - When the primary agent initiates delegation without specifying an explicit agent handle, the router selects the highest-scoring available agent enabled for that domain tag.
+
+3. **Concurrency & Resource Throttling:**
+   - Each agent configuration specifies `max_concurrent_instances` (default: 2, range: 1–8).
+   - The scheduler enforces this ceiling to prevent runaway subprocess fan-out, API rate-limit exhaustion, and CPU starvation. Excess delegation requests queue in the Work subsystem or return backpressure to the primary agent.
+
+4. **Budget & Token Bounds:**
+   - Hard limits on cost (`max_dollars_per_turn`) and token volume (`max_tokens_per_turn`) protect against infinite agent retry loops.
+   - When a subagent hits a budget threshold, execution is paused and an approval request is surfaced through Guard-2 to the human cockpit.
+
+5. **Sandbox & Worktree Isolation:**
+   - Delegated coding subagents execute inside isolated Git worktrees (`everyaios-core::worktree`) created off the current branch. Subagents cannot mutate the primary workspace branch directly without an explicit merge step and user review.
+
 ---
 
 ## 6. Switching, parking, resuming
