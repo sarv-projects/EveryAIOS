@@ -39,7 +39,7 @@
 // Usage: node scripts/gen-codebase-map.mjs [--check]
 //   --check   exit 1 if the generated section is stale, without rewriting.
 
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { createRequire } from "node:module";
 import { readFileSync, writeFileSync, existsSync, statSync } from "node:fs";
 import { dirname, join, extname, basename } from "node:path";
@@ -60,7 +60,7 @@ const CHECK = process.argv.includes("--check");
 
 /** Every git-tracked file, repo-relative, POSIX separators, sorted. */
 function trackedFiles() {
-  const raw = execSync("git ls-files -z", { cwd: ROOT, maxBuffer: 1 << 28 });
+  const raw = execFileSync("git", ["ls-files", "-z"], { cwd: ROOT, maxBuffer: 1 << 28 });
   return raw
     .toString("utf8")
     .split("\0")

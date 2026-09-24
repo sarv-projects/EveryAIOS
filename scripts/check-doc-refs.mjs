@@ -40,13 +40,13 @@ const ACCEPTED = [
 function collectDocs() {
   const out = [];
   for (const name of readdirSync(ROOT)) {
-    if (name.endsWith('.md')) out.push(name);
+    if (name.endsWith('.md')) out.push(name.replace(/\\/g, '/'));
   }
   for (const dir of ['ARCH', 'docs', 'docs/release', 'docs/packaging', 'docs/codebase', 'RESEARCH']) {
     const abs = join(ROOT, dir);
     if (!existsSync(abs)) continue;
     for (const name of readdirSync(abs)) {
-      if (name.endsWith('.md')) out.push(join(dir, name));
+      if (name.endsWith('.md')) out.push(join(dir, name).replace(/\\/g, '/'));
     }
   }
   return out;
@@ -133,9 +133,10 @@ for (const p of docs) {
 }
 const byBasename = new Map();
 for (const p of docs) {
-  const base = p.includes('/') ? p.split('/').pop() : p;
+  const norm = p.replace(/\\/g, '/');
+  const base = norm.split('/').pop();
   if (!byBasename.has(base)) byBasename.set(base, []);
-  byBasename.get(base).push(p);
+  byBasename.get(base).push(norm);
 }
 
 const BASELINE_FILE = 'docs/codebase/doc-ref-baseline.json';
@@ -152,17 +153,18 @@ const isAccepted = (file, ref) =>
  * line — otherwise the paragraph is talking about that other document.
  */
 function resolveIdentifier(token) {
-  if (token.endsWith('.md')) {
-    const base = token.split('/').pop();
+  const normToken = token.replace(/\\/g, '/');
+  if (normToken.endsWith('.md')) {
+    const base = normToken.split('/').pop();
     const found = byBasename.get(base) ?? [];
     return found.length ? found : null;
   }
-  if (token === 'CORE') return byBasename.get('CORE.md') ?? null;
-  if (token === 'SPEC') return byBasename.get('DESKTOP-APP-SPEC.md') ?? null;
+  if (normToken === 'CORE') return byBasename.get('CORE.md') ?? null;
+  if (normToken === 'SPEC') return byBasename.get('DESKTOP-APP-SPEC.md') ?? null;
   // ARCH/<n> — match by numeric prefix (ARCH/13 → ARCH/13-PROMPT-ANATOMY.md).
-  const arch = /^ARCH\/(\d+)$/.exec(token);
+  const arch = /^ARCH\/(\d+)$/.exec(normToken);
   if (arch) {
-    const hit = docs.filter((d) => new RegExp(`^ARCH/${arch[1]}(-|\\.md$)`).test(d));
+    const hit = docs.filter((d) => new RegExp(`^ARCH/${arch[1]}(-|\\.md$)`).test(d.replace(/\\/g, '/')));
     return hit.length ? hit : null;
   }
   return null;

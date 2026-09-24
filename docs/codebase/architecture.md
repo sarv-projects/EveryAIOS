@@ -10,7 +10,7 @@
 ```mermaid
 flowchart TD
     UI["L4 Cockpit — ui/ (React 19, Zustand 5, Tailwind 4)"] -->|"nativeCall() — Tauri IPC, protocol v1"| TAURI["L3 Tauri shell — src-tauri/ (351 registered commands, 40 *_cmds.rs)"]
-    TAURI -->|"direct Rust calls"| KERNEL["L2 Rust kernel — crates/ (22-crate workspace)"]
+    TAURI -->|"direct Rust calls"| KERNEL["L2 Rust kernel — crates/ (21-crate workspace)"]
     KERNEL -->|"stdio JSON-RPC 2.0, [u32 LE len][JSON] framing"| SIDECAR["L1 Bun sidecar — packages/coordinator (LLM turn loop)"]
     SIDECAR -->|"ACP / MCP / CDP"| L0["L0 External agents — Claude Code, Codex, OpenCode, MCP servers, Chrome"]
 ```

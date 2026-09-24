@@ -31,7 +31,7 @@ Capability identity: [`capabilities.yaml`](../../capabilities.yaml) == `ARCH/09-
 |---|---|---|
 | L4 Cockpit | `ui/` — React 19 + Zustand 5 + Tailwind 4 | Tauri IPC: `nativeCall()` (`ui/src/lib/runtime.ts`) |
 | L3 Tauri shell | `src-tauri/` — 350 registered commands across 40 `*_cmds.rs` modules (machine-checked by `scripts/ipc-parity.mjs`, 2026-09-21) | direct Rust calls into L2 |
-| L2 Rust kernel | `crates/` — 22-cargo workspace | stdio JSON-RPC 2.0 (`crates/everyaios-ipc`) |
+| L2 Rust kernel | `crates/` — 21-cargo workspace | stdio JSON-RPC 2.0 (`crates/everyaios-ipc`) |
 | L1 Bun sidecar | `packages/coordinator` — LLM turn loop | ACP / MCP / CDP |
 | L0 External agents | Claude Code, Codex, OpenCode, MCP servers, Chrome | their own protocols |
 

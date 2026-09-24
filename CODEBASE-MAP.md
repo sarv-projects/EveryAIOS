@@ -771,12 +771,12 @@ complete function accounting for the file. `refs` is the cross-file `stem::` ref
 | `crates/everyaios-catalog/` | 20 | 9,021 | 344 | 116 |
 | `crates/everyaios-cdp/` | 6 | 3,038 | 120 | 49 |
 | `crates/everyaios-codeintel/` | 17 | 4,139 | 200 | 63 |
-| `crates/everyaios-core/` | 108 | 65,773 | 2684 | 828 |
+| `crates/everyaios-core/` | 110 | 66,763 | 2710 | 847 |
 | `crates/everyaios-desktop/` | 15 | 6,946 | 279 | 65 |
 | `crates/everyaios-eval/` | 11 | 2,885 | 133 | 47 |
 | `crates/everyaios-guard/` | 36 | 10,324 | 536 | 195 |
 | `crates/everyaios-ipc/` | 7 | 1,178 | 74 | 33 |
-| `crates/everyaios-mcp/` | 17 | 8,773 | 359 | 89 |
+| `crates/everyaios-mcp/` | 18 | 9,842 | 389 | 106 |
 | `crates/everyaios-memory/` | 34 | 10,277 | 593 | 217 |
 | `crates/everyaios-office/` | 37 | 11,287 | 499 | 180 |
 | `crates/everyaios-script/` | 5 | 1,842 | 85 | 24 |
@@ -785,7 +785,7 @@ complete function accounting for the file. `refs` is the cross-file `stem::` ref
 | `crates/everyaios-types/` | 1 | 1,523 | 59 | 11 |
 | `crates/everyaios-vault/` | 17 | 11,683 | 447 | 160 |
 | `src-tauri/` | 52 | 22,513 | 783 | 97 |
-| **TOTAL** | **508** | **221,755** | **9559** | **2891** |
+| **TOTAL** | **511** | **2,23,814** | **9615** | **2927** |
 
 ### 9.1 `crates/everyaios-acp/`
 
@@ -1621,7 +1621,7 @@ complete function accounting for the file. `refs` is the cross-file `stem::` ref
 **`const`** (3): `SNAPSHOT_FILE`:28, `META_FILE`:30, `SETTINGS_FILE`:32 · **`fn`** (15): `from_snapshot`:61, `if_none_match`:74, `new`:91, `dir`:95, `snapshot_path`:99, `meta_path`:103, `settings_path`:107, `load_settings`:112, `refresh_interval_secs`:120, `save_settings`:124, `load`:133, `load_meta`:139, `save`:146, `save_meta`:161, `clear`:169 · **`struct`** (3): `CatalogSettings`:37, `CatalogMeta`:45, `CatalogStore`:86
 - `fns` (26): from_snapshot:61, if_none_match:74, new:91, dir:95, snapshot_path:99, meta_path:103, settings_path:107, load_settings:112, refresh_interval_secs:120, save_settings:124, load:133, load_meta:139, save:146, save_meta:161, clear:169, write_atomic:183, dir:200, snapshot:209, save_then_load_round_trips_snapshot_and_meta:215, missing_files_are_none_not_an_error:238, corrupt_snapshot_reads_as_absent:248, meta_records_failed_attempts_honestly:258, clear_removes_both_files_and_is_idempotent:274, settings_default_to_four_hours_and_clamp:292, clear_keeps_settings:313, atomic_write_leaves_no_tmp_behind:334
 
-#### `crates/everyaios-catalog/src/sync.rs` — 393 lines · 7 tests · refs 363
+#### `crates/everyaios-catalog/src/sync.rs` — 393 lines · 7 tests · refs 365
 
 > P14-5 — Sync automation (doc 66 §1.4 — deferred maintenance loop): the vendored `models.json` baseline ships **static**; a refresh path exists for when we need it.
 
@@ -1819,7 +1819,7 @@ complete function accounting for the file. `refs` is the cross-file `stem::` ref
 **`fn`** (2): `scan_markers`:53, `to_prompt`:85 · **`struct`** (2): `AiMarker`:13, `AutoSubmitPayload`:78
 - `fns` (10): marker_at:25, scan_markers:53, to_prompt:85, detects_line_markers:106, case_insensitive_and_other_comment_styles:118, html_comment_form:126, empty_instruction_still_matches:134, context_lines_are_included_above_marker:142, max_markers_caps_batch:157, payload_renders_instruction_and_context:165
 
-#### `crates/everyaios-core/src/automation_runtime.rs` — 476 lines · 9 tests · refs 6
+#### `crates/everyaios-core/src/automation_runtime.rs` — 476 lines · 9 tests · refs 7
 
 > The pure Work factory for automations (P71.3c — `ARCH/AUTOMATION.md` §5).
 
@@ -2020,7 +2020,7 @@ complete function accounting for the file. `refs` is the cross-file `stem::` ref
 **`fn`** (4): `new`:24, `last_report`:31, `last_surface_verdict`:35, `handle`:39 · **`struct`** (1): `EvalService`:16
 - `fns` (12): new:24, last_report:31, last_surface_verdict:35, handle:39, verify_surface:55, verify:83, looks_like_path:139, outcome_from_json:143, tmp:165, verify_complete_when_file_exists:179, unverifiable_when_no_outcomes:199, verify_surface_verifies_with_context_and_stays_honest_without:208
 
-#### `crates/everyaios-core/src/execution.rs` — 4,178 lines · 33 tests · refs 25
+#### `crates/everyaios-core/src/execution.rs` — 4,178 lines · 33 tests · refs 30
 
 > H3 — unified Work records inside the ExecutionKernel (P47.4: the durable per-turn unit is named `Work`; the kernel that holds them stays `ExecutionKernel`).
 
@@ -2317,7 +2317,7 @@ complete function accounting for the file. `refs` is the cross-file `stem::` ref
 **`fn`** (6): `self_mb`:32, `combined_mb`:35, `measure_self`:41, `measure_tree`:70, `snapshot`:135, `measure_idle_and_warm`:153 · **`struct`** (1): `RssSnapshot`:19
 - `fns` (11): self_mb:32, combined_mb:35, measure_self:41, measure_tree:70, child_pids:93, rss_for_pid:114, snapshot:135, measure_idle_and_warm:153, measure_self_returns_nonzero_on_self:165, snapshot_has_consistent_fields:174, measure_tree_includes_self:185
 
-#### `crates/everyaios-core/src/scheduler_service.rs` — 4,239 lines · 35 tests · refs 9
+#### `crates/everyaios-core/src/scheduler_service.rs` — 4,239 lines · 35 tests · refs 11
 
 > Scheduled-task **trigger plane** (P6.4 — B7; re-scoped by `P71.3d` / `ARCH/AUTOMATION.md` §9).
 
@@ -2450,7 +2450,7 @@ complete function accounting for the file. `refs` is the cross-file `stem::` ref
 **`enum`** (1): `WidgetError`:42 · **`fn`** (14): `simple`:27, `evaluate`:73, `card`:93, `card`:272, `new`:314, `should_refresh`:324, `store`:351, `get`:356, `card`:362, `new`:422, `should_refresh`:429, `store`:453, `get`:458, `card`:465 · **`struct`** (7): `WidgetCard`:18, `MathWidget`:70, `LookupWidget`:269, `WeatherSnapshot`:292, `WeatherWidget`:302, `StockQuote`:401, `StockWidget`:410
 - `fns` (34): simple:27, fmt:50, evaluate:73, card:93, with_answer:105, format_number:112, tokenize_math:129, peek:168, next:172, parse_expr:180, parse_term:197, parse_factor:225, parse_unary:235, parse_primary:247, card:272, default:308, new:314, should_refresh:324, store:351, get:356, card:362, default:416, new:422, should_refresh:429, store:453, get:458, card:465, math_evaluates_basic_ops:486, math_rejects_bad_input:502, math_card_has_result:534, lookup_card_renders_pairs:542, weather_card_and_ttl_cache:554, weather_ttl_expires:582, stock_card_and_cache:590
 
-#### `crates/everyaios-core/src/work_gateway.rs` — 6,082 lines · 41 tests · refs 21
+#### `crates/everyaios-core/src/work_gateway.rs` — 6,082 lines · 41 tests · refs 23
 
 > P49 — V1-local Work Gateway / Session Runtime.
 
@@ -2504,6 +2504,12 @@ complete function accounting for the file. `refs` is the cross-file `stem::` ref
 **`fn`** (4): `seal`:178, `verify_unmigrated`:208, `verify_rollback`:229, `vault_newer_schema_refused`:240
 - `fns` (13): preserved_stores:22, corrupt_manifest_is_reported_not_overwritten:32, newer_stamped_store_is_refused_with_names:57, pre_stamp_data_is_adopted_and_flagged:97, evidence_list_matches_the_boot_registry:116, audit_chain_validates_after_upgrade:146, seal:178, verify_unmigrated:208, verify_rollback:229, vault_newer_schema_refused:240, walk:248, hash_concat:261, sha_like:273
 
+#### `crates/everyaios-core/tests/automation_v1.rs` — 483 lines · 12 tests · refs 0
+
+> Hermetic automation-v1 admission, provenance, and recovery tests.
+
+- `fns` (16): temp_path:16, job_steps:27, add_job:33, receipt:37, occurrence_identity_revision_and_work_factory_are_bound:47, uncertain_occurrence_is_not_retried_until_explicit_reconciliation:92, cancellation_is_monotonic_and_never_reopens_the_occurrence:127, receipt_and_provenance_are_required_for_advancement:163, delete_recreate_advances_generation_and_cannot_reuse_occurrence_identity:215, delivery_keys_distinguish_identical_payloads_and_replay_is_idempotent:243, revision_digest_is_checked_by_compile_work:287, persistence_failure_rolls_back_definition_and_admission:324, overdue_cron_admits_one_run_once_on_resume:349, checked_definition_write_applies_enabled_and_rolls_back_on_persist_failure:385, manual_rpc_without_a_request_key_fails_closed:426, work_state_projection_does_not_invent_completion:438
+
 #### `crates/everyaios-core/tests/p10_bench.rs` — 593 lines · 14 tests · refs 0
 
 > P10.3 — Performance & stress benchmarks (ARCH/02 budgets, doc 33 §9 replay scale, ARCH/05 token economy).
@@ -2527,6 +2533,12 @@ complete function accounting for the file. `refs` is the cross-file `stem::` ref
 > P50.5.5 (remainder) + P50.5.6 — failure + crash/restart recovery gates.
 
 - `fns` (14): temp_dir:36, expired_ticket:43, expired_ticket_is_refused_at_consume:72, corrupt_scheduler_json_fails_closed:101, corrupt_tasks_json_recovers_empty:132, wrong_vault_key_fails_closed:152, vault_open_in_unwritable_location_fails_honestly:174, scheduler_trigger_registry_survives_crash:199, ledger_crash_midrun_recovers_running_never_terminal:248, kernel_crash_midrun_recovers_running_with_counter:280, audit_chain_survives_reopen_with_exact_order:314, search:356, fetch:401, real_search_round_trip_lands_receipt_in_audit_chain:407
+
+#### `crates/everyaios-core/tests/recovery_replay.rs` — 507 lines · 7 tests · refs 0
+
+> Hermetic production-recovery/replay coverage for the core Work spine.
+
+- `fns` (10): temp_dir:18, journal:29, make_automation_work:33, automation_kind_provenance_and_terminal_state_replay_exactly:69, missing_or_corrupt_run_state_refuses_recovery:113, checkpoint_mismatch_is_fail_closed_and_journal_wins:215, binding_ownership_and_private_session_survive_replay:247, pending_approval_replays_and_resolution_is_terminal_journal_fact:304, approval_rpc_handles_are_ticket_scoped_and_match_the_projection:385, uncertain_effect_requires_explicit_reconciliation_before_resume:455
 
 #### `crates/everyaios-core/tests/sidecar_handoff.rs` — 105 lines · 1 tests · refs 0
 
@@ -3142,6 +3154,12 @@ complete function accounting for the file. `refs` is the cross-file `stem::` ref
 
 - `fns` (7): mock_server:18, new:32, call:44, call:58, real_connector_attach_list_and_read_path:69, real_connector_mutation_needs_approval_first:109, real_connector_unknown_tool_and_bypass_refused:147
 
+#### `crates/everyaios-mcp/tests/streamable_http.rs` — 1,069 lines · 17 tests · refs 0
+
+> Official-shaped fixtures for the supervised Streamable-HTTP `/mcp` lease.
+
+- `fns` (30): call:22, call:34, call:49, call:61, call:73, call:88, call:99, json:112, request:118, raw_request:182, json_request:209, mutation_request:234, start_echo_lease:247, initialize_list_and_call_follow_the_http_contract:258, duplicate_mutation_idempotency_key_replays_one_result:334, handler_panic_marks_the_mutation_uncertain_and_never_replays_it:383, approval_pending_is_not_cached_as_a_terminal_mutation:418, terminal_failures_replay_but_unknown_failures_remain_fenced:463, changed_arguments_reject_an_existing_idempotency_key:514, bounded_mutation_ledger_evicts_terminal_entries_for_future_mutations:541, mutating_timeout_does_not_execute_a_second_time:564, loopback_pool_speaks_the_same_strict_headers:614, notification_is_202_with_no_body:628, strict_accept_and_framing_failures_are_json_protocol_errors:652, wrong_method_content_type_host_origin_and_path_are_refused:705, protocol_negotiation_and_metadata_mismatch_fail_closed:789, bearer_isolation_and_shared_only_admission_are_per_lease:936, shutdown_is_bounded_when_handler_never_returns:982, partial_http_request_has_a_bounded_deadline:1032, shutdown_closes_idle_active_connections:1054
+
 ### 9.15 `crates/everyaios-memory/`
 
 #### `crates/everyaios-memory/src/abort.rs` — 168 lines · 4 tests · refs 0
@@ -3381,7 +3399,7 @@ complete function accounting for the file. `refs` is the cross-file `stem::` ref
 
 ### 9.16 `crates/everyaios-office/`
 
-#### `crates/everyaios-office/src/atomic.rs` — 101 lines · 3 tests · refs 142
+#### `crates/everyaios-office/src/atomic.rs` — 101 lines · 3 tests · refs 143
 
 > D7 — atomic writes (ARCH/04 §4.4): write a sibling temp file, fsync it, then rename over the target.
 
@@ -4309,10 +4327,11 @@ complete function accounting for the file. `refs` is the cross-file `stem::` ref
 
 ## 10. TypeScript / TSX — per-area, per-file LLD
 
-**Every tracked `.ts`/`.tsx` file is enumerated below** (623 of them). `exports:` lists every exported
+**Every tracked `.ts`/`.tsx` file is enumerated below** (627 of them). `exports:` lists every exported
 declaration and re-export. `fns:` lists **every named function** — declarations, class and object-literal
 methods, constructors, get/set accessors, and function/arrow expressions bound to a name — as `name:line`,
-parsed with the TypeScript compiler. `anon:` counts the
+parsed with a **line regex** — `typescript` did not resolve, so class/object methods,
+constructors, accessors and named fn expressions are UNDERCOUNTED here. `anon:` counts the
 function/arrow expressions with no binding name (inline callbacks); `fns + anon` is the file's full function
 population. `wiring:` is the §11 verdict.
 
@@ -4320,217 +4339,178 @@ population. `wiring:` is the §11 verdict.
 
 | Area | Files | Lines | Fns | Anon | Exports | Tests | Prod-reachable |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `ARCH/archive` | 50 | 13,043 | 367 | 636 | 275 | 345 | 0 |
-| `packages/coordinator` | 95 | 9,056 | 283 | 483 | 307 | 306 | 12 |
-| `packages/core-agents` | 4 | 315 | 10 | 8 | 10 | 5 | 0 |
-| `packages/core-ai` | 41 | 4,763 | 133 | 222 | 148 | 142 | 0 |
-| `packages/core-connectors` | 39 | 7,324 | 211 | 186 | 83 | 91 | 1 |
-| `packages/core-domain` | 18 | 1,209 | 10 | 11 | 94 | 9 | 1 |
-| `packages/core-memory` | 25 | 4,768 | 122 | 234 | 104 | 116 | 0 |
-| `packages/core-providers` | 12 | 2,348 | 40 | 76 | 34 | 33 | 0 |
-| `packages/core-search` | 47 | 4,071 | 164 | 186 | 136 | 81 | 1 |
-| `packages/core-security` | 5 | 556 | 24 | 28 | 10 | 23 | 0 |
-| `packages/core-tools` | 6 | 349 | 9 | 6 | 21 | 3 | 0 |
-| `ui` | 1 | 198 | 7 | 0 | 0 | 0 | 0 |
-| `ui/src` | 280 | 66,956 | 1947 | 3702 | 1251 | 515 | 167 |
+| `ARCH/archive` | 50 | 13,043 | 236 | 0 | 275 | 345 | 0 |
+| `packages/coordinator` | 95 | 9,056 | 194 | 0 | 307 | 306 | 1 |
+| `packages/core-agents` | 4 | 315 | 2 | 0 | 10 | 5 | 0 |
+| `packages/core-ai` | 41 | 4,763 | 79 | 0 | 148 | 142 | 0 |
+| `packages/core-connectors` | 39 | 7,324 | 164 | 0 | 83 | 91 | 0 |
+| `packages/core-domain` | 18 | 1,209 | 11 | 0 | 94 | 9 | 0 |
+| `packages/core-memory` | 25 | 4,768 | 76 | 0 | 104 | 116 | 0 |
+| `packages/core-providers` | 12 | 2,348 | 21 | 0 | 34 | 33 | 0 |
+| `packages/core-search` | 47 | 4,071 | 71 | 0 | 136 | 81 | 0 |
+| `packages/core-security` | 5 | 556 | 21 | 0 | 10 | 23 | 0 |
+| `packages/core-tools` | 6 | 349 | 5 | 0 | 21 | 3 | 0 |
+| `ui` | 1 | 198 | 3 | 0 | 0 | 0 | 0 |
+| `ui/src` | 284 | 67,687 | 1640 | 0 | 1251 | 541 | 2 |
 
 ### 10.1 `ARCH/archive`
 
 #### `ARCH/archive/coordinator-loop/agent-patterns.test.ts` — 203 lines · 32 tests · TEST · imported by 0
-- `anon` (38): function/arrow expressions with no binding name
 
-#### `ARCH/archive/coordinator-loop/agent-patterns.ts` — 272 lines · 0 tests · TEST-ONLY · imported by 1
+#### `ARCH/archive/coordinator-loop/agent-patterns.ts` — 272 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (23): type AgentMode, interface PlanActDecision, function decideMode, type Tier, interface ArchitectConfig, function architectSplit, interface OracleConfig, interface ReviewVerdict, function oracleChecks, interface StopInfo, function detectPrematureStop, type PromptNode, interface ComposeOptions, function composePrompt, interface ModelAliasMap, function resolveModelAlias, interface DistroPreset, interface DistroManifest, function findDistro, function applyDistro, interface AcpLinkConfig, const ACP_LINK, function acpAuthMode
-- `fns` (13): decideMode:29, architectSplit:61, editPrompt:67, oracleChecks:90, detectPrematureStop:112, composePrompt:137, approx:138, cut:141, render:150, resolveModelAlias:195, findDistro:231, applyDistro:235, acpAuthMode:265
-- `anon` (3): function/arrow expressions with no binding name
+- `fns` (14): decideMode:29, architectSplit:61, oracleChecks:90, detectPrematureStop:112, fences:114, unbalancedBrace:116, composePrompt:137, approx:138, cut:141, render:150, resolveModelAlias:195, findDistro:231, applyDistro:235, acpAuthMode:265
 
 #### `ARCH/archive/coordinator-loop/chat.test.ts` — 1,124 lines · 35 tests · TEST · imported by 0
-- `fns` (39): collector:29, emit:33, scripted:40, streamChat:42, tick:60, streamChat:159, streamChat:186, streamChat:366, request:372, streamChat:397, request:403, request:436, streamChat:449, request:479, streamChat:505, request:534, streamChat:547, request:562, streamChat:575, request:603, streamChat:624, request:652, streamChat:675, request:704, streamChat:734, request:753, streamChat:780, request:800, streamChat:831, request:859, request:880, request:928, streamChat:958, request:1000, streamChat:1022, request:1046, streamChat:1056, request:1085, streamChat:1104
-- `anon` (92): function/arrow expressions with no binding name
+- `fns` (27): collector:29, scripted:40, tick:60, pull:212, pull:252, pull:305, request:372, request:403, request:436, names:459, request:479, request:534, request:562, request:603, request:652, request:704, request:753, request:800, request:859, request:880, request:928, p:930, request:1000, p:1001, request:1046, request:1085, p:1086
 
-#### `ARCH/archive/coordinator-loop/chat.ts` — 1,575 lines · 0 tests · TEST-ONLY · imported by 5
+#### `ARCH/archive/coordinator-loop/chat.ts` — 1,575 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (33): re-export evaluateGuard, re-export useTicket, re-export guardGate, re-export assertAllLogged, re-export ContextTrace, re-export type ContextSource, re-export composeHooks, re-export runStage, re-export type WaterfallHooks, interface ChatStreamParams, interface ChiefDispatch, function dispatchByChief, interface ChiefTurnContext, interface ChiefAdapter, class InbuiltChiefAdapter, class ExternalChiefAdapter, function chiefAdapterFor, type ChatEvent, interface ProviderMessage, interface ProviderRequest, interface ProviderBridge, class PendingQueue, interface ProviderChunk, class FrameProviderBridge, function cancelChatStream, function activeStreamCount, function runChatStream, function extractJsonToolCalls, interface ToolRetryParams, function runToolRetry, function extractFacts, function injectBelowBoundary, function fileToFacts
-- `fns` (32): dispatchByChief:135, runTurn:176, constructor:195, runTurn:197, chiefAdapterFor:215, push:296, close:303, next:309, constructor:352, handleChunk:357, streamChat:396, takeFailure:408, onAbort:428, cancelChatStream:504, activeStreamCount:512, runChatStream:528, runInbuiltTurn:566, dispatchOneTool:735, generatePrompt:925, streamProvider:1064, persistTurn:1122, executeTool:1126, executeTools:1129, extractMemory:1144, isBudgetError:1382, toolCallChunk:1386, extractJsonToolCalls:1406, toolCallsFromValue:1442, runToolRetry:1493, extractFacts:1537, injectBelowBoundary:1551, fileToFacts:1563
-- `anon` (18): function/arrow expressions with no binding name
+- `fns` (22): dispatchByChief:135, chiefAdapterFor:215, takeFailure:408, onAbort:428, cancelChatStream:504, activeStreamCount:512, runChatStream:528, runInbuiltTurn:566, started:598, cached:709, dispatchOneTool:735, plan:941, warm:954, map:987, isBudgetError:1382, toolCallChunk:1386, extractJsonToolCalls:1406, toolCallsFromValue:1442, runToolRetry:1493, extractFacts:1537, injectBelowBoundary:1551, fileToFacts:1563
 
 #### `ARCH/archive/coordinator-loop/chief-dispatch.test.ts` — 151 lines · 14 tests · TEST · imported by 0
-- `fns` (4): scriptedBridge:29, streamChat:31, emit:60, streamChat:76
-- `anon` (24): function/arrow expressions with no binding name
+- `fns` (1): scriptedBridge:29
 
 #### `ARCH/archive/coordinator-loop/chunking.test.ts` — 77 lines · 13 tests · TEST · imported by 0
-- `anon` (13): function/arrow expressions with no binding name
 
-#### `ARCH/archive/coordinator-loop/chunking.ts` — 208 lines · 0 tests · TEST-ONLY · imported by 3
+#### `ARCH/archive/coordinator-loop/chunking.ts` — 208 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (2): function estimateTokens, function chunkText
 - `fns` (8): estimateTokens:28, chunkText:39, isSemanticMime:52, chunkFixedSize:61, findSentenceBreak:107, chunkMarkdownSemantic:117, splitMarkdownSections:159, mergeSmallChunks:180
-- `anon` (1): function/arrow expressions with no binding name
 
 #### `ARCH/archive/coordinator-loop/citations.test.ts` — 28 lines · 3 tests · TEST · imported by 0
-- `anon` (3): function/arrow expressions with no binding name
 
-#### `ARCH/archive/coordinator-loop/citations.ts` — 54 lines · 0 tests · TEST-ONLY · imported by 2
+#### `ARCH/archive/coordinator-loop/citations.ts` — 54 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (2): interface Citation, function citationsFromSearchResult
 - `fns` (2): asHit:17, citationsFromSearchResult:35
 
-#### `ARCH/archive/coordinator-loop/context-providers.ts` — 96 lines · 0 tests · TEST-ONLY · imported by 2
+#### `ARCH/archive/coordinator-loop/context-providers.ts` — 96 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (10): type ContextProviderId, interface Mention, interface ContextPayload, type ContextResolver, function registerContextProvider, function hasContextProvider, function listContextProviders, function parseMentions, function resolveMentions, function approxTokens
-- `fns` (6): registerContextProvider:40, hasContextProvider:44, listContextProviders:48, parseMentions:56, resolveMentions:72, approxTokens:93
-- `anon` (2): function/arrow expressions with no binding name
+- `fns` (7): registerContextProvider:40, hasContextProvider:44, listContextProviders:48, parseMentions:56, id:63, resolveMentions:72, approxTokens:93
 
 #### `ARCH/archive/coordinator-loop/cowork-swarm-verification.test.ts` — 421 lines · 20 tests · TEST · imported by 0
-- `fns` (2): agentAStream:270, agentBStream:276
-- `anon` (24): function/arrow expressions with no binding name
+- `fns` (1): occurrences:376
 
-#### `ARCH/archive/coordinator-loop/edit-strategies.ts` — 185 lines · 0 tests · TEST-ONLY · imported by 1
+#### `ARCH/archive/coordinator-loop/edit-strategies.ts` — 185 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (5): type EditStrategyKind, interface EditOperation, interface MatchResult, function applySearchReplace, function parseApplyPatch
-- `fns` (5): flex:31, levenshtein:38, splitEllipsis:65, applySearchReplace:89, parseApplyPatch:153
-- `anon` (5): function/arrow expressions with no binding name
+- `fns` (7): flex:31, levenshtein:38, splitEllipsis:65, applySearchReplace:89, parseApplyPatch:153, op:160, path:161
 
 #### `ARCH/archive/coordinator-loop/first-class-tools.test.ts` — 37 lines · 4 tests · TEST · imported by 0
-- `anon` (6): function/arrow expressions with no binding name
 
-#### `ARCH/archive/coordinator-loop/first-class-tools.ts` — 130 lines · 0 tests · TEST-ONLY · imported by 1
+#### `ARCH/archive/coordinator-loop/first-class-tools.ts` — 130 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (4): type FirstClassToolId, const FIRST_CLASS_TOOLS, function mergeFirstClassTools, function isFirstClassTool
 - `fns` (2): mergeFirstClassTools:121, isFirstClassTool:127
-- `anon` (2): function/arrow expressions with no binding name
 
-#### `ARCH/archive/coordinator-loop/intent.ts` — 128 lines · 0 tests · TEST-ONLY · imported by 1
+#### `ARCH/archive/coordinator-loop/intent.ts` — 128 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (5): type IntentKind, interface Intent, function classifyIntent, type IntentClassifier, function handlerFor
 - `fns` (3): classifyIntent:44, score:48, handlerFor:114
 
 #### `ARCH/archive/coordinator-loop/mention.test.ts` — 63 lines · 7 tests · TEST · imported by 0
-- `anon` (8): function/arrow expressions with no binding name
 
-#### `ARCH/archive/coordinator-loop/mention.ts` — 142 lines · 0 tests · TEST-ONLY · imported by 1
+#### `ARCH/archive/coordinator-loop/mention.ts` — 142 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (9): type MentionSource, interface MentionMessage, interface MentionHit, interface MentionPlan, function extractMentions, function stripMentions, class MentionRegistry, function builtinMentionSeed, function routeMention
-- `fns` (8): extractMentions:48, stripMentions:64, constructor:76, register:85, resolve:89, knownHandles:93, builtinMentionSeed:105, routeMention:119
-- `anon` (1): function/arrow expressions with no binding name
+- `fns` (4): extractMentions:48, stripMentions:64, builtinMentionSeed:105, routeMention:119
 
 #### `ARCH/archive/coordinator-loop/p64-ladder-diff.test.ts` — 39 lines · 2 tests · TEST · imported by 0
-- `anon` (3): function/arrow expressions with no binding name
 
 #### `ARCH/archive/coordinator-loop/p64-lane.test.ts` — 1,066 lines · 62 tests · TEST · imported by 0
-- `fns` (21): TAG:52, streamChat:98, request:104, streamChat:136, request:224, request:244, request:274, request:302, editHarness:331, request:333, failing:392, scriptedBridge:404, streamChat:406, harness:415, request:417, editPath:588, request:592, wrapped:704, batchHarness:858, request:862, request:1010
-- `anon` (109): function/arrow expressions with no binding name
+- `fns` (25): TAG:52, request:104, request:224, request:244, request:274, request:302, editHarness:331, request:333, p:334, failing:392, scriptedBridge:404, harness:415, request:417, editPath:588, request:592, p:593, wrapped:704, out:740, batchHarness:858, request:862, p:863, args:864, request:1010, p:1011, args:1012
 
 #### `ARCH/archive/coordinator-loop/plan.test.ts` — 414 lines · 22 tests · TEST · imported by 0
-- `fns` (9): collector:28, plan:32, chat:33, scripted:38, streamChat:40, scriptedBreaker:53, request:62, tick:143, streamChat:361
-- `anon` (54): function/arrow expressions with no binding name
+- `fns` (4): collector:28, scripted:38, scriptedBreaker:53, tick:143
 
-#### `ARCH/archive/coordinator-loop/plan.ts` — 732 lines · 0 tests · TEST-ONLY · imported by 2
+#### `ARCH/archive/coordinator-loop/plan.ts` — 732 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (18): re-export evaluateGuard, re-export useTicket, re-export guardGate, interface PlanTask, function draftPlanTasks, interface PlanExecutionParams, interface PlanInterruptEvent, type PlanEvent, type PlanChoice, type PlanRequest, function activePlanCount, function respondToBreak, function cancelPlan, function runPlanExecution, function describeBreak, function topologicalOrder, function planTokenEstimate, re-export TurnInput
-- `fns` (13): draftPlanTasks:55, activePlanCount:162, respondToBreak:170, cancelPlan:179, runPlanExecution:193, stepOnce:401, describeBreak:425, waitForChoice:446, onAbort:465, runTaskTurn:482, taskTools:679, topologicalOrder:689, planTokenEstimate:723
-- `anon` (21): function/arrow expressions with no binding name
+- `fns` (17): draftPlanTasks:55, activePlanCount:162, respondToBreak:170, cancelPlan:179, runPlanExecution:193, started:226, report:349, stepOnce:401, reply:410, describeBreak:425, waitForChoice:446, onAbort:465, runTaskTurn:482, taskTools:679, topologicalOrder:689, depsOk:707, planTokenEstimate:723
 
 #### `ARCH/archive/coordinator-loop/prompt.test.ts` — 161 lines · 17 tests · TEST · imported by 0
-- `anon` (17): function/arrow expressions with no binding name
+- `fns` (3): realClosings:70, closings:94, closings:157
 
-#### `ARCH/archive/coordinator-loop/prompt.ts` — 267 lines · 0 tests · TEST-ONLY · imported by 4
+#### `ARCH/archive/coordinator-loop/prompt.ts` — 267 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (14): function scanPersonaForInjection, const MINIMAL_CODE_DOCTRINE, const SINGLE_MATCH_EDIT_INVARIANT, const CONTEXT_MODE_SUMMARY_INVARIANT, function wrapUntrusted, function wrapUserDocument, function stablePrefixOf, interface DesktopPromptOptions, function buildDesktopSystemPrompt, interface RepoMapTag, const REPOMAP_DEFAULT_BUDGET_TOKENS, function rankRepoMapTags, function fitRepoMapToBudget, function renderRepoMapBlock
-- `fns` (10): scanPersonaForInjection:61, sanitizeAngles:80, wrapUntrusted:102, wrapUserDocument:117, stablePrefixOf:132, buildDesktopSystemPrompt:161, rankRepoMapTags:225, fitRepoMapToBudget:242, costOf:250, renderRepoMapBlock:262
-- `anon` (4): function/arrow expressions with no binding name
+- `fns` (11): scanPersonaForInjection:61, sanitizeAngles:80, wrapUntrusted:102, wrapUserDocument:117, stablePrefixOf:132, buildDesktopSystemPrompt:161, docs:190, rankRepoMapTags:225, fitRepoMapToBudget:242, costOf:250, renderRepoMapBlock:262
 
 #### `ARCH/archive/coordinator-loop/real-tasks-benchmark.test.ts` — 294 lines · 13 tests · TEST · imported by 0
-- `fns` (9): constructor:43, get:51, set:62, evictExpired:82, get size:93, touch:97, toExpiresAt:102, isExpired:108, detectConflicts:240
-- `anon` (16): function/arrow expressions with no binding name
+- `fns` (2): matches:221, detectConflicts:240
 
 #### `ARCH/archive/coordinator-loop/tools.test.ts` — 352 lines · 24 tests · TEST · imported by 0
-- `fns` (6): fakeRust:17, request:28, request:274, status:290, request:321, request:343
-- `anon` (43): function/arrow expressions with no binding name
+- `fns` (2): fakeRust:17, p:30
 
-#### `ARCH/archive/coordinator-loop/tools.ts` — 1,912 lines · 0 tests · TEST-ONLY · imported by 9
+#### `ARCH/archive/coordinator-loop/tools.ts` — 1,912 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (58): type ToolRequest, type ToolDecision, interface ShadowPreflightResult, function preflightBlocks, interface ToolCommitResult, interface ListedTool, interface OpenAIFunctionTool, const MAX_ACTIVE_TOOLS, interface TerminalSessionView, interface TerminalPlaneStatus, const FIRST_CLASS_NATIVE_TOOLS, function mergeWithNativeTools, function sortToolsStable, const LOOP_PINNED_TOOL_IDS, function resolveActiveTools, function listedToolsToOpenAI, function canonicalArgsHash, const MAX_TOOL_OUTPUT_CHARS, function sanitizeToolResult, function sanitizeUnknown, class ToolExecutor, const DELEGATE_BLOCKED_TOOLS, const SUBAGENT_DEFAULT_DENY_TASK_TOOLS, const SUBAGENT_MAX_DEPTH, const SUBAGENT_MAX_CONCURRENT, const SUBAGENT_MAX_TOTAL, interface SubAgentSpecShape, interface SubAgentResultShape, interface BuildSubAgentSpecOptions, function buildSubAgentSpec, function subAgentSpecFromToolArgs, interface SubAgentSpawnCounts, function checkSubAgentSpawn, class SubAgentSpawnTracker, const subAgentTracker, function toSummaryOnlyResult, function dispatchSubAgent, function dispatchMultiRun, interface ExactEditParams, function countOccurrences, function assertSingleMatch, interface ApplyExactEditOptions, function deriveEditRisk, type EditStrategy, const P64_MAX_EDIT_BYTES, interface LadderResult, function lexicalSymbols, function applyExactOnce, function applyStructuredEdit, function applyFuzzyEdit, function applyEditLadder, function editArgsFromToolCall, function applyExactEdit, interface BatchEditParams, interface BatchEditOutcome, interface BatchEditResult, function executeEditAwareRound, function applyEditBatch
-- `fns` (54): preflightBlocks:40, mergeWithNativeTools:234, sortToolsStable:246, resolveActiveTools:296, listedToolsToOpenAI:364, canonicalArgsHash:393, canonicalNumberToken:401, canonicalize:412, sanitizeToolResult:428, sanitizeUnknown:453, record:464, constructor:483, notifyTicket:494, setExecutionId:508, get lastTicketId:513, recordVerifiedEdit:529, runShadowPreflight:565, listTools:609, terminalPlaneStatus:623, terminalLastCommand:637, executeTool:648, waitForTicket:740, operationOf:771, sanitizeTaskId:853, buildSubAgentSpec:864, deriveEffectiveSubAgentTools:892, subAgentSpecFromToolArgs:914, checkSubAgentSpawn:974, get active:1011, get total:1015, canSpawn:1019, begin:1023, release:1032, toSummaryOnlyResult:1041, waitForTicketApproval:1048, dispatchSubAgent:1081, dispatchMultiRun:1152, countOccurrences:1219, assertSingleMatch:1235, countMatches:1280, deriveEditRisk:1304, balance:1315, rustLines:1348, normalizeFuzzyLine:1359, lexicalSymbols:1383, applyExactOnce:1407, whitespaceFree:1438, applyStructuredEdit:1467, applyFuzzyEdit:1514, applyEditLadder:1595, editArgsFromToolCall:1636, applyExactEdit:1658, executeEditAwareRound:1785, applyEditBatch:1826
-- `anon` (30): function/arrow expressions with no binding name
+- `fns` (50): preflightBlocks:40, mergeWithNativeTools:234, sortToolsStable:246, resolveActiveTools:296, listedToolsToOpenAI:364, canonicalArgsHash:393, canonicalNumberToken:401, canonicalize:412, sanitizeToolResult:428, sanitizeUnknown:453, raw:577, out:610, out:624, out:638, pre:693, committed:719, status:753, state:756, operationOf:771, sanitizeTaskId:853, buildSubAgentSpec:864, model:871, subAgentSpecFromToolArgs:914, checkSubAgentSpawn:974, toSummaryOnlyResult:1041, waitForTicketApproval:1048, status:1057, state:1060, dispatchSubAgent:1081, dispatchMultiRun:1152, countOccurrences:1219, assertSingleMatch:1235, countMatches:1280, deriveEditRisk:1304, balance:1315, rustLines:1348, normalizeFuzzyLine:1359, lexicalSymbols:1383, applyExactOnce:1407, whitespaceFree:1438, applyStructuredEdit:1467, lastByte:1491, applyFuzzyEdit:1514, applyEditLadder:1595, editArgsFromToolCall:1636, applyExactEdit:1658, read:1669, executeEditAwareRound:1785, applyEditBatch:1826, read:1856
 
 #### `ARCH/archive/core-engine/src/__tests__/agent-routing.test.ts` — 161 lines · 7 tests · TEST · imported by 0
-- `fns` (16): makeDeps:14, generatePrompt:18, streamProvider:19, executeTool:24, persistTurn:25, extractMemory:26, generatePrompt:92, streamProvider:97, executeTool:101, persistTurn:102, extractMemory:103, generatePrompt:137, streamProvider:138, executeTool:144, persistTurn:145, extractMemory:146
-- `anon` (11): function/arrow expressions with no binding name
+- `fns` (1): makeDeps:14
 
 #### `ARCH/archive/core-engine/src/__tests__/engine.test.ts` — 367 lines · 17 tests · TEST · imported by 0
-- `fns` (38): generatePrompt:12, streamProvider:13, persistTurn:17, extractMemory:18, generatePrompt:42, streamProvider:43, executeTool:53, executeTools:56, persistTurn:60, extractMemory:61, generatePrompt:75, generatePrompt:104, streamProvider:105, executeTool:123, persistTurn:127, extractMemory:131, generatePrompt:156, streamProvider:157, persistTurn:162, extractMemory:163, generatePrompt:178, streamProvider:179, executeTool:196, persistTurn:200, extractMemory:201, generatePrompt:220, streamProvider:221, executeTool:235, persistTurn:239, extractMemory:240, generatePrompt:252, streamProvider:253, executeTool:264, persistTurn:265, extractMemory:266, getRiskSignals:289, getRiskSignals:312, getRiskSignals:343
-- `anon` (19): function/arrow expressions with no binding name
 
 #### `ARCH/archive/core-engine/src/__tests__/permission-gate.test.ts` — 68 lines · 5 tests · TEST · imported by 0
-- `fns` (2): toolFor:13, execute:21
-- `anon` (5): function/arrow expressions with no binding name
+- `fns` (1): toolFor:13
 
 #### `ARCH/archive/core-engine/src/__tests__/risk-compass.test.ts` — 132 lines · 13 tests · TEST · imported by 0
 - `fns` (2): buildLabeledSamples:90, mulberry32:122
-- `anon` (14): function/arrow expressions with no binding name
 
 #### `ARCH/archive/core-engine/src/__tests__/trajectory.test.ts` — 263 lines · 12 tests · TEST · imported by 0
-- `fns` (19): generatePrompt:5, streamProvider:6, persistTurn:10, extractMemory:11, streamProvider:56, generatePrompt:80, streamProvider:81, executeTool:91, persistTurn:92, extractMemory:93, streamProvider:118, streamProvider:144, generatePrompt:164, persistTurn:200, generatePrompt:216, streamProvider:217, executeTool:227, persistTurn:228, extractMemory:229
-- `anon` (16): function/arrow expressions with no binding name
 
 #### `ARCH/archive/core-engine/src/__tests__/trust-ladder.test.ts` — 189 lines · 23 tests · TEST · imported by 0
-- `fns` (2): toolFor:110, execute:118
-- `anon` (24): function/arrow expressions with no binding name
+- `fns` (1): toolFor:110
 
-#### `ARCH/archive/core-engine/src/automation-engine.ts` — 108 lines · 0 tests · UNREACHED · imported by 2
+#### `ARCH/archive/core-engine/src/automation-engine.ts` — 108 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (5): type AutomationRunInput, type AutomationRunResult, function getAutomationSurface, function automationInputToTurnInput, function estimateAutomationCost
 - `fns` (3): getAutomationSurface:38, automationInputToTurnInput:77, estimateAutomationCost:93
 
-#### `ARCH/archive/core-engine/src/context/index.ts` — 8 lines · 0 tests · UNREACHED · imported by 1
+#### `ARCH/archive/core-engine/src/context/index.ts` — 8 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (5): re-export ContextManager, re-export ContextBlock, re-export ContextManagerDeps, re-export ContextTier, re-export ContextTraceSink
 
-#### `ARCH/archive/core-engine/src/context/manager.ts` — 104 lines · 0 tests · UNREACHED · imported by 2
+#### `ARCH/archive/core-engine/src/context/manager.ts` — 104 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (5): type ContextTier, interface ContextBlock, interface ContextTraceSink, interface ContextManagerDeps, class ContextManager
-- `fns` (7): constructor:62, inject:68, record:78, blocks:85, blocksOf:90, count:95, indexOf:100
-- `anon` (2): function/arrow expressions with no binding name
 
-#### `ARCH/archive/core-engine/src/engine.ts` — 573 lines · 0 tests · TEST-ONLY · imported by 4
+#### `ARCH/archive/core-engine/src/engine.ts` — 573 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (7): type EngineEvent, type StreamChunk, type ToolResultRecord, type StreamProviderExtras, interface EngineDeps, type EngineCallback, class ConversationEngine
-- `fns` (4): constructor:151, run:153, runOne:327, gateToolCall:517
-- `anon` (5): function/arrow expressions with no binding name
+- `fns` (1): runOne:327
 
-#### `ARCH/archive/core-engine/src/index.ts` — 47 lines · 0 tests · TEST-ONLY · imported by 2
+#### `ARCH/archive/core-engine/src/index.ts` — 47 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (18): re-export ConversationEngine, re-export TrajectoryStep, re-export TurnTrajectory, re-export RiskSignals, re-export RiskAssessment, re-export RiskBand, re-export CalibrationSample, re-export CalibrationReport, re-export defaultContract, re-export SurfaceContract, re-export SurfaceKind, re-export ToolFamily, re-export TurnInput, re-export AgentSandbox, re-export compilePrompt, re-export CompiledPrompt, re-export AutomationRunInput, re-export AutomationRunResult
 
-#### `ARCH/archive/core-engine/src/policy/index.ts` — 28 lines · 0 tests · UNREACHED · imported by 1
+#### `ARCH/archive/core-engine/src/policy/index.ts` — 28 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (2): re-export LadderRiskLevel, re-export TrustOutcome
 
-#### `ARCH/archive/core-engine/src/policy/permission-gate.ts` — 200 lines · 0 tests · TEST-ONLY · imported by 4
+#### `ARCH/archive/core-engine/src/policy/permission-gate.ts` — 200 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (4): function evaluatePermissionGate, function approveRiskForSession, function clearSessionApprovals, function evaluatePermissionGateWithTrust
 - `fns` (6): pruneSessionMap:46, evaluatePermissionGate:66, approveRiskForSession:106, clearSessionApprovals:122, higherRisk:134, evaluatePermissionGateWithTrust:154
 
-#### `ARCH/archive/core-engine/src/policy/trust-ladder.ts` — 148 lines · 0 tests · TEST-ONLY · imported by 4
+#### `ARCH/archive/core-engine/src/policy/trust-ladder.ts` — 148 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (13): type LadderRiskLevel, const TRUST_LADDER, const TRUST_SUCCESS_DELTA, const TRUST_FAILURE_DELTA, const TRUST_DECLINE_DELTA, const TRUST_MAX, const TRUST_FARM_WINDOW_MS, const TRUST_FARM_CAP, function maxRiskForScore, function riskIndex, interface TrustOutcome, class TrustLadder, function ladderLevelForScore
-- `fns` (11): maxRiskForScore:47, riskIndex:55, constructor:72, getScore:76, maxRisk:80, isUnlocked:89, restore:99, recordOutcome:105, resetFarm:129, progress:135, ladderLevelForScore:141
+- `fns` (3): maxRiskForScore:47, riskIndex:55, ladderLevelForScore:141
 
-#### `ARCH/archive/core-engine/src/prompt-compiler/index.ts` — 31 lines · 0 tests · UNREACHED · imported by 2
+#### `ARCH/archive/core-engine/src/prompt-compiler/index.ts` — 31 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (2): interface CompiledPrompt, function compilePrompt
 - `fns` (2): digestSha256:7, compilePrompt:17
-- `anon` (2): function/arrow expressions with no binding name
 
-#### `ARCH/archive/core-engine/src/risk-compass.ts` — 148 lines · 0 tests · UNREACHED · imported by 3
+#### `ARCH/archive/core-engine/src/risk-compass.ts` — 148 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (8): type RiskBand, interface RiskSignals, interface RiskAssessment, function assessHallucinationRisk, function countUncertaintyMarkers, interface CalibrationSample, interface CalibrationReport, function evaluateCalibration
 - `fns` (3): assessHallucinationRisk:49, countUncertaintyMarkers:88, evaluateCalibration:110
 
-#### `ARCH/archive/core-engine/src/stages/index.ts` — 7 lines · 0 tests · UNREACHED · imported by 4
+#### `ARCH/archive/core-engine/src/stages/index.ts` — 7 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (7): re-export RetrievalPlanner, re-export RetrievalPlan, re-export ToolPlanner, re-export FAMILY_TO_TOOLS, re-export ToolPlan, re-export PermissionGate, re-export GateResult
 
-#### `ARCH/archive/core-engine/src/stages/permission-gate.ts` — 55 lines · 0 tests · UNREACHED · imported by 2
+#### `ARCH/archive/core-engine/src/stages/permission-gate.ts` — 55 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (2): interface GateResult, class PermissionGate
-- `fns` (2): evaluate:24, approveForSession:47
 
-#### `ARCH/archive/core-engine/src/stages/retrieval-planner.ts` — 48 lines · 0 tests · UNREACHED · imported by 3
+#### `ARCH/archive/core-engine/src/stages/retrieval-planner.ts` — 48 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (2): interface RetrievalPlan, class RetrievalPlanner
-- `fns` (1): plan:13
 
-#### `ARCH/archive/core-engine/src/stages/tool-planner.ts` — 63 lines · 0 tests · UNREACHED · imported by 2
+#### `ARCH/archive/core-engine/src/stages/tool-planner.ts` — 63 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (3): const FAMILY_TO_TOOLS, interface ToolPlan, class ToolPlanner
-- `fns` (2): plan:36, familyOf:56
-- `anon` (1): function/arrow expressions with no binding name
 
-#### `ARCH/archive/core-engine/src/surface-contract.ts` — 60 lines · 0 tests · UNREACHED · imported by 2
+#### `ARCH/archive/core-engine/src/surface-contract.ts` — 60 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): function defaultContract
 - `fns` (1): defaultContract:6
 
-#### `ARCH/archive/core-engine/src/trajectory.ts` — 29 lines · 0 tests · UNREACHED · imported by 2
+#### `ARCH/archive/core-engine/src/trajectory.ts` — 29 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (2): interface TrajectoryStep, interface TurnTrajectory
 
-#### `ARCH/archive/core-engine/src/types.ts` — 59 lines · 0 tests · UNREACHED · imported by 8
+#### `ARCH/archive/core-engine/src/types.ts` — 59 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (6): re-export Scope, type SurfaceKind, type ToolFamily, interface AgentSandbox, interface SurfaceContract, interface TurnInput
 
 #### `ARCH/archive/core-engine/vitest.config.ts` — 16 lines · 0 tests · NOT IMPORTED · imported by 0
@@ -4538,369 +4518,298 @@ population. `wiring:` is the §11 verdict.
 ### 10.2 `packages/coordinator`
 
 #### `packages/coordinator/src/agent-builder.test.ts` — 76 lines · 6 tests · TEST · imported by 0
-- `anon` (6): function/arrow expressions with no binding name
 
-#### `packages/coordinator/src/agui.ts` — 159 lines · 0 tests · REACHABLE · imported by 2
+#### `packages/coordinator/src/agui.ts` — 159 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (13): type AguiEventType, interface AguiEnvelope, interface ToolCallData, interface ArtifactData, interface InterruptData, function encodeAgui, function decodeAgui, function notifyAgui, function onAguiEvent, function dispatchAguiLine, function isToolCall, function isArtifact, function isInterrupt
 - `fns` (8): encodeAgui:91, decodeAgui:97, notifyAgui:113, onAguiEvent:123, dispatchAguiLine:138, isToolCall:148, isArtifact:152, isInterrupt:156
-- `anon` (2): function/arrow expressions with no binding name
 
 #### `packages/coordinator/src/budget.test.ts` — 132 lines · 17 tests · TEST · imported by 0
-- `anon` (19): function/arrow expressions with no binding name
 
-#### `packages/coordinator/src/budget.ts` — 196 lines · 0 tests · TEST-ONLY · imported by 1
+#### `packages/coordinator/src/budget.ts` — 196 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (10): enum MessageKind, interface PayloadBudget, function budgetFor, interface Budgeted, function applyBudget, const DEFAULT_REF_TTL_MS, const MAX_REF_HANDLES, class RefRegistry, const refRegistry, function budgetJson
-- `fns` (10): budgetFor:32, MARKER:57, applyBudget:65, constructor:111, put:116, take:130, sweep:143, clear:156, get size:160, budgetJson:176
+- `fns` (4): budgetFor:32, MARKER:57, applyBudget:65, budgetJson:176
 
 #### `packages/coordinator/src/capability-seams.test.ts` — 40 lines · 5 tests · TEST · imported by 0
-- `anon` (12): function/arrow expressions with no binding name
 
-#### `packages/coordinator/src/capability-seams.ts` — 143 lines · 0 tests · TEST-ONLY · imported by 1
+#### `packages/coordinator/src/capability-seams.ts` — 143 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (6): interface ServiceDefinition, interface ProviderHandle, interface ConsumerBinding, interface UnloadReport, class CapabilityError, class CapabilitySeamRegistry
-- `fns` (11): constructor:44, declare:61, hasDefinition:65, register:70, bind:84, resolve:94, unregister:101, providerCount:115, providerFor:120, findProvider:130, consumerKey:140
+- `fns` (3): providerFor:120, findProvider:130, consumerKey:140
 
 #### `packages/coordinator/src/catalog.test.ts` — 157 lines · 18 tests · TEST · imported by 0
-- `anon` (19): function/arrow expressions with no binding name
 
-#### `packages/coordinator/src/catalog.ts` — 158 lines · 0 tests · TEST-ONLY · imported by 3
+#### `packages/coordinator/src/catalog.ts` — 158 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (13): const BROKER_TO_CATALOG_ID, const KEYLESS_DESKTOP_PROVIDERS, interface LocalModelInfo, interface ModelHints, function setLocalModels, function catalogIdForProvider, function catalogModels, function contextWindowFor, function hintsFor, function supportsToolsHeuristic, function localModelsFor, function brokerProviders, function providerLabel
 - `fns` (9): setLocalModels:73, catalogIdForProvider:78, catalogModels:83, contextWindowFor:90, hintsFor:99, supportsToolsHeuristic:124, localModelsFor:132, brokerProviders:137, providerLabel:146
-- `anon` (3): function/arrow expressions with no binding name
 
 #### `packages/coordinator/src/channel-a.test.ts` — 45 lines · 10 tests · TEST · imported by 0
-- `anon` (10): function/arrow expressions with no binding name
 
-#### `packages/coordinator/src/channel-a.ts` — 97 lines · 0 tests · TEST-ONLY · imported by 1
+#### `packages/coordinator/src/channel-a.ts` — 97 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (6): type AcpMethod, type MediatedAction, interface ChannelAConfig, const DEFAULT_CHANNEL_A, function mediate, function readTokenFootprint
 - `fns` (2): mediate:45, readTokenFootprint:86
 
 #### `packages/coordinator/src/combo-pick.test.ts` — 24 lines · 3 tests · TEST · imported by 0
-- `anon` (4): function/arrow expressions with no binding name
 
-#### `packages/coordinator/src/combo-pick.ts` — 32 lines · 0 tests · TEST-ONLY · imported by 1
+#### `packages/coordinator/src/combo-pick.ts` — 32 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (3): type HostRequest, function comboFromToolArgs, function applyComboPickIfPresent
-- `fns` (2): comboFromToolArgs:8, applyComboPickIfPresent:23
+- `fns` (3): comboFromToolArgs:8, applyComboPickIfPresent:23, out:29
 
 #### `packages/coordinator/src/companion.ts` — 42 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (4): type CompanionMood, interface CompanionFrame, function companionFrameFor, function moodForState
 - `fns` (2): companionFrameFor:28, moodForState:37
 
-#### `packages/coordinator/src/connector-bridge.ts` — 57 lines · 0 tests · REACHABLE · imported by 1
+#### `packages/coordinator/src/connector-bridge.ts` — 57 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (4): interface ConnectorCatalogEntry, function connectorCatalog, function queryConnectors, function resetConnectorRegistryForTests
 - `fns` (4): getRegistry:16, connectorCatalog:27, queryConnectors:43, resetConnectorRegistryForTests:54
-- `anon` (4): function/arrow expressions with no binding name
 
 #### `packages/coordinator/src/context-trace.test.ts` — 56 lines · 5 tests · TEST · imported by 0
-- `anon` (5): function/arrow expressions with no binding name
 
-#### `packages/coordinator/src/context-trace.ts` — 116 lines · 0 tests · TEST-ONLY · imported by 1
+#### `packages/coordinator/src/context-trace.ts` — 116 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (8): type ContextSource, interface ContextLogEntry, interface ContextLogResult, function estimateBlockTokens, function sha256Hex, class ContextTrace, function verifyEntry, function assertAllLogged
-- `fns` (8): estimateBlockTokens:47, sha256Hex:51, record:63, entriesFor:71, all:75, count:79, verifyEntry:89, assertAllLogged:103
-- `anon` (2): function/arrow expressions with no binding name
+- `fns` (4): estimateBlockTokens:47, sha256Hex:51, verifyEntry:89, assertAllLogged:103
 
 #### `packages/coordinator/src/core-providers.smoke.test.ts` — 101 lines · 7 tests · TEST · imported by 0
-- `anon` (7): function/arrow expressions with no binding name
+- `fns` (1): mod:88
 
 #### `packages/coordinator/src/cua-brief.test.ts` — 39 lines · 3 tests · TEST · imported by 0
-- `anon` (4): function/arrow expressions with no binding name
 
-#### `packages/coordinator/src/cua-brief.ts` — 50 lines · 0 tests · TEST-ONLY · imported by 1
+#### `packages/coordinator/src/cua-brief.ts` — 50 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (5): type HostRequest, interface FivePartBrief, function briefFromToolArgs, function briefIsComplete, function applyCuaBriefIfPresent
 - `fns` (4): briefFromToolArgs:16, str:20, briefIsComplete:33, applyCuaBriefIfPresent:39
-- `anon` (1): function/arrow expressions with no binding name
 
 #### `packages/coordinator/src/cua-perceive.test.ts` — 23 lines · 3 tests · TEST · imported by 0
-- `anon` (4): function/arrow expressions with no binding name
 
-#### `packages/coordinator/src/cua-perceive.ts` — 34 lines · 0 tests · TEST-ONLY · imported by 1
+#### `packages/coordinator/src/cua-perceive.ts` — 34 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (3): type HostRequest, function layersFromToolArgs, function applyCuaPerceiveIfPresent
 - `fns` (2): layersFromToolArgs:8, applyCuaPerceiveIfPresent:22
 
 #### `packages/coordinator/src/cua-replan.test.ts` — 56 lines · 4 tests · TEST · imported by 0
-- `anon` (6): function/arrow expressions with no binding name
 
-#### `packages/coordinator/src/cua-replan.ts` — 56 lines · 0 tests · TEST-ONLY · imported by 1
+#### `packages/coordinator/src/cua-replan.ts` — 56 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (5): type CuaReplanReason, type HostRequest, function remainingFromToolArgs, function cuaReplanReasonFromResult, function applyCuaReplanIfPresent
 - `fns` (3): remainingFromToolArgs:17, cuaReplanReasonFromResult:24, applyCuaReplanIfPresent:44
 
 #### `packages/coordinator/src/cua-route.test.ts` — 24 lines · 3 tests · TEST · imported by 0
-- `anon` (3): function/arrow expressions with no binding name
 
-#### `packages/coordinator/src/cua-route.ts` — 61 lines · 0 tests · TEST-ONLY · imported by 1
+#### `packages/coordinator/src/cua-route.ts` — 61 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (3): type WorkSurface, function routeWorkSurface, function refuseDesktopIfWrongSurface
 - `fns` (2): routeWorkSurface:22, refuseDesktopIfWrongSurface:33
-- `anon` (1): function/arrow expressions with no binding name
 
 #### `packages/coordinator/src/cua-skill.test.ts` — 50 lines · 3 tests · TEST · imported by 0
-- `anon` (5): function/arrow expressions with no binding name
 
-#### `packages/coordinator/src/cua-skill.ts` — 56 lines · 0 tests · TEST-ONLY · imported by 1
+#### `packages/coordinator/src/cua-skill.ts` — 56 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (3): type HostRequest, function promoteSkillArgs, function applyCuaSkillPromoteIfPresent
 - `fns` (2): promoteSkillArgs:12, applyCuaSkillPromoteIfPresent:40
 
 #### `packages/coordinator/src/cua-stop.test.ts` — 26 lines · 3 tests · TEST · imported by 0
-- `anon` (4): function/arrow expressions with no binding name
 
-#### `packages/coordinator/src/cua-stop.ts` — 26 lines · 0 tests · TEST-ONLY · imported by 1
+#### `packages/coordinator/src/cua-stop.ts` — 26 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (3): type HostRequest, function stopReasonFromToolArgs, function applyCuaStopIfPresent
 - `fns` (2): stopReasonFromToolArgs:8, applyCuaStopIfPresent:15
 
 #### `packages/coordinator/src/cua-verify.test.ts` — 42 lines · 3 tests · TEST · imported by 0
-- `anon` (4): function/arrow expressions with no binding name
 
-#### `packages/coordinator/src/cua-verify.ts` — 71 lines · 0 tests · TEST-ONLY · imported by 1
+#### `packages/coordinator/src/cua-verify.ts` — 71 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (5): type HostRequest, type EvidenceKind, interface MechanicalEvidence, function evidenceFromToolArgs, function applyCuaMechanicalVerifyIfPresent
 - `fns` (2): evidenceFromToolArgs:26, applyCuaMechanicalVerifyIfPresent:49
 
 #### `packages/coordinator/src/dream-diary.test.ts` — 39 lines · 6 tests · TEST · imported by 0
-- `anon` (9): function/arrow expressions with no binding name
 
-#### `packages/coordinator/src/dream-diary.ts` — 105 lines · 0 tests · TEST-ONLY · imported by 1
+#### `packages/coordinator/src/dream-diary.ts` — 105 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (7): interface ConsolidationRun, interface DiaryEntry, function nextDiaryId, function headlineFor, function briefFor, function diaryEntryFor, class DreamDiary
-- `fns` (8): nextDiaryId:32, headlineFor:38, briefFor:48, diaryEntryFor:63, constructor:81, record:84, list:90, morningBrief:95
-- `anon` (3): function/arrow expressions with no binding name
+- `fns` (4): nextDiaryId:32, headlineFor:38, briefFor:48, diaryEntryFor:63
 
 #### `packages/coordinator/src/external-inbox.test.ts` — 57 lines · 5 tests · TEST · imported by 0
-- `anon` (9): function/arrow expressions with no binding name
 
-#### `packages/coordinator/src/external-inbox.ts` — 129 lines · 0 tests · TEST-ONLY · imported by 1
+#### `packages/coordinator/src/external-inbox.ts` — 129 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (6): type InboxRiskClass, interface ExternalAsk, interface ParkAskInput, function nextAskId, class ExternalInbox, function unattendedVerdict
-- `fns` (9): nextAskId:47, constructor:59, park:62, list:78, pendingCount:84, approve:89, reject:98, expireOlderThan:106, unattendedVerdict:124
-- `anon` (2): function/arrow expressions with no binding name
+- `fns` (2): nextAskId:47, unattendedVerdict:124
 
 #### `packages/coordinator/src/fabric.test.ts` — 22 lines · 2 tests · TEST · imported by 0
-- `anon` (4): function/arrow expressions with no binding name
 
-#### `packages/coordinator/src/fabric.ts` — 22 lines · 0 tests · TEST-ONLY · imported by 1
+#### `packages/coordinator/src/fabric.ts` — 22 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (2): type HostRequest, function applyFabricIfPresent
 - `fns` (1): applyFabricIfPresent:7
 
 #### `packages/coordinator/src/fleet.test.ts` — 86 lines · 9 tests · TEST · imported by 0
-- `fns` (4): sA:39, sB:44, sA:59, sB:63
-- `anon` (10): function/arrow expressions with no binding name
 
-#### `packages/coordinator/src/fleet.ts` — 152 lines · 0 tests · TEST-ONLY · imported by 1
+#### `packages/coordinator/src/fleet.ts` — 152 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (9): interface FleetMember, interface FleetPlan, interface WorktreeSpec, function planFleet, function worktreeSpecs, type FleetEventPayload, type FleetEvent, function foldFleetState, function pinAdapterVersion
-- `fns` (6): planFleet:39, worktreeSpecs:56, multiplex:81, foldFleetState:97, pinAdapterVersion:130, slug:146
-- `anon` (2): function/arrow expressions with no binding name
+- `fns` (5): planFleet:39, worktreeSpecs:56, foldFleetState:97, pinAdapterVersion:130, slug:146
 
-#### `packages/coordinator/src/frame.ts` — 100 lines · 0 tests · REACHABLE · imported by 4
+#### `packages/coordinator/src/frame.ts` — 100 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (6): const MAX_FRAME_LEN, function encode, function encodeJson, function notify, class FrameDecoder, class FrameError
-- `fns` (6): encode:22, encodeJson:34, notify:44, push:61, get hasPartial:89, constructor:95
+- `fns` (3): encode:22, encodeJson:34, notify:44
 
 #### `packages/coordinator/src/goal.test.ts` — 48 lines · 5 tests · TEST · imported by 0
-- `anon` (8): function/arrow expressions with no binding name
 
-#### `packages/coordinator/src/goal.ts` — 126 lines · 0 tests · TEST-ONLY · imported by 1
+#### `packages/coordinator/src/goal.ts` — 126 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (6): type GoalState, interface GoalRecord, interface ParseGoalResult, function parseGoalCommand, function nextGoalId, class GoalRegistry
-- `fns` (12): parseGoalCommand:36, nextGoalId:46, constructor:55, start:58, get:70, list:74, activeCount:78, markRunning:83, pause:92, resume:101, finish:110, markLost:119
-- `anon` (2): function/arrow expressions with no binding name
+- `fns` (2): parseGoalCommand:36, nextGoalId:46
 
 #### `packages/coordinator/src/guard.test.ts` — 105 lines · 5 tests · TEST · imported by 0
-- `fns` (2): fakeRust:18, request:29
-- `anon` (6): function/arrow expressions with no binding name
+- `fns` (1): fakeRust:18
 
-#### `packages/coordinator/src/guard.ts` — 103 lines · 0 tests · TEST-ONLY · imported by 1
+#### `packages/coordinator/src/guard.ts` — 103 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (8): type GuardDecision, type GuardOperation, type GuardRequest, interface GuardDecisionPackage, interface GuardEvaluateParams, function evaluateGuard, function useTicket, function guardGate
-- `fns` (3): evaluateGuard:63, useTicket:83, guardGate:97
+- `fns` (4): evaluateGuard:63, useTicket:83, out:88, guardGate:97
 
 #### `packages/coordinator/src/h32.test.ts` — 31 lines · 3 tests · TEST · imported by 0
-- `anon` (3): function/arrow expressions with no binding name
 
-#### `packages/coordinator/src/h32.ts` — 47 lines · 0 tests · TEST-ONLY · imported by 1
+#### `packages/coordinator/src/h32.ts` — 47 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (4): function isAcpAgent, function shouldForwardModel, function sanitizeRequest, function modelColumnState
 - `fns` (4): isAcpAgent:23, shouldForwardModel:32, sanitizeRequest:37, modelColumnState:44
 
 #### `packages/coordinator/src/heap.test.ts` — 132 lines · 5 tests · TEST · imported by 0
-- `anon` (9): function/arrow expressions with no binding name
 
-#### `packages/coordinator/src/heap.ts` — 105 lines · 0 tests · REACHABLE · imported by 2
+#### `packages/coordinator/src/heap.ts` — 105 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (3): interface HeapMonitorOpts, interface HeapMonitorHandle, function startHeapMonitor
-- `fns` (2): startHeapMonitor:52, stop:97
-- `anon` (2): function/arrow expressions with no binding name
+- `fns` (1): startHeapMonitor:52
 
 #### `packages/coordinator/src/index.test.ts` — 227 lines · 17 tests · TEST · imported by 0
-- `anon` (25): function/arrow expressions with no binding name
+- `fns` (2): reader:178, readLoop:179
 
-#### `packages/coordinator/src/index.ts` — 505 lines · 0 tests · ENTRY · imported by 1
+#### `packages/coordinator/src/index.ts` — 505 lines · 0 tests · ENTRY · imported by 0
 - `exports` (13): const PROTOCOL_VERSION, interface Capabilities, const DEFAULT_CAPABILITIES, const VERSION, const DEFAULT_HEARTBEAT_MS, interface InitializeParams, function handleRequest, function heapUsedMB, function announceReady, function heartbeatIntervalMS, function startHeartbeat, function run, const schedulerWebhooks
-- `fns` (7): sendRequest:90, handleRequest:114, heapUsedMB:334, announceReady:347, heartbeatIntervalMS:360, startHeartbeat:373, run:386
-- `anon` (14): function/arrow expressions with no binding name
+- `fns` (14): sendRequest:90, handleRequest:114, p:121, p:142, p:156, p:194, p:220, p:262, p:289, heapUsedMB:334, announceReady:347, heartbeatIntervalMS:360, startHeartbeat:373, run:386
 
 #### `packages/coordinator/src/live-agent-harness.test.ts` — 251 lines · 8 tests · TEST · imported by 0
 - `fns` (1): hasBinary:36
-- `anon` (20): function/arrow expressions with no binding name
 
 #### `packages/coordinator/src/mcp-bridge.test.ts` — 14 lines · 2 tests · TEST · imported by 0
-- `anon` (2): function/arrow expressions with no binding name
 
-#### `packages/coordinator/src/mcp-bridge.ts` — 40 lines · 0 tests · REACHABLE · imported by 2
+#### `packages/coordinator/src/mcp-bridge.ts` — 40 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (2): function searchExternalMcp, function disconnectExternalMcp
 - `fns` (3): clientFor:12, searchExternalMcp:22, disconnectExternalMcp:33
 
 #### `packages/coordinator/src/mcp-catalog.test.ts` — 46 lines · 4 tests · TEST · imported by 0
-- `anon` (4): function/arrow expressions with no binding name
 
-#### `packages/coordinator/src/mcp-catalog.ts` — 98 lines · 0 tests · TEST-ONLY · imported by 2
+#### `packages/coordinator/src/mcp-catalog.ts` — 98 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (8): type CatalogSource, interface McpCatalogEntry, const OFFICIAL_REMOTE, const POPULAR_SAAS, const CATALOG_SEED, function catalogEntry, type SeedVerdict, function validateSeed
 - `fns` (2): catalogEntry:63, validateSeed:78
-- `anon` (1): function/arrow expressions with no binding name
 
 #### `packages/coordinator/src/mcp-install.test.ts` — 55 lines · 6 tests · TEST · imported by 0
-- `anon` (6): function/arrow expressions with no binding name
 
-#### `packages/coordinator/src/mcp-install.ts` — 100 lines · 0 tests · TEST-ONLY · imported by 2
+#### `packages/coordinator/src/mcp-install.ts` — 100 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (5): interface McpDirectoryEntry, interface AttachPlan, type InstallVerdict, function installPlan, function attachablePlans
 - `fns` (4): splitCommand:32, pkgVersion:39, installPlan:51, attachablePlans:84
 
 #### `packages/coordinator/src/mcp-manager.test.ts` — 60 lines · 6 tests · TEST · imported by 0
 - `fns` (1): approvalFor:12
-- `anon` (10): function/arrow expressions with no binding name
 
-#### `packages/coordinator/src/mcp-manager.ts` — 121 lines · 0 tests · TEST-ONLY · imported by 1
+#### `packages/coordinator/src/mcp-manager.ts` — 121 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (10): interface McpServerView, interface ManagerApproval, type InstallOutcome, function mcpServers, function mcpInstall, function mcpRun, function mcpStop, function mcpQuarantine, interface ToolSurfaceView, function mcpTools
 - `fns` (6): mcpServers:40, mcpInstall:55, mcpRun:84, mcpStop:93, mcpQuarantine:99, mcpTools:111
-- `anon` (2): function/arrow expressions with no binding name
 
-#### `packages/coordinator/src/message.ts` — 77 lines · 0 tests · REACHABLE · imported by 2
+#### `packages/coordinator/src/message.ts` — 77 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (9): const JSONRPC, const ERROR_CODES, interface Request, interface JsonRpcError, interface Response, function isRequest, function ok, function err, function methodNotFound
 - `fns` (4): isRequest:53, ok:64, err:69, methodNotFound:74
 
 #### `packages/coordinator/src/migration-import.test.ts` — 65 lines · 7 tests · TEST · imported by 0
-- `anon` (8): function/arrow expressions with no binding name
 
-#### `packages/coordinator/src/migration-import.ts` — 193 lines · 0 tests · TEST-ONLY · imported by 1
+#### `packages/coordinator/src/migration-import.ts` — 193 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (11): type ImportKind, interface ImportedSession, interface ImportedSkill, interface ImportedConfig, interface MigrationResult, function parseChatGptExport, function parseClaudeExport, function parseOpenClawExport, function parseAgentInstructions, function parseEditorMcpConfig, function runMigration
 - `fns` (6): parseChatGptExport:48, parseClaudeExport:80, parseOpenClawExport:112, parseAgentInstructions:136, parseEditorMcpConfig:151, runMigration:165
-- `anon` (3): function/arrow expressions with no binding name
 
 #### `packages/coordinator/src/observations.test.ts` — 66 lines · 5 tests · TEST · imported by 0
-- `anon` (6): function/arrow expressions with no binding name
 
-#### `packages/coordinator/src/observations.ts` — 142 lines · 0 tests · REACHABLE · imported by 2
+#### `packages/coordinator/src/observations.ts` — 142 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (5): function recordObservation, function currentObservations, interface DurableUsageRow, function hydrateObservations, function resetObservations
 - `fns` (4): recordObservation:47, currentObservations:69, hydrateObservations:113, resetObservations:138
-- `anon` (2): function/arrow expressions with no binding name
 
-#### `packages/coordinator/src/orphan.ts` — 48 lines · 0 tests · REACHABLE · imported by 1
+#### `packages/coordinator/src/orphan.ts` — 48 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (2): function startOrphanWatch, function stopOrphanWatch
 - `fns` (2): startOrphanWatch:14, stopOrphanWatch:42
-- `anon` (1): function/arrow expressions with no binding name
 
 #### `packages/coordinator/src/patch-overlay.test.ts` — 48 lines · 5 tests · TEST · imported by 0
-- `anon` (5): function/arrow expressions with no binding name
 
-#### `packages/coordinator/src/patch-overlay.ts` — 116 lines · 0 tests · TEST-ONLY · imported by 1
+#### `packages/coordinator/src/patch-overlay.ts` — 116 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (6): type PatchValue, interface PatchMap, function parsePatchDoc, function applyPatch, function isMap, class LayeredSpec
-- `fns` (8): parsePatchDoc:19, parseScalar:54, applyPatch:70, isMap:87, constructor:96, addPatch:101, effective:106, get:112
+- `fns` (4): parsePatchDoc:19, parseScalar:54, applyPatch:70, isMap:87
 
 #### `packages/coordinator/src/persona-registry.test.ts` — 65 lines · 5 tests · TEST · imported by 0
-- `anon` (5): function/arrow expressions with no binding name
 
-#### `packages/coordinator/src/persona-registry.ts` — 135 lines · 0 tests · TEST-ONLY · imported by 2
+#### `packages/coordinator/src/persona-registry.ts` — 135 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (7): type PersonaSource, interface PersonaManifest, interface PersonaValidation, function validateManifest, const BUILTIN_IDS, function builtinManifests, class PersonaRegistry
-- `fns` (7): validateManifest:34, builtinManifests:56, constructor:99, register:104, get:114, list:118, effectiveText:123
-- `anon` (1): function/arrow expressions with no binding name
+- `fns` (2): validateManifest:34, builtinManifests:56
 
 #### `packages/coordinator/src/primary-agent.test.ts` — 164 lines · 23 tests · TEST · imported by 0
-- `anon` (28): function/arrow expressions with no binding name
 
-#### `packages/coordinator/src/primary-agent.ts` — 274 lines · 0 tests · REACHABLE · imported by 3
+#### `packages/coordinator/src/primary-agent.ts` — 274 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (20): type PrimaryAgentId, const RETIRED_AGENT_IDS, function isRetiredAgentId, type GovernanceMode, function governanceBadge, function resolvePrimaryAgentId, function resolveSessionPrimaryAgent, function validateSessionPin, interface PrimaryAgentContext, function injectPrimaryContext, interface SubagentLimits, const DEFAULT_SUBAGENT_LIMITS, interface SpawnState, type SpawnVerdict, function checkSpawn, function deriveChildPermissions, interface PrimaryAgentRecord, function buildResumePrompt, class PrimaryAgentRegistry, const primaryAgentRegistry
-- `fns` (16): isRetiredAgentId:33, governanceBadge:43, resolvePrimaryAgentId:60, resolveSessionPrimaryAgent:78, validateSessionPin:90, injectPrimaryContext:114, checkSpawn:164, deriveChildPermissions:178, buildResumePrompt:203, record:226, get:230, setSessionPin:235, sessionPin:247, clearSessionPin:251, swap:256, get size:268
+- `fns` (9): isRetiredAgentId:33, governanceBadge:43, resolvePrimaryAgentId:60, resolveSessionPrimaryAgent:78, validateSessionPin:90, injectPrimaryContext:114, checkSpawn:164, deriveChildPermissions:178, buildResumePrompt:203
 
 #### `packages/coordinator/src/reflection-agui.test.ts` — 161 lines · 16 tests · TEST · imported by 0
-- `anon` (21): function/arrow expressions with no binding name
 
-#### `packages/coordinator/src/reflection.ts` — 81 lines · 0 tests · TEST-ONLY · imported by 1
+#### `packages/coordinator/src/reflection.ts` — 81 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (5): interface ReflectionResult, interface ReflectionOptions, type ReflectionRunner, function runWithReflection, function suggestedCheckFor
 - `fns` (2): runWithReflection:35, suggestedCheckFor:73
 
 #### `packages/coordinator/src/resumable.test.ts` — 77 lines · 8 tests · TEST · imported by 0
-- `anon` (8): function/arrow expressions with no binding name
 
-#### `packages/coordinator/src/resumable.ts` — 167 lines · 0 tests · TEST-ONLY · imported by 1
+#### `packages/coordinator/src/resumable.ts` — 167 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (6): interface StreamState, class StreamRegistry, type IdempotencyClass, function classifyIdempotency, function canAutoRetry, function reconnectInfo
-- `fns` (13): begin:41, appendToken:61, markToolCall:71, complete:79, interrupt:87, get:94, resumeCursor:99, drop:105, stale:110, get size:118, classifyIdempotency:132, canAutoRetry:147, reconnectInfo:152
+- `fns` (3): classifyIdempotency:132, canAutoRetry:147, reconnectInfo:152
 
 #### `packages/coordinator/src/router-scorer.test.ts` — 134 lines · 11 tests · TEST · imported by 0
 - `fns` (1): obs:12
-- `anon` (13): function/arrow expressions with no binding name
 
-#### `packages/coordinator/src/router.ts` — 394 lines · 0 tests · TEST-ONLY · imported by 2
+#### `packages/coordinator/src/router.ts` — 394 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (8): type TaskKind, interface ModelSelection, interface RouterOptions, const ASYMMETRIC_TIERS, function classifyTask, function selectModelForTask, function plannerForTask, function subagentForTask
 - `fns` (8): normalizeProviderId:97, classifyTask:123, selectModelForTask:134, failed:298, plannerForTask:335, subagentForTask:340, fallbackModel:345, describeReason:364
-- `anon` (9): function/arrow expressions with no binding name
 
 #### `packages/coordinator/src/run-identity.ts` — 47 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (4): interface RunIdentity, interface EventEnvelopeFields, function envelopeEvent, function resetRunIdentitySequence
 - `fns` (2): envelopeEvent:25, resetRunIdentitySequence:44
 
 #### `packages/coordinator/src/runtime-bind.test.ts` — 29 lines · 3 tests · TEST · imported by 0
-- `anon` (4): function/arrow expressions with no binding name
 
-#### `packages/coordinator/src/runtime-bind.ts` — 53 lines · 0 tests · TEST-ONLY · imported by 1
+#### `packages/coordinator/src/runtime-bind.ts` — 53 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (3): type HostRequest, function runtimeBindFromToolArgs, function applyRuntimeBindIfPresent
 - `fns` (2): runtimeBindFromToolArgs:13, applyRuntimeBindIfPresent:44
 
 #### `packages/coordinator/src/scheduler.test.ts` — 137 lines · 6 tests · TEST · imported by 0
-- `fns` (1): scriptedRust:6
-- `anon` (10): function/arrow expressions with no binding name
+- `fns` (3): scriptedRust:6, p:11, body:41
 
-#### `packages/coordinator/src/scheduler.ts` — 170 lines · 0 tests · REACHABLE · imported by 3
+#### `packages/coordinator/src/scheduler.ts` — 170 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (3): function webhookIdempotencyKey, interface WebhookIngress, function startWebhookIngress
-- `fns` (7): normalizeIdempotencyKey:38, webhookIdempotencyKey:57, startWebhookIngress:104, start:108, fetch:117, stop:164, webhookPort:168
-- `anon` (5): function/arrow expressions with no binding name
+- `fns` (6): normalizeIdempotencyKey:38, webhookIdempotencyKey:57, startWebhookIngress:104, start:108, out:139, stop:164
 
 #### `packages/coordinator/src/scorer.test.ts` — 101 lines · 10 tests · TEST · imported by 0
 - `fns` (1): obs:16
-- `anon` (11): function/arrow expressions with no binding name
 
-#### `packages/coordinator/src/scorer.ts` — 109 lines · 0 tests · REACHABLE · imported by 4
+#### `packages/coordinator/src/scorer.ts` — 109 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (5): interface ProviderObservation, function obsKey, function scorerScore, interface RouteDecision, function routeDecision
-- `fns` (3): obsKey:31, scorerScore:41, routeDecision:69
-- `anon` (4): function/arrow expressions with no binding name
+- `fns` (4): obsKey:31, scorerScore:41, cacheBonus:52, routeDecision:69
 
 #### `packages/coordinator/src/skill-warm.test.ts` — 23 lines · 3 tests · TEST · imported by 0
-- `anon` (3): function/arrow expressions with no binding name
 
-#### `packages/coordinator/src/skill-warm.ts` — 25 lines · 0 tests · TEST-ONLY · imported by 1
+#### `packages/coordinator/src/skill-warm.ts` — 25 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (3): interface SkillWarmRow, function filterModelWarmSkills, function slashSkillNames
 - `fns` (2): filterModelWarmSkills:14, slashSkillNames:20
-- `anon` (4): function/arrow expressions with no binding name
 
 #### `packages/coordinator/src/spend-split.test.ts` — 15 lines · 2 tests · TEST · imported by 0
-- `anon` (3): function/arrow expressions with no binding name
 
-#### `packages/coordinator/src/spend-split.ts` — 32 lines · 0 tests · TEST-ONLY · imported by 1
+#### `packages/coordinator/src/spend-split.ts` — 32 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (2): type HostRequest, function applySpendSplitIfPresent
-- `fns` (1): applySpendSplitIfPresent:7
+- `fns` (2): applySpendSplitIfPresent:7, out:26
 
 #### `packages/coordinator/src/stream-session.test.ts` — 114 lines · 8 tests · TEST · imported by 0
 - `fns` (1): tick:12
-- `anon` (22): function/arrow expressions with no binding name
 
-#### `packages/coordinator/src/stream-session.ts` — 103 lines · 0 tests · TEST-ONLY · imported by 1
+#### `packages/coordinator/src/stream-session.ts` — 103 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (3): type StreamEvent, type StreamSessionConfig, class StreamSession
-- `fns` (8): constructor:36, pushToken:46, flushBatch:62, complete:75, error:83, destroy:87, getFullText:96, getTokenCount:100
-- `anon` (1): function/arrow expressions with no binding name
 
 #### `packages/coordinator/src/surfaces.test.ts` — 75 lines · 10 tests · TEST · imported by 0
-- `anon` (10): function/arrow expressions with no binding name
 
-#### `packages/coordinator/src/surfaces.ts` — 152 lines · 0 tests · TEST-ONLY · imported by 1
+#### `packages/coordinator/src/surfaces.ts` — 152 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (10): type CaptureInput, type CaptureRoute, function routeCapture, type InboxItem, class Inbox, interface RepeatTarget, type RepeatVerdict, function repeat, interface Deliverable, class Studio
-- `fns` (11): routeCapture:28, push:55, all:60, byKind:65, ack:69, get size:74, repeat:99, compose:124, markRendered:137, export:142, all:148
-- `anon` (5): function/arrow expressions with no binding name
+- `fns` (2): routeCapture:28, repeat:99
 
 #### `packages/coordinator/src/waterfall.test.ts` — 95 lines · 8 tests · TEST · imported by 0
-- `fns` (9): preStep:15, preStep:29, preStep:37, preStep:39, preStep:52, preStep:62, preExecute:66, preStep:79, preStep:85
-- `anon` (8): function/arrow expressions with no binding name
 
-#### `packages/coordinator/src/waterfall.ts` — 108 lines · 0 tests · TEST-ONLY · imported by 1
+#### `packages/coordinator/src/waterfall.ts` — 108 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (7): type WaterfallStage, interface WaterfallContext, type Next, type WaterfallHook, interface WaterfallHooks, function runStage, function composeHooks
-- `fns` (7): passThrough:44, runStage:52, run:67, next:69, composeHooks:82, run:95, n:97
-- `anon` (5): function/arrow expressions with no binding name
+- `fns` (4): runStage:52, run:67, composeHooks:82, run:95
 
 #### `packages/coordinator/src/work-events.ts` — 90 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (5): type WorkRunState, type RequestFn, function ensureWork, function recordTransition, function recordThought
@@ -4909,65 +4818,49 @@ population. `wiring:` is the §11 verdict.
 ### 10.3 `packages/core-agents`
 
 #### `packages/core-agents/src/__tests__/registry.test.ts` — 36 lines · 5 tests · TEST · imported by 0
-- `anon` (7): function/arrow expressions with no binding name
 
-#### `packages/core-agents/src/index.ts` — 3 lines · 0 tests · TEST-ONLY · imported by 3
+#### `packages/core-agents/src/index.ts` — 3 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (5): re-export SHIPPED_AGENTS, re-export createAgentProfileRepository, re-export AgentProfile, re-export AgentProfileRepository, re-export MemoryScope
 
-#### `packages/core-agents/src/registry.ts` — 239 lines · 0 tests · UNREACHED · imported by 1
+#### `packages/core-agents/src/registry.ts` — 239 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (2): const SHIPPED_AGENTS, function createAgentProfileRepository
-- `fns` (10): createAgentProfileRepository:110, get:120, list:121, save:122, delete:123, ensureLoaded:128, get:179, list:184, save:189, delete:225
-- `anon` (1): function/arrow expressions with no binding name
+- `fns` (2): createAgentProfileRepository:110, ensureLoaded:128
 
-#### `packages/core-agents/src/types.ts` — 37 lines · 0 tests · UNREACHED · imported by 2
+#### `packages/core-agents/src/types.ts` — 37 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (3): type MemoryScope, interface AgentProfile, interface AgentProfileRepository
 
 ### 10.4 `packages/core-ai`
 
 #### `packages/core-ai/src/__tests__/agents.test.ts` — 40 lines · 7 tests · TEST · imported by 0
-- `anon` (11): function/arrow expressions with no binding name
 
 #### `packages/core-ai/src/__tests__/context-compressor.test.ts` — 117 lines · 12 tests · TEST · imported by 0
-- `anon` (15): function/arrow expressions with no binding name
+- `fns` (1): realClosings:93
 
 #### `packages/core-ai/src/__tests__/detect-artifact-intent.test.ts` — 62 lines · 11 tests · TEST · imported by 0
-- `anon` (11): function/arrow expressions with no binding name
 
 #### `packages/core-ai/src/__tests__/handler-mapper.test.ts` — 134 lines · 13 tests · TEST · imported by 0
-- `anon` (13): function/arrow expressions with no binding name
 
 #### `packages/core-ai/src/__tests__/output-normalizer.test.ts` — 70 lines · 11 tests · TEST · imported by 0
-- `anon` (11): function/arrow expressions with no binding name
 
 #### `packages/core-ai/src/__tests__/parse-intent.test.ts` — 87 lines · 20 tests · TEST · imported by 0
-- `anon` (22): function/arrow expressions with no binding name
 
 #### `packages/core-ai/src/__tests__/parse-spec.test.ts` — 88 lines · 11 tests · TEST · imported by 0
-- `anon` (11): function/arrow expressions with no binding name
 
 #### `packages/core-ai/src/__tests__/performance-stack.test.ts` — 27 lines · 3 tests · TEST · imported by 0
-- `fns` (1): onChapterEmbedded:13
-- `anon` (3): function/arrow expressions with no binding name
 
 #### `packages/core-ai/src/__tests__/prompt-guard.test.ts` — 87 lines · 7 tests · TEST · imported by 0
-- `anon` (7): function/arrow expressions with no binding name
 
 #### `packages/core-ai/src/__tests__/prompt-limits.test.ts` — 80 lines · 16 tests · TEST · imported by 0
-- `anon` (16): function/arrow expressions with no binding name
 
 #### `packages/core-ai/src/__tests__/retrieval-planner.test.ts` — 120 lines · 12 tests · TEST · imported by 0
-- `anon` (15): function/arrow expressions with no binding name
 
 #### `packages/core-ai/src/__tests__/smart-router.test.ts` — 58 lines · 7 tests · TEST · imported by 0
-- `anon` (7): function/arrow expressions with no binding name
 
 #### `packages/core-ai/src/__tests__/system-prompt.test.ts` — 82 lines · 12 tests · TEST · imported by 0
-- `anon` (16): function/arrow expressions with no binding name
 
 #### `packages/core-ai/src/artifact-maker/detect-artifact-intent.ts` — 87 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (2): interface ArtifactIntent, function detectArtifactIntent
 - `fns` (2): containsAny:43, detectArtifactIntent:55
-- `anon` (5): function/arrow expressions with no binding name
 
 #### `packages/core-ai/src/artifact-maker/docmaker-prompt.ts` — 63 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): function buildDocMakerPrompt
@@ -4983,17 +4876,14 @@ population. `wiring:` is the §11 verdict.
 #### `packages/core-ai/src/artifact-maker/parse-spec.ts` — 139 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (2): interface ParseResult, function parseDocumentSpec
 - `fns` (5): extractJsonBlock:18, repairTruncatedJson:35, coerceLevel:61, normalizeSection:68, parseDocumentSpec:102
-- `anon` (7): function/arrow expressions with no binding name
 
 #### `packages/core-ai/src/chat/agents.ts` — 240 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (8): type AgentToolHint, type AgentPersonaOverlay, const AGENT_ORDER, const AGENT_CATALOG, re-export UI_EXTENSIONS, function getAgentById, function getAgentByLabel, function agentSystemBlock
 - `fns` (4): deriveToolHints:167, getAgentById:227, getAgentByLabel:232, agentSystemBlock:236
-- `anon` (3): function/arrow expressions with no binding name
 
 #### `packages/core-ai/src/chat/output-normalizer.ts` — 86 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): function normalizeOutput
 - `fns` (2): normalizeProse:39, normalizeOutput:73
-- `anon` (1): function/arrow expressions with no binding name
 
 #### `packages/core-ai/src/chat/persona.ts` — 24 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (5): const PERSONA_PRESETS, const DEFAULT_PERSONA, type PersonaId, function buildPersonalityPrompt, const CACHE_BOUNDARY
@@ -5002,56 +4892,46 @@ population. `wiring:` is the §11 verdict.
 #### `packages/core-ai/src/chat/system-prompt.ts` — 232 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (4): const DEFAULT_CHAT_SYSTEM_PROMPT, function buildRagSystemPrompt, function assembleChatPrompt, function assertCitationInvariant
 - `fns` (5): sanitizeUntrustedText:72, wrapUntrusted:77, buildRagSystemPrompt:86, assembleChatPrompt:110, assertCitationInvariant:215
-- `anon` (1): function/arrow expressions with no binding name
 
 #### `packages/core-ai/src/context/context-compressor.ts` — 295 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (9): const COMPRESSION_TARGET_RATIO, const NORMAL_CONTEXT_TOKEN_BUDGET, type CompressionStats, type CompressibleSource, function compressTextToBudget, function compressRetrievalBlock, function contextCharBudget, function compressChatMessages, function buildCompressedAugmentedPrompt
 - `fns` (10): sanitizeEnvelopeText:36, tokenizeTerms:48, splitSentences:56, scoreSentence:64, buildStats:78, compressTextToBudget:94, compressRetrievalBlock:156, contextCharBudget:210, compressChatMessages:219, buildCompressedAugmentedPrompt:277
-- `anon` (17): function/arrow expressions with no binding name
 
 #### `packages/core-ai/src/context/tiered-compaction.ts` — 244 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (9): type CompactContext, type ContextBudget, function calculateBudget, function selectRecentTurns, function buildOlderSummary, function buildMemoryTier, function buildToolResultTier, function assembleCompactContext, function needsCompaction
 - `fns` (9): calculateBudget:52, selectRecentTurns:76, buildOlderSummary:99, buildMemoryTier:135, buildToolResultTier:162, assembleCompactContext:186, estimateTurnTokens:222, estimateStringTokens:227, needsCompaction:235
-- `anon` (3): function/arrow expressions with no binding name
 
-#### `packages/core-ai/src/index.ts` — 71 lines · 0 tests · UNREACHED · imported by 1
+#### `packages/core-ai/src/index.ts` — 71 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (26): re-export normalizeOutput, re-export classifyDepth, re-export preRoute, re-export PreRouteDecision, re-export AffinityTracker, re-export getAffinityTracker, re-export RouteClass, re-export ThreadAffinity, re-export AffinityDecision, re-export MetricsCollector, re-export getMetricsCollector, re-export buildRequestMetrics, re-export RequestMetrics, re-export RouteHealth, re-export isOnDeviceGenerationAvailable, re-export getRecommendedLocalModel, re-export formatLocalPrompt, re-export PlaceholderRuntime, re-export LocalModelInfo, re-export LocalGenerationConfig, re-export LocalGenerationResult, re-export LocalInferenceRuntime, re-export CompactContext, re-export ContextBudget, re-export StreamEvent, re-export StreamSessionConfig
 
 #### `packages/core-ai/src/local/llm-runtime.ts` — 336 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (12): type LocalModelStatus, type LocalGenerationConfig, type LocalGenerationResult, type LocalModelInfo, const LOCAL_MODELS, interface LocalInferenceRuntime, function getLocalModeCapabilities, function isOnDeviceGenerationAvailable, function getRecommendedLocalModel, function formatLocalPrompt, class LlamaRuntime, class PlaceholderRuntime
-- `fns` (16): getLocalModeCapabilities:111, isOnDeviceGenerationAvailable:141, getRecommendedLocalModel:155, formatLocalPrompt:167, constructor:203, loadModel:207, unloadModel:235, getStatus:244, generate:248, checkMemory:286, resolveModelPath:291, loadModel:311, unloadModel:315, getStatus:319, generate:323, checkMemory:332
-- `anon` (2): function/arrow expressions with no binding name
+- `fns` (5): getLocalModeCapabilities:111, isOnDeviceGenerationAvailable:141, getRecommendedLocalModel:155, formatLocalPrompt:167, base:297
 
 #### `packages/core-ai/src/metrics/metrics-collector.ts` — 259 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (5): type RequestMetrics, type RouteHealth, class MetricsCollector, function getMetricsCollector, function buildRequestMetrics
-- `fns` (11): percentile:70, rollingWindow:76, constructor:89, record:95, getRouteHealth:119, getAllRouteHealth:163, getRecentRequests:168, getAggregateStats:173, clear:213, getMetricsCollector:223, buildRequestMetrics:231
-- `anon` (17): function/arrow expressions with no binding name
+- `fns` (4): percentile:70, rollingWindow:76, getMetricsCollector:223, buildRequestMetrics:231
 
 #### `packages/core-ai/src/retrieval/performance-stack.ts` — 182 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (6): type TwoTierSearchFn, type ReaderPerformanceStackOptions, type ChaptersReadyState, type LazyChapterIngestOptions, class QuestionCache, class ReaderPerformanceStack
-- `fns` (13): key:27, get:36, set:44, clear:51, constructor:63, setChapterSummary:70, getChapterSummary:79, twoTierRetrieve:87, lazyChapterIngest:98, getChaptersReady:117, routeSummaryQuery:126, routeQuery:152, getExpectedLatency:170
-- `anon` (2): function/arrow expressions with no binding name
 
 #### `packages/core-ai/src/router/affinity-tracker.ts` — 208 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (5): type RouteClass, type ThreadAffinity, type AffinityDecision, class AffinityTracker, function getAffinityTracker
-- `fns` (8): evaluate:49, set:157, update:162, get:170, remove:175, comparePrefixHashes:180, clear:193, getAffinityTracker:202
+- `fns` (1): getAffinityTracker:202
 
 #### `packages/core-ai/src/router/handler-mapper.ts` — 150 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): function resolveHandler
 - `fns` (6): routeResult:12, isLowPower:32, isOffline:36, detectInputModalities:40, managedRouteForCapabilities:55, resolveHandler:70
-- `anon` (3): function/arrow expressions with no binding name
 
 #### `packages/core-ai/src/router/heuristic-classifier.ts` — 144 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (2): class HeuristicIntentClassifier, function classifyDepth
-- `fns` (2): classify:80, classifyDepth:119
-- `anon` (1): function/arrow expressions with no binding name
+- `fns` (1): classifyDepth:119
 
 #### `packages/core-ai/src/router/index.ts` — 8 lines · 0 tests · NOT IMPORTED · imported by 0
 
 #### `packages/core-ai/src/router/parse-intent.ts` — 53 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (2): function parseIntentCategory, function classificationFromLabel
 - `fns` (2): parseIntentCategory:14, classificationFromLabel:43
-- `anon` (1): function/arrow expressions with no binding name
 
 #### `packages/core-ai/src/router/pre-router.ts` — 202 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (2): type PreRouteDecision, function preRoute
@@ -5071,207 +4951,169 @@ population. `wiring:` is the §11 verdict.
 
 #### `packages/core-ai/src/router/smart-router.ts` — 63 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): class SmartRouter
-- `fns` (2): constructor:11, route:15
 
 #### `packages/core-ai/src/router/types.ts` — 17 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (7): re-export IntentCategory, re-export IntentClassification, re-export RouteContext, re-export RouteDecision, re-export UserQuery, interface IntentClassifier, interface SmartRouterOptions
 
 #### `packages/core-ai/src/streaming/stream-session.ts` — 197 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (6): type StreamEvent, type StreamSessionConfig, class StreamSession, class StreamCancellationToken, function shouldContinueStreaming, function estimateStreamCost
-- `fns` (15): constructor:48, pushToken:65, flushBatch:86, emitCheckpoint:99, complete:103, error:127, destroy:131, getFullText:140, getTokenCount:144, constructor:154, get signal:158, get isCancelled:162, cancel:166, shouldContinueStreaming:176, estimateStreamCost:187
-- `anon` (1): function/arrow expressions with no binding name
+- `fns` (2): shouldContinueStreaming:176, estimateStreamCost:187
 
 #### `packages/core-ai/vitest.config.ts` — 9 lines · 0 tests · NOT IMPORTED · imported by 0
 
 ### 10.5 `packages/core-connectors`
 
 #### `packages/core-connectors/src/__tests__/adapters.test.ts` — 451 lines · 29 tests · TEST · imported by 0
-- `fns` (21): BASE_CTX:21, json:33, json:52, json:55, json:88, json:105, json:126, json:161, json:175, json:202, json:222, fmt:244, text:273, text:297, text:325, json:342, json:370, resolveCredential:403, request:407, json:412, text:422
-- `anon` (39): function/arrow expressions with no binding name
+- `fns` (2): BASE_CTX:21, fmt:244
 
 #### `packages/core-connectors/src/__tests__/batch3-connectors.test.ts` — 150 lines · 8 tests · TEST · imported by 0
-- `fns` (7): CTX:20, installHost:26, resolveCredential:30, request:34, json:41, text:42, json:129
-- `anon` (9): function/arrow expressions with no binding name
+- `fns` (2): CTX:20, installHost:26
 
 #### `packages/core-connectors/src/__tests__/integration.test.ts` — 55 lines · 3 tests · TEST · imported by 0
-- `anon` (6): function/arrow expressions with no binding name
 
 #### `packages/core-connectors/src/__tests__/mobile-connectors.test.ts` — 273 lines · 19 tests · TEST · imported by 0
-- `fns` (12): BASE_CTX:21, installHost:27, resolveCredential:30, request:34, json:39, text:40, json:171, json:190, json:193, json:211, json:234, json:256
-- `anon` (26): function/arrow expressions with no binding name
+- `fns` (2): BASE_CTX:21, installHost:27
 
 #### `packages/core-connectors/src/__tests__/orchestrator.test.ts` — 340 lines · 32 tests · TEST · imported by 0
-- `fns` (6): json:27, text:28, resolveCredential:91, json:118, text:119, resolveCredential:123
-- `anon` (37): function/arrow expressions with no binding name
 
 #### `packages/core-connectors/src/adapters/aviationstack-adapter.ts` — 145 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): class AviationstackAdapter
-- `fns` (4): isAuthorized:37, scoreRelevance:41, buildFilter:49, fetch:53
-- `anon` (1): function/arrow expressions with no binding name
+- `fns` (3): q:42, q:55, data:92
 
 #### `packages/core-connectors/src/adapters/coingecko-adapter.ts` — 132 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): class CoingeckoAdapter
-- `fns` (5): isAuthorized:36, scoreRelevance:40, buildFilter:51, fetch:58, searchFallback:108
-- `anon` (3): function/arrow expressions with no binding name
+- `fns` (7): q:41, f:59, vs:61, signal:65, raw:79, raw:116, coins:117
 
 #### `packages/core-connectors/src/adapters/dropbox-adapter.ts` — 137 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): class DropboxAdapter
-- `fns` (5): isAuthorized:35, scoreRelevance:39, buildFilter:45, fetch:49, formatSize:130
-- `anon` (1): function/arrow expressions with no binding name
+- `fns` (4): q:40, data:73, data:101, formatSize:130
 
 #### `packages/core-connectors/src/adapters/finnhub-adapter.ts` — 205 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): class FinnhubAdapter
-- `fns` (4): isAuthorized:38, scoreRelevance:42, buildFilter:51, fetch:55
+- `fns` (9): q:43, q:57, base:71, quote:72, data:97, data:126, data:155, direction:168, pct:169
 
-#### `packages/core-connectors/src/adapters/github-adapter.ts` — 99 lines · 0 tests · TEST-ONLY · imported by 1
+#### `packages/core-connectors/src/adapters/github-adapter.ts` — 99 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): class GitHubAdapter
-- `fns` (4): isAuthorized:26, scoreRelevance:30, buildFilter:36, fetch:40
-- `anon` (1): function/arrow expressions with no binding name
+- `fns` (3): filter:41, qtext:42, q:43
 
 #### `packages/core-connectors/src/adapters/google-drive-oauth-adapter.ts` — 137 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): class GoogleDriveOAuthAdapter
-- `fns` (5): isAuthorized:47, scoreRelevance:51, buildFilter:57, fetch:61, formatSize:130
-- `anon` (2): function/arrow expressions with no binding name
+- `fns` (3): q:52, data:96, formatSize:130
 
 #### `packages/core-connectors/src/adapters/google-places-adapter.ts` — 130 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): class GooglePlacesAdapter
-- `fns` (4): isAuthorized:41, scoreRelevance:45, buildFilter:54, fetch:60
-- `anon` (2): function/arrow expressions with no binding name
+- `fns` (4): q:46, f:61, text:73, raw:96
 
 #### `packages/core-connectors/src/adapters/hacker-news-adapter.ts` — 116 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): class HackerNewsAdapter
-- `fns` (4): isAuthorized:31, scoreRelevance:35, buildFilter:44, fetch:55
-- `anon` (2): function/arrow expressions with no binding name
+- `fns` (5): q:36, text:45, f:56, tags:58, data:74
 
 #### `packages/core-connectors/src/adapters/ical-adapter.ts` — 304 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): class IcalAdapter
-- `fns` (10): unescapeIcsText:39, foldLines:47, isPrivateHost:98, validateIcsUrl:124, parseIcsEvents:140, parseIcsDate:185, isAuthorized:207, scoreRelevance:211, buildFilter:220, fetch:231
-- `anon` (7): function/arrow expressions with no binding name
+- `fns` (9): unescapeIcsText:39, foldLines:47, isPrivateHost:98, validateIcsUrl:124, parseIcsEvents:140, parseIcsDate:185, q:212, f:232, rawUrl:233
 
 #### `packages/core-connectors/src/adapters/microsoft-graph-adapter.ts` — 234 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (2): type MicrosoftSubService, class MicrosoftGraphAdapter
-- `fns` (9): constructor:45, isAuthorized:50, scoreRelevance:54, buildFilter:71, fetch:75, mapGraphRow:144, formatSize:196, stripHtmlTags:204, decodeHtmlEntities:219
-- `anon` (3): function/arrow expressions with no binding name
+- `fns` (13): q:55, filter:76, query:81, data:132, mapGraphRow:144, subject:146, subject:166, start:167, loc:168, name:184, formatSize:196, stripHtmlTags:204, decodeHtmlEntities:219
 
 #### `packages/core-connectors/src/adapters/nominatim-adapter.ts` — 189 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (2): function __resetNominatimThrottleForTests, class NominatimAdapter
-- `fns` (8): takeNominatimSlot:49, __resetNominatimThrottleForTests:60, osmItems:74, osmResult:90, isAuthorized:99, scoreRelevance:103, buildFilter:112, fetch:116
-- `anon` (3): function/arrow expressions with no binding name
+- `fns` (8): PROXY_BASE:41, takeNominatimSlot:49, __resetNominatimThrottleForTests:60, osmItems:74, osmResult:90, q:104, f:117, query:154
 
-#### `packages/core-connectors/src/adapters/notion-oauth-adapter.ts` — 122 lines · 0 tests · TEST-ONLY · imported by 1
+#### `packages/core-connectors/src/adapters/notion-oauth-adapter.ts` — 122 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): class NotionOAuthAdapter
-- `fns` (6): isAuthorized:34, scoreRelevance:38, buildFilter:44, fetch:48, extractTitle:97, getObjectType:114
-- `anon` (2): function/arrow expressions with no binding name
+- `fns` (6): q:39, data:75, url:78, lastEdited:79, extractTitle:97, getObjectType:114
 
 #### `packages/core-connectors/src/adapters/openlibrary-adapter.ts` — 107 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): class OpenLibraryAdapter
-- `fns` (4): isAuthorized:35, scoreRelevance:39, buildFilter:49, fetch:53
-- `anon` (2): function/arrow expressions with no binding name
+- `fns` (4): q:40, f:54, q:55, raw:65
 
 #### `packages/core-connectors/src/adapters/public-holidays-adapter.ts` — 97 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): class PublicHolidaysAdapter
-- `fns` (4): isAuthorized:36, scoreRelevance:40, buildFilter:46, fetch:56
-- `anon` (2): function/arrow expressions with no binding name
+- `fns` (4): q:41, f:57, countryCode:58, data:70
 
 #### `packages/core-connectors/src/adapters/reddit-adapter.ts` — 127 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): class RedditAdapter
-- `fns` (4): isAuthorized:39, scoreRelevance:43, buildFilter:52, fetch:60
-- `anon` (4): function/arrow expressions with no binding name
+- `fns` (5): q:44, f:61, q:62, sort:63, raw:88
 
 #### `packages/core-connectors/src/adapters/restcountries-adapter.ts` — 126 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): class RestCountriesAdapter
-- `fns` (4): isAuthorized:35, scoreRelevance:39, buildFilter:47, fetch:51
-- `anon` (2): function/arrow expressions with no binding name
+- `fns` (6): q:40, f:52, raw:53, data:71, capital:86, dialing:89
 
-#### `packages/core-connectors/src/adapters/rss-adapter.ts` — 141 lines · 0 tests · TEST-ONLY · imported by 1
+#### `packages/core-connectors/src/adapters/rss-adapter.ts` — 141 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): class RssAdapter
-- `fns` (6): extractItems:25, getTag:37, isAuthorized:71, scoreRelevance:75, buildFilter:81, fetch:91
-- `anon` (2): function/arrow expressions with no binding name
+- `fns` (4): extractItems:25, getTag:37, q:76, f:92
 
 #### `packages/core-connectors/src/adapters/slack-adapter.ts` — 206 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): class SlackAdapter
-- `fns` (5): isAuthorized:40, scoreRelevance:44, buildFilter:52, fetch:56, hostRequest:61
-- `anon` (3): function/arrow expressions with no binding name
+- `fns` (9): q:45, q:58, hostRequest:61, listData:80, ch:98, histData:116, listData:141, histData:152, searchData:174
 
 #### `packages/core-connectors/src/adapters/soundcloud-adapter.ts` — 140 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): class SoundcloudAdapter
-- `fns` (5): isAuthorized:39, scoreRelevance:43, buildFilter:50, fetch:54, formatDuration:134
-- `anon` (1): function/arrow expressions with no binding name
+- `fns` (4): q:44, q:56, data:91, formatDuration:134
 
 #### `packages/core-connectors/src/adapters/spotify-adapter.ts` — 158 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): class SpotifyAdapter
-- `fns` (5): spotifySearch:35, isAuthorized:124, scoreRelevance:128, buildFilter:135, fetch:144
-- `anon` (5): function/arrow expressions with no binding name
+- `fns` (5): spotifySearch:35, raw:51, q:129, f:145, q:146
 
 #### `packages/core-connectors/src/adapters/stackexchange-adapter.ts` — 116 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): class StackExchangeAdapter
-- `fns` (4): isAuthorized:37, scoreRelevance:41, buildFilter:50, fetch:59
-- `anon` (3): function/arrow expressions with no binding name
+- `fns` (5): q:42, f:60, q:61, raw:81, bodyExcerpt:93
 
-#### `packages/core-connectors/src/adapters/telegram-adapter.ts` — 84 lines · 0 tests · TEST-ONLY · imported by 1
+#### `packages/core-connectors/src/adapters/telegram-adapter.ts` — 84 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): class TelegramAdapter
-- `fns` (5): constructor:30, isAuthorized:34, scoreRelevance:38, buildFilter:43, fetch:47
+- `fns` (3): f:48, chatId:49, me:59
 
 #### `packages/core-connectors/src/adapters/todoist-adapter.ts` — 105 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): class TodoistAdapter
-- `fns` (4): isAuthorized:39, scoreRelevance:43, buildFilter:51, fetch:62
-- `anon` (2): function/arrow expressions with no binding name
+- `fns` (3): q:44, f:63, raw:78
 
 #### `packages/core-connectors/src/adapters/trello-adapter.ts` — 149 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): class TrelloAdapter
-- `fns` (4): isAuthorized:31, scoreRelevance:35, buildFilter:43, fetch:47
-- `anon` (3): function/arrow expressions with no binding name
+- `fns` (4): q:36, q:54, data:106, labels:111
 
-#### `packages/core-connectors/src/adapters/weather-adapter.ts` — 144 lines · 0 tests · TEST-ONLY · imported by 1
+#### `packages/core-connectors/src/adapters/weather-adapter.ts` — 144 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): class WeatherAdapter
-- `fns` (4): isAuthorized:30, scoreRelevance:35, buildFilter:42, fetch:49
-- `anon` (2): function/arrow expressions with no binding name
+- `fns` (3): q:36, f:50, data:83
 
 #### `packages/core-connectors/src/adapters/wikipedia-adapter.ts` — 136 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): class WikipediaAdapter
-- `fns` (5): isAuthorized:38, scoreRelevance:42, buildFilter:48, fetch:52, parseSearch:119
-- `anon` (2): function/arrow expressions with no binding name
+- `fns` (4): q:43, f:53, query:54, data:82
 
 #### `packages/core-connectors/src/adapters/worldtime-adapter.ts` — 107 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): class WorldtimeAdapter
-- `fns` (4): isAuthorized:34, scoreRelevance:38, buildFilter:44, fetch:53
-- `anon` (1): function/arrow expressions with no binding name
+- `fns` (4): q:39, f:54, tz:55, data:72
 
 #### `packages/core-connectors/src/adapters/youtube-adapter.ts` — 115 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): class YouTubeAdapter
-- `fns` (4): isAuthorized:41, scoreRelevance:45, buildFilter:51, fetch:55
-- `anon` (2): function/arrow expressions with no binding name
+- `fns` (2): q:46, data:82
 
 #### `packages/core-connectors/src/composio-adapter.ts` — 216 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (2): class ComposioAdapter, function buildComposioAdapters
-- `fns` (8): constructor:44, isAuthorized:59, scoreRelevance:69, buildFilter:83, fetch:96, refreshToken:158, getKeywords:162, buildComposioAdapters:203
-- `anon` (2): function/arrow expressions with no binding name
+- `fns` (3): text:70, data:130, buildComposioAdapters:203
 
-#### `packages/core-connectors/src/composio-catalog.ts` — 344 lines · 0 tests · UNREACHED · imported by 1
+#### `packages/core-connectors/src/composio-catalog.ts` — 344 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (4): interface ComposioToolkitEntry, const COMPOSIO_MANAGED_TOOLKITS, const COMPOSIO_CONNECTOR_MAP, const COMPOSIO_TOOLKIT_MAP
-- `anon` (2): function/arrow expressions with no binding name
 
-#### `packages/core-connectors/src/connection-manager.ts` — 1,076 lines · 0 tests · TEST-ONLY · imported by 1
+#### `packages/core-connectors/src/connection-manager.ts` — 1,076 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (12): type ConnectorStatus, interface ConnectionInfo, interface ConnectorCredentialHandle, interface ConnectorHostHttpRequest, interface ConnectorHostRequest, interface ConnectorHostResponse, interface ConnectorHostTransport, interface ConnectorRequestInput, function setConnectorHostTransport, function hasConnectorHostTransport, function requestConnector, const CONNECTOR_CATALOG
 - `fns` (6): setConnectorHostTransport:101, hasConnectorHostTransport:106, normalizedCredentialKey:121, isOpaqueCredentialHandle:125, isCredentialFreeHttpRequest:129, requestConnector:165
 
-#### `packages/core-connectors/src/index.ts` — 161 lines · 0 tests · REACHABLE · imported by 2
+#### `packages/core-connectors/src/index.ts` — 161 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (30): re-export ConnectorAdapter, re-export WeatherAdapter, re-export RssAdapter, re-export GitHubAdapter, re-export NotionOAuthAdapter, re-export DropboxAdapter, re-export YouTubeAdapter, re-export GoogleDriveOAuthAdapter, re-export TelegramAdapter, re-export WikipediaAdapter, re-export HackerNewsAdapter, re-export PublicHolidaysAdapter, re-export NominatimAdapter, re-export WorldtimeAdapter, re-export IcalAdapter, re-export RestCountriesAdapter, re-export MicrosoftGraphAdapter, re-export SpotifyAdapter, re-export RedditAdapter, re-export TodoistAdapter, re-export GooglePlacesAdapter, re-export CoingeckoAdapter, re-export StackExchangeAdapter, re-export OpenLibraryAdapter, re-export FinnhubAdapter, re-export TrelloAdapter, re-export SlackAdapter, re-export AviationstackAdapter, re-export SoundcloudAdapter, function createDefaultRegistry
 - `fns` (1): createDefaultRegistry:103
 
-#### `packages/core-connectors/src/orchestrator.ts` — 240 lines · 0 tests · TEST-ONLY · imported by 1
+#### `packages/core-connectors/src/orchestrator.ts` — 240 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (5): interface ConnectorPlan, interface HostMediatedConnectorAdapter, type ConnectorExecutionStatus, interface ConnectorExecutionResult, class ConnectorOrchestrator
-- `fns` (11): isHostMediated:43, normalizedCredentialKey:60, withoutCredentialFields:64, emptyResult:83, register:90, list:94, plan:102, execute:137, runOne:143, writeBack:189, classifyConnectorCategory:221
-- `anon` (2): function/arrow expressions with no binding name
+- `fns` (5): isHostMediated:43, normalizedCredentialKey:60, withoutCredentialFields:64, emptyResult:83, runOne:143
 
 #### `packages/core-connectors/vitest.config.ts` — 10 lines · 0 tests · NOT IMPORTED · imported by 0
 
 ### 10.6 `packages/core-domain`
 
-#### `packages/core-domain/src/index.ts` — 2 lines · 0 tests · REACHABLE · imported by 99
+#### `packages/core-domain/src/index.ts` — 2 lines · 0 tests · NOT IMPORTED · imported by 0
 
 #### `packages/core-domain/src/types/__tests__/message-parts.test.ts` — 89 lines · 9 tests · TEST · imported by 0
-- `anon` (11): function/arrow expressions with no binding name
 
 #### `packages/core-domain/src/types/assistant-request-plan.ts` — 94 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (5): type AssistantRequestPlan, type ContextBlock, type CanonicalMessage, type SourceBlock, type ToolResultBlock
@@ -5300,7 +5142,7 @@ population. `wiring:` is the §11 verdict.
 
 #### `packages/core-domain/src/types/message-parts.ts` — 147 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (11): interface CitationRef, interface WebSource, type MessagePart, type WidgetKind, type WidgetData, type MessagePartType, function isTextPart, function isCodePart, function isToolCallPart, function encodeParts, function decodeParts
-- `fns` (6): isTextPart:69, isCodePart:73, isToolCallPart:77, encodeParts:82, isValidPart:99, decodeParts:137
+- `fns` (7): isTextPart:69, isCodePart:73, isToolCallPart:77, encodeParts:82, isValidPart:99, type:101, decodeParts:137
 
 #### `packages/core-domain/src/types/op-log.ts` — 15 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): interface OpLogEntry
@@ -5325,37 +5167,28 @@ population. `wiring:` is the §11 verdict.
 ### 10.7 `packages/core-memory`
 
 #### `packages/core-memory/src/__tests__/categories.test.ts` — 19 lines · 4 tests · TEST · imported by 0
-- `anon` (4): function/arrow expressions with no binding name
 
 #### `packages/core-memory/src/__tests__/conflict.test.ts` — 66 lines · 3 tests · TEST · imported by 0
 - `fns` (2): hashEmbed:5, baseFact:26
-- `anon` (5): function/arrow expressions with no binding name
 
 #### `packages/core-memory/src/__tests__/correction-detector.test.ts` — 317 lines · 38 tests · TEST · imported by 0
-- `anon` (42): function/arrow expressions with no binding name
 
 #### `packages/core-memory/src/__tests__/forgetting-to-remember.test.ts` — 128 lines · 23 tests · TEST · imported by 0
 - `fns` (1): fact:14
-- `anon` (25): function/arrow expressions with no binding name
 
 #### `packages/core-memory/src/__tests__/phantom-thread.test.ts` — 127 lines · 13 tests · TEST · imported by 0
 - `fns` (2): bookFact:12, financeFact:21
-- `anon` (20): function/arrow expressions with no binding name
 
 #### `packages/core-memory/src/__tests__/router-integration.test.ts` — 143 lines · 12 tests · TEST · imported by 0
-- `anon` (12): function/arrow expressions with no binding name
 
 #### `packages/core-memory/src/__tests__/spreading-activation.test.ts` — 139 lines · 14 tests · TEST · imported by 0
-- `anon` (21): function/arrow expressions with no binding name
 
 #### `packages/core-memory/src/__tests__/temporal-anticipation.test.ts` — 91 lines · 9 tests · TEST · imported by 0
 - `fns` (1): weeklyRhythm:10
-- `anon` (13): function/arrow expressions with no binding name
 
 #### `packages/core-memory/src/auto-promote.ts` — 101 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (3): interface AutoPromoteResult, type OnPromoteCallback, function autoPromote
 - `fns` (1): autoPromote:40
-- `anon` (3): function/arrow expressions with no binding name
 
 #### `packages/core-memory/src/categories.ts` — 52 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (3): function inferMemoryCategoriesFromQuery, function memoryCategoriesForIntent, function allMemoryCategories
@@ -5363,18 +5196,15 @@ population. `wiring:` is the §11 verdict.
 
 #### `packages/core-memory/src/conflict.ts` — 167 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (3): type EmbedVectorFn, type ConflictDetectionResult, class MemoryConflictResolver
-- `fns` (11): cosineSimilarity:16, get:45, set:58, invalidate:70, invalidateAll:75, get size:79, constructor:88, detect:90, resolveDuplicate:135, resolveConflict:141, get cacheSize:163
-- `anon` (3): function/arrow expressions with no binding name
+- `fns` (1): cosineSimilarity:16
 
 #### `packages/core-memory/src/correction-detector.ts` — 291 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (7): interface PromotionCandidate, const PROMOTION_THRESHOLD, function detectCorrections, function trackCorrection, function getCorrectionCount, function seedCorrectionCounts, function clearCounts
 - `fns` (10): detectCorrections:76, isPurelyFactual:128, hasBehavioralIntent:153, extractPattern:176, classifyCategory:213, computeConfidence:233, trackCorrection:258, getCorrectionCount:268, seedCorrectionCounts:276, clearCounts:288
-- `anon` (3): function/arrow expressions with no binding name
 
 #### `packages/core-memory/src/correction-store.ts` — 133 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (5): function correctionConfidenceFromCount, function loadCorrectionPatterns, function incrementCorrectionCount, function removeTrackingRow, function listTrackedPatterns
 - `fns` (5): correctionConfidenceFromCount:26, loadCorrectionPatterns:35, incrementCorrectionCount:60, removeTrackingRow:98, listTrackedPatterns:120
-- `anon` (3): function/arrow expressions with no binding name
 
 #### `packages/core-memory/src/decay.ts` — 51 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (8): const DECAY_LAMBDA, const ARCHIVE_THRESHOLD, interface DecayInput, function daysSince, function computeDecayScore, function confidenceFromCandidate, function isArchived, function shouldRunDecay
@@ -5383,30 +5213,25 @@ population. `wiring:` is the §11 verdict.
 #### `packages/core-memory/src/forgetting-to-remember.ts` — 151 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (10): type FactPolarity, const POLARITY_SUPPRESSION, const POLARITY_OVERLAP_FLOOR, function classifyPolarity, function detectFrustration, function tokenOverlap, interface LessonStrengthInput, function lessonStrength, function lessonSuppressionWeight, function rankWithPolarity
 - `fns` (7): tokenize:56, classifyPolarity:68, detectFrustration:78, tokenOverlap:84, lessonStrength:103, lessonSuppressionWeight:113, rankWithPolarity:130
-- `anon` (7): function/arrow expressions with no binding name
 
-#### `packages/core-memory/src/index.ts` — 124 lines · 0 tests · UNREACHED · imported by 1
+#### `packages/core-memory/src/index.ts` — 124 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (5): re-export MemoryService, re-export type RememberOptions, re-export MemoryConflictResolver, re-export type EmbedVectorFn, re-export type ConflictDetectionResult
 
 #### `packages/core-memory/src/kg-extraction.ts` — 591 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (14): type KgObjectType, type KgEdgeType, interface KgObject, interface KgEvent, interface KgRelation, interface Tier1Result, function extractStructure, function extractKeyValues, function extractGazetteer, function extractCoOccurrence, function extractEvents, function extractProjectLinks, interface Tier1Options, function extractTier1
-- `fns` (21): extractStructure:172, extractLabel:235, extractLabel:241, extractLabel:247, extractLabel:253, extractLabel:259, extractLabel:265, extractLabel:271, extractLabel:277, extractKeyValues:281, extractGazetteer:316, extractCoOccurrence:361, formatDate:401, formatDate:406, formatDate:414, formatDate:422, formatDate:433, formatDate:441, extractEvents:445, extractProjectLinks:478, extractTier1:516
-- `anon` (2): function/arrow expressions with no binding name
+- `fns` (8): extractStructure:172, heading:191, extractKeyValues:281, extractGazetteer:316, extractCoOccurrence:361, extractEvents:445, extractProjectLinks:478, extractTier1:516
 
 #### `packages/core-memory/src/kg-llm-refinement.ts` — 366 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (7): interface Tier2Input, interface Tier2Output, function estimateTier2Cost, interface Tier2LlmProvider, interface Tier2Billing, interface Tier2Options, function refineTier2
 - `fns` (6): RELATIONSHIP_SYNTHESIS_PROMPT:62, DISAMBIGUATION_PROMPT:96, TOPIC_EXTRACTION_PROMPT:118, COMMUNITY_SUMMARIZATION_PROMPT:132, estimateTier2Cost:158, refineTier2:208
-- `anon` (4): function/arrow expressions with no binding name
 
 #### `packages/core-memory/src/knowledge-graph.ts` — 1,062 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (9): interface KGraphDb, interface ExtractedEntity, interface ExtractedTriple, type EntityType, interface EntityRow, interface TripleRow, interface GraphQueryResult, function extractEntitiesAndTriples, class KnowledgeGraphService
-- `fns` (21): newId:74, extractEntitiesAndTriples:135, constructor:241, storeExtraction:247, upsertEntity:297, queryGraph:326, getChunkEntities:365, getSourceTriples:377, getStats:399, deleteBySourceId:409, storeTier1Result:437, queryGraphV2:533, registerChatObject:681, syncChatsToGraph:785, queryGraphWithActivation:834, getTimeline:875, getSourceGraph:886, getChunkObjects:917, storeTier2Result:930, getStatsV2:1017, getEnrichmentProgress:1041
-- `anon` (35): function/arrow expressions with no binding name
+- `fns` (3): newId:74, extractEntitiesAndTriples:135, d:867
 
 #### `packages/core-memory/src/phantom-thread.ts` — 136 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (10): interface PhantomActivity, interface PhantomFact, interface PreloadOptions, function topicOverlap, function recencyBoost, function categoryMatch, function scoreFact, function preloadForActivity, function preloadCoverage, function preloadLift
-- `fns` (8): topicTokens:53, topicOverlap:63, recencyBoost:73, categoryMatch:82, scoreFact:86, preloadForActivity:98, preloadCoverage:116, preloadLift:133
-- `anon` (9): function/arrow expressions with no binding name
+- `fns` (9): topicTokens:53, topicOverlap:63, recencyBoost:73, days:77, categoryMatch:82, scoreFact:86, preloadForActivity:98, preloadCoverage:116, preloadLift:133
 
 #### `packages/core-memory/src/router-integration.ts` — 43 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (3): type MemoryRetrievalHint, function buildMemoryRetrievalHint, function attachMemoryScopeToPlan
@@ -5414,54 +5239,44 @@ population. `wiring:` is the §11 verdict.
 
 #### `packages/core-memory/src/service.ts` — 132 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (3): type RememberOptions, class MemoryService, function shouldRunDecay
-- `fns` (7): constructor:24, remember:32, recall:85, getByCategory:89, storeCandidate:96, decayAll:123, shouldRunDecay:129
-- `anon` (1): function/arrow expressions with no binding name
+- `fns` (1): shouldRunDecay:129
 
 #### `packages/core-memory/src/spreading-activation.ts` — 186 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (7): interface ActivationEdge, interface ActivationSeed, interface SpreadOptions, interface ActivationResult, function lateralInhibit, function spreadActivation, function rankByActivation
 - `fns` (5): buildAdjacency:59, push:61, lateralInhibit:79, spreadActivation:100, rankByActivation:175
-- `anon` (8): function/arrow expressions with no binding name
 
-#### `packages/core-memory/src/temporal-anticipation.ts` — 142 lines · 0 tests · TEST-ONLY · imported by 1
+#### `packages/core-memory/src/temporal-anticipation.ts` — 142 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (7): interface TemporalEvent, interface PredictOptions, interface PredictionScore, function scoreTopic, function predictNextTopics, interface AnticipationEval, function evaluateAnticipation
 - `fns` (4): periodicity:42, scoreTopic:61, predictNextTopics:86, evaluateAnticipation:113
-- `anon` (14): function/arrow expressions with no binding name
 
 #### `packages/core-memory/vitest.config.ts` — 10 lines · 0 tests · NOT IMPORTED · imported by 0
 
 ### 10.8 `packages/core-providers`
 
 #### `packages/core-providers/src/__tests__/live-pricing.test.ts` — 175 lines · 15 tests · TEST · imported by 0
-- `anon` (23): function/arrow expressions with no binding name
 
 #### `packages/core-providers/src/__tests__/registry.test.ts` — 57 lines · 6 tests · TEST · imported by 0
-- `anon` (14): function/arrow expressions with no binding name
 
 #### `packages/core-providers/src/__tests__/vault-concurrency.test.ts` — 67 lines · 4 tests · TEST · imported by 0
-- `fns` (6): createSlowStore:5, wait:7, getItem:9, setItem:13, removeItem:17, dump:20
-- `anon` (6): function/arrow expressions with no binding name
+- `fns` (2): createSlowStore:5, wait:7
 
 #### `packages/core-providers/src/__tests__/vault.test.ts` — 90 lines · 8 tests · TEST · imported by 0
-- `fns` (5): createMockStore:5, getItem:8, setItem:11, removeItem:14, dump:17
-- `anon` (10): function/arrow expressions with no binding name
+- `fns` (1): createMockStore:5
 
 #### `packages/core-providers/src/capability-registry.ts` — 98 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (11): type ModelInputModality, interface ModelCapabilities, interface ProviderModels, interface ModelCatalog, function setModelCatalog, function getModelCatalog, function getBundledCatalogVersion, function getModelsForProvider, function getModelCapabilities, function modelSupportsReasoning, function modelSupportsVision
 - `fns` (8): setModelCatalog:48, getModelCatalog:56, getBundledCatalogVersion:60, getModelsForProvider:65, getModelCapabilities:70, modelSupportsReasoning:80, modelSupportsVision:85, isValidCatalog:89
-- `anon` (1): function/arrow expressions with no binding name
 
-#### `packages/core-providers/src/index.ts` — 48 lines · 0 tests · TEST-ONLY · imported by 3
+#### `packages/core-providers/src/index.ts` — 48 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): re-export ProviderVault
 
 #### `packages/core-providers/src/pricing/live-pricing.ts` — 151 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (3): type ProviderPricing, function fetchProviderPricing, function formatPricingLine
-- `fns` (4): fetchProviderPricing:66, fetchOpenRouterPricing:100, parseUsdPerMillion:132, formatPricingLine:143
-- `anon` (2): function/arrow expressions with no binding name
+- `fns` (5): fetchProviderPricing:66, fetchOpenRouterPricing:100, body:106, parseUsdPerMillion:132, formatPricingLine:143
 
 #### `packages/core-providers/src/registry.ts` — 1,315 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (8): const AI_PROVIDER_GROUPS, const WEB_OTHER_PROVIDER_GROUPS, const PROVIDER_CATALOG, function getProviderById, function getRecommendedProviders, function filterProvidersBySection, function isAiProviderGroup, function groupProvidersByLabel
 - `fns` (5): getProviderById:1282, getRecommendedProviders:1286, filterProvidersBySection:1290, isAiProviderGroup:1298, groupProvidersByLabel:1302
-- `anon` (4): function/arrow expressions with no binding name
 
 #### `packages/core-providers/src/types.ts` — 59 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (4): interface KeyValueStore, interface ProviderCatalogEntry, interface StoredProviderRecord, interface ConnectedProvider
@@ -5471,42 +5286,31 @@ population. `wiring:` is the §11 verdict.
 
 #### `packages/core-providers/src/vault.ts` — 198 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): class ProviderVault
-- `fns` (12): acquire:13, constructor:48, list:50, getActive:57, save:70, remove:124, setActive:131, hasKey:150, keyRef:155, toConnectedProvider:163, readRecords:181, writeRecords:194
-- `anon` (16): function/arrow expressions with no binding name
 
 #### `packages/core-providers/vitest.config.ts` — 9 lines · 0 tests · NOT IMPORTED · imported by 0
 
 ### 10.9 `packages/core-search`
 
 #### `packages/core-search/src/__tests__/bm25-rerank.test.ts` — 52 lines · 5 tests · TEST · imported by 0
-- `anon` (6): function/arrow expressions with no binding name
 
 #### `packages/core-search/src/__tests__/cascade-order.test.ts` — 46 lines · 3 tests · TEST · imported by 0
-- `fns` (3): providerNames:12, parallel:14, isAvailable:17
-- `anon` (4): function/arrow expressions with no binding name
+- `fns` (1): providerNames:12
 
 #### `packages/core-search/src/__tests__/duckduckgo-search.test.ts` — 81 lines · 6 tests · TEST · imported by 0
-- `fns` (2): text:57, text:75
-- `anon` (8): function/arrow expressions with no binding name
 
 #### `packages/core-search/src/__tests__/hf-providers.test.ts` — 421 lines · 31 tests · TEST · imported by 0
-- `fns` (6): jsonResponse:15, get:20, json:22, errorResponse:26, get:30, json:31
-- `anon` (44): function/arrow expressions with no binding name
+- `fns` (2): jsonResponse:15, errorResponse:26
 
 #### `packages/core-search/src/__tests__/query-rewrite.test.ts` — 42 lines · 7 tests · TEST · imported by 0
-- `anon` (7): function/arrow expressions with no binding name
 
 #### `packages/core-search/src/__tests__/search-cache.test.ts` — 155 lines · 22 tests · TEST · imported by 0
-- `anon` (26): function/arrow expressions with no binding name
 
 #### `packages/core-search/src/__tests__/searxng-pool.test.ts` — 153 lines · 7 tests · TEST · imported by 0
-- `fns` (11): jsonResponse:18, get:23, text:25, get:84, text:85, get:104, text:105, get:123, text:124, get:141, text:143
-- `anon` (11): function/arrow expressions with no binding name
+- `fns` (1): jsonResponse:18
 
 #### `packages/core-search/src/bm25-rerank.ts` — 101 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (3): interface Bm25RerankItem, interface Bm25RankedItem, function rerankByBm25
 - `fns` (4): tokenize:16, buildTermFreqMap:24, computeBm25Score:32, rerankByBm25:61
-- `anon` (5): function/arrow expressions with no binding name
 
 #### `packages/core-search/src/build-cascade-providers.native.ts` — 53 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (2): type CascadeProviderFactory, function buildCascadeProviders
@@ -5518,183 +5322,146 @@ population. `wiring:` is the §11 verdict.
 
 #### `packages/core-search/src/cache/search-cache.ts` — 80 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (3): class SearchCache, function getSearchCache, class SearchCacheProvider
-- `fns` (9): normalizeQuery:11, get:18, set:31, clear:40, evict:44, getSearchCache:60, constructor:71, isAvailable:73, search:77
+- `fns` (2): normalizeQuery:11, getSearchCache:60
 
 #### `packages/core-search/src/cascade.native.ts` — 15 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (3): re-export rewriteSearchQuery, re-export buildCascadeProviders, function buildDefaultCascade
-- `fns` (2): buildDefaultCascade:9, parallel:11
+- `fns` (1): buildDefaultCascade:9
 
 #### `packages/core-search/src/cascade.ts` — 25 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (4): re-export WebSearchCascade, re-export rewriteSearchQuery, re-export buildCascadeProviders, function buildDefaultCascade
-- `fns` (2): buildDefaultCascade:20, parallel:22
+- `fns` (1): buildDefaultCascade:20
 
 #### `packages/core-search/src/contextual-rewrite.ts` — 62 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): function contextualRewrite
 - `fns` (1): contextualRewrite:6
-- `anon` (4): function/arrow expressions with no binding name
 
 #### `packages/core-search/src/fan-out.ts` — 176 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (5): interface FanOutOptions, function isLocalIntent, function buildLocationHint, function generateAspectQueries, function mergeAndDedupe
 - `fns` (4): isLocalIntent:86, buildLocationHint:92, generateAspectQueries:108, mergeAndDedupe:158
-- `anon` (4): function/arrow expressions with no binding name
 
 #### `packages/core-search/src/fetch-and-rerank.native.ts` — 104 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): function fetchAndRerankSearchResults
 - `fns` (4): excerpt:10, pooledFetch:18, next:24, fetchAndRerankSearchResults:38
-- `anon` (6): function/arrow expressions with no binding name
 
 #### `packages/core-search/src/fetch-and-rerank.ts` — 76 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): function fetchAndRerankSearchResults
 - `fns` (2): excerpt:8, fetchAndRerankSearchResults:19
-- `anon` (4): function/arrow expressions with no binding name
 
 #### `packages/core-search/src/fetch-cascade.ts` — 31 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): class WebFetchCascade
-- `fns` (2): constructor:6, fetch:10
-- `anon` (1): function/arrow expressions with no binding name
 
 #### `packages/core-search/src/governed-transport.ts` — 62 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (6): interface GovernedSearchRequest, interface GovernedSearchResponse, interface GovernedSearchTransport, function setGovernedSearchTransport, function getGovernedSearchTransport, function hasGovernedSearchTransport
 - `fns` (3): setGovernedSearchTransport:49, getGovernedSearchTransport:54, hasGovernedSearchTransport:59
 
-#### `packages/core-search/src/index.ts` — 37 lines · 0 tests · REACHABLE · imported by 1
+#### `packages/core-search/src/index.ts` — 37 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (39): re-export WebSearchCascade, re-export buildDefaultCascade, re-export rewriteSearchQuery, re-export WebFetchCascade, re-export rerankByBm25, re-export Bm25RerankItem, re-export Bm25RankedItem, re-export fetchAndRerankSearchResults, re-export SearchCache, re-export SearchCacheProvider, re-export getSearchCache, re-export SearXNGPoolProvider, re-export resetSearxPoolHealthForTests, re-export loadSearxPoolHealth, re-export setSearxPoolPersistenceStore, re-export ParallelSearchProvider, re-export ExaSearchProvider, re-export DdgInstantAnswerProvider, re-export DdgHtmlSearchProvider, re-export TavilySearchProvider, re-export ExaRestSearchProvider, re-export WikipediaSearchProvider, re-export DuckDuckGoSearchProvider, re-export parseDuckDuckGoLiteHtml, re-export ReadabilityFetcherProvider, re-export McpSearchClient, re-export BrightDataWebMcpProvider, re-export HfSearxngProvider, re-export HfWhoogleProvider, re-export HfWebsurfxProvider, re-export HfSearchRotator, re-export buildHfProviders, re-export hfDeepResearch, re-export HfSearchConfig, re-export runResearch, re-export ResearchProgress, re-export ResearchResult, re-export ResearchSection, re-export ResearchSource
 
 #### `packages/core-search/src/mcp-client.ts` — 107 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): class McpSearchClient
-- `fns` (6): constructor:17, connect:19, parseContent:38, search:44, fetch:87, disconnect:100
-- `anon` (3): function/arrow expressions with no binding name
 
 #### `packages/core-search/src/mobile.ts` — 17 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (26): re-export WebSearchCascade, re-export buildDefaultCascade, re-export rewriteSearchQuery, re-export rerankByBm25, re-export Bm25RerankItem, re-export Bm25RankedItem, re-export fetchAndRerankSearchResults, re-export SearchCache, re-export SearchCacheProvider, re-export getSearchCache, re-export SearXNGPoolProvider, re-export ParallelSearchProvider, re-export DdgInstantAnswerProvider, re-export DdgHtmlSearchProvider, re-export TavilySearchProvider, re-export WikipediaSearchProvider, re-export DuckDuckGoSearchProvider, re-export parseDuckDuckGoLiteHtml, re-export loadSearxPoolHealth, re-export setSearxPoolPersistenceStore, re-export contextualRewrite, re-export runResearch, re-export ResearchProgress, re-export ResearchResult, re-export ResearchSection, re-export ResearchSource
 
 #### `packages/core-search/src/parallel-web-search-cascade.ts` — 152 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (3): function getCachedContent, function setCachedContent, class ParallelWebSearchCascade
-- `fns` (8): evictOldest:15, getCachedContent:28, setCachedContent:38, normalizeUrl:43, deduplicateResults:52, constructor:74, search:79, getAvailableProviders:137
-- `anon` (6): function/arrow expressions with no binding name
+- `fns` (5): evictOldest:15, getCachedContent:28, setCachedContent:38, normalizeUrl:43, deduplicateResults:52
 
 #### `packages/core-search/src/providers/bright-data-mcp.native.ts` — 15 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): class BrightDataWebMcpProvider
-- `fns` (2): isAvailable:8, fetch:12
 
 #### `packages/core-search/src/providers/bright-data-mcp.ts` — 23 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): class BrightDataWebMcpProvider
-- `fns` (2): isAvailable:9, fetch:13
 
 #### `packages/core-search/src/providers/ddg-html-search.ts` — 91 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): class DdgHtmlSearchProvider
-- `fns` (4): decodeDdgUrl:8, stripHtml:19, isAvailable:33, search:37
-- `anon` (2): function/arrow expressions with no binding name
+- `fns` (2): decodeDdgUrl:8, stripHtml:19
 
 #### `packages/core-search/src/providers/ddg-instant.ts` — 80 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): class DdgInstantAnswerProvider
-- `fns` (2): isAvailable:25, search:29
-- `anon` (1): function/arrow expressions with no binding name
+- `fns` (1): data:37
 
 #### `packages/core-search/src/providers/duckduckgo-search.native.ts` — 63 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (2): function parseDuckDuckGoLiteHtml, class DuckDuckGoSearchProvider
-- `fns` (3): parseDuckDuckGoLiteHtml:9, isAvailable:48, search:52
+- `fns` (1): parseDuckDuckGoLiteHtml:9
 
 #### `packages/core-search/src/providers/duckduckgo-search.ts` — 120 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (2): function parseDuckDuckGoLiteHtml, class DuckDuckGoSearchProvider
-- `fns` (5): normalizeUrl:11, decodeDuckDuckGoRedirect:21, parseDuckDuckGoLiteHtml:36, isAvailable:75, search:79
-- `anon` (4): function/arrow expressions with no binding name
+- `fns` (3): normalizeUrl:11, decodeDuckDuckGoRedirect:21, parseDuckDuckGoLiteHtml:36
 
 #### `packages/core-search/src/providers/exa-rest-search.ts` — 75 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): class ExaRestSearchProvider
-- `fns` (3): constructor:22, isAvailable:24, search:28
-- `anon` (2): function/arrow expressions with no binding name
+- `fns` (1): body:55
 
 #### `packages/core-search/src/providers/exa-search.ts` — 30 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): class ExaSearchProvider
-- `fns` (3): constructor:9, isAvailable:14, search:18
-- `anon` (1): function/arrow expressions with no binding name
 
 #### `packages/core-search/src/providers/hf-rotator.ts` — 139 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (4): interface HfSearchConfig, function buildHfProviders, class HfSearchRotator, function hfDeepResearch
-- `fns` (6): buildHfProviders:25, constructor:55, get providerCount:59, isAvailable:63, search:67, hfDeepResearch:102
-- `anon` (2): function/arrow expressions with no binding name
+- `fns` (2): buildHfProviders:25, hfDeepResearch:102
 
 #### `packages/core-search/src/providers/hf-searxng.ts` — 76 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): class HfSearxngProvider
-- `fns` (4): normalizeResult:6, constructor:28, isAvailable:34, search:38
-- `anon` (2): function/arrow expressions with no binding name
+- `fns` (2): normalizeResult:6, data:56
 
 #### `packages/core-search/src/providers/hf-websurfx.ts` — 78 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): class HfWebsurfxProvider
-- `fns` (3): constructor:19, isAvailable:25, search:29
-- `anon` (2): function/arrow expressions with no binding name
+- `fns` (1): data:47
 
 #### `packages/core-search/src/providers/hf-whoogle.ts` — 76 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): class HfWhoogleProvider
-- `fns` (4): normalizeResult:6, constructor:28, isAvailable:34, search:38
-- `anon` (2): function/arrow expressions with no binding name
+- `fns` (2): normalizeResult:6, data:56
 
 #### `packages/core-search/src/providers/parallel-search.native.ts` — 29 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): class ParallelSearchProvider
-- `fns` (3): constructor:9, isAvailable:14, search:18
-- `anon` (1): function/arrow expressions with no binding name
 
 #### `packages/core-search/src/providers/parallel-search.ts` — 29 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): class ParallelSearchProvider
-- `fns` (3): constructor:9, isAvailable:14, search:18
-- `anon` (1): function/arrow expressions with no binding name
 
 #### `packages/core-search/src/providers/readability-fetcher.native.ts` — 78 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): class ReadabilityFetcherProvider
-- `fns` (3): extractText:6, isAvailable:40, fetch:44
-- `anon` (1): function/arrow expressions with no binding name
+- `fns` (1): extractText:6
 
 #### `packages/core-search/src/providers/readability-fetcher.ts` — 54 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): class ReadabilityFetcherProvider
-- `fns` (2): isAvailable:8, fetch:13
-- `anon` (1): function/arrow expressions with no binding name
 
 #### `packages/core-search/src/providers/searxng-pool.native.ts` — 9 lines · 0 tests · NOT IMPORTED · imported by 0
 
 #### `packages/core-search/src/providers/searxng-pool.ts` — 306 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (5): interface SearxPoolInstance, function loadSearxPoolHealth, function setSearxPoolPersistenceStore, class SearXNGPoolProvider, function resetSearxPoolHealthForTests
-- `fns` (18): loadSearxPoolHealth:37, saveSearxPoolHealth:53, setSearxPoolPersistenceStore:74, getHealth:81, isInstanceHealthy:90, recordSuccess:95, recordFailure:104, parseRetryAfterMs:124, looksLikeCaptcha:138, mapResults:148, queryInstance:160, record:173, constructor:240, isAvailable:244, getHealthyInstances:248, search:252, raceHealthyInstances:270, resetSearxPoolHealthForTests:304
-- `anon` (8): function/arrow expressions with no binding name
+- `fns` (14): loadSearxPoolHealth:37, saveSearxPoolHealth:53, setSearxPoolPersistenceStore:74, getHealth:81, isInstanceHealthy:90, recordSuccess:95, recordFailure:104, parseRetryAfterMs:124, looksLikeCaptcha:138, mapResults:148, queryInstance:160, record:173, raceHealthyInstances:270, resetSearxPoolHealthForTests:304
 
 #### `packages/core-search/src/providers/tavily-search.ts` — 101 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): class TavilySearchProvider
-- `fns` (3): constructor:40, isAvailable:42, search:46
+- `fns` (1): data:71
 
 #### `packages/core-search/src/providers/wikipedia-search.ts` — 64 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): class WikipediaSearchProvider
-- `fns` (2): isAvailable:20, search:24
-- `anon` (2): function/arrow expressions with no binding name
+- `fns` (1): data:43
 
 #### `packages/core-search/src/query-rewrite.ts` — 221 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): function rewriteSearchQuery
-- `fns` (14): resolve:97, resolve:101, resolve:109, resolve:117, resolve:129, resolve:143, resolve:147, resolve:151, resolve:155, resolve:159, expandTemporalPhrases:170, stripFillerWords:181, addExactPhraseQuotes:191, rewriteSearchQuery:210
-- `anon` (3): function/arrow expressions with no binding name
+- `fns` (4): expandTemporalPhrases:170, stripFillerWords:181, addExactPhraseQuotes:191, rewriteSearchQuery:210
 
 #### `packages/core-search/src/research-tiers.ts` — 122 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (5): interface ResearchProgress, interface ResearchSource, interface ResearchSection, interface ResearchResult, function runResearch
 - `fns` (2): runResearch:29, generateSubQueries:106
-- `anon` (9): function/arrow expressions with no binding name
 
 #### `packages/core-search/src/web-search-cascade.ts` — 75 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): class WebSearchCascade
-- `fns` (2): constructor:18, search:23
-- `anon` (3): function/arrow expressions with no binding name
 
 #### `packages/core-search/vitest.config.ts` — 10 lines · 0 tests · NOT IMPORTED · imported by 0
 
 ### 10.10 `packages/core-security`
 
 #### `packages/core-security/src/__tests__/crypto-edge.test.ts` — 171 lines · 17 tests · TEST · imported by 0
-- `anon` (19): function/arrow expressions with no binding name
 
 #### `packages/core-security/src/__tests__/crypto.test.ts` — 34 lines · 6 tests · TEST · imported by 0
-- `anon` (6): function/arrow expressions with no binding name
 
 #### `packages/core-security/src/crypto.ts` — 329 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (10): interface InjectableSubtleCrypto, type CryptoOptions, function resolveSubtle, function generateSalt, function deriveKeyFromPassword, function toBase64, function fromBase64, function base64ToString, function encryptSecret, function decryptSecret
-- `fns` (24): bufferSourceToUint8Array:48, arrayBufferFromBytes:55, constructor:61, createStableSubtle:69, digest:73, importKey:78, exportKey:88, generateKey:97, wrapKey:106, unwrapKey:116, encrypt:130, decrypt:137, createStableRandom:151, isCompleteSubtle:173, resolveSubtle:188, resolveRandom:196, deriveKey:208, generateSalt:220, deriveKeyFromPassword:234, toBase64:259, fromBase64:270, base64ToString:283, encryptSecret:291, decryptSecret:313
-- `anon` (3): function/arrow expressions with no binding name
+- `fns` (21): bufferSourceToUint8Array:48, arrayBufferFromBytes:55, createStableSubtle:69, keyBytes:89, keyBytes:107, wkBytes:109, ukBytes:118, keyBytes:132, keyBytes:139, createStableRandom:151, isCompleteSubtle:173, resolveSubtle:188, resolveRandom:196, deriveKey:208, generateSalt:220, deriveKeyFromPassword:234, toBase64:259, fromBase64:270, base64ToString:283, encryptSecret:291, decryptSecret:313
 
 #### `packages/core-security/src/index.ts` — 13 lines · 0 tests · NOT IMPORTED · imported by 0
 
@@ -5704,342 +5471,284 @@ population. `wiring:` is the §11 verdict.
 
 #### `packages/core-tools/src/__tests__/tool-runtime.test.ts` — 34 lines · 3 tests · TEST · imported by 0
 - `fns` (1): mockExec:9
-- `anon` (3): function/arrow expressions with no binding name
 
-#### `packages/core-tools/src/image-generation.ts` — 24 lines · 0 tests · UNREACHED · imported by 1
+#### `packages/core-tools/src/image-generation.ts` — 24 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (2): const imageGenerationTool, const imageEditingTool
 
-#### `packages/core-tools/src/index.ts` — 8 lines · 0 tests · TEST-ONLY · imported by 7
+#### `packages/core-tools/src/index.ts` — 8 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (10): re-export ToolRuntime, re-export imageGenerationTool, re-export imageEditingTool, re-export toolsToOpenAI, re-export ToolContract, re-export ToolContext, re-export ToolInvocation, re-export RiskLevel, re-export ToolFamily, re-export PermissionGateResult
 
-#### `packages/core-tools/src/tool-function-calling.ts` — 190 lines · 0 tests · UNREACHED · imported by 1
+#### `packages/core-tools/src/tool-function-calling.ts` — 190 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (2): type OpenAITool, function toolsToOpenAI
 - `fns` (3): getTypeName:35, zodToJsonSchema:71, toolsToOpenAI:174
-- `anon` (2): function/arrow expressions with no binding name
 
-#### `packages/core-tools/src/tool-runtime.ts` — 49 lines · 0 tests · UNREACHED · imported by 1
+#### `packages/core-tools/src/tool-runtime.ts` — 49 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): class ToolRuntime
-- `fns` (5): register:6, registerMany:10, getTool:14, listTools:18, execute:23
-- `anon` (1): function/arrow expressions with no binding name
+- `fns` (1): issues:39
 
-#### `packages/core-tools/src/types.ts` — 44 lines · 0 tests · TEST-ONLY · imported by 3
+#### `packages/core-tools/src/types.ts` — 44 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (6): type RiskLevel, type ToolFamily, interface ToolContext, interface ToolContract, interface PermissionGateResult, interface ToolInvocation
 
 ### 10.12 `ui`
 
 #### `ui/vite.config.ts` — 198 lines · 0 tests · NOT IMPORTED · imported by 0
-- `fns` (7): readRequiredFile:42, isMonacoDomSanitizeImporter:89, monacoDompurifyReplacement:100, buildStart:106, resolveId:109, load:122, buildEnd:128
+- `fns` (3): readRequiredFile:42, isMonacoDomSanitizeImporter:89, monacoDompurifyReplacement:100
 
 ### 10.13 `ui/src`
 
-#### `ui/src/App.tsx` — 148 lines · 0 tests · REACHABLE · imported by 1
+#### `ui/src/App.tsx` — 148 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (4): const NARROW_SHELL_BREAKPOINT, function isNarrowShellWidth, function FirstRunSurfaces, function App
 - `fns` (6): isNarrowShellWidth:29, useNarrowShell:33, update:42, FirstRunSurfaces:52, App:57, onClick:96
-- `anon` (15): function/arrow expressions with no binding name
 
 #### `ui/src/components/chat/agent-model-picker.dom.test.tsx` — 248 lines · 11 tests · TEST · imported by 0
-- `fns` (10): runtimeRow:39, pickerHandlers:63, chief_default_get:65, chief_default_set:69, acp_registry_status:70, agent_directory_list:71, acp_install_status:72, trigger:115, agentRow:119, openPicker:123
-- `anon` (22): function/arrow expressions with no binding name
+- `fns` (5): runtimeRow:39, pickerHandlers:63, trigger:115, agentRow:119, openPicker:123
 
-#### `ui/src/components/chat/agent-model-picker.tsx` — 1,110 lines · 0 tests · REACHABLE · imported by 1
+#### `ui/src/components/chat/agent-model-picker.tsx` — 1,110 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): function AgentModelPicker
-- `fns` (14): StatusDot:62, LifecycleBadge:76, ProvenanceBadge:112, getCapabilityIcon:146, AgentLogo:165, AgentModelPicker:184, handleImportCustomBinary:230, handleVerifyAgent:264, acpIdForAgent:319, handleSetDefaultAgent:323, handlePinAgent:351, installAgent:376, connectAgent:427, signIn:450
-- `anon` (66): function/arrow expressions with no binding name
+- `fns` (15): StatusDot:62, LifecycleBadge:76, ProvenanceBadge:112, getCapabilityIcon:146, AgentLogo:165, AgentModelPicker:184, handleImportCustomBinary:230, handleVerifyAgent:264, acpIdForAgent:319, handleSetDefaultAgent:323, handlePinAgent:351, installAgent:376, cmd:383, connectAgent:427, signIn:450
 
-#### `ui/src/components/chat/artifact-card.tsx` — 394 lines · 0 tests · REACHABLE · imported by 1
+#### `ui/src/components/chat/artifact-card.tsx` — 394 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): function ArtifactCard
 - `fns` (5): TypeIcon:37, Preview:59, ArtifactCard:167, openArtifact:175, ActionChecklist:314
-- `anon` (21): function/arrow expressions with no binding name
 
-#### `ui/src/components/chat/chat-composer.tsx` — 669 lines · 0 tests · REACHABLE · imported by 2
+#### `ui/src/components/chat/casual-layer.dom.test.tsx` — 174 lines · 6 tests · TEST · imported by 0
+
+#### `ui/src/components/chat/chat-composer.tsx` — 669 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (2): re-export splitAtRefs, function ChatComposer
-- `fns` (10): HintPopover:53, HintRow:66, WorkModeChip:88, AutonomyChip:111, SimpleAutonomyDial:151, IconBtn:188, ChatComposer:223, pickFile:345, onFileChosen:347, send:386
-- `anon` (60): function/arrow expressions with no binding name
+- `fns` (11): HintPopover:53, HintRow:66, WorkModeChip:88, AutonomyChip:111, SimpleAutonomyDial:151, IconBtn:188, ChatComposer:223, pickFile:345, onFileChosen:347, send:386, sendText:456
 
-#### `ui/src/components/chat/chat-panel.tsx` — 1,229 lines · 0 tests · REACHABLE · imported by 1
+#### `ui/src/components/chat/chat-panel.tsx` — 1,229 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): function ChatPanel
 - `fns` (16): StatusBadge:122, deriveNowDoing:137, transcriptMarkdown:159, ChatPanel:163, cancelLiveStream:181, onTogglePause:193, onStopAll:203, onMenuAction:218, onKey:315, handleViewportScroll:350, stepMatch:389, AgentSendBlockerBanner:880, NoAgentCard:922, EmptyState:1001, InlineWorkStream:1150, shortWorkId:1226
-- `anon` (88): function/arrow expressions with no binding name
 
-#### `ui/src/components/chat/mcq-interrupt-card.tsx` — 399 lines · 0 tests · REACHABLE · imported by 1
+#### `ui/src/components/chat/mcq-interrupt-card.tsx` — 399 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (3): interface ConsentSummary, function consentSummary, function McqInterruptCard
-- `fns` (9): DiffView:21, McqOptions:56, AutonomyBody:101, BudgetBar:125, firstSentence:149, consentSummary:157, ConsentFacts:178, InterruptTechnicalDetails:193, McqInterruptCard:225
-- `anon` (16): function/arrow expressions with no binding name
+- `fns` (10): DiffView:21, McqOptions:56, AutonomyBody:101, BudgetBar:125, firstSentence:149, consentSummary:157, files:159, ConsentFacts:178, InterruptTechnicalDetails:193, McqInterruptCard:225
 
-#### `ui/src/components/chat/message-bubble.tsx` — 892 lines · 0 tests · REACHABLE · imported by 1
+#### `ui/src/components/chat/message-bubble.tsx` — 892 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): function messageMarkdown
-- `fns` (31): CodeBlock:49, pre:109, strong:110, em:115, ul:120, li:125, p:130, a:135, useLiveElapsed:149, Reasoning:165, TimeStamp:231, TechnicalDetails:243, rawJson:272, messageMarkdown:282, regenerateTurn:326, shape:334, TurnErrorCard:361, copy:373, retryWith:378, retry:391, retrySafer:392, retryDifferently:398, undo:399, AssistantActions:528, copy:535, quote:540, exportMd:544, regenerate:558, UserEditInline:617, save:628, AssistantCheckpoint:705
-- `anon` (47): function/arrow expressions with no binding name
+- `fns` (25): CodeBlock:49, useLiveElapsed:149, Reasoning:165, TimeStamp:231, TechnicalDetails:243, rawJson:272, messageMarkdown:282, regenerateTurn:326, shape:334, TurnErrorCard:361, copy:373, retryWith:378, retry:391, retrySafer:392, retryDifferently:398, undo:399, AssistantActions:528, copy:535, quote:540, exportMd:544, regenerate:558, UserEditInline:617, save:628, AssistantCheckpoint:705, assistants:710
 
-#### `ui/src/components/chat/now-doing-strip.tsx` — 148 lines · 0 tests · REACHABLE · imported by 1
+#### `ui/src/components/chat/now-doing-strip.tsx` — 148 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): function NowDoingStrip
-- `fns` (1): NowDoingStrip:25
-- `anon` (14): function/arrow expressions with no binding name
+- `fns` (2): NowDoingStrip:25, runningToolCalls:54
 
-#### `ui/src/components/chat/pending-queue-chips.tsx` — 163 lines · 0 tests · REACHABLE · imported by 1
+#### `ui/src/components/chat/pending-queue-chips.tsx` — 163 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): function PendingQueueChips
 - `fns` (3): commitEdit:18, fireNow:30, PendingQueueChips:128
-- `anon` (13): function/arrow expressions with no binding name
 
-#### `ui/src/components/chat/progress-steps.tsx` — 162 lines · 0 tests · REACHABLE · imported by 1
+#### `ui/src/components/chat/progress-steps.tsx` — 162 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): function ProgressSteps
 - `fns` (3): StepTypeIcon:23, StatusDot:49, ProgressSteps:79
-- `anon` (2): function/arrow expressions with no binding name
 
-#### `ui/src/components/chat/session-tabs.tsx` — 114 lines · 0 tests · REACHABLE · imported by 1
+#### `ui/src/components/chat/session-tabs.tsx` — 114 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): function SessionTabs
 - `fns` (3): tabOrder:20, statusDot:27, SessionTabs:50
-- `anon` (11): function/arrow expressions with no binding name
 
-#### `ui/src/components/chat/session-timeline.tsx` — 437 lines · 0 tests · REACHABLE · imported by 1
+#### `ui/src/components/chat/session-timeline.tsx` — 437 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): function SessionTimeline
 - `fns` (3): getTimelineEvents:45, stepToEventType:94, SessionTimeline:137
-- `anon` (18): function/arrow expressions with no binding name
 
-#### `ui/src/components/chat/tool-chip.tsx` — 329 lines · 0 tests · REACHABLE · imported by 1
+#### `ui/src/components/chat/tool-chip.tsx` — 329 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (5): type ToolActivityStatus, interface ToolActivitySummary, function formatToolDuration, function toolActivitySummary, function ToolChips
-- `fns` (6): actionForTool:120, formatToolDuration:138, toolActivitySummary:150, riskTone:170, safeJson:178, ToolChips:319
-- `anon` (10): function/arrow expressions with no binding name
+- `fns` (8): actionForTool:120, formatToolDuration:138, toolActivitySummary:150, riskTone:170, r:171, safeJson:178, requestId:202, ToolChips:319
 
-#### `ui/src/components/chat/turn-checkpoint.tsx` — 481 lines · 0 tests · REACHABLE · imported by 2
+#### `ui/src/components/chat/turn-checkpoint.tsx` — 481 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): function TurnCheckpoint
 - `fns` (3): TurnCheckpoint:57, onKey:132, doRestore:151
-- `anon` (23): function/arrow expressions with no binding name
 
-#### `ui/src/components/nps-prompt.tsx` — 77 lines · 0 tests · REACHABLE · imported by 1
+#### `ui/src/components/nps-prompt.tsx` — 77 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): function NpsPrompt
 - `fns` (2): NpsPrompt:18, submit:25
-- `anon` (6): function/arrow expressions with no binding name
 
 #### `ui/src/components/onboarding-modal.test.ts` — 100 lines · 4 tests · TEST · imported by 0
-- `fns` (6): dependencies:20, inTauri:24, invoke:31, invoke:60, unavailable:74, available:88
-- `anon` (11): function/arrow expressions with no binding name
+- `fns` (1): dependencies:20
 
-#### `ui/src/components/onboarding-modal.tsx` — 898 lines · 0 tests · REACHABLE · imported by 2
+#### `ui/src/components/onboarding-modal.tsx` — 898 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (4): type OnboardingVaultPath, interface VaultSetupDependencies, function completeOnboardingAfterVault, function OnboardingModal
 - `fns` (8): completeOnboardingAfterVault:65, OnboardingModal:155, scanAgents:200, finish:236, startFirstTask:251, handleInstallAgent:264, handleBindAgent:295, handleSetPassphrase:311
-- `anon` (40): function/arrow expressions with no binding name
 
-#### `ui/src/components/panels/agent-builder-panel.tsx` — 597 lines · 0 tests · REACHABLE · imported by 1
+#### `ui/src/components/panels/agent-builder-panel.tsx` — 597 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): function AgentBuilderPanel
 - `fns` (11): AgentBuilderPanel:40, loadRegistry:69, persistBundles:94, startFromTemplate:106, splitIds:122, build:129, saveAgent:141, removeAgent:163, copyToml:176, downloadToml:188, IdListField:581
-- `anon` (37): function/arrow expressions with no binding name
 
 #### `ui/src/components/panels/agents-models-section.dom.test.tsx` — 220 lines · 7 tests · TEST · imported by 0
-- `fns` (8): backendState:34, settings_agent_get:66, settings_agent_get:133, agent_backend_get:134, agent_backend_providers:135, agent_backend_clear:136, settings_agent_get:173, settings_agent_get:199
-- `anon` (25): function/arrow expressions with no binding name
+- `fns` (1): backendState:34
 
-#### `ui/src/components/panels/agents-models-section.tsx` — 1,118 lines · 0 tests · REACHABLE · imported by 1
+#### `ui/src/components/panels/agents-models-section.tsx` — 1,118 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): function AgentsModelsSection
-- `fns` (19): formatTokens:66, AgentBackendPanel:85, load:93, choose:114, clear:132, test:149, StatusBadge:364, AgentLogo:387, agentReadiness:408, readinessTone:435, AuthOwnerBadge:449, AgentDetailCards:463, AgentCard:584, rescan:621, installAgent:637, AgentsTab:880, discoverMore:896, RoutingTab:968, AgentsModelsSection:1090
-- `anon` (52): function/arrow expressions with no binding name
+- `fns` (21): formatTokens:66, AgentBackendPanel:85, load:93, choose:114, clear:132, test:149, visible:173, StatusBadge:364, AgentLogo:387, agentReadiness:408, readinessTone:435, AuthOwnerBadge:449, AgentDetailCards:463, AgentCard:584, rescan:621, installAgent:637, cmd:643, AgentsTab:880, discoverMore:896, RoutingTab:968, AgentsModelsSection:1090
 
-#### `ui/src/components/panels/analytics-panel.tsx` — 327 lines · 0 tests · REACHABLE · imported by 1
+#### `ui/src/components/panels/analytics-panel.tsx` — 327 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): function AnalyticsPanel
 - `fns` (2): AnalyticsPanel:57, exportCsv:99
-- `anon` (12): function/arrow expressions with no binding name
 
-#### `ui/src/components/panels/analytics-sections.tsx` — 260 lines · 0 tests · REACHABLE · imported by 2
+#### `ui/src/components/panels/analytics-sections.tsx` — 260 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (4): function ChartCard, function SessionsTable, function ModelLeaderboard, function AgentBreakdown
-- `fns` (4): ChartCard:48, SessionsTable:77, ModelLeaderboard:175, AgentBreakdown:207
-- `anon` (8): function/arrow expressions with no binding name
+- `fns` (5): ChartCard:48, SessionsTable:77, ModelLeaderboard:175, AgentBreakdown:207, pct:216
 
-#### `ui/src/components/panels/automation-editor.tsx` — 205 lines · 0 tests · REACHABLE · imported by 1
+#### `ui/src/components/panels/automation-editor.tsx` — 205 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): function AutomationEditor
 - `fns` (3): triggerExpr:26, AutomationEditor:33, save:42
-- `anon` (4): function/arrow expressions with no binding name
 
-#### `ui/src/components/panels/automations-panel.tsx` — 874 lines · 0 tests · REACHABLE · imported by 1
+#### `ui/src/components/panels/automations-panel.tsx` — 874 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): function AutomationsPanel
-- `fns` (23): sessionAgentLabel:81, isAgentBinding:83, LiveRuns:104, openRun:127, phaseStyle:135, SchedulerHealth:210, runDoctor:229, ack:238, appendNotepad:246, AutomationsPanel:390, createFromNl:430, useTemplate:465, reportActionError:495, toggleEnabled:498, runNow:505, pauseJob:506, resumeJob:510, removeJob:514, duplicateJob:520, exportJob:526, parseNlTrigger:816, extractHour:851, templateTrigger:863
-- `anon` (75): function/arrow expressions with no binding name
+- `fns` (24): sessionAgentLabel:81, isAgentBinding:83, LiveRuns:104, openRun:127, phaseStyle:135, SchedulerHealth:210, runDoctor:229, ack:238, appendNotepad:246, unacked:260, AutomationsPanel:390, createFromNl:430, useTemplate:465, reportActionError:495, toggleEnabled:498, runNow:505, pauseJob:506, resumeJob:510, removeJob:514, duplicateJob:520, exportJob:526, parseNlTrigger:816, extractHour:851, templateTrigger:863
 
-#### `ui/src/components/panels/capability-matrix-panel.tsx` — 147 lines · 0 tests · REACHABLE · imported by 1
+#### `ui/src/components/panels/capability-matrix-panel.tsx` — 147 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): function CapabilityMatrixPanel
 - `fns` (1): CapabilityMatrixPanel:35
-- `anon` (7): function/arrow expressions with no binding name
 
 #### `ui/src/components/panels/computer-use-section.dom.test.tsx` — 251 lines · 7 tests · TEST · imported by 0
-- `fns` (11): policy:35, fakeDesktop:68, readiness:74, status:79, desktop_status:88, desktop_attach:89, desktop_policy_get:93, desktop_apps:94, desktop_policy_set_interaction:102, desktop_policy_allow_path:107, desktop_policy_remove_path:112
-- `anon` (34): function/arrow expressions with no binding name
+- `fns` (4): policy:35, fakeDesktop:68, readiness:74, status:79
 
-#### `ui/src/components/panels/connectors-panel.tsx` — 1,508 lines · 0 tests · REACHABLE · imported by 2
+#### `ui/src/components/panels/connectors-panel.dom.test.tsx` — 154 lines · 4 tests · TEST · imported by 0
+
+#### `ui/src/components/panels/connectors-panel.tsx` — 1,508 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (6): type StoreGroup, interface StoreGroupEntry, function storeGroupFor, function groupStoreEntries, function storeActionLabel, function ConnectorsPanel
 - `fns` (20): ConnectionBadge:91, ListSkeleton:104, storeGroupFor:159, groupStoreEntries:165, storeActionLabel:189, initials:195, ConnectorsPanel:200, retryStore:222, refreshMcp:342, runMcpAction:354, attachMcp:378, startOauth:421, tick:431, StoreSection:1025, setEntryError:1043, refreshConnected:1094, disconnect:1120, connect:1148, ToolCatalogSection:1353, ConnectorCard:1432
-- `anon` (90): function/arrow expressions with no binding name
 
-#### `ui/src/components/panels/discover-section.tsx` — 153 lines · 0 tests · REACHABLE · imported by 1
+#### `ui/src/components/panels/discover-section.tsx` — 153 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): function DiscoverSection
 - `fns` (3): statusTone:30, DiscoverSection:38, refresh:43
-- `anon` (9): function/arrow expressions with no binding name
 
-#### `ui/src/components/panels/feedback-panel.tsx` — 129 lines · 0 tests · REACHABLE · imported by 1
+#### `ui/src/components/panels/feedback-panel.tsx` — 129 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): function FeedbackSection
 - `fns` (3): FeedbackSection:20, submit:29, copy:51
-- `anon` (8): function/arrow expressions with no binding name
 
-#### `ui/src/components/panels/guard-panel.tsx` — 916 lines · 0 tests · REACHABLE · imported by 1
+#### `ui/src/components/panels/guard-panel.tsx` — 916 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): function GuardPanel
 - `fns` (7): trustMeter:40, GuardPanel:100, refresh:125, respond:184, TicketTtl:809, Legend:866, VaultCard:885
-- `anon` (48): function/arrow expressions with no binding name
 
-#### `ui/src/components/panels/home-launchpad.tsx` — 316 lines · 0 tests · REACHABLE · imported by 1
+#### `ui/src/components/panels/home-launchpad.tsx` — 316 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (3): function HomeLaunchpad, function ActivityPanel, function ProjectsPanel
 - `fns` (7): greeting:17, statusLine:24, HomeLaunchpad:36, startTask:59, ActivityPanel:185, Section:204, ProjectsPanel:233
-- `anon` (33): function/arrow expressions with no binding name
 
-#### `ui/src/components/panels/local-models-panel.tsx` — 1,233 lines · 0 tests · REACHABLE · imported by 1
+#### `ui/src/components/panels/local-models-panel.tsx` — 1,233 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): function LocalModelsPanel
 - `fns` (13): FitDot:104, CapChip:124, DownloadRow:142, LocalModelsPanel:206, savePrefs:409, download:414, resume:436, cancel:447, remove:457, bulkRemove:470, serve:493, autoPick:510, parseGallery:533
-- `anon` (79): function/arrow expressions with no binding name
 
-#### `ui/src/components/panels/memory-panel.tsx` — 950 lines · 0 tests · REACHABLE · imported by 2
+#### `ui/src/components/panels/memory-panel.tsx` — 950 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): function MemoryPanel
-- `fns` (15): MemoryPanel:96, submitAdd:113, startEdit:170, categoryCount:216, storeSub:222, toggleItem:232, dismiss:241, accept:255, EpisodicTab:483, SemanticTab:557, GraphTab:663, SkillsTab:788, SuggestionCard:829, KnowledgeCard:880, Chip:942
-- `anon` (80): function/arrow expressions with no binding name
+- `fns` (17): MemoryPanel:96, submitAdd:113, res:132, startEdit:170, categoryCount:216, storeSub:222, toggleItem:232, dismiss:241, accept:255, EpisodicTab:483, SemanticTab:557, GraphTab:663, angle:698, SkillsTab:788, SuggestionCard:829, KnowledgeCard:880, Chip:942
 
-#### `ui/src/components/panels/runtime-session-section.tsx` — 257 lines · 0 tests · REACHABLE · imported by 1
+#### `ui/src/components/panels/runtime-session-section.tsx` — 257 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): function RuntimeSessionSection
 - `fns` (6): RuntimeSessionSection:32, spawnPty:78, closePty:89, createWorktree:95, spawnAgent:110, agentOp:124
-- `anon` (28): function/arrow expressions with no binding name
 
-#### `ui/src/components/panels/schedules-section.tsx` — 275 lines · 0 tests · REACHABLE · imported by 1
+#### `ui/src/components/panels/schedules-section.tsx` — 275 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): function SchedulesSection
 - `fns` (6): stateBadge:38, SchedulesSkeleton:46, SchedulesSection:65, runNow:91, toggleEnabled:106, pauseOrResume:132
-- `anon` (21): function/arrow expressions with no binding name
 
-#### `ui/src/components/panels/settings-panel.tsx` — 408 lines · 0 tests · REACHABLE · imported by 1
+#### `ui/src/components/panels/settings-panel.tsx` — 408 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): function SettingsPanel
 - `fns` (3): SectionBody:190, SettingsPanel:290, fuzzy:303
-- `anon` (12): function/arrow expressions with no binding name
 
-#### `ui/src/components/panels/settings-providers.tsx` — 1,276 lines · 0 tests · REACHABLE · imported by 1
+#### `ui/src/components/panels/settings-providers.tsx` — 1,276 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): function ProvidersSection
-- `fns` (17): parseRereadEnvelope:84, RereadState:98, fmtCount:128, fmtWhen:133, CatalogStatusBar:144, SourceBadge:241, ProviderRowButton:256, ModelTable:336, ActivatePanel:501, removeKey:601, useNim:611, CustomInferenceForm:861, save:875, ProvidersSection:1015, doRefresh:1086, onInterval:1099, onClear:1113
-- `anon` (70): function/arrow expressions with no binding name
+- `fns` (18): parseRereadEnvelope:84, RereadState:98, fmtCount:128, fmtWhen:133, CatalogStatusBar:144, SourceBadge:241, ProviderRowButton:256, ModelTable:336, ActivatePanel:501, removeKey:601, useNim:611, p:613, CustomInferenceForm:861, save:875, ProvidersSection:1015, doRefresh:1086, onInterval:1099, onClear:1113
 
-#### `ui/src/components/panels/settings-sections-extra.tsx` — 773 lines · 0 tests · REACHABLE · imported by 1
+#### `ui/src/components/panels/settings-sections-extra.tsx` — 773 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (7): function PrivacySection, function KeyboardSection, function AdvancedSection, function AboutSection, function SyncSection, function DoctorSection, function DiagnosticsSection
 - `fns` (26): PrivacySection:20, KeyboardSection:52, AdvancedSection:93, appVersion:156, AboutSection:174, setUpdateChannel:236, checkForUpdates:248, backgroundDownload:269, restartToUpdate:280, SyncSection:373, refreshDevice:386, refreshServe:397, handleStart:415, handleStop:426, handlePeerSync:435, handleNodeAttach:446, handleRotate:467, handleExportBundle:477, handleImportBundle:487, DoctorSection:574, run:578, glyph:592, tone:593, DiagnosticsSection:649, exportBundle:667, wipeAll:690
-- `anon` (34): function/arrow expressions with no binding name
 
-#### `ui/src/components/panels/settings-sections-security.tsx` — 520 lines · 0 tests · REACHABLE · imported by 1
+#### `ui/src/components/panels/settings-sections-security.tsx` — 520 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (2): function PermissionsSection, function UsageSection
 - `fns` (5): Legend:60, PermissionsSection:73, applyRules:122, UsageSection:368, PillToggles:496
-- `anon` (36): function/arrow expressions with no binding name
 
-#### `ui/src/components/panels/settings-sections-studio.tsx` — 1,936 lines · 0 tests · REACHABLE · imported by 2
+#### `ui/src/components/panels/settings-sections-studio.tsx` — 1,936 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (19): function NotificationsSection, function VoiceSection, function MobileSection, function ChatAutoRunSection, function BrowserNetworkSection, function IndexingSection, function MarketplaceSection, function ToolLogSection, function SubagentsSection, function ExpertsSection, function LaunchCliSection, function HooksSection, function WorktreeSection, function RulesSection, function ComputerUseSection, function SearchEnginesSection, function ResourcesSection, function BetaSection, function GeneralExtras
-- `fns` (36): Honest:55, RadioCard:63, NotificationsSection:101, VoiceSection:171, MobileSection:268, ChatAutoRunSection:311, BrowserNetworkSection:373, updateConfig:414, IndexingSection:589, MarketplaceSection:713, ToolLogSection:784, load:789, SubagentsSection:823, load:832, ExpertsSection:977, saveNote:1011, LaunchCliSection:1155, HooksSection:1188, WorktreeSection:1228, RulesSection:1247, ComputerUseSection:1281, loadStatus:1299, attach:1315, loadApps:1338, setInteraction:1392, allowPath:1415, removePath:1434, pickPath:1453, SearchEnginesSection:1681, load:1688, discover:1711, apply:1727, sourceLabel:1752, ResourcesSection:1830, BetaSection:1877, GeneralExtras:1892
-- `anon` (137): function/arrow expressions with no binding name
+- `fns` (37): Honest:55, RadioCard:63, NotificationsSection:101, VoiceSection:171, MobileSection:268, ChatAutoRunSection:311, BrowserNetworkSection:373, updateConfig:414, IndexingSection:589, MarketplaceSection:713, ToolLogSection:784, load:789, SubagentsSection:823, load:832, ExpertsSection:977, saveNote:1011, LaunchCliSection:1155, HooksSection:1188, WorktreeSection:1228, RulesSection:1247, ComputerUseSection:1281, loadStatus:1299, attach:1315, loadApps:1338, setInteraction:1392, allowPath:1415, removePath:1434, pickPath:1453, interaction:1478, SearchEnginesSection:1681, load:1688, discover:1711, apply:1727, sourceLabel:1752, ResourcesSection:1830, BetaSection:1877, GeneralExtras:1892
 
-#### `ui/src/components/panels/settings-sections.tsx` — 270 lines · 0 tests · REACHABLE · imported by 1
+#### `ui/src/components/panels/settings-sections.tsx` — 270 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (2): function GeneralSection, function AppearanceSection
 - `fns` (4): GeneralSection:23, Choice:64, AppearancePreview:100, AppearanceSection:130
-- `anon` (13): function/arrow expressions with no binding name
 
-#### `ui/src/components/panels/settings-shared.tsx` — 66 lines · 0 tests · REACHABLE · imported by 11
+#### `ui/src/components/panels/settings-shared.tsx` — 66 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (3): function SectionShell, function Row, function LinkChip
 - `fns` (3): SectionShell:5, Row:34, LinkChip:54
-- `anon` (1): function/arrow expressions with no binding name
 
-#### `ui/src/components/panels/skills-panel.tsx` — 274 lines · 0 tests · REACHABLE · imported by 2
+#### `ui/src/components/panels/skills-panel.tsx` — 274 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): function SkillsPanel
 - `fns` (5): SkillsPanel:20, refresh:31, install:59, uninstall:72, FilterChip:260
-- `anon` (21): function/arrow expressions with no binding name
 
-#### `ui/src/components/panels/tasks-rail.tsx` — 299 lines · 0 tests · REACHABLE · imported by 1
+#### `ui/src/components/panels/tasks-rail.tsx` — 299 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): function TasksRail
 - `fns` (3): TasksRail:56, cancel:120, retry:128
-- `anon` (14): function/arrow expressions with no binding name
 
-#### `ui/src/components/panels/usage-metrics-section.tsx` — 128 lines · 0 tests · REACHABLE · imported by 1
+#### `ui/src/components/panels/usage-metrics-section.tsx` — 128 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): function UxMetricsSection
 - `fns` (5): UxMetricsSection:30, refresh:36, fmtMs:51, fmtPct:56, exportRecording:58
-- `anon` (10): function/arrow expressions with no binding name
 
-#### `ui/src/components/shell/ai-pointer.tsx` — 105 lines · 0 tests · REACHABLE · imported by 1
+#### `ui/src/components/shell/ai-pointer.tsx` — 105 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): function AiPointer
 - `fns` (2): AiPointer:17, send:36
-- `anon` (7): function/arrow expressions with no binding name
 
-#### `ui/src/components/shell/center-column.tsx` — 113 lines · 0 tests · REACHABLE · imported by 1
+#### `ui/src/components/shell/center-column.tsx` — 113 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): function CenterColumn
-- `fns` (1): CenterColumn:17
-- `anon` (3): function/arrow expressions with no binding name
+- `fns` (2): CenterColumn:17, known:21
 
-#### `ui/src/components/shell/cockpit-slideover.tsx` — 328 lines · 0 tests · REACHABLE · imported by 1
+#### `ui/src/components/shell/cockpit-slideover.tsx` — 328 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): function CockpitSlideover
 - `fns` (4): CockpitSlideover:50, poll:64, confirmResume:85, formatTokens:323
-- `anon` (19): function/arrow expressions with no binding name
 
-#### `ui/src/components/shell/command-palette.tsx` — 489 lines · 0 tests · REACHABLE · imported by 1
+#### `ui/src/components/shell/command-palette.tsx` — 489 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): function CommandPalette
-- `fns` (21): CommandPalette:58, onSelect:121, onSelect:131, onSelect:144, onSelect:156, onSelect:168, onSelect:179, onSelect:190, onSelect:200, onSelect:210, onSelect:220, onSelect:230, onSelect:241, onSelect:251, onSelect:262, onSelect:273, onSelect:283, onSelect:311, onSelect:327, onSelect:346, handler:382
-- `anon` (41): function/arrow expressions with no binding name
+- `fns` (2): CommandPalette:58, handler:382
 
-#### `ui/src/components/shell/companion-chip.tsx` — 85 lines · 0 tests · REACHABLE · imported by 1
+#### `ui/src/components/shell/companion-chip.tsx` — 85 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (2): type CompanionMood, function CompanionChip
 - `fns` (2): moodForState:31, CompanionChip:36
-- `anon` (6): function/arrow expressions with no binding name
 
-#### `ui/src/components/shell/keyboard-shortcuts.tsx` — 372 lines · 0 tests · REACHABLE · imported by 2
+#### `ui/src/components/shell/keyboard-shortcuts.tsx` — 372 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (4): interface ShortcutRow, interface ShortcutGroup, const SHORTCUTS, function KeyboardShortcuts
-- `fns` (3): Kbd:62, KeyboardShortcuts:70, handler:91
-- `anon` (25): function/arrow expressions with no binding name
+- `fns` (4): Kbd:62, KeyboardShortcuts:70, handler:91, tag:244
 
-#### `ui/src/components/shell/left-sidebar.tsx` — 671 lines · 0 tests · REACHABLE · imported by 2
+#### `ui/src/components/shell/left-sidebar.tsx` — 671 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (12): type AttentionBucket, type AttentionSession, interface AttentionGroup, const ATTENTION_GROUPS, function attentionBucketForSession, function groupSessionsByAttention, function sessionOwnerLabel, function sessionReasonLabel, function sessionNextAction, function groupSessionsByFolder, interface LeftSidebarProps, function LeftSidebar
 - `fns` (15): attentionBucketForSession:68, groupSessionsByAttention:76, sessionOwnerLabel:86, sessionReasonLabel:91, sessionNextAction:103, NavItem:111, Label:157, WorkRow:166, open:199, groupSessionsByFolder:284, sortNewest:295, LeftSidebar:310, focusFirst:339, onKeyDown:346, navigate:377
-- `anon` (54): function/arrow expressions with no binding name
 
-#### `ui/src/components/shell/notifications-popover.tsx` — 358 lines · 0 tests · REACHABLE · imported by 1
+#### `ui/src/components/shell/notifications-popover.tsx` — 358 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): function NotificationsPopover
 - `fns` (6): relativeTime:134, NotificationsPopover:146, onKey:171, onClick:181, markAllRead:197, markRead:205
-- `anon` (21): function/arrow expressions with no binding name
 
-#### `ui/src/components/shell/right-rail.tsx` — 1,093 lines · 0 tests · REACHABLE · imported by 1
+#### `ui/src/components/shell/p0-shell.dom.test.tsx` — 306 lines · 10 tests · TEST · imported by 0
+- `fns` (6): readyAgent:28, resetState:40, shellHandlers:64, setInputValue:72, DrawerHarness:245, TabsHarness:273
+
+#### `ui/src/components/shell/right-rail.tsx` — 1,093 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (6): const NARROW_RIGHT_TABS, type NarrowRightTab, function narrowTabForView, function NarrowRightTabBar, function ActivityRail, function RightViewport
-- `fns` (28): narrowTabForView:116, NarrowRightTabBar:122, onKeyDown:132, ViewportContent:237, renderView:251, ActivityRail:284, handleClick:306, RightViewport:530, newUntitledFile:585, exportWorkLog:612, action:644, action:651, action:661, action:666, action:673, action:685, action:689, action:697, action:701, action:710, action:720, action:727, action:734, action:744, action:751, chooseNarrowTab:757, onMove:779, onUp:786
-- `anon` (80): function/arrow expressions with no binding name
+- `fns` (13): narrowTabForView:116, NarrowRightTabBar:122, onKeyDown:132, ViewportContent:237, renderView:251, ActivityRail:284, handleClick:306, RightViewport:530, newUntitledFile:585, exportWorkLog:612, chooseNarrowTab:757, onMove:779, onUp:786
 
-#### `ui/src/components/shell/runtime-status-banner.tsx` — 68 lines · 0 tests · REACHABLE · imported by 1
+#### `ui/src/components/shell/runtime-status-banner.tsx` — 68 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): function RuntimeStatusBanner
 - `fns` (1): RuntimeStatusBanner:45
 
-#### `ui/src/components/shell/setup-gate.tsx` — 391 lines · 0 tests · REACHABLE · imported by 1
+#### `ui/src/components/shell/setup-gate.tsx` — 391 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): function SetupGate
-- `fns` (7): readinessTone:37, SetupGate:43, bind:92, install:115, signIn:153, startChatting:186, openSettings:193
-- `anon` (16): function/arrow expressions with no binding name
+- `fns` (8): readinessTone:37, SetupGate:43, bind:92, install:115, cmd:123, signIn:153, startChatting:186, openSettings:193
 
 #### `ui/src/components/shell/status-bar.dom.test.tsx` — 121 lines · 4 tests · TEST · imported by 0
 - `fns` (1): setState:41
-- `anon` (9): function/arrow expressions with no binding name
 
-#### `ui/src/components/shell/status-bar.tsx` — 499 lines · 0 tests · REACHABLE · imported by 1
+#### `ui/src/components/shell/status-bar.tsx` — 499 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): function StatusBar
-- `fns` (4): LiveContextMeter:53, StatusBar:172, onClick:277, onClick:289
-- `anon` (44): function/arrow expressions with no binding name
+- `fns` (3): LiveContextMeter:53, StatusBar:172, body:442
 
-#### `ui/src/components/shell/title-bar.tsx` — 331 lines · 0 tests · REACHABLE · imported by 1
+#### `ui/src/components/shell/title-bar.tsx` — 331 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): function TitleBar
 - `fns` (3): WindowControls:46, act:60, TitleBar:102
-- `anon` (19): function/arrow expressions with no binding name
 
-#### `ui/src/components/shell/toast-bridge.tsx` — 32 lines · 0 tests · REACHABLE · imported by 1
+#### `ui/src/components/shell/toast-bridge.tsx` — 32 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): function ToastBridge
 - `fns` (1): ToastBridge:11
-- `anon` (3): function/arrow expressions with no binding name
 
-#### `ui/src/components/shell/vault-gate.tsx` — 132 lines · 0 tests · REACHABLE · imported by 1
+#### `ui/src/components/shell/vault-gate.tsx` — 132 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): function VaultGate
 - `fns` (2): VaultGate:12, submit:45
-- `anon` (7): function/arrow expressions with no binding name
 
-#### `ui/src/components/theme-provider.tsx` — 290 lines · 0 tests · REACHABLE · imported by 8
+#### `ui/src/components/theme-provider.tsx` — 290 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (25): type Theme, type ThemeMode, type Accent, type FontScale, type Density, const THEME_STORAGE_KEY, const ACCENT_STORAGE_KEY, const FONT_SCALE_PREF_KEY, const HIGH_CONTRAST_PREF_KEY, const DENSITY_PREF_KEY, const ACCENT_PRESETS, const THEME_PRESETS, const DENSITY_PRESETS, const ACCENTS, function systemPrefersDark, function resolveTheme, function readStoredTheme, function readStoredThemeMode, function readStoredAccent, function readStoredFontScale, function readStoredHighContrast, function readStoredDensity, function applyAppearance, function ThemeProvider, function useTheme
 - `fns` (12): systemPrefersDark:91, resolveTheme:102, readStoredTheme:108, readStoredThemeMode:112, readStoredAccent:118, readStoredFontScale:123, readStoredHighContrast:128, readStoredDensity:132, applyAppearance:139, ThemeProvider:157, onChange:192, useTheme:285
-- `anon` (25): function/arrow expressions with no binding name
 
 #### `ui/src/components/ui/accordion.tsx` — 67 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (4): re-export Accordion, re-export AccordionItem, re-export AccordionTrigger, re-export AccordionContent
@@ -6056,43 +5765,40 @@ population. `wiring:` is the §11 verdict.
 - `exports` (1): re-export AspectRatio
 - `fns` (1): AspectRatio:5
 
-#### `ui/src/components/ui/avatar.tsx` — 54 lines · 0 tests · REACHABLE · imported by 3
+#### `ui/src/components/ui/avatar.tsx` — 54 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (3): re-export Avatar, re-export AvatarImage, re-export AvatarFallback
 - `fns` (3): Avatar:8, AvatarImage:24, AvatarFallback:37
 
-#### `ui/src/components/ui/badge.tsx` — 47 lines · 0 tests · REACHABLE · imported by 46
+#### `ui/src/components/ui/badge.tsx` — 47 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (2): re-export Badge, re-export badgeVariants
 - `fns` (1): Badge:28
 
 #### `ui/src/components/ui/breadcrumb.tsx` — 110 lines · 0 tests · NOT IMPORTED · imported by 0
 - `fns` (7): Breadcrumb:7, BreadcrumbList:11, BreadcrumbItem:24, BreadcrumbLink:34, BreadcrumbPage:52, BreadcrumbSeparator:65, BreadcrumbEllipsis:83
 
-#### `ui/src/components/ui/button.tsx` — 60 lines · 0 tests · REACHABLE · imported by 51
+#### `ui/src/components/ui/button.tsx` — 60 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (2): re-export Button, re-export buttonVariants
 - `fns` (1): Button:38
 
 #### `ui/src/components/ui/calendar.tsx` — 214 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (2): re-export Calendar, re-export CalendarDayButton
-- `fns` (6): Calendar:14, formatMonthDropdown:39, Root:128, Chevron:138, WeekNumber:159, CalendarDayButton:175
-- `anon` (1): function/arrow expressions with no binding name
+- `fns` (2): Calendar:14, CalendarDayButton:175
 
-#### `ui/src/components/ui/card.tsx` — 93 lines · 0 tests · REACHABLE · imported by 2
+#### `ui/src/components/ui/card.tsx` — 93 lines · 0 tests · NOT IMPORTED · imported by 0
 - `fns` (7): Card:5, CardHeader:18, CardTitle:31, CardDescription:41, CardAction:51, CardContent:64, CardFooter:74
 
 #### `ui/src/components/ui/carousel.tsx` — 242 lines · 0 tests · NOT IMPORTED · imported by 0
 - `fns` (6): useCarousel:35, Carousel:45, CarouselContent:135, CarouselItem:156, CarouselPrevious:174, CarouselNext:204
-- `anon` (7): function/arrow expressions with no binding name
 
 #### `ui/src/components/ui/chart.tsx` — 354 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): type ChartConfig
 - `fns` (6): useChart:27, ChartContainer:37, ChartStyle:72, ChartTooltipContent:107, ChartLegendContent:253, getPayloadConfigFromPayload:308
-- `anon` (6): function/arrow expressions with no binding name
 
 #### `ui/src/components/ui/checkbox.tsx` — 33 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): re-export Checkbox
 - `fns` (1): Checkbox:9
 
-#### `ui/src/components/ui/collapsible.tsx` — 34 lines · 0 tests · REACHABLE · imported by 1
+#### `ui/src/components/ui/collapsible.tsx` — 34 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (3): re-export Collapsible, re-export CollapsibleTrigger, re-export CollapsibleContent
 - `fns` (3): Collapsible:5, CollapsibleTrigger:11, CollapsibleContent:22
 
@@ -6102,16 +5808,16 @@ population. `wiring:` is the §11 verdict.
 #### `ui/src/components/ui/context-menu.tsx` — 253 lines · 0 tests · NOT IMPORTED · imported by 0
 - `fns` (15): ContextMenu:9, ContextMenuTrigger:15, ContextMenuGroup:23, ContextMenuPortal:31, ContextMenuSub:39, ContextMenuRadioGroup:45, ContextMenuSubTrigger:56, ContextMenuSubContent:80, ContextMenuContent:96, ContextMenuItem:114, ContextMenuCheckboxItem:137, ContextMenuRadioItem:163, ContextMenuLabel:187, ContextMenuSeparator:207, ContextMenuShortcut:220
 
-#### `ui/src/components/ui/dialog.tsx` — 144 lines · 0 tests · REACHABLE · imported by 5
+#### `ui/src/components/ui/dialog.tsx` — 144 lines · 0 tests · NOT IMPORTED · imported by 0
 - `fns` (10): Dialog:9, DialogTrigger:15, DialogPortal:21, DialogClose:27, DialogOverlay:33, DialogContent:49, DialogHeader:83, DialogFooter:93, DialogTitle:106, DialogDescription:119
 
 #### `ui/src/components/ui/drawer.tsx` — 136 lines · 0 tests · NOT IMPORTED · imported by 0
 - `fns` (10): Drawer:8, DrawerTrigger:14, DrawerPortal:20, DrawerClose:26, DrawerOverlay:32, DrawerContent:48, DrawerHeader:75, DrawerFooter:88, DrawerTitle:98, DrawerDescription:111
 
-#### `ui/src/components/ui/dropdown-menu.tsx` — 258 lines · 0 tests · REACHABLE · imported by 3
+#### `ui/src/components/ui/dropdown-menu.tsx` — 258 lines · 0 tests · NOT IMPORTED · imported by 0
 - `fns` (15): DropdownMenu:9, DropdownMenuPortal:15, DropdownMenuTrigger:23, DropdownMenuContent:34, DropdownMenuGroup:54, DropdownMenuItem:62, DropdownMenuCheckboxItem:85, DropdownMenuRadioGroup:111, DropdownMenuRadioItem:122, DropdownMenuLabel:146, DropdownMenuSeparator:166, DropdownMenuShortcut:179, DropdownMenuSub:195, DropdownMenuSubTrigger:201, DropdownMenuSubContent:225
 
-#### `ui/src/components/ui/empty-state.tsx` — 46 lines · 0 tests · REACHABLE · imported by 2
+#### `ui/src/components/ui/empty-state.tsx` — 46 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): function EmptyState
 - `fns` (1): EmptyState:11
 
@@ -6120,7 +5826,7 @@ population. `wiring:` is the §11 verdict.
 - `fns` (4): errorMeta:44, classifyError:49, ErrorState:62, ErrorChip:110
 
 #### `ui/src/components/ui/form.tsx` — 168 lines · 0 tests · NOT IMPORTED · imported by 0
-- `fns` (7): FormField:32, useFormField:45, FormItem:76, FormLabel:90, FormControl:107, FormDescription:125, FormMessage:138
+- `fns` (6): useFormField:45, FormItem:76, FormLabel:90, FormControl:107, FormDescription:125, FormMessage:138
 
 #### `ui/src/components/ui/hover-card.tsx` — 45 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (3): re-export HoverCard, re-export HoverCardTrigger, re-export HoverCardContent
@@ -6130,18 +5836,17 @@ population. `wiring:` is the §11 verdict.
 - `exports` (4): re-export InputOTP, re-export InputOTPGroup, re-export InputOTPSlot, re-export InputOTPSeparator
 - `fns` (4): InputOTP:9, InputOTPGroup:29, InputOTPSlot:39, InputOTPSeparator:69
 
-#### `ui/src/components/ui/input.tsx` — 22 lines · 0 tests · REACHABLE · imported by 14
+#### `ui/src/components/ui/input.tsx` — 22 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): re-export Input
 - `fns` (1): Input:5
 
-#### `ui/src/components/ui/label.tsx` — 25 lines · 0 tests · REACHABLE · imported by 3
+#### `ui/src/components/ui/label.tsx` — 25 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): re-export Label
 - `fns` (1): Label:8
 
-#### `ui/src/components/ui/loading-state.tsx` — 72 lines · 0 tests · REACHABLE · imported by 8
+#### `ui/src/components/ui/loading-state.tsx` — 72 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (3): type LoadingKind, function LoadingState, function SkeletonBlock
 - `fns` (2): LoadingState:23, SkeletonBlock:53
-- `anon` (1): function/arrow expressions with no binding name
 
 #### `ui/src/components/ui/menubar.tsx` — 277 lines · 0 tests · NOT IMPORTED · imported by 0
 - `fns` (16): Menubar:9, MenubarMenu:25, MenubarGroup:31, MenubarPortal:37, MenubarRadioGroup:43, MenubarTrigger:51, MenubarContent:67, MenubarItem:91, MenubarCheckboxItem:114, MenubarRadioItem:140, MenubarLabel:164, MenubarSeparator:184, MenubarShortcut:197, MenubarSub:213, MenubarSubTrigger:219, MenubarSubContent:243
@@ -6152,11 +5857,11 @@ population. `wiring:` is the §11 verdict.
 #### `ui/src/components/ui/pagination.tsx` — 128 lines · 0 tests · NOT IMPORTED · imported by 0
 - `fns` (7): Pagination:11, PaginationContent:23, PaginationItem:36, PaginationLink:45, PaginationPrevious:68, PaginationNext:85, PaginationEllipsis:102
 
-#### `ui/src/components/ui/popover.tsx` — 49 lines · 0 tests · REACHABLE · imported by 2
+#### `ui/src/components/ui/popover.tsx` — 49 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (4): re-export Popover, re-export PopoverTrigger, re-export PopoverContent, re-export PopoverAnchor
 - `fns` (4): Popover:8, PopoverTrigger:14, PopoverContent:20, PopoverAnchor:42
 
-#### `ui/src/components/ui/progress.tsx` — 32 lines · 0 tests · REACHABLE · imported by 2
+#### `ui/src/components/ui/progress.tsx` — 32 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): re-export Progress
 - `fns` (1): Progress:8
 
@@ -6168,804 +5873,657 @@ population. `wiring:` is the §11 verdict.
 - `exports` (3): re-export ResizablePanelGroup, re-export ResizablePanel, re-export ResizableHandle
 - `fns` (3): ResizablePanelGroup:9, ResizablePanel:25, ResizableHandle:31
 
-#### `ui/src/components/ui/scroll-area.tsx` — 68 lines · 0 tests · REACHABLE · imported by 8
+#### `ui/src/components/ui/scroll-area.tsx` — 68 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (2): re-export ScrollArea, re-export ScrollBar
 - `fns` (2): ScrollArea:8, ScrollBar:40
 
-#### `ui/src/components/ui/select.tsx` — 186 lines · 0 tests · REACHABLE · imported by 5
+#### `ui/src/components/ui/select.tsx` — 186 lines · 0 tests · NOT IMPORTED · imported by 0
 - `fns` (10): Select:9, SelectGroup:15, SelectValue:21, SelectTrigger:27, SelectContent:53, SelectLabel:88, SelectItem:101, SelectSeparator:125, SelectScrollUpButton:138, SelectScrollDownButton:156
 
-#### `ui/src/components/ui/separator.tsx` — 29 lines · 0 tests · UNREACHED · imported by 1
+#### `ui/src/components/ui/separator.tsx` — 29 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): re-export Separator
 - `fns` (1): Separator:8
 
-#### `ui/src/components/ui/sheet.tsx` — 140 lines · 0 tests · UNREACHED · imported by 1
+#### `ui/src/components/ui/sheet.tsx` — 140 lines · 0 tests · NOT IMPORTED · imported by 0
 - `fns` (10): Sheet:9, SheetTrigger:13, SheetClose:19, SheetPortal:25, SheetOverlay:31, SheetContent:47, SheetHeader:84, SheetFooter:94, SheetTitle:104, SheetDescription:117
 
 #### `ui/src/components/ui/sidebar.tsx` — 727 lines · 0 tests · NOT IMPORTED · imported by 0
-- `fns` (25): useSidebar:47, SidebarProvider:56, handleKeyDown:98, Sidebar:154, SidebarTrigger:256, SidebarRail:282, SidebarInset:307, SidebarInput:321, SidebarHeader:335, SidebarFooter:346, SidebarSeparator:357, SidebarContent:371, SidebarGroup:385, SidebarGroupLabel:396, SidebarGroupAction:417, SidebarGroupContent:440, SidebarMenu:454, SidebarMenuItem:465, SidebarMenuButton:498, SidebarMenuAction:548, SidebarMenuBadge:580, SidebarMenuSkeleton:602, SidebarMenuSub:640, SidebarMenuSubItem:655, SidebarMenuSubButton:669
-- `anon` (9): function/arrow expressions with no binding name
+- `fns` (26): useSidebar:47, SidebarProvider:56, handleKeyDown:98, Sidebar:154, SidebarTrigger:256, SidebarRail:282, SidebarInset:307, SidebarInput:321, SidebarHeader:335, SidebarFooter:346, SidebarSeparator:357, SidebarContent:371, SidebarGroup:385, SidebarGroupLabel:396, SidebarGroupAction:417, SidebarGroupContent:440, SidebarMenu:454, SidebarMenuItem:465, SidebarMenuButton:498, button:514, SidebarMenuAction:548, SidebarMenuBadge:580, SidebarMenuSkeleton:602, SidebarMenuSub:640, SidebarMenuSubItem:655, SidebarMenuSubButton:669
 
-#### `ui/src/components/ui/skeleton.tsx` — 14 lines · 0 tests · UNREACHED · imported by 1
+#### `ui/src/components/ui/skeleton.tsx` — 14 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): re-export Skeleton
 - `fns` (1): Skeleton:3
 
-#### `ui/src/components/ui/slider.tsx` — 64 lines · 0 tests · REACHABLE · imported by 3
+#### `ui/src/components/ui/slider.tsx` — 64 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): re-export Slider
 - `fns` (1): Slider:8
-- `anon` (2): function/arrow expressions with no binding name
 
 #### `ui/src/components/ui/sonner.tsx` — 26 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): re-export Toaster
 - `fns` (1): Toaster:6
 
-#### `ui/src/components/ui/switch.tsx` — 32 lines · 0 tests · REACHABLE · imported by 12
+#### `ui/src/components/ui/switch.tsx` — 32 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): re-export Switch
 - `fns` (1): Switch:8
 
-#### `ui/src/components/ui/table.tsx` — 117 lines · 0 tests · REACHABLE · imported by 1
+#### `ui/src/components/ui/table.tsx` — 117 lines · 0 tests · NOT IMPORTED · imported by 0
 - `fns` (8): Table:7, TableHeader:22, TableBody:32, TableFooter:42, TableRow:55, TableHead:68, TableCell:81, TableCaption:94
 
-#### `ui/src/components/ui/tabs.tsx` — 67 lines · 0 tests · REACHABLE · imported by 4
+#### `ui/src/components/ui/tabs.tsx` — 67 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (4): re-export Tabs, re-export TabsList, re-export TabsTrigger, re-export TabsContent
 - `fns` (4): Tabs:8, TabsList:21, TabsTrigger:37, TabsContent:53
 
-#### `ui/src/components/ui/textarea.tsx` — 19 lines · 0 tests · REACHABLE · imported by 6
+#### `ui/src/components/ui/textarea.tsx` — 19 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): re-export Textarea
 - `fns` (1): Textarea:5
 
-#### `ui/src/components/ui/toast.tsx` — 129 lines · 0 tests · REACHABLE · imported by 2
-- `anon` (6): function/arrow expressions with no binding name
+#### `ui/src/components/ui/toast.tsx` — 129 lines · 0 tests · NOT IMPORTED · imported by 0
 
-#### `ui/src/components/ui/toaster.tsx` — 35 lines · 0 tests · REACHABLE · imported by 1
+#### `ui/src/components/ui/toaster.tsx` — 35 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): function Toaster
 - `fns` (1): Toaster:13
-- `anon` (1): function/arrow expressions with no binding name
 
 #### `ui/src/components/ui/toggle-group.tsx` — 74 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (2): re-export ToggleGroup, re-export ToggleGroupItem
 - `fns` (2): ToggleGroup:17, ToggleGroupItem:43
 
-#### `ui/src/components/ui/toggle.tsx` — 48 lines · 0 tests · UNREACHED · imported by 1
+#### `ui/src/components/ui/toggle.tsx` — 48 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (2): re-export Toggle, re-export toggleVariants
 - `fns` (1): Toggle:31
 
-#### `ui/src/components/ui/tooltip.tsx` — 62 lines · 0 tests · REACHABLE · imported by 8
+#### `ui/src/components/ui/tooltip.tsx` — 62 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (4): re-export Tooltip, re-export TooltipTrigger, re-export TooltipContent, re-export TooltipProvider
 - `fns` (4): TooltipProvider:8, Tooltip:21, TooltipTrigger:31, TooltipContent:37
 
 #### `ui/src/components/views/artifact-view.tsx` — 255 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): function ArtifactView
 - `fns` (2): ArtifactView:64, stop:122
-- `anon` (16): function/arrow expressions with no binding name
 
-#### `ui/src/components/views/audit-view.tsx` — 429 lines · 0 tests · REACHABLE · imported by 1
+#### `ui/src/components/views/audit-view.tsx` — 429 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): function AuditView
 - `fns` (4): classify:47, fmtTs:69, p:72, AuditView:76
-- `anon` (30): function/arrow expressions with no binding name
 
-#### `ui/src/components/views/blueprint-view.tsx` — 284 lines · 0 tests · REACHABLE · imported by 1
+#### `ui/src/components/views/blueprint-view.tsx` — 284 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): function BlueprintView
 - `fns` (5): isReady:91, BlueprintView:95, addTask:116, runTask:147, resetAll:170
-- `anon` (19): function/arrow expressions with no binding name
 
-#### `ui/src/components/views/browse-view.tsx` — 524 lines · 0 tests · REACHABLE · imported by 1
+#### `ui/src/components/views/browse-view.tsx` — 524 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): function BrowseView
 - `fns` (9): BrowseView:31, switchTab:141, validUrl:161, start:180, go:202, stop:223, clickRef:244, annotateRef:266, typeInto:280
-- `anon` (33): function/arrow expressions with no binding name
 
-#### `ui/src/components/views/chat-overlay.tsx` — 139 lines · 0 tests · REACHABLE · imported by 2
+#### `ui/src/components/views/chat-overlay.tsx` — 139 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): function ChatOverlay
 - `fns` (2): ChatOverlay:34, send:39
-- `anon` (6): function/arrow expressions with no binding name
 
 #### `ui/src/components/views/desktop-view.tsx` — 522 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): function DesktopView
 - `fns` (11): DesktopView:40, refresh:58, readWindow:102, seeWindow:122, runAct:149, typeInto:172, clickCentre:180, approveEscalation:188, cancelEscalation:210, selectWindow:216, estop:229
-- `anon` (23): function/arrow expressions with no binding name
 
-#### `ui/src/components/views/diff-view.tsx` — 284 lines · 0 tests · REACHABLE · imported by 1
+#### `ui/src/components/views/diff-view.tsx` — 284 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): function DiffView
 - `fns` (6): DiffView:35, refresh:70, showDiff:82, restore:124, diffLines:263, formatBytes:279
-- `anon` (18): function/arrow expressions with no binding name
 
-#### `ui/src/components/views/folder-view.tsx` — 220 lines · 0 tests · REACHABLE · imported by 2
+#### `ui/src/components/views/folder-view.tsx` — 220 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): function FolderView
 - `fns` (5): FolderView:29, openFile:76, renderTree:92, FileIcon:204, formatBytes:214
-- `anon` (15): function/arrow expressions with no binding name
 
 #### `ui/src/components/views/generative-view.tsx` — 120 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): function GenerativeView
 - `fns` (1): GenerativeView:43
-- `anon` (3): function/arrow expressions with no binding name
 
-#### `ui/src/components/views/generative/generative-ui.tsx` — 348 lines · 0 tests · UNREACHED · imported by 1
+#### `ui/src/components/views/generative/generative-ui.tsx` — 348 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (7): type Descriptor, function isDescriptor, function DescriptorRenderer, function SandboxedArtifact, interface ArtifactVersion, function ArtifactCard, function MermaidBlock
-- `fns` (8): isDescriptor:33, DescriptorRenderer:40, MiniChart:111, SandboxedArtifact:166, ArtifactCard:197, StaticPreview:265, loadMermaid:298, MermaidBlock:307
-- `anon` (18): function/arrow expressions with no binding name
+- `fns` (9): isDescriptor:33, DescriptorRenderer:40, MiniChart:111, x:116, SandboxedArtifact:166, ArtifactCard:197, StaticPreview:265, loadMermaid:298, MermaidBlock:307
 
-#### `ui/src/components/views/ide/diff-rail.tsx` — 152 lines · 0 tests · UNREACHED · imported by 1
+#### `ui/src/components/views/ide/diff-rail.tsx` — 152 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): function DiffRail
 - `fns` (4): VerdictIcon:22, VerificationRow:28, DiffRail:61, refresh:68
-- `anon` (7): function/arrow expressions with no binding name
 
-#### `ui/src/components/views/ide/editor-tabs.tsx` — 66 lines · 0 tests · UNREACHED · imported by 2
+#### `ui/src/components/views/ide/editor-tabs.tsx` — 66 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (2): interface OpenFile, function EditorTabs
 - `fns` (1): EditorTabs:13
-- `anon` (3): function/arrow expressions with no binding name
 
-#### `ui/src/components/views/ide/explorer-panel.tsx` — 173 lines · 0 tests · UNREACHED · imported by 1
+#### `ui/src/components/views/ide/explorer-panel.tsx` — 173 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): function ExplorerPanel
 - `fns` (4): ExplorerPanel:17, openFile:49, openTerminalHere:60, renderTree:83
-- `anon` (13): function/arrow expressions with no binding name
 
 #### `ui/src/components/views/ide/ide-workbench.tsx` — 244 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): function IdeWorkbench
-- `fns` (7): IdeWorkbench:43, handler:55, onDirty:73, onSaved:76, closeTab:79, jumpToLine:87, sidebar:91
-- `anon` (18): function/arrow expressions with no binding name
+- `fns` (8): IdeWorkbench:43, handler:55, d:56, onDirty:73, onSaved:76, closeTab:79, jumpToLine:87, sidebar:91
 
-#### `ui/src/components/views/ide/monaco-pane.tsx` — 157 lines · 0 tests · UNREACHED · imported by 1
+#### `ui/src/components/views/ide/monaco-pane.tsx` — 157 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): function MonacoPane
-- `fns` (6): MonacoPane:22, handleMount:44, save:51, onChange:87, langFor:138, cnButton:149
-- `anon` (4): function/arrow expressions with no binding name
+- `fns` (5): MonacoPane:22, save:51, onChange:87, langFor:138, cnButton:149
 
-#### `ui/src/components/views/ide/problems-panel.tsx` — 97 lines · 0 tests · UNREACHED · imported by 1
+#### `ui/src/components/views/ide/problems-panel.tsx` — 97 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): function ProblemsPanel
 - `fns` (1): ProblemsPanel:16
-- `anon` (7): function/arrow expressions with no binding name
 
-#### `ui/src/components/views/ide/scm-panel.tsx` — 236 lines · 0 tests · UNREACHED · imported by 1
+#### `ui/src/components/views/ide/scm-panel.tsx` — 236 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (2): function ScmPanel, re-export Plus
 - `fns` (4): ScmPanel:19, commit:62, addWorktree:75, mergeWorktree:89
-- `anon` (13): function/arrow expressions with no binding name
 
-#### `ui/src/components/views/kanban-view.tsx` — 158 lines · 0 tests · REACHABLE · imported by 1
+#### `ui/src/components/views/kanban-view.tsx` — 158 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (4): type KanbanStatus, interface KanbanCard, function sortKanban, function KanbanView
 - `fns` (2): sortKanban:49, KanbanView:56
-- `anon` (8): function/arrow expressions with no binding name
 
-#### `ui/src/components/views/local-server-view.tsx` — 570 lines · 0 tests · REACHABLE · imported by 1
+#### `ui/src/components/views/local-server-view.tsx` — 570 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): function LocalServerView
 - `fns` (10): LocalServerView:61, refresh:85, loadRegistry:94, toggle:155, restart:174, serve:189, setOpt:204, checkFit:208, copy:219, serveBadge:225
-- `anon` (29): function/arrow expressions with no binding name
 
-#### `ui/src/components/views/office-docx-view.tsx` — 303 lines · 0 tests · REACHABLE · imported by 1
+#### `ui/src/components/views/office-docx-view.tsx` — 303 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): function OfficeDocxView
 - `fns` (3): OfficeDocxView:15, fail:31, open:36
-- `anon` (21): function/arrow expressions with no binding name
 
-#### `ui/src/components/views/office-file-switcher.tsx` — 91 lines · 0 tests · REACHABLE · imported by 4
+#### `ui/src/components/views/office-file-switcher.tsx` — 91 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): function OfficeFileSwitcher
 - `fns` (2): OfficeFileSwitcher:13, fileName:30
-- `anon` (8): function/arrow expressions with no binding name
 
-#### `ui/src/components/views/office-open-bar.tsx` — 163 lines · 0 tests · REACHABLE · imported by 5
+#### `ui/src/components/views/office-open-bar.tsx` — 163 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (4): const OFFICE_EXTENSIONS, function isGoogleDocUrl, function officeExtensionError, function OfficeOpenBar
 - `fns` (6): isGoogleDocUrl:26, officeExtensionError:40, OfficeOpenBar:49, open:58, openPath:63, browse:89
-- `anon` (5): function/arrow expressions with no binding name
 
 #### `ui/src/components/views/office-pdf-view.tsx` — 452 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): function OfficePdfView
 - `fns` (6): OfficePdfView:37, open:61, runPageOp:91, annotatePage:103, redactPage:106, fillForm:114
-- `anon` (35): function/arrow expressions with no binding name
 
-#### `ui/src/components/views/office-pptx-view.tsx` — 332 lines · 0 tests · REACHABLE · imported by 1
+#### `ui/src/components/views/office-pptx-view.tsx` — 332 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): function OfficePptxView
 - `fns` (2): OfficePptxView:21, open:34
-- `anon` (18): function/arrow expressions with no binding name
 
-#### `ui/src/components/views/office-ribbon.tsx` — 174 lines · 0 tests · UNREACHED · imported by 1
+#### `ui/src/components/views/office-ribbon.tsx` — 174 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (2): type RibbonActionId, function OfficeRibbon
 - `fns` (1): OfficeRibbon:92
-- `anon` (7): function/arrow expressions with no binding name
 
 #### `ui/src/components/views/office-xlsx-view.tsx` — 839 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): function OfficeXlsxView
 - `fns` (16): OfficeXlsxView:40, open:93, fetchMore:119, runRecalc:147, rowCells:160, selectCell:164, propose:172, openApproval:191, commitEdit:205, proposeBatch:234, commitBatch:248, runFill:270, runSort:282, runPivot:294, runShift:315, computed:333
-- `anon` (49): function/arrow expressions with no binding name
 
 #### `ui/src/components/views/pdf-canvas.tsx` — 117 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): interface PdfCanvasHandle
-- `fns` (1): findText:60
-- `anon` (13): function/arrow expressions with no binding name
 
-#### `ui/src/components/views/progress-view.tsx` — 453 lines · 0 tests · REACHABLE · imported by 1
+#### `ui/src/components/views/progress-view.tsx` — 453 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): function ProgressView
-- `fns` (9): fmtTime:50, iconFor:61, summarizeWorkEvent:77, buildEvents:83, CuaDagBoard:129, load:135, edit:152, WalkthroughBoard:221, ProgressView:245
-- `anon` (25): function/arrow expressions with no binding name
+- `fns` (10): fmtTime:50, iconFor:61, summarizeWorkEvent:77, buildEvents:83, CuaDagBoard:129, load:135, edit:152, WalkthroughBoard:221, ProgressView:245, artifacts:256
 
-#### `ui/src/components/views/shell-view.tsx` — 1,098 lines · 0 tests · REACHABLE · imported by 2
+#### `ui/src/components/views/shell-view.tsx` — 1,098 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): function ShellView
-- `fns` (11): ShellView:104, provideLinks:202, activate:225, disposer:267, scanLine:298, closeTab:536, unsplit:603, onKey:626, loadHistory:640, focusTab:656, focusPane:669
-- `anon` (91): function/arrow expressions with no binding name
+- `fns` (10): ShellView:104, disposer:267, scanLine:298, y:308, closeTab:536, unsplit:603, onKey:626, loadHistory:640, focusTab:656, focusPane:669
 
-#### `ui/src/components/views/storage-view.tsx` — 353 lines · 0 tests · REACHABLE · imported by 1
+#### `ui/src/components/views/storage-view.tsx` — 353 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): function StorageView
 - `fns` (5): DreamDiaryCard:25, treemapColor:50, StorageView:56, reviewCleanup:67, refresh:81
-- `anon` (13): function/arrow expressions with no binding name
 
-#### `ui/src/components/views/trajectory-view.tsx` — 186 lines · 0 tests · REACHABLE · imported by 1
+#### `ui/src/components/views/trajectory-view.tsx` — 186 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): function TrajectoryView
 - `fns` (3): Row:39, TrajectoryView:58, load:64
-- `anon` (8): function/arrow expressions with no binding name
 
 #### `ui/src/globals.d.ts` — 8 lines · 0 tests · NOT IMPORTED · imported by 0
 
 #### `ui/src/guard-main.ts` — 232 lines · 0 tests · ENTRY · imported by 0
 - `fns` (7): riskTone:49, el:57, render:64, setBusy:132, respond:137, ticketsNow:197, main:205
-- `anon` (7): function/arrow expressions with no binding name
 
-#### `ui/src/hooks/use-mobile.ts` — 20 lines · 0 tests · UNREACHED · imported by 1
+#### `ui/src/hooks/use-mobile.ts` — 20 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): function useIsMobile
 - `fns` (2): useIsMobile:5, onChange:10
-- `anon` (2): function/arrow expressions with no binding name
 
-#### `ui/src/hooks/use-toast.ts` — 194 lines · 0 tests · REACHABLE · imported by 2
+#### `ui/src/hooks/use-toast.ts` — 194 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (3): const reducer, re-export useToast, re-export toast
-- `fns` (10): genId:30, addToRemoveQueue:61, reducer:77, dispatch:136, toast:145, update:148, dismiss:153, onOpenChange:161, useToast:174, dismiss:190
-- `anon` (8): function/arrow expressions with no binding name
+- `fns` (8): genId:30, addToRemoveQueue:61, reducer:77, dispatch:136, toast:145, update:148, dismiss:153, useToast:174
 
-#### `ui/src/lib/acp.ts` — 811 lines · 0 tests · REACHABLE · imported by 14
+#### `ui/src/lib/acp.ts` — 811 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (67): type AuthMode, type HarnessProtocol, interface AuthMethod, interface HarnessManifest, type GovernanceClass, interface GovernanceInfo, function governanceLabel, interface AcpConfigOptionValue, interface AcpConfigOption, interface AcpHandleInfo, interface AcpHandleRecord, function acpHandleKey, type AcpHandleIdentity, function parseAcpHandleKey, function acpHandleRecordFromLaunch, function findAcpHandleRecord, interface AvailableCommand, interface AcpPromptUpdate, interface AcpPromptResult, type RuntimeLocation, interface InstallState, interface InstallRequest, interface AuthenticateResult, function acpIdFor, function isRetiredBinding, function currentBinding, interface AgentDirectoryEntry, type AgentReadiness, function isAgentInstalled, function isAgentReady, function readinessLabel, function canAgentDelegate, interface AgentDirectorySnapshot, function agentDirectoryList, function acpAgents, function acpInstallStatus, function acpInstallRequest, function acpInstallCommit, function acpInstallAwait, function acpLaunch, function acpAuthenticate, function acpPrompt, function acpSessionCommands, function acpSessionConfigOptions, function acpSessionSetConfigOption, interface AcpToolLogEntry, function acpToolLog, interface SubagentRow, function chiefSubagents, function chiefSubagentSetNote, function chiefSubagentSetEnabled, function chiefSubagentMix, function acpRegistryRefresh, function acpCancel, function acpCancel, function acpCancel, function acpShutdown, function acpSessions, function chiefDefaultGet, interface SubagentProfile, function chiefSubagentSetPolicy, function chiefDefaultSet, type AgentLifecycleState, interface AgentVerificationResult, function acpAgentImport, function acpAgentVerify, function getAgentLifecycleState
 - `fns` (42): governanceLabel:67, acpHandleKey:144, parseAcpHandleKey:161, acpHandleRecordFromLaunch:176, findAcpHandleRecord:199, acpIdFor:342, isRetiredBinding:355, currentBinding:360, isAgentInstalled:410, isAgentReady:423, readinessLabel:435, canAgentDelegate:464, agentDirectoryList:480, acpAgents:484, acpInstallStatus:489, acpInstallRequest:495, acpInstallCommit:501, acpInstallAwait:511, acpLaunch:522, acpAuthenticate:532, acpPrompt:540, acpSessionCommands:569, acpSessionConfigOptions:574, acpSessionSetConfigOption:581, acpToolLog:608, chiefSubagents:624, chiefSubagentSetNote:630, chiefSubagentSetEnabled:635, chiefSubagentMix:640, acpRegistryRefresh:646, cancelOwnedAcpTurn:654, acpCancel:676, acpCancel:677, acpCancel:678, acpShutdown:690, acpSessions:695, chiefDefaultGet:700, chiefSubagentSetPolicy:729, chiefDefaultSet:748, acpAgentImport:764, acpAgentVerify:780, getAgentLifecycleState:791
-- `anon` (28): function/arrow expressions with no binding name
 
 #### `ui/src/lib/agent-backend.test.ts` — 89 lines · 8 tests · TEST · imported by 0
-- `fns` (2): installShell:11, invoke:14
-- `anon` (10): function/arrow expressions with no binding name
+- `fns` (1): installShell:11
 
-#### `ui/src/lib/agent-backend.ts` — 152 lines · 0 tests · REACHABLE · imported by 3
+#### `ui/src/lib/agent-backend.ts` — 152 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (14): type BackendChannel, type AgentCredentialMode, type HostVaultInjection, interface AgentBackendChoice, interface AgentBackendState, interface AgentProviderRow, interface ProviderProbeResult, function channelLabel, function hasLegacyVaultKeyRequest, function agentBackendGet, function agentBackendProviders, function agentBackendSet, function agentBackendClear, function agentBackendProbe
 - `fns` (7): channelLabel:87, hasLegacyVaultKeyRequest:103, agentBackendGet:109, agentBackendProviders:115, agentBackendSet:122, agentBackendClear:141, agentBackendProbe:147
-- `anon` (5): function/arrow expressions with no binding name
 
-#### `ui/src/lib/agent-builder.ts` — 293 lines · 0 tests · REACHABLE · imported by 2
+#### `ui/src/lib/agent-builder.ts` — 293 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (13): type EngineBinding, interface ModelPin, interface ToolScope, interface AgentBundle, const BUNDLE_SCHEMA_VERSION, type AgentTemplateId, interface AgentTemplate, const AGENT_TEMPLATES, function templateById, function slug, function bundleFromTemplate, function bundleToToml, function exportBundle
 - `fns` (7): templateById:217, slug:225, bundleFromTemplate:231, q:241, arr:245, bundleToToml:257, exportBundle:291
-- `anon` (2): function/arrow expressions with no binding name
 
 #### `ui/src/lib/agent-ownership.test.ts` — 129 lines · 11 tests · TEST · imported by 0
 - `fns` (1): installed:40
-- `anon` (16): function/arrow expressions with no binding name
 
-#### `ui/src/lib/agent-registry.ts` — 94 lines · 0 tests · REACHABLE · imported by 1
+#### `ui/src/lib/agent-registry.ts` — 94 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (8): interface RegisteredAgent, interface RegistryList, function agentRegistryList, function agentRegistrySave, function agentRegistryGet, function agentRegistryRemove, function agentRegistryDuplicate, function agentRegistrySetDisabled
 - `fns` (8): agentRegistryList:26, agentRegistrySave:32, agentRegistryGet:43, agentRegistryRemove:49, agentRegistryDuplicate:55, agentRegistrySetDisabled:64, demoLoad:83, demoList:92
-- `anon` (6): function/arrow expressions with no binding name
 
-#### `ui/src/lib/agents.ts` — 623 lines · 0 tests · REACHABLE · imported by 24
+#### `ui/src/lib/agents.ts` — 623 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (24): type AgentCapability, type AgentInstallStatus, interface AgentModel, type ModelProvider, interface AgentRuntime, const MODELS, const MODEL_MAP, function getModel, function formatContext, function formatPrice, const AGENTS, const AGENT_MAP, function getAgent, function getModelsForAgent, function isRuntimeUsable, function readinessToInstallStatus, function getModelsForAgentLive, function getDefaultModelForAgent, type TaskKind, const TASK_LABELS, const DEFAULT_ROUTING, const ROUTING_BOUND_AGENT, const CAPABILITY_LABELS, const PROVIDER_LABELS
 - `fns` (9): getModel:337, formatContext:341, formatPrice:346, getAgent:481, getModelsForAgent:485, isRuntimeUsable:506, readinessToInstallStatus:519, getModelsForAgentLive:550, getDefaultModelForAgent:554
-- `anon` (3): function/arrow expressions with no binding name
 
-#### `ui/src/lib/artifact.ts` — 61 lines · 0 tests · UNREACHED · imported by 1
+#### `ui/src/lib/artifact.ts` — 61 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (3): function startArtifactServer, function stopArtifactServer, function demoActionChecklist
-- `fns` (7): startArtifactServer:24, live:29, preview:33, stopArtifactServer:40, live:43, preview:46, demoActionChecklist:53
+- `fns` (4): startArtifactServer:24, port:30, stopArtifactServer:40, demoActionChecklist:53
 
-#### `ui/src/lib/at-refs.ts` — 14 lines · 0 tests · REACHABLE · imported by 3
+#### `ui/src/lib/at-refs.ts` — 14 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): function splitAtRefs
 - `fns` (1): splitAtRefs:5
-- `anon` (1): function/arrow expressions with no binding name
 
 #### `ui/src/lib/attachments.test.ts` — 104 lines · 25 tests · TEST · imported by 0
-- `anon` (25): function/arrow expressions with no binding name
 
-#### `ui/src/lib/attachments.ts` — 118 lines · 0 tests · REACHABLE · imported by 3
+#### `ui/src/lib/attachments.ts` — 118 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (15): const ATTACH_IMAGE_TYPES, const ATTACH_TEXT_TYPES, const MAX_ATTACH_BYTES, const MAX_ATTACH_DIM, const MAX_ATTACH_B64_BYTES, type AttachClass, function classifyAttachment, type ValidateResult, function validateImage, function downscaleDimensions, function checkBase64Limit, interface ResizedImage, function resizeImageToMax, function readSvgAsText, function fmtBytes
 - `fns` (7): classifyAttachment:28, validateImage:43, downscaleDimensions:54, checkBase64Limit:63, resizeImageToMax:86, readSvgAsText:110, fmtBytes:114
-- `anon` (1): function/arrow expressions with no binding name
 
-#### `ui/src/lib/audit.ts` — 147 lines · 0 tests · REACHABLE · imported by 1
+#### `ui/src/lib/audit.ts` — 147 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (8): interface Segment, interface ReplayEvent, interface Timeline, function replaySessions, function replayTimeline, function replayScreenshot, function watchEvents, re-export agentStop
 - `fns` (7): replaySessions:39, replayTimeline:45, replayScreenshot:51, watchEvents:64, demoSessionSearch:79, demoTimeline:112, demoShotSvg:138
-- `anon` (7): function/arrow expressions with no binding name
 
 #### `ui/src/lib/autonomy.test.ts` — 218 lines · 10 tests · TEST · imported by 0
 - `fns` (1): seedSession:9
-- `anon` (17): function/arrow expressions with no binding name
 
 #### `ui/src/lib/bridge-agent-send.test.ts` — 165 lines · 6 tests · TEST · imported by 0
 - `fns` (3): idleSession:14, runtime:25, handleInfo:60
-- `anon` (12): function/arrow expressions with no binding name
 
-#### `ui/src/lib/bridge.ts` — 1,118 lines · 0 tests · REACHABLE · imported by 9
+#### `ui/src/lib/bridge.ts` — 1,118 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (5): function refreshAgentCatalog, function registerTurnDispatcher, function handleChatEvent, function initBridge, function sendUserMessage
-- `fns` (18): pushLive:53, mergeAgentCatalog:74, refreshAgentCatalog:122, registerTurnDispatcher:140, mergeDirectoryAgents:162, synthesizeAgent:215, mcqLabel:243, budgetKillText:267, budgetEventText:273, updateLiveBudget:280, handleChatEvent:295, initBridge:533, startBridge:550, recordFault:567, updateReadiness:572, loadLiveData:620, pollGuard:732, sendUserMessage:839
-- `anon` (34): function/arrow expressions with no binding name
+- `fns` (20): pushLive:53, mergeAgentCatalog:74, refreshAgentCatalog:122, registerTurnDispatcher:140, mergeDirectoryAgents:162, synthesizeAgent:215, mcqLabel:243, budgetKillText:267, budgetEventText:273, updateLiveBudget:280, handleChatEvent:295, initBridge:533, startBridge:550, recordFault:567, updateReadiness:572, loadLiveData:620, pollGuard:732, sendUserMessage:839, seenCommands:1060, configUpdate:1071
 
-#### `ui/src/lib/browser.ts` — 196 lines · 0 tests · REACHABLE · imported by 2
+#### `ui/src/lib/browser.ts` — 196 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (20): type BrowserChannel, type CandidateSource, interface BrowserCandidate, type BrowserProfileMode, interface BrowserConfig, interface BrowserStatus, function browserListInstalled, function browserGetConfig, function browserSetConfig, function browserStart, interface TieredRead, function browserReadUrl, function tierLabel, function browserNavigate, function browserSnapshot, function browserRead, function browserClick, function browserType, function browserStop, function browserStatus
 - `fns` (14): browserListInstalled:57, browserGetConfig:83, browserSetConfig:98, browserStart:105, browserReadUrl:120, tierLabel:136, browserNavigate:149, browserSnapshot:154, browserRead:159, browserClick:164, browserType:169, browserStop:174, browserStatus:179, demoSnapshot:184
-- `anon` (12): function/arrow expressions with no binding name
 
 #### `ui/src/lib/calendar.test.ts` — 52 lines · 5 tests · TEST · imported by 0
-- `anon` (5): function/arrow expressions with no binding name
 
-#### `ui/src/lib/calendar.ts` — 144 lines · 0 tests · TEST-ONLY · imported by 1
+#### `ui/src/lib/calendar.ts` — 144 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (9): interface CalendarRow, interface CalendarEventRow, function calendarList, function calendarPut, function calendarDelete, function calendarEventListArgs, function calendarEventList, function calendarEventPut, function calendarEventDelete
-- `fns` (19): calendarList:61, live:64, preview:68, calendarPut:72, live:75, preview:78, calendarDelete:82, live:85, preview:88, calendarEventListArgs:93, calendarEventList:105, live:112, preview:121, calendarEventPut:125, live:128, preview:131, calendarEventDelete:135, live:138, preview:141
+- `fns` (9): calendarList:61, out:65, calendarPut:72, calendarDelete:82, calendarEventListArgs:93, calendarEventList:105, out:113, calendarEventPut:125, calendarEventDelete:135
 
-#### `ui/src/lib/capabilities.ts` — 167 lines · 0 tests · REACHABLE · imported by 4
+#### `ui/src/lib/capabilities.ts` — 167 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (5): interface SessionCapabilityItem, interface SessionCapabilityLoadout, const STANDARD_SHARED_CAPABILITIES, function isCapabilityEnabled, function filterToolsByCapabilityLoadout
 - `fns` (2): isCapabilityEnabled:132, filterToolsByCapabilityLoadout:146
-- `anon` (1): function/arrow expressions with no binding name
 
 #### `ui/src/lib/capability-status.test.ts` — 105 lines · 14 tests · TEST · imported by 0
 - `fns` (1): ctx:11
-- `anon` (15): function/arrow expressions with no binding name
 
-#### `ui/src/lib/capability-status.ts` — 177 lines · 0 tests · REACHABLE · imported by 2
+#### `ui/src/lib/capability-status.ts` — 177 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (6): type CapabilityStatus, type CapabilityId, interface CapabilityContext, interface CapabilityRow, function capabilityFor, function capabilityMatrix
 - `fns` (2): capabilityFor:102, capabilityMatrix:175
-- `anon` (1): function/arrow expressions with no binding name
 
 #### `ui/src/lib/catalog-models.test.ts` — 154 lines · 15 tests · TEST · imported by 0
 - `fns` (2): row:20, model:32
-- `anon` (20): function/arrow expressions with no binding name
 
-#### `ui/src/lib/catalog-models.ts` — 130 lines · 0 tests · TEST-ONLY · imported by 1
+#### `ui/src/lib/catalog-models.ts` — 130 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (7): interface CatalogPickerModel, function usableCatalogProviders, function toCatalogPickerModel, function catalogPickerModels, function flattenCatalogRows, function cuaEligibleModels, function catalogPickLabel
 - `fns` (6): usableCatalogProviders:52, toCatalogPickerModel:62, catalogPickerModels:87, flattenCatalogRows:103, cuaEligibleModels:110, catalogPickLabel:123
-- `anon` (2): function/arrow expressions with no binding name
 
 #### `ui/src/lib/chat-event-routing.test.ts` — 160 lines · 10 tests · TEST · imported by 0
-- `fns` (5): freshSession:5, lastMessage:12, stubNotifyPref:22, getItem:25, restoreWindow:31
-- `anon` (18): function/arrow expressions with no binding name
+- `fns` (5): freshSession:5, lastMessage:12, originalWindow:20, stubNotifyPref:22, restoreWindow:31
 
 #### `ui/src/lib/checkpoints-preflight.test.ts` — 134 lines · 13 tests · TEST · imported by 0
 - `fns` (3): call:14, msg:18, turnsOf:28
-- `anon` (13): function/arrow expressions with no binding name
 
 #### `ui/src/lib/checkpoints-restore.test.ts` — 144 lines · 16 tests · TEST · imported by 0
-- `fns` (2): installShell:22, removeShell:26
-- `anon` (24): function/arrow expressions with no binding name
+- `fns` (3): installShell:22, removeShell:26, path:66
 
-#### `ui/src/lib/checkpoints.ts` — 266 lines · 0 tests · REACHABLE · imported by 5
+#### `ui/src/lib/checkpoints.ts` — 266 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (16): type PreflightKind, interface CheckpointTurn, function preflightOutcome, function isMutatingToolId, function isMutatingToolCall, function isMutatingStep, function isMutatingMessage, function checkpointSummary, function deriveCheckpointTurns, interface RestoreResult, interface RestoreReceipt, function restoreCheckpointPaths, function restoreFullyAudited, function needsGuardApproval, function snapshotsForSession, function shortPath
-- `fns` (13): preflightOutcome:57, isMutatingToolId:82, isMutatingToolCall:109, isMutatingStep:115, isMutatingMessage:121, checkpointSummary:129, strongestPreflight:148, deriveCheckpointTurns:167, restoreCheckpointPaths:212, restoreFullyAudited:244, needsGuardApproval:250, snapshotsForSession:255, shortPath:262
-- `anon` (6): function/arrow expressions with no binding name
+- `fns` (15): preflightOutcome:57, isMutatingToolId:82, isMutatingToolCall:109, isMutatingStep:115, isMutatingMessage:121, checkpointSummary:129, tools:130, steps:131, strongestPreflight:148, deriveCheckpointTurns:167, restoreCheckpointPaths:212, restoreFullyAudited:244, needsGuardApproval:250, snapshotsForSession:255, shortPath:262
 
 #### `ui/src/lib/chief-handoff.test.ts` — 80 lines · 6 tests · TEST · imported by 0
 - `fns` (1): seedHandoffSession:9
-- `anon` (6): function/arrow expressions with no binding name
 
-#### `ui/src/lib/chief-handoff.ts` — 57 lines · 0 tests · TEST-ONLY · imported by 1
+#### `ui/src/lib/chief-handoff.ts` — 57 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): function buildChiefHandoff
 - `fns` (2): stripToolBlobs:19, buildChiefHandoff:27
-- `anon` (5): function/arrow expressions with no binding name
 
 #### `ui/src/lib/chief-pin.test.ts` — 113 lines · 7 tests · TEST · imported by 0
 - `fns` (1): seedSession:9
-- `anon` (13): function/arrow expressions with no binding name
 
 #### `ui/src/lib/citations.test.ts` — 31 lines · 4 tests · TEST · imported by 0
-- `anon` (4): function/arrow expressions with no binding name
 
-#### `ui/src/lib/citations.ts` — 43 lines · 0 tests · REACHABLE · imported by 2
+#### `ui/src/lib/citations.ts` — 43 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (4): interface ChatCitation, function citationAnchorId, function formatCitationExport, function applyCitationMarks
 - `fns` (3): citationAnchorId:15, formatCitationExport:20, applyCitationMarks:31
-- `anon` (2): function/arrow expressions with no binding name
 
-#### `ui/src/lib/cockpit.ts` — 160 lines · 0 tests · REACHABLE · imported by 1
+#### `ui/src/lib/cockpit.ts` — 160 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (14): type AgentStatus, interface LiveAction, interface TokenCounters, interface AgentCard, interface InterruptCard, interface CockpitState, function cockpitSnapshot, function cockpitActivity, function cockpitTokens, function cockpitUpsertAgent, function cockpitQuiet, re-export agentStop, re-export agentUndo, function interruptRespond
 - `fns` (8): cockpitSnapshot:49, cockpitActivity:55, cockpitTokens:65, cockpitUpsertAgent:75, cockpitQuiet:86, interruptRespond:98, now:110, demoState:112
-- `anon` (6): function/arrow expressions with no binding name
 
-#### `ui/src/lib/connections.ts` — 224 lines · 0 tests · REACHABLE · imported by 1
+#### `ui/src/lib/connections.ts` — 224 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (8): type ConnectionViewState, interface ConnectionView, function connectionTone, function connectionLabel, function connectorToRecord, function mcpRowToRecord, function oauthToRecord, function storeEntryToRecord
 - `fns` (6): connectionTone:59, connectionLabel:76, connectorToRecord:80, mcpRowToRecord:111, oauthToRecord:165, storeEntryToRecord:187
 
-#### `ui/src/lib/connector-scopes.ts` — 102 lines · 0 tests · REACHABLE · imported by 1
+#### `ui/src/lib/connector-scopes.ts` — 102 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (4): interface ScopeEntry, interface ConnectorScopeManifest, const SCOPE_MANIFEST, function scopesFor
 - `fns` (1): scopesFor:99
-- `anon` (1): function/arrow expressions with no binding name
 
 #### `ui/src/lib/cua-dag.test.ts` — 75 lines · 5 tests · TEST · imported by 0
 - `fns` (1): dag:11
-- `anon` (11): function/arrow expressions with no binding name
 
-#### `ui/src/lib/cua-dag.ts` — 186 lines · 0 tests · REACHABLE · imported by 2
+#### `ui/src/lib/cua-dag.ts` — 186 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (10): type CuaStatus, interface CuaDagNode, interface CuaDag, interface CuaDagLayoutNode, interface CuaDagLayout, function userMayEditRemaining, function dagFromWire, function readyFrontier, function layoutCuaDag, function previewRemainingEdit
 - `fns` (7): userMayEditRemaining:49, asStatus:53, dagFromWire:69, readyFrontier:109, layoutCuaDag:120, visit:123, previewRemainingEdit:166
-- `anon` (13): function/arrow expressions with no binding name
 
 #### `ui/src/lib/design-tokens.test.ts` — 229 lines · 11 tests · TEST · imported by 0
-- `fns` (5): block:19, hsl:32, toRgb:39, luminance:55, ratio:65
-- `anon` (12): function/arrow expressions with no binding name
+- `fns` (7): block:19, hsl:32, toRgb:39, c:40, hp:41, luminance:55, ratio:65
 
 #### `ui/src/lib/desktop-apps.test.ts` — 130 lines · 15 tests · TEST · imported by 0
 - `fns` (1): app:17
-- `anon` (15): function/arrow expressions with no binding name
 
-#### `ui/src/lib/desktop-apps.ts` — 180 lines · 0 tests · REACHABLE · imported by 2
+#### `ui/src/lib/desktop-apps.ts` — 180 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (13): type DesktopReadinessState, interface DesktopReadiness, interface DesktopInstalledApp, interface DesktopPolicy, interface ReadinessView, interface BackgroundInputView, function readinessView, function pickerOptions, function pathTail, function sourceLabel, function addBlockReason, function backgroundInputView, function interactionCopy
 - `fns` (7): readinessView:68, pickerOptions:79, pathTail:109, sourceLabel:116, addBlockReason:135, backgroundInputView:146, interactionCopy:175
 
-#### `ui/src/lib/desktop.ts` — 162 lines · 0 tests · REACHABLE · imported by 2
+#### `ui/src/lib/desktop.ts` — 162 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (17): interface DesktopCapabilities, interface DesktopReadiness, interface DesktopStatus, interface DesktopWindow, type DesktopActKind, interface EscalationRequest, function desktopStatus, function desktopAttach, function desktopWindows, function desktopRead, function desktopSee, function desktopAct, function desktopEscalation, function desktopActEscalating, function desktopStop, function cuaDagGet, function cuaDagEditRemaining
 - `fns` (12): desktopStatus:61, desktopAttach:66, desktopWindows:71, desktopRead:77, desktopSee:84, desktopAct:91, desktopEscalation:103, desktopActEscalating:121, desktopStop:132, demoWindows:139, cuaDagGet:147, cuaDagEditRemaining:153
-- `anon` (11): function/arrow expressions with no binding name
 
-#### `ui/src/lib/discovery.ts` — 84 lines · 0 tests · REACHABLE · imported by 3
+#### `ui/src/lib/discovery.ts` — 84 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (8): type ResourceKind, type ManagedStatus, interface ResourceCard, interface ResourceCounts, interface DiscoveryInventory, interface RouteDecision, function discoveryInventory, function routingFeedDecide
 - `fns` (3): discoveryInventory:51, routingFeedDecide:56, demoInventory:65
-- `anon` (2): function/arrow expressions with no binding name
 
 #### `ui/src/lib/doctor.ts` — 45 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (4): type DoctorStatus, interface DoctorCheck, interface DoctorReport, function doctorReport
 - `fns` (2): doctorReport:23, demoReport:28
-- `anon` (1): function/arrow expressions with no binding name
 
 #### `ui/src/lib/error-ttfb.test.ts` — 151 lines · 12 tests · TEST · imported by 0
 - `fns` (2): freshSession:9, lastMessage:18
-- `anon` (16): function/arrow expressions with no binding name
 
 #### `ui/src/lib/errors.test.ts` — 33 lines · 6 tests · TEST · imported by 0
-- `anon` (6): function/arrow expressions with no binding name
 
-#### `ui/src/lib/errors.ts` — 77 lines · 0 tests · REACHABLE · imported by 2
+#### `ui/src/lib/errors.ts` — 77 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): function explainError
 - `fns` (1): explainError:58
 
-#### `ui/src/lib/feedback.ts` — 65 lines · 0 tests · REACHABLE · imported by 1
+#### `ui/src/lib/feedback.ts` — 65 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (5): type FeedbackKind, interface FeedbackReport, function submitFeedback, function localFeedbackDrafts, function renderFeedbackMarkdown
 - `fns` (3): submitFeedback:22, localFeedbackDrafts:43, renderFeedbackMarkdown:52
-- `anon` (1): function/arrow expressions with no binding name
 
 #### `ui/src/lib/first-run.test.ts` — 118 lines · 16 tests · TEST · imported by 0
-- `fns` (3): memStorage:19, get:22, set:23
-- `anon` (19): function/arrow expressions with no binding name
+- `fns` (1): memStorage:19
 
-#### `ui/src/lib/first-run.ts` — 151 lines · 0 tests · REACHABLE · imported by 3
+#### `ui/src/lib/first-run.ts` — 151 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (11): const DAY_MS, const FIRST_TASK_NUDGE_AFTER_MS, const FIRST_SEEN_KEY, const NUDGE_SHOWN_KEY, interface FirstTask, const FIRST_TASKS, interface FirstRunStorage, const localStorageFirstRunStorage, function markFirstSeen, function shouldNudgeFirstTask, function resetFirstRun
-- `fns` (6): get:87, set:94, readStamp:104, markFirstSeen:116, shouldNudgeFirstTask:133, resetFirstRun:147
+- `fns` (4): readStamp:104, markFirstSeen:116, shouldNudgeFirstTask:133, resetFirstRun:147
 
-#### `ui/src/lib/fs.ts` — 136 lines · 0 tests · REACHABLE · imported by 10
+#### `ui/src/lib/fs.ts` — 136 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (14): interface FsEntry, interface FsList, interface FsRead, interface FsUndo, interface FsUndoSnapshot, function fsHome, function fsListDir, function fsReadFile, function fsWriteFile, function fsWriteTicket, function fsWriteCommit, function fsUndoList, function fsUndoRestore, function fsUndoSnapshot
 - `fns` (10): fsHome:50, fsListDir:55, fsReadFile:60, fsWriteFile:67, fsWriteTicket:74, fsWriteCommit:89, fsUndoList:97, fsUndoRestore:107, fsUndoSnapshot:116, demoList:132
-- `anon` (9): function/arrow expressions with no binding name
 
 #### `ui/src/lib/fuzzy.test.ts` — 52 lines · 8 tests · TEST · imported by 0
-- `anon` (14): function/arrow expressions with no binding name
 
-#### `ui/src/lib/fuzzy.ts` — 53 lines · 0 tests · REACHABLE · imported by 4
+#### `ui/src/lib/fuzzy.ts` — 53 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (2): function fuzzyScore, function fuzzyRank
 - `fns` (2): fuzzyScore:10, fuzzyRank:39
-- `anon` (2): function/arrow expressions with no binding name
 
-#### `ui/src/lib/git.ts` — 87 lines · 0 tests · UNREACHED · imported by 1
+#### `ui/src/lib/git.ts` — 87 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (14): interface GitStatusRow, interface GitStatus, interface GitLog, function gitStatus, function gitLog, function gitDiff, function gitStageAll, function gitCommit, function gitRoot, interface Worktree, function gitWorktreeList, function gitWorktreeAdd, function gitWorktreeMerge, function gitWorktreeRevert
 - `fns` (10): gitStatus:20, gitLog:27, gitDiff:32, gitStageAll:37, gitCommit:41, gitRoot:45, gitWorktreeList:57, gitWorktreeAdd:63, gitWorktreeMerge:71, gitWorktreeRevert:80
-- `anon` (10): function/arrow expressions with no binding name
 
 #### `ui/src/lib/guard-autonomy.test.ts` — 51 lines · 7 tests · TEST · imported by 0
-- `anon` (7): function/arrow expressions with no binding name
 
 #### `ui/src/lib/guard-ux.test.ts` — 56 lines · 8 tests · TEST · imported by 0
-- `anon` (8): function/arrow expressions with no binding name
 
-#### `ui/src/lib/guard.ts` — 413 lines · 0 tests · REACHABLE · imported by 8
+#### `ui/src/lib/guard.ts` — 413 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (33): interface GuardDecision, interface GuardTicket, interface GuardReceipt, interface GuardPolicy, function guardTickets, function guardRespond, function openGuardWindow, function guardReceipts, interface RecentAction, function guardActivity, interface MatrixCell, function guardPermissionsMatrix, interface GuardLifecycleEvent, function listenGuardEvent, interface GuardTtlExtension, function guardExtendTtl, interface GuardBlockExplanation, function guardExplainBlock, function ttlSecondsLeft, function guardPolicy, function guardSetPolicyRules, interface PolicyRule, interface GuardCombo, function guardCombos, function guardApplyCombo, function guardEstop, type AutonomyLevel, type UIAutonomyLevel, function toRustLevel, function toUILevel, interface GuardAutonomy, function guardAutonomy, function guardSetAutonomy
-- `fns` (43): guardTickets:68, live:71, preview:72, guardRespond:77, live:84, preview:85, openGuardWindow:96, guardReceipts:102, live:105, preview:106, guardActivity:120, live:123, preview:124, guardPermissionsMatrix:136, live:139, preview:140, demoActivity:144, demoMatrix:154, listenGuardEvent:181, guardExtendTtl:195, live:201, preview:206, guardExplainBlock:220, live:223, preview:224, ttlSecondsLeft:229, guardPolicy:234, live:237, preview:238, guardSetPolicyRules:250, live:253, preview:254, guardCombos:274, guardApplyCombo:282, guardEstop:288, live:291, preview:292, toRustLevel:307, toUILevel:311, guardAutonomy:325, guardSetAutonomy:336, demoTickets:344, demoReceipts:399
-- `anon` (10): function/arrow expressions with no binding name
+- `fns` (23): guardTickets:68, guardRespond:77, openGuardWindow:96, guardReceipts:102, guardActivity:120, guardPermissionsMatrix:136, demoActivity:144, demoMatrix:154, listenGuardEvent:181, guardExtendTtl:195, guardExplainBlock:220, ttlSecondsLeft:229, guardPolicy:234, guardSetPolicyRules:250, guardCombos:274, guardApplyCombo:282, guardEstop:288, toRustLevel:307, toUILevel:311, guardAutonomy:325, guardSetAutonomy:336, demoTickets:344, demoReceipts:399
 
-#### `ui/src/lib/i18n.ts` — 158 lines · 0 tests · REACHABLE · imported by 1
+#### `ui/src/lib/i18n.ts` — 158 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (3): type Locale, type LocaleDict, function useLocale
 - `fns` (2): readLocale:122, useLocale:133
-- `anon` (4): function/arrow expressions with no binding name
 
 #### `ui/src/lib/interrupts.test.ts` — 126 lines · 21 tests · TEST · imported by 0
 - `fns` (1): permission:19
-- `anon` (21): function/arrow expressions with no binding name
 
-#### `ui/src/lib/interrupts.ts` — 103 lines · 0 tests · REACHABLE · imported by 2
+#### `ui/src/lib/interrupts.ts` — 103 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (8): interface InterruptLike, type InterruptTier, function digestClass, function tierFor, const TIER_LABEL, function isHighBlast, function confirmWord, function confirmSatisfied
 - `fns` (5): digestClass:33, tierFor:47, isHighBlast:73, confirmWord:83, confirmSatisfied:99
 
-#### `ui/src/lib/layout.ts` — 17 lines · 0 tests · REACHABLE · imported by 2
+#### `ui/src/lib/layout.ts` — 17 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): function useChatColumnClass
 - `fns` (1): useChatColumnClass:6
-- `anon` (2): function/arrow expressions with no binding name
 
-#### `ui/src/lib/local-models.ts` — 195 lines · 0 tests · REACHABLE · imported by 2
+#### `ui/src/lib/local-models.ts` — 195 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (19): interface LocalModelRow, interface HardwareProfile, interface HubModel, interface HubFile, interface LocalPrefs, function formatBytes, function formatDownloads, function relativeUpdated, function quantFromPath, function ramBytes, function cpuCores, function searchHub, function listHubFiles, function hubCaps, function listLocalModels, function ensureLocal, function getHardware, function getLocalPrefs, function setLocalPrefs
-- `fns` (14): formatBytes:50, formatDownloads:57, relativeUpdated:63, quantFromPath:73, ramBytes:93, cpuCores:97, searchHub:104, listHubFiles:139, hubCaps:152, listLocalModels:163, ensureLocal:173, getHardware:177, getLocalPrefs:182, setLocalPrefs:192
-- `anon` (12): function/arrow expressions with no binding name
+- `fns` (16): formatBytes:50, formatDownloads:57, relativeUpdated:63, quantFromPath:73, ramBytes:93, cpuCores:97, searchHub:104, rows:119, listHubFiles:139, rows:142, hubCaps:152, listLocalModels:163, ensureLocal:173, getHardware:177, getLocalPrefs:182, setLocalPrefs:192
 
-#### `ui/src/lib/lsp.ts` — 39 lines · 0 tests · UNREACHED · imported by 1
+#### `ui/src/lib/lsp.ts` — 39 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (3): interface LspProblem, interface LspResult, function lspDiagnostics
 - `fns` (1): lspDiagnostics:22
-- `anon` (1): function/arrow expressions with no binding name
 
-#### `ui/src/lib/mcp.ts` — 325 lines · 0 tests · REACHABLE · imported by 3
+#### `ui/src/lib/mcp.ts` — 325 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (23): interface ToolInfo, interface McpCatalog, function mcpCatalog, interface McpServerRow, function mcpServers, interface McpExternalTool, interface McpExternalCatalog, const EMPTY_EXTERNAL_CATALOG, function mcpExternalTools, function mcpAttachRequest, function mcpAttachCommit, function mcpDetach, function mcpStop, function mcpStart, function mcpSetAutostart, function mcpRefresh, function waitForTicketResolution, interface StoreEntry, function storeCatalog, interface RemoteToolInfo, function mcpRemoteTools, function mcpRemoteStatus, function mcpConnectStart
 - `fns` (18): mcpCatalog:28, mcpServers:51, mcpExternalTools:85, mcpAttachRequest:94, mcpAttachCommit:109, mcpDetach:139, mcpStop:145, mcpStart:151, mcpSetAutostart:156, mcpRefresh:173, waitForTicketResolution:188, storeCatalog:217, mcpRemoteTools:230, mcpRemoteStatus:239, mcpConnectStart:247, demoStore:256, demoServers:300, demoCatalog:308
-- `anon` (16): function/arrow expressions with no binding name
 
-#### `ui/src/lib/memory.ts` — 190 lines · 0 tests · REACHABLE · imported by 1
+#### `ui/src/lib/memory.ts` — 190 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (12): function memoryRequest, function memoryRead, interface MemoryFact, interface MemoryStatus, function memoryFacts, interface GraphNode, interface GraphEdge, interface MemoryGraph, interface MemoryEpisode, interface MemoryEpisodes, function memoryGraph, function memoryEpisodes
-- `fns` (16): memoryRequest:8, live:14, preview:15, memoryRead:19, live:25, preview:26, memoryFacts:57, live:60, preview:61, memoryGraph:122, live:125, preview:126, memoryEpisodes:152, live:155, preview:156, demoHandle:180
-- `anon` (6): function/arrow expressions with no binding name
+- `fns` (6): memoryRequest:8, memoryRead:19, memoryFacts:57, memoryGraph:122, memoryEpisodes:152, demoHandle:180
 
 #### `ui/src/lib/model-fit.test.ts` — 109 lines · 15 tests · TEST · imported by 0
 - `fns` (1): gguf:13
-- `anon` (15): function/arrow expressions with no binding name
 
-#### `ui/src/lib/model-fit.ts` — 112 lines · 0 tests · REACHABLE · imported by 2
+#### `ui/src/lib/model-fit.ts` — 112 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (11): const DEFAULT_QUANT, const FIT_CTX, const FIT_CTX_LABEL, type FitTier, interface FitEstimate, interface TierTone, function tierTone, function hostHwClass, function fileHwClass, function buildCandidates, function bytesToGib
-- `fns` (5): tierTone:47, hostHwClass:73, fileHwClass:81, buildCandidates:89, bytesToGib:108
+- `fns` (6): tierTone:47, hostHwClass:73, gpu:74, fileHwClass:81, buildCandidates:89, bytesToGib:108
 
 #### `ui/src/lib/model-routing.test.ts` — 87 lines · 9 tests · TEST · imported by 0
-- `anon` (9): function/arrow expressions with no binding name
 
-#### `ui/src/lib/model-routing.ts` — 50 lines · 0 tests · TEST-ONLY · imported by 1
+#### `ui/src/lib/model-routing.ts` — 50 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (2): interface SelectedProviderModel, function resolveProviderModel
 - `fns` (1): resolveProviderModel:26
 
-#### `ui/src/lib/models-download.ts` — 212 lines · 0 tests · REACHABLE · imported by 4
+#### `ui/src/lib/models-download.ts` — 212 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (23): interface ModelDownloadRow, interface OrphanPart, interface RegistryEntry, interface RegistryList, interface ModelDownloadEvent, function startDownload, function listDownloads, function cancelDownload, function registryList, function removeModel, function recommendQuant, function estimateFit, interface ServeOptions, function serveModel, interface GalleryFile, interface GalleryEntry, interface GalleryIndex, function parseGalleryYaml, type HwClass, interface VariantCandidate, function bestPick, function onModelDownloadEvent, function downloadsAvailable
 - `fns` (12): startDownload:71, listDownloads:80, cancelDownload:87, registryList:91, removeModel:95, recommendQuant:99, estimateFit:109, serveModel:142, parseGalleryYaml:177, bestPick:195, onModelDownloadEvent:203, downloadsAvailable:210
-- `anon` (1): function/arrow expressions with no binding name
 
-#### `ui/src/lib/monaco.ts` — 39 lines · 0 tests · UNREACHED · imported by 1
-- `fns` (1): getWorker:19
+#### `ui/src/lib/monaco.ts` — 39 lines · 0 tests · NOT IMPORTED · imported by 0
 
 #### `ui/src/lib/nps.test.ts` — 73 lines · 6 tests · TEST · imported by 0
-- `fns` (3): memStorage:13, get:16, set:17
-- `anon` (6): function/arrow expressions with no binding name
+- `fns` (1): memStorage:13
 
-#### `ui/src/lib/nps.ts` — 83 lines · 0 tests · REACHABLE · imported by 2
+#### `ui/src/lib/nps.ts` — 83 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (11): const DAY_MS, const FIRST_PROMPT_AFTER_MS, const RE_PROMPT_AFTER_MS, const FIRST_SEEN_KEY, const LAST_PROMPT_KEY, const SCORES_KEY, interface NpsStorage, const localStorageNpsStorage, function npsShouldPrompt, function npsRecordScore, function npsScores
-- `fns` (5): get:24, set:31, npsShouldPrompt:41, npsRecordScore:61, npsScores:75
+- `fns` (3): npsShouldPrompt:41, npsRecordScore:61, npsScores:75
 
-#### `ui/src/lib/oauth.ts` — 49 lines · 0 tests · REACHABLE · imported by 2
+#### `ui/src/lib/oauth.ts` — 49 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (7): interface OAuthAccount, function oauthStatus, function oauthAccounts, function oauthStartPkce, function oauthStartDevice, function oauthPollDevice, function oauthRevoke
 - `fns` (6): oauthStatus:13, oauthAccounts:18, oauthStartPkce:24, oauthStartDevice:28, oauthPollDevice:37, oauthRevoke:45
-- `anon` (6): function/arrow expressions with no binding name
 
 #### `ui/src/lib/occupancy.test.ts` — 47 lines · 6 tests · TEST · imported by 0
-- `anon` (6): function/arrow expressions with no binding name
 
-#### `ui/src/lib/occupancy.ts` — 35 lines · 0 tests · REACHABLE · imported by 3
+#### `ui/src/lib/occupancy.ts` — 35 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (3): function occupancyChief, function dispatchOccupancy, function routingTableDrivesDispatch
 - `fns` (3): occupancyChief:12, dispatchOccupancy:24, routingTableDrivesDispatch:32
 
 #### `ui/src/lib/office-open-bar.test.ts` — 24 lines · 4 tests · TEST · imported by 0
-- `anon` (4): function/arrow expressions with no binding name
 
-#### `ui/src/lib/office.ts` — 108 lines · 0 tests · REACHABLE · imported by 4
+#### `ui/src/lib/office.ts` — 108 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (16): interface DocxBlockInfo, interface DocxPayload, interface PptxSlideInfo, interface PptxPayload, interface PdfPayload, function docxOpen, function pptxOpen, function pdfOpen, function pdfBytes, function docxPatch, function docxTracks, function pptxNotes, function pdfPageOp, function officeOpenExternal, function isOfficeFloorError, const demoDocx
 - `fns` (10): docxOpen:37, pptxOpen:41, pdfOpen:45, pdfBytes:50, docxPatch:54, docxTracks:58, pptxNotes:65, pdfPageOp:69, officeOpenExternal:77, isOfficeFloorError:87
-- `anon` (9): function/arrow expressions with no binding name
 
-#### `ui/src/lib/openai-server.ts` — 40 lines · 0 tests · REACHABLE · imported by 1
+#### `ui/src/lib/openai-server.ts` — 40 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (4): interface OpenAiServerStatus, function openAiServerStatus, function openAiServerStart, function openAiServerStop
-- `fns` (9): openAiServerStatus:17, live:20, preview:21, openAiServerStart:25, live:28, preview:29, openAiServerStop:33, live:36, preview:37
+- `fns` (3): openAiServerStatus:17, openAiServerStart:25, openAiServerStop:33
 
-#### `ui/src/lib/perf.ts` — 87 lines · 0 tests · REACHABLE · imported by 2
+#### `ui/src/lib/perf.ts` — 87 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (3): interface PerfSnapshot, function startPerfMeasurement, function usePerfSnapshot
 - `fns` (3): measure:25, startPerfMeasurement:70, usePerfSnapshot:79
-- `anon` (7): function/arrow expressions with no binding name
 
-#### `ui/src/lib/personas.ts` — 21 lines · 0 tests · UNREACHED · imported by 1
+#### `ui/src/lib/personas.ts` — 21 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (5): const PERSONA_PRESETS, const DEFAULT_PERSONA, const SOUL_PRESETS, type PersonaId, type SoulId
 
 #### `ui/src/lib/plain-language.test.ts` — 189 lines · 33 tests · TEST · imported by 0
-- `anon` (33): function/arrow expressions with no binding name
 
-#### `ui/src/lib/plain-language.ts` — 289 lines · 0 tests · REACHABLE · imported by 7
+#### `ui/src/lib/plain-language.ts` — 289 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (15): const PLAIN_STAGE_LABELS, function toPlainStage, interface ArtifactFigures, function preciseFigures, interface Limitation, function limitationFor, const PLAIN_NOUNS, function toPlainNoun, const PLAIN_AUTONOMY_LABELS, const PLAIN_AUTONOMY_ORDER, function toPlainAutonomy, const SUGGESTED_AGENT_NAMES, function suggestAgentNames, interface InheritedContext, function inheritContext
 - `fns` (7): toPlainStage:45, preciseFigures:104, limitationFor:120, toPlainNoun:192, toPlainAutonomy:239, suggestAgentNames:259, inheritContext:280
 
 #### `ui/src/lib/plan-draft.ts` — 36 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (2): interface DraftTask, function draftPlanTasks
 - `fns` (1): draftPlanTasks:9
-- `anon` (7): function/arrow expressions with no binding name
 
 #### `ui/src/lib/project-groups.test.ts` — 45 lines · 5 tests · TEST · imported by 0
 - `fns` (1): s:7
-- `anon` (10): function/arrow expressions with no binding name
 
 #### `ui/src/lib/provider-groups.test.ts` — 24 lines · 3 tests · TEST · imported by 0
-- `anon` (10): function/arrow expressions with no binding name
 
-#### `ui/src/lib/provider-groups.ts` — 32 lines · 0 tests · REACHABLE · imported by 2
+#### `ui/src/lib/provider-groups.ts` — 32 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (2): interface ProviderGroupIds, function rowsByGroup
 - `fns` (2): rowsByGroup:13, pick:20
-- `anon` (6): function/arrow expressions with no binding name
 
 #### `ui/src/lib/providers.test.ts` — 212 lines · 18 tests · TEST · imported by 0
 - `fns` (2): card:22, row:78
-- `anon` (29): function/arrow expressions with no binding name
 
-#### `ui/src/lib/providers.ts` — 639 lines · 0 tests · REACHABLE · imported by 5
+#### `ui/src/lib/providers.ts` — 639 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (34): interface VaultKeyRow, interface ProviderEntry, function envVarFromAuth, function modelsDevUrl, function providerModels, function toProviderEntry, function logoUrl, interface ProviderDirectory, interface CatalogStatus, interface CatalogProviderRow, interface CatalogModel, interface CatalogProviderPayload, function isLiveRow, function catalogProviders, function catalogProviderModels, function catalogRefresh, function catalogSetInterval, function providerProbe, function providerProfileUpsert, function providerProfileRemove, function providerNimProfile, function formatPerM, function previewCatalogRows, function providerFields, function subsequenceMatch, function providerMatches, function searchProviders, function configuredProviders, function parseHeaderLines, function parseProfileModels, function parseJsonObject, interface CustomProfilePayload, function toProfilePayload, function loadProviderDirectory
-- `fns` (28): envVarFromAuth:46, modelsDevUrl:51, providerModels:78, toProviderEntry:84, fallbackEntries:136, logoUrl:162, isLiveRow:267, catalogProviders:273, catalogProviderModels:291, catalogRefresh:318, catalogSetInterval:330, providerProbe:340, providerProfileUpsert:351, providerProfileRemove:370, providerNimProfile:377, formatPerM:384, previewCatalogRows:394, providerFields:422, subsequenceMatch:438, providerMatches:449, searchProviders:460, configuredProviders:473, parseHeaderLines:484, parseProfileModels:511, int:525, parseJsonObject:541, toProfilePayload:571, loadProviderDirectory:620
-- `anon` (23): function/arrow expressions with no binding name
+- `fns` (30): envVarFromAuth:46, modelsDevUrl:51, providerModels:78, toProviderEntry:84, fallbackEntries:136, logoUrl:162, isLiveRow:267, catalogProviders:273, catalogProviderModels:291, catalogRefresh:318, catalogSetInterval:330, providerProbe:340, providerProfileUpsert:351, providerProfileRemove:370, providerNimProfile:377, formatPerM:384, previewCatalogRows:394, providerFields:422, subsequenceMatch:438, providerMatches:449, searchProviders:460, configuredProviders:473, parseHeaderLines:484, parseProfileModels:511, int:525, parseJsonObject:541, toProfilePayload:571, id:584, loadProviderDirectory:620, cards:629
 
 #### `ui/src/lib/queue-while-generating.test.ts` — 105 lines · 6 tests · TEST · imported by 0
 - `fns` (2): freshSession:9, closeStream:20
-- `anon` (10): function/arrow expressions with no binding name
 
 #### `ui/src/lib/reasoning-stream.test.ts` — 112 lines · 6 tests · TEST · imported by 0
 - `fns` (3): freshSession:9, closeStream:23, lastMessage:27
-- `anon` (8): function/arrow expressions with no binding name
 
 #### `ui/src/lib/recovery.test.ts` — 67 lines · 11 tests · TEST · imported by 0
-- `anon` (11): function/arrow expressions with no binding name
 
-#### `ui/src/lib/recovery.ts` — 53 lines · 0 tests · REACHABLE · imported by 2
+#### `ui/src/lib/recovery.ts` — 53 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (6): function saferMode, const TRY_SAFER_NOTE, const TRY_DIFFERENTLY_NOTE, function saferPrompt, function differentlyPrompt, function hasUndoableWork
 - `fns` (4): saferMode:19, saferPrompt:34, differentlyPrompt:40, hasUndoableWork:50
-- `anon` (1): function/arrow expressions with no binding name
 
 #### `ui/src/lib/rewind-goals-queue.test.ts` — 266 lines · 19 tests · TEST · imported by 0
 - `fns` (2): freshSession:14, seedTranscript:21
-- `anon` (47): function/arrow expressions with no binding name
 
 #### `ui/src/lib/runtime.test.ts` — 61 lines · 5 tests · TEST · imported by 0
-- `fns` (4): live:18, preview:19, live:32, preview:35
-- `anon` (5): function/arrow expressions with no binding name
+- `fns` (1): previous:26
 
-#### `ui/src/lib/runtime.ts` — 119 lines · 0 tests · REACHABLE · imported by 45
+#### `ui/src/lib/runtime.ts` — 119 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (15): type RuntimeReadiness, interface RuntimeState, function getRuntimeState, function subscribeRuntimeState, function useRuntimeState, function setRuntimeState, function runtimeError, function nativeCall, function bridgeCall, function markRuntimeLive, function setRuntimeDetail, function markSidecarOffline, function markVaultSetup, function markVaultLocked, function markRuntimeBooting
 - `fns` (14): shellAvailable:4, getRuntimeState:32, subscribeRuntimeState:36, useRuntimeState:41, setRuntimeState:49, runtimeError:55, nativeCall:67, bridgeCall:83, markRuntimeLive:96, setRuntimeDetail:100, markSidecarOffline:104, markVaultSetup:108, markVaultLocked:112, markRuntimeBooting:116
-- `anon` (2): function/arrow expressions with no binding name
 
-#### `ui/src/lib/scheduler.ts` — 414 lines · 0 tests · REACHABLE · imported by 5
+#### `ui/src/lib/scheduler.test.ts` — 97 lines · 6 tests · TEST · imported by 0
+- `fns` (1): installShell:10
+
+#### `ui/src/lib/scheduler.ts` — 414 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (30): type SchedulerRequestKey, function createSchedulerRequestKey, type SchedulerTrigger, interface SchedulerJob, interface SchedulerList, interface NudgeSuggestion, function schedulerList, function schedulerCreate, function schedulerDelete, function schedulerEnable, function schedulerPause, function schedulerResume, function schedulerRunNow, function schedulerBattery, function schedulerFireEvent, function schedulerNudges, function schedulerNudge, interface SchedulerIncident, interface SchedulerNotepad, function schedulerNotepadGet, function schedulerNotepadAppend, function schedulerIncidents, function schedulerIncidentAck, interface AutomationRun, function schedulerRuns, function schedulerDuplicate, interface AutomationExport, function schedulerExport, function schedulerDoctor, function triggerLabel
-- `fns` (62): normalizeSchedulerRequestKey:20, createSchedulerRequestKey:32, schedulerKeyFor:43, settleSchedulerKey:52, schedulerList:147, live:150, preview:151, schedulerCreate:155, live:165, preview:166, schedulerDelete:170, live:173, preview:174, schedulerEnable:178, live:181, preview:182, schedulerPause:186, live:189, preview:190, schedulerResume:194, live:197, preview:198, schedulerRunNow:208, live:217, preview:218, schedulerBattery:228, live:231, preview:232, schedulerFireEvent:240, live:250, preview:251, schedulerNudges:262, live:265, preview:266, schedulerNudge:271, live:274, preview:275, schedulerNotepadGet:299, live:302, preview:303, schedulerNotepadAppend:308, live:311, preview:312, schedulerIncidents:317, live:320, preview:321, schedulerIncidentAck:326, live:329, preview:330, schedulerRuns:351, live:354, preview:355, schedulerDuplicate:360, live:363, preview:364, schedulerExport:384, live:387, preview:388, schedulerDoctor:393, live:396, preview:397, triggerLabel:402
+- `fns` (25): normalizeSchedulerRequestKey:20, createSchedulerRequestKey:32, randomUUID:33, schedulerKeyFor:43, settleSchedulerKey:52, schedulerList:147, schedulerCreate:155, schedulerDelete:170, schedulerEnable:178, schedulerPause:186, schedulerResume:194, schedulerRunNow:208, schedulerBattery:228, schedulerFireEvent:240, schedulerNudges:262, schedulerNudge:271, schedulerNotepadGet:299, schedulerNotepadAppend:308, schedulerIncidents:317, schedulerIncidentAck:326, schedulerRuns:351, schedulerDuplicate:360, schedulerExport:384, schedulerDoctor:393, triggerLabel:402
 
 #### `ui/src/lib/session-recording.test.ts` — 105 lines · 8 tests · TEST · imported by 0
-- `fns` (6): memStorage:16, get:19, set:20, remove:21, fakeTarget:25, getAttribute:28
-- `anon` (8): function/arrow expressions with no binding name
+- `fns` (2): memStorage:16, fakeTarget:25
 
-#### `ui/src/lib/session-recording.ts` — 116 lines · 0 tests · REACHABLE · imported by 3
+#### `ui/src/lib/session-recording.ts` — 116 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (11): interface RecordedSessionEvent, const MAX_RECORDED_EVENTS, interface RecordingStorage, const localStorageRecordingStorage, function __setRecordingStorage, function sessionRecordingEnabled, function setSessionRecording, function recordSessionEvent, function getRecordedEvents, function clearRecordedEvents, function exportRecordedEvents
-- `fns` (12): get:29, set:36, remove:43, __setRecordingStorage:55, sessionRecordingEnabled:59, setSessionRecording:63, elementIdentity:70, recordSessionEvent:83, getRecordedEvents:91, clearRecordedEvents:95, loadEvents:99, exportRecordedEvents:113
+- `fns` (10): __setRecordingStorage:55, sessionRecordingEnabled:59, setSessionRecording:63, elementIdentity:70, tag:73, recordSessionEvent:83, getRecordedEvents:91, clearRecordedEvents:95, loadEvents:99, exportRecordedEvents:113
 
 #### `ui/src/lib/session-truth.test.ts` — 212 lines · 14 tests · TEST · imported by 0
-- `anon` (23): function/arrow expressions with no binding name
 
 #### `ui/src/lib/settings-groups.test.ts` — 198 lines · 14 tests · TEST · imported by 0
 - `fns` (2): row:18, acpRow:101
-- `anon` (23): function/arrow expressions with no binding name
 
-#### `ui/src/lib/settings.ts` — 542 lines · 0 tests · REACHABLE · imported by 8
+#### `ui/src/lib/settings.ts` — 542 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (53): type SettingsKind, type SettingsState, type SettingsHealth, interface SettingsReadModel, type RuntimeLocation, interface BackendBindingView, interface AgentConfigOptionView, interface SessionLoadoutRow, type AgentProtocol, type AgentAuthMode, type ModelOwner, type AgentReadiness, interface AgentSettings, type ConnectionKind, type ConnectionState, interface ConnectionRecord, type ScheduleTrigger, type ScheduleState, interface ScheduleSettings, type ExtensionKind, interface InstalledExtension, interface SettingsMutationResult, type ProviderSettingsRow, interface ProviderGroups, interface ProvidersEnvelope, interface DefaultModelEnvelope, interface AgentsEnvelope, interface ConnectionsEnvelope, interface SchedulesEnvelope, interface ExtensionsEnvelope, function groupConnectionRecords, function mutationLooksLive, function chooseAfterMutation, function assertNoAgentConfigWrite, function hasHostLaunchOverride, function projectModelOwner, function agentAuthenticationLabel, function nativeSurfaceNotReplaced, const SETTINGS_IPC_MATRIX, function assertSettingsCommandDoesNotWriteAgentConfig, function settingsProvidersList, function settingsDefaultModelGet, function settingsDefaultModelSet, function settingsAgentsList, function settingsAgentGet, function settingsAgentLoadout, function settingsConnectionsList, function settingsSchedulesList, function settingsScheduleGet, function settingsScheduleSetEnabled, function settingsExtensionsList, function runtimeLocationLabel, function isLaunchable
-- `fns` (35): groupConnectionRecords:276, empty:277, mutationLooksLive:294, chooseAfterMutation:302, assertNoAgentConfigWrite:311, hasHostLaunchOverride:318, projectModelOwner:329, agentAuthenticationLabel:339, nativeSurfaceNotReplaced:359, assertSettingsCommandDoesNotWriteAgentConfig:398, settingsProvidersList:413, live:416, preview:417, settingsDefaultModelGet:426, live:429, preview:430, settingsDefaultModelSet:441, settingsAgentsList:449, live:452, preview:453, settingsAgentGet:458, settingsAgentLoadout:463, settingsConnectionsList:470, live:473, preview:474, settingsSchedulesList:479, live:482, preview:483, settingsScheduleGet:487, settingsScheduleSetEnabled:496, settingsExtensionsList:504, live:507, preview:508, runtimeLocationLabel:521, isLaunchable:539
-- `anon` (3): function/arrow expressions with no binding name
+- `fns` (23): groupConnectionRecords:276, empty:277, mutationLooksLive:294, chooseAfterMutation:302, assertNoAgentConfigWrite:311, hasHostLaunchOverride:318, projectModelOwner:329, agentAuthenticationLabel:339, nativeSurfaceNotReplaced:359, assertSettingsCommandDoesNotWriteAgentConfig:398, settingsProvidersList:413, settingsDefaultModelGet:426, settingsDefaultModelSet:441, settingsAgentsList:449, settingsAgentGet:458, settingsAgentLoadout:463, settingsConnectionsList:470, settingsSchedulesList:479, settingsScheduleGet:487, settingsScheduleSetEnabled:496, settingsExtensionsList:504, runtimeLocationLabel:521, isLaunchable:539
 
 #### `ui/src/lib/skills-surfaces.test.ts` — 23 lines · 3 tests · TEST · imported by 0
-- `anon` (5): function/arrow expressions with no binding name
 
-#### `ui/src/lib/skills.ts` — 111 lines · 0 tests · REACHABLE · imported by 3
+#### `ui/src/lib/skills.ts` — 111 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (7): interface SkillRowView, function slashCatalog, function splitSkillSurfaces, function skillsCatalog, function skillsInstall, function skillsUninstall, function demoSkills
-- `fns` (12): slashCatalog:24, splitSkillSurfaces:31, skillsCatalog:41, live:44, preview:45, skillsInstall:49, live:53, preview:54, skillsUninstall:58, live:61, preview:62, demoSkills:66
-- `anon` (4): function/arrow expressions with no binding name
+- `fns` (6): slashCatalog:24, splitSkillSurfaces:31, skillsCatalog:41, skillsInstall:49, skillsUninstall:58, demoSkills:66
 
 #### `ui/src/lib/spend.test.ts` — 11 lines · 2 tests · TEST · imported by 0
-- `anon` (2): function/arrow expressions with no binding name
 
-#### `ui/src/lib/spend.ts` — 249 lines · 0 tests · REACHABLE · imported by 5
+#### `ui/src/lib/spend.ts` — 249 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (14): interface UsageRecord, type UsageSource, interface KeyUsage, interface SessionUsage, interface UsageObservations, function usageSourceLabel, function unreportedOwners, function costReadout, interface PrimarySpendView, interface UsageSnapshot, function primarySpendWarning, interface SessionTotal, function usageSnapshot, function sessionTotals
-- `fns` (12): usageSourceLabel:50, unreportedOwners:62, costReadout:69, primarySpendWarning:103, usageSnapshot:123, live:126, preview:127, sessionTotals:132, live:135, preview:136, demoSessionTotals:140, demoSnapshot:151
-- `anon` (3): function/arrow expressions with no binding name
+- `fns` (8): usageSourceLabel:50, unreportedOwners:62, costReadout:69, primarySpendWarning:103, usageSnapshot:123, sessionTotals:132, demoSessionTotals:140, demoSnapshot:151
 
-#### `ui/src/lib/spreadsheet.ts` — 255 lines · 0 tests · UNREACHED · imported by 1
+#### `ui/src/lib/spreadsheet.ts` — 255 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (28): type CellValue, interface SheetMeta, interface SheetWindow, interface XlsxWindowPayload, interface RecalcCell, interface SheetValues, interface RecalcResult, function xlsxRecalc, interface XlsxEditRequest, function xlsxEditRequest, function xlsxEditCommit, type Scalar, type CellRef, type RangeRef, type XlsxOperation, interface WorkbookBatch, function newBatch, function scalar, function parseRangeRef, interface XlsxBatchRequest, function xlsxBatchRequest, function xlsxBatchCommit, interface PivotRow, function xlsxPivot, function xlsxOpen, function cellDisplay, function colLetter, function demoRow
-- `fns` (14): xlsxRecalc:53, xlsxEditRequest:67, xlsxEditCommit:76, newBatch:118, scalar:128, parseCellRef:137, parseRangeRef:145, xlsxBatchRequest:160, xlsxBatchCommit:168, xlsxPivot:183, xlsxOpen:202, cellDisplay:216, colLetter:230, demoRow:245
-- `anon` (7): function/arrow expressions with no binding name
+- `fns` (15): xlsxRecalc:53, xlsxEditRequest:67, xlsxEditCommit:76, newBatch:118, scalar:128, parseCellRef:137, parseRangeRef:145, xlsxBatchRequest:160, xlsxBatchCommit:168, xlsxPivot:183, xlsxOpen:202, cellDisplay:216, colLetter:230, rem:234, demoRow:245
 
-#### `ui/src/lib/stagger.ts` — 26 lines · 0 tests · REACHABLE · imported by 6
+#### `ui/src/lib/stagger.ts` — 26 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (3): interface StaggerOptions, function staggerStyle, const staggerDelay
 - `fns` (1): staggerStyle:17
 
-#### `ui/src/lib/storage.ts` — 182 lines · 0 tests · REACHABLE · imported by 1
+#### `ui/src/lib/storage.ts` — 182 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (13): interface StorageHealth, interface TreemapRect, interface StorageScan, interface LargeFile, interface DupGroup, interface CleanupProposal, function storageHealth, function storageScan, function storageLargeFiles, function storageDuplicates, function storageCleanupProposals, function storageBattery, re-export bytes
 - `fns` (12): storageHealth:65, storageScan:71, storageLargeFiles:77, storageDuplicates:87, storageCleanupProposals:97, storageBattery:112, bytes:117, demoHealth:133, demoScan:146, demoLargeFiles:161, demoDupGroups:169, demoCleanupProposals:176
-- `anon` (6): function/arrow expressions with no binding name
 
-#### `ui/src/lib/store.ts` — 3,136 lines · 0 tests · REACHABLE · imported by 101
+#### `ui/src/lib/store.ts` — 3,136 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (42): type ViewId, type ChatMode, function normalizeChatMode, type SessionStatus, interface ToolCallRecord, interface ChatMessage, interface ChatError, interface ArtifactActionUi, interface ArtifactServerState, interface Artifact, interface ProgressStep, interface MCQInterrupt, interface TaskElevation, interface TaskSnapshot, interface VerificationRecord, interface StreamStats, interface Session, function sessionTranscriptMarkdown, function sanitizeSessionRows, function mergeHydratedSessions, interface Automation, interface SessionLayout, interface DiaryEntry, interface PendingPatch, interface Connector, interface MemoryItem, interface PermissionEntry, const mockSessions, const mockMemory, interface LiveBudget, interface QueuedTurn, type TurnDispatcher, interface LiveNotification, interface AgentSendBlocker, function streamElapsedMs, function resetStreamingTestState, type StatusBarPills, const readStatusBarPills, const SETTINGS_SECTION_IDS, type SettingsSectionId, function taskScopeHash, const useAppStore
-- `fns` (159): normalizeChatMode:56, sessionTranscriptMarkdown:295, sanitizeSessionRows:307, mergeHydratedSessions:327, iso:422, markFirstDelta:706, ttfbFor:711, freshId:721, streamSessionId:727, hasActiveStream:732, bindStreamId:738, retireStream:749, streamElapsedMs:757, resetStreamingTestState:767, patchActiveAssistant:781, patchStreamMessage:801, readStatusBarPills:825, writeStatusBarPills:836, readPowerMode:847, writePowerMode:858, readPermission:922, writePermission:932, taskScopeHash:944, streamTestReset:1414, setWorkProjection:1436, setCoworkMode:1438, markSessionsHydrated:1441, setActiveSession:1442, newSession:1458, openAutomationRun:1485, pushMonitor:1512, clearMonitorBadge:1526, deleteSession:1527, reopenClosedSession:1561, reopenClosedSessionId:1570, purgeClosedSession:1596, purgeAllClosed:1598, cycleSession:1599, renameSession:1608, toggleSessionPinned:1617, clearSessionMessages:1624, compactSessionMessages:1638, setSessionGoal:1661, markGoalAchieved:1670, rewindToUserMessage:1675, rewindBeforeAssistant:1693, forkSession:1716, setActiveView:1741, setBrowserAttached:1753, clearBrowserUrl:1754, setDesktopAttached:1757, setCuaVisionGate:1760, setProviderKeysConfigured:1762, openSetup:1764, closeSetup:1765, setAgentSendBlocker:1767, setSessionChiefPin:1774, clearSessionChiefPin:1782, setUserDefaultChief:1800, openInBrowser:1801, toggleRail:1812, setRailCollapsed:1816, setFullscreenView:1821, addView:1824, closeView:1834, switchOfficeDoc:1845, closeOfficeDoc:1850, openOfficeDoc:1861, reorderViews:1893, setScopedView:1907, setScopedDoc:1909, patchArtifactServer:1914, setArtifactActions:1915, setAiPointerOpen:1918, pushDiaryEntry:1921, clearDiary:1923, toggleSidebar:1926, togglePowerMode:1929, setPowerMode:1935, setDevMode:1941, setStatusBarPills:1944, setComposerMode:1950, setComposerValue:1952, setSelectedAgent:1958, setSelectedModel:1974, cycleModelVariant:1979, setPersonaId:1989, setSoulId:1991, setAgentName:1993, setLocalRuntime:1996, setReconnect:2001, noteStreamTick:2002, forkFromMessage:2027, setAutoRoute:2053, setRouting:2055, setCenterScreen:2059, setSettingsSection:2061, setPermissionMode:2063, syncAutonomyFromRust:2080, freezeTaskSnapshot:2093, clearTaskSnapshot:2113, respondAutonomyCard:2114, pushAutonomyLimit:2169, effectiveAutonomyLevel:2189, setComposerRole:2208, setTaskFolder:2210, setOfficeFlyoutOpen:2213, setPaletteOpen:2216, setCockpitOpen:2219, toggleAgentPause:2222, notify:2243, notifyMcpError:2244, setLiveAgents:2247, setLiveBudget:2249, pushLiveNotification:2255, markLiveNotificationsRead:2260, setLiveStreamId:2264, clearLiveStreamId:2266, pushUserMessage:2274, streamStart:2291, appendReasoning:2314, streamAppend:2341, streamFinalize:2387, streamFail:2429, streamBudgetKill:2481, streamCancelled:2524, streamCitations:2557, streamWalkthrough:2566, streamToolCall:2578, streamToolResult:2596, streamToolProgress:2628, retryToolCall:2638, streamStep:2680, pushMcq:2708, respondMcq:2748, clearMcq:2805, setAcpHandle:2822, getAcpHandle:2859, clearAcpHandles:2861, setAcpConfigOptions:2874, setPendingPlan:2880, setTurnDispatcher:2887, queueTurn:2890, editQueuedTurn:2911, removeQueuedTurn:2922, setQueuePaused:2933, promoteQueuedTurn:2936, dequeueNextTurn:2952, parkEditorWrite:2982, takeEditorWrite:2984, pushVerification:2996, setOnboardingDone:3008, saveSessionLayout:3022, restoreSessionLayout:3036, setSessionPaused:3066, setPendingPatches:3076, setNlAutomationDraft:3080, setSessionCapabilityOverride:3083, resetSessionCapabilities:3098
-- `anon` (193): function/arrow expressions with no binding name
+- `fns` (28): normalizeChatMode:56, sessionTranscriptMarkdown:295, sanitizeSessionRows:307, mergeHydratedSessions:327, iso:422, markFirstDelta:706, ttfbFor:711, freshId:721, streamSessionId:727, hasActiveStream:732, bindStreamId:738, retireStream:749, streamElapsedMs:757, resetStreamingTestState:767, patchActiveAssistant:781, patchStreamMessage:801, readStatusBarPills:825, writeStatusBarPills:836, readPowerMode:847, writePowerMode:858, readPermission:922, writePermission:932, taskScopeHash:944, next:1604, used:2015, list:2632, clearMcq:2805, list:2924
 
 #### `ui/src/lib/tasks-contract.test.ts` — 110 lines · 5 tests · TEST · imported by 0
-- `fns` (2): assertTaskRecord:14, req:17
-- `anon` (9): function/arrow expressions with no binding name
+- `fns` (3): assertTaskRecord:14, req:17, b:47
 
-#### `ui/src/lib/tasks.ts` — 198 lines · 0 tests · REACHABLE · imported by 2
+#### `ui/src/lib/tasks.ts` — 198 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (12): type TaskKind, type TaskStatus, type DeliveryState, interface TaskRecord, function tasksList, function tasksShow, function tasksCancel, function tasksRetry, function tasksEnqueue, function onTaskUpdate, function taskStatusLabel, function taskKindLabel
-- `fns` (18): tasksList:99, live:102, preview:107, tasksShow:111, live:114, preview:124, tasksCancel:128, live:131, preview:135, tasksRetry:139, live:142, preview:147, tasksEnqueue:151, live:158, preview:163, onTaskUpdate:169, taskStatusLabel:183, taskKindLabel:195
-- `anon` (2): function/arrow expressions with no binding name
+- `fns` (8): tasksList:99, tasksShow:111, tasksCancel:128, tasksRetry:139, tasksEnqueue:151, onTaskUpdate:169, taskStatusLabel:183, taskKindLabel:195
 
-#### `ui/src/lib/tauri.ts` — 241 lines · 0 tests · REACHABLE · imported by 79
+#### `ui/src/lib/tauri.ts` — 241 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (17): re-export listen, type UnlistenFn, function inTauri, function invoke, interface ChatWireEvent, function schedulerPauseSession, function onChatEvent, interface RuntimeStatus, function runtimeStatus, interface SidecarProbe, function sidecarProbe, interface AgentCard, interface InterruptCard, interface CockpitState, function cockpitSnapshot, function agentStop, function agentUndo
 - `fns` (10): inTauri:21, invoke:26, schedulerPauseSession:112, onChatEvent:124, runtimeStatus:137, sidecarProbe:149, cockpitSnapshot:186, agentStop:192, agentUndo:198, demoCockpit:203
-- `anon` (2): function/arrow expressions with no binding name
 
 #### `ui/src/lib/terminal-split.test.ts` — 73 lines · 7 tests · TEST · imported by 0
 - `fns` (1): tabs:4
-- `anon` (8): function/arrow expressions with no binding name
 
-#### `ui/src/lib/terminal-split.ts` — 53 lines · 0 tests · REACHABLE · imported by 2
+#### `ui/src/lib/terminal-split.ts` — 53 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (5): type SplitDir, interface SplitTab, type SplitDecision, function decideSplit, function decideUnsplit
 - `fns` (2): decideSplit:23, decideUnsplit:50
-- `anon` (3): function/arrow expressions with no binding name
 
 #### `ui/src/lib/terminal.test.ts` — 61 lines · 6 tests · TEST · imported by 0
-- `anon` (10): function/arrow expressions with no binding name
+- `fns` (1): originalWindow:9
 
-#### `ui/src/lib/terminal.ts` — 392 lines · 0 tests · REACHABLE · imported by 3
+#### `ui/src/lib/terminal.ts` — 392 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (33): type TerminalBackendId, type TerminalOriginId, type IntegrationQuality, interface TerminalProfile, interface TerminalProfilesResponse, interface TerminalPtyStatus, interface TerminalCommandRecord, interface TerminalEvent, interface TerminalCommandsResponse, function demoProfiles, function terminalProfiles, function terminalSpawn, function terminalRun, function terminalWrite, function terminalResize, function terminalKill, function terminalStatus, function terminalSetDefault, function terminalSetAutomation, function terminalConfirmUnsafe, function terminalSetShellIntegration, function terminalCommands, function terminalLastCommandContext, function terminalHistoryContext, interface TerminalReplayResponse, function terminalReplay, function onTerminalEvent, function decodeChunk, function backendLabel, function originLabel, function isInteractiveOrigin, function cwdLeaf, function computeXtermTheme
 - `fns` (27): demoProfiles:94, mk:96, terminalProfiles:127, terminalSpawn:132, terminalRun:149, terminalWrite:164, terminalResize:169, terminalKill:174, terminalStatus:179, terminalSetDefault:184, terminalSetAutomation:189, terminalConfirmUnsafe:196, terminalSetShellIntegration:203, terminalCommands:211, terminalLastCommandContext:225, terminalHistoryContext:239, terminalReplay:277, onTerminalEvent:288, decodeChunk:297, backendLabel:310, originLabel:317, isInteractiveOrigin:324, cwdLeaf:329, tokenHsl:344, tokenHsla:355, computeXtermTheme:367, g:373
-- `anon` (19): function/arrow expressions with no binding name
 
 #### `ui/src/lib/theme-persist.test.ts` — 66 lines · 6 tests · TEST · imported by 0
-- `fns` (2): stubStorage:9, getItem:12
-- `anon` (7): function/arrow expressions with no binding name
+- `fns` (2): originalWindow:7, stubStorage:9
 
-#### `ui/src/lib/trajectory.ts` — 85 lines · 0 tests · REACHABLE · imported by 1
+#### `ui/src/lib/trajectory.ts` — 85 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (6): interface ContextInjection, const TRAJECTORY_SOURCES, type TrajectorySource, function trajectorySessions, function trajectorySnapshot, function groupBySource
-- `fns` (5): trajectorySessions:33, trajectorySnapshot:39, groupBySource:47, demoSessions:61, demoInjections:65
-- `anon` (3): function/arrow expressions with no binding name
+- `fns` (6): trajectorySessions:33, trajectorySnapshot:39, groupBySource:47, src:53, demoSessions:61, demoInjections:65
 
-#### `ui/src/lib/ui-prefs.ts` — 138 lines · 0 tests · REACHABLE · imported by 7
+#### `ui/src/lib/ui-prefs.ts` — 138 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (10): function writePref, function readStoredText, function writeStoredText, function readStoredFlag, function writeStoredFlag, function removeStoredKey, function readPref, function usePref, type PermissionMode, type ComposerRole
 - `fns` (11): readRaw:5, writePref:17, writeRaw:21, parseOrUndefined:30, readStoredText:56, writeStoredText:74, readStoredFlag:85, writeStoredFlag:93, removeStoredKey:100, readPref:111, usePref:116
-- `anon` (2): function/arrow expressions with no binding name
 
-#### `ui/src/lib/utils.ts` — 7 lines · 0 tests · REACHABLE · imported by 116
+#### `ui/src/lib/utils.ts` — 7 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): function cn
 - `fns` (1): cn:4
 
-#### `ui/src/lib/ux-metrics.ts` — 125 lines · 0 tests · REACHABLE · imported by 3
+#### `ui/src/lib/ux-metrics.ts` — 125 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (11): interface UxMetrics, function recordSessionCreated, function recordTurnCompleted, function recordTurnFailed, function recordToolResult, function recordApprovalDecision, function getUxMetrics, function resetUxMetrics, function timeToValueMs, function completionRate, function errorRate
 - `fns` (13): load:30, save:43, mutate:51, recordSessionCreated:58, recordTurnCompleted:65, recordTurnFailed:73, recordToolResult:80, recordApprovalDecision:87, getUxMetrics:94, resetUxMetrics:98, timeToValueMs:107, completionRate:113, errorRate:120
-- `anon` (5): function/arrow expressions with no binding name
 
-#### `ui/src/lib/ux.ts` — 128 lines · 0 tests · REACHABLE · imported by 3
+#### `ui/src/lib/ux.ts` — 128 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (6): function useDebouncedValue, interface VirtualListOptions, interface VirtualList, function useVirtualList, function useElementSize, function useDebouncedCallback
 - `fns` (4): useDebouncedValue:12, useVirtualList:43, useElementSize:90, useDebouncedCallback:113
-- `anon` (12): function/arrow expressions with no binding name
 
-#### `ui/src/lib/version.ts` — 15 lines · 0 tests · REACHABLE · imported by 2
+#### `ui/src/lib/version.ts` — 15 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (1): const ARCH_VERSION
 
 #### `ui/src/lib/voice.test.ts` — 14 lines · 3 tests · TEST · imported by 0
-- `anon` (3): function/arrow expressions with no binding name
 
-#### `ui/src/lib/voice.ts` — 114 lines · 0 tests · REACHABLE · imported by 3
+#### `ui/src/lib/voice.ts` — 114 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (10): interface VoiceStatus, interface VoiceUtterance, function pcmFloatToI16, function voiceStatus, function voiceVadClassify, function voiceProcessUtterance, function speechSynthesisAvailable, function speakText, function stopSpeaking, function captureUtterance
 - `fns` (8): pcmFloatToI16:25, voiceStatus:34, voiceVadClassify:46, voiceProcessUtterance:50, speechSynthesisAvailable:62, speakText:67, stopSpeaking:76, captureUtterance:84
-- `anon` (3): function/arrow expressions with no binding name
 
 #### `ui/src/lib/walkthrough.test.ts` — 17 lines · 2 tests · TEST · imported by 0
-- `anon` (2): function/arrow expressions with no binding name
 
-#### `ui/src/lib/walkthrough.ts` — 32 lines · 0 tests · REACHABLE · imported by 2
+#### `ui/src/lib/walkthrough.ts` — 32 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (2): interface WalkthroughStop, function layoutWalkthroughStops
 - `fns` (1): layoutWalkthroughStops:15
-- `anon` (1): function/arrow expressions with no binding name
 
 #### `ui/src/lib/work.test.ts` — 64 lines · 7 tests · TEST · imported by 0
 - `fns` (1): env:4
-- `anon` (7): function/arrow expressions with no binding name
 
-#### `ui/src/lib/work.ts` — 491 lines · 0 tests · REACHABLE · imported by 7
+#### `ui/src/lib/work.ts` — 491 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (37): interface WorkAddress, function sessionOwnerSurface, function sessionKindLabel, interface WorkPresence, interface WorkEventEnvelope, type DomainEvent, type OperationalEvent, type PresenceEvent, type RuntimeEvent, type WorkEvent, function presenceLabel, type WorkLifecycleState, function workStateLabel, function waitReasonLabel, interface WorkEventDescription, function describeWorkEvent, interface WorkSnapshot, function workList, function workSnapshot, function workEvents, function workPresence, function workReviews, interface PtySession, interface AgentSession, function workPtySpawn, function workPtyResize, function workPtySignal, function workPtyClose, function workPtySnapshot, function workWorktreeCreate, function workWorktreeAttach, function workWorktreeOp, function workAgentSpawn, function workAgentOp, function workAgentSessions, interface ChildWork, function workChildren
 - `fns` (24): sessionOwnerSurface:20, sessionKindLabel:34, presenceLabel:186, workStateLabel:209, waitReasonLabel:231, describeWorkEvent:256, shortId:373, workList:386, workSnapshot:391, workEvents:396, workPresence:401, workReviews:406, workPtySpawn:434, workPtyResize:437, workPtySignal:440, workPtyClose:443, workPtySnapshot:446, workWorktreeCreate:451, workWorktreeAttach:457, workWorktreeOp:460, workAgentSpawn:464, workAgentOp:470, workAgentSessions:473, workChildren:487
-- `anon` (17): function/arrow expressions with no binding name
 
 #### `ui/src/main.tsx` — 37 lines · 0 tests · ENTRY · imported by 0
 - `fns` (1): Bootstrap:12
-- `anon` (3): function/arrow expressions with no binding name
 
-#### `ui/src/test/dom-harness.tsx` — 171 lines · 0 tests · TEST-ONLY · imported by 5
+#### `ui/src/test/dom-harness.tsx` — 171 lines · 0 tests · NOT IMPORTED · imported by 0
 - `exports` (12): type ShellHandler, function registerDom, function unregisterDom, function installShell, function removeShell, interface Mounted, function mount, function tick, function waitFor, function click, function withAct, function findButton
-- `fns` (20): chief_default_get:36, local_models:37, local_hardware:38, runtime_status:39, registerDom:43, unregisterDom:50, installShell:59, invoke:64, transformCallback:70, unregisterCallback:71, convertFileSrc:72, removeShell:79, mount:91, unmount:108, settle:116, tick:121, waitFor:136, click:151, withAct:161, findButton:166
-- `anon` (6): function/arrow expressions with no binding name
+- `fns` (12): registerDom:43, unregisterDom:50, installShell:59, removeShell:79, win:80, mount:91, settle:116, tick:121, waitFor:136, click:151, withAct:161, findButton:166
 
 
 ---
@@ -6986,8 +6544,8 @@ population. `wiring:` is the §11 verdict.
 
 ### 11.2 Rust files with zero cross-file references
 
-128 of 508 files have no `stem::` reference anywhere else.
-**85 are non-test source files** (the real candidates); the other 43 are
+131 of 511 files have no `stem::` reference anywhere else.
+**85 are non-test source files** (the real candidates); the other 46 are
 integration tests, fixtures, and mock servers, which are never referenced by name.
 
 **Non-test source orphans, by directory:**
@@ -7026,7 +6584,7 @@ integration tests, fixtures, and mock servers, which are never referenced by nam
 - `crates/everyaios-codeintel/src` (3): docs_lookup, mock-lsp-server, session
 - `crates/everyaios-codeintel/tests` (1): lsp_runner
 - `crates/everyaios-core/src` (26): blueprint, challenge_tests, combos, connector_approvals, decline, diagnose, distill, graph, hooks, inventory, kernel_budget, local_tests, migrate, migration, mock-worker, pairing, probe, remote_attach, research, resources, routing, self_audit, store, sync, tracing, watcher_glue
-- `crates/everyaios-core/tests` (9): acceptance_edit_ladder, acceptance_terminal_automation, acceptance_upgrade_evidence, p10_bench, p10_e2e, p10_security, p50_gates, sidecar_handoff, worker_pool
+- `crates/everyaios-core/tests` (11): acceptance_edit_ladder, acceptance_terminal_automation, acceptance_upgrade_evidence, automation_v1, p10_bench, p10_e2e, p10_security, p50_gates, recovery_replay, sidecar_handoff, worker_pool
 - `crates/everyaios-desktop/src` (1): policy
 - `crates/everyaios-desktop/tests` (1): live_linux_e2e
 - `crates/everyaios-eval/src` (2): report, store
@@ -7034,7 +6592,7 @@ integration tests, fixtures, and mock servers, which are never referenced by nam
 - `crates/everyaios-guard/src` (6): batch, configscan, ecc, loopguard, manifest, profiles
 - `crates/everyaios-ipc/src` (1): frame
 - `crates/everyaios-mcp/src` (5): mcp-standalone-server, mock-mcp-server, protocol, record, store
-- `crates/everyaios-mcp/tests` (4): attach, external_client, p10_external_client, p50_mcp_e2e
+- `crates/everyaios-mcp/tests` (5): attach, external_client, p10_external_client, p50_mcp_e2e, streamable_http
 - `crates/everyaios-memory/src` (9): abort, bench, branch, cache, graph, maintain, repair, seek, usage
 - `crates/everyaios-memory/tests` (1): acceptance_memory_fusion
 - `crates/everyaios-office/src` (7): author, parts, patch, planner, provenance, read, storage
@@ -7108,12 +6666,90 @@ The tail of this list is where "referenced once, by its own re-export" hides.
 
 ### 11.4 TS/TSX files never imported by anything
 
-171 files (excluding test files).
+458 files (excluding test files).
 
+- `ARCH/archive/coordinator-loop/agent-patterns.ts`
+- `ARCH/archive/coordinator-loop/chat.ts`
+- `ARCH/archive/coordinator-loop/chunking.ts`
+- `ARCH/archive/coordinator-loop/citations.ts`
+- `ARCH/archive/coordinator-loop/context-providers.ts`
+- `ARCH/archive/coordinator-loop/edit-strategies.ts`
+- `ARCH/archive/coordinator-loop/first-class-tools.ts`
+- `ARCH/archive/coordinator-loop/intent.ts`
+- `ARCH/archive/coordinator-loop/mention.ts`
+- `ARCH/archive/coordinator-loop/plan.ts`
+- `ARCH/archive/coordinator-loop/prompt.ts`
+- `ARCH/archive/coordinator-loop/tools.ts`
+- `ARCH/archive/core-engine/src/automation-engine.ts`
+- `ARCH/archive/core-engine/src/context/index.ts`
+- `ARCH/archive/core-engine/src/context/manager.ts`
+- `ARCH/archive/core-engine/src/engine.ts`
+- `ARCH/archive/core-engine/src/index.ts`
+- `ARCH/archive/core-engine/src/policy/index.ts`
+- `ARCH/archive/core-engine/src/policy/permission-gate.ts`
+- `ARCH/archive/core-engine/src/policy/trust-ladder.ts`
+- `ARCH/archive/core-engine/src/prompt-compiler/index.ts`
+- `ARCH/archive/core-engine/src/risk-compass.ts`
+- `ARCH/archive/core-engine/src/stages/index.ts`
+- `ARCH/archive/core-engine/src/stages/permission-gate.ts`
+- `ARCH/archive/core-engine/src/stages/retrieval-planner.ts`
+- `ARCH/archive/core-engine/src/stages/tool-planner.ts`
+- `ARCH/archive/core-engine/src/surface-contract.ts`
+- `ARCH/archive/core-engine/src/trajectory.ts`
+- `ARCH/archive/core-engine/src/types.ts`
 - `ARCH/archive/core-engine/vitest.config.ts`
+- `packages/coordinator/src/agui.ts`
+- `packages/coordinator/src/budget.ts`
+- `packages/coordinator/src/capability-seams.ts`
+- `packages/coordinator/src/catalog.ts`
+- `packages/coordinator/src/channel-a.ts`
+- `packages/coordinator/src/combo-pick.ts`
 - `packages/coordinator/src/companion.ts`
+- `packages/coordinator/src/connector-bridge.ts`
+- `packages/coordinator/src/context-trace.ts`
+- `packages/coordinator/src/cua-brief.ts`
+- `packages/coordinator/src/cua-perceive.ts`
+- `packages/coordinator/src/cua-replan.ts`
+- `packages/coordinator/src/cua-route.ts`
+- `packages/coordinator/src/cua-skill.ts`
+- `packages/coordinator/src/cua-stop.ts`
+- `packages/coordinator/src/cua-verify.ts`
+- `packages/coordinator/src/dream-diary.ts`
+- `packages/coordinator/src/external-inbox.ts`
+- `packages/coordinator/src/fabric.ts`
+- `packages/coordinator/src/fleet.ts`
+- `packages/coordinator/src/frame.ts`
+- `packages/coordinator/src/goal.ts`
+- `packages/coordinator/src/guard.ts`
+- `packages/coordinator/src/h32.ts`
+- `packages/coordinator/src/heap.ts`
+- `packages/coordinator/src/mcp-bridge.ts`
+- `packages/coordinator/src/mcp-catalog.ts`
+- `packages/coordinator/src/mcp-install.ts`
+- `packages/coordinator/src/mcp-manager.ts`
+- `packages/coordinator/src/message.ts`
+- `packages/coordinator/src/migration-import.ts`
+- `packages/coordinator/src/observations.ts`
+- `packages/coordinator/src/orphan.ts`
+- `packages/coordinator/src/patch-overlay.ts`
+- `packages/coordinator/src/persona-registry.ts`
+- `packages/coordinator/src/primary-agent.ts`
+- `packages/coordinator/src/reflection.ts`
+- `packages/coordinator/src/resumable.ts`
+- `packages/coordinator/src/router.ts`
 - `packages/coordinator/src/run-identity.ts`
+- `packages/coordinator/src/runtime-bind.ts`
+- `packages/coordinator/src/scheduler.ts`
+- `packages/coordinator/src/scorer.ts`
+- `packages/coordinator/src/skill-warm.ts`
+- `packages/coordinator/src/spend-split.ts`
+- `packages/coordinator/src/stream-session.ts`
+- `packages/coordinator/src/surfaces.ts`
+- `packages/coordinator/src/waterfall.ts`
 - `packages/coordinator/src/work-events.ts`
+- `packages/core-agents/src/index.ts`
+- `packages/core-agents/src/registry.ts`
+- `packages/core-agents/src/types.ts`
 - `packages/core-ai/src/artifact-maker/detect-artifact-intent.ts`
 - `packages/core-ai/src/artifact-maker/docmaker-prompt.ts`
 - `packages/core-ai/src/artifact-maker/document-spec.ts`
@@ -7125,6 +6761,7 @@ The tail of this list is where "referenced once, by its own re-export" hides.
 - `packages/core-ai/src/chat/system-prompt.ts`
 - `packages/core-ai/src/context/context-compressor.ts`
 - `packages/core-ai/src/context/tiered-compaction.ts`
+- `packages/core-ai/src/index.ts`
 - `packages/core-ai/src/local/llm-runtime.ts`
 - `packages/core-ai/src/metrics/metrics-collector.ts`
 - `packages/core-ai/src/retrieval/performance-stack.ts`
@@ -7145,27 +6782,37 @@ The tail of this list is where "referenced once, by its own re-export" hides.
 - `packages/core-connectors/src/adapters/coingecko-adapter.ts`
 - `packages/core-connectors/src/adapters/dropbox-adapter.ts`
 - `packages/core-connectors/src/adapters/finnhub-adapter.ts`
+- `packages/core-connectors/src/adapters/github-adapter.ts`
 - `packages/core-connectors/src/adapters/google-drive-oauth-adapter.ts`
 - `packages/core-connectors/src/adapters/google-places-adapter.ts`
 - `packages/core-connectors/src/adapters/hacker-news-adapter.ts`
 - `packages/core-connectors/src/adapters/ical-adapter.ts`
 - `packages/core-connectors/src/adapters/microsoft-graph-adapter.ts`
 - `packages/core-connectors/src/adapters/nominatim-adapter.ts`
+- `packages/core-connectors/src/adapters/notion-oauth-adapter.ts`
 - `packages/core-connectors/src/adapters/openlibrary-adapter.ts`
 - `packages/core-connectors/src/adapters/public-holidays-adapter.ts`
 - `packages/core-connectors/src/adapters/reddit-adapter.ts`
 - `packages/core-connectors/src/adapters/restcountries-adapter.ts`
+- `packages/core-connectors/src/adapters/rss-adapter.ts`
 - `packages/core-connectors/src/adapters/slack-adapter.ts`
 - `packages/core-connectors/src/adapters/soundcloud-adapter.ts`
 - `packages/core-connectors/src/adapters/spotify-adapter.ts`
 - `packages/core-connectors/src/adapters/stackexchange-adapter.ts`
+- `packages/core-connectors/src/adapters/telegram-adapter.ts`
 - `packages/core-connectors/src/adapters/todoist-adapter.ts`
 - `packages/core-connectors/src/adapters/trello-adapter.ts`
+- `packages/core-connectors/src/adapters/weather-adapter.ts`
 - `packages/core-connectors/src/adapters/wikipedia-adapter.ts`
 - `packages/core-connectors/src/adapters/worldtime-adapter.ts`
 - `packages/core-connectors/src/adapters/youtube-adapter.ts`
 - `packages/core-connectors/src/composio-adapter.ts`
+- `packages/core-connectors/src/composio-catalog.ts`
+- `packages/core-connectors/src/connection-manager.ts`
+- `packages/core-connectors/src/index.ts`
+- `packages/core-connectors/src/orchestrator.ts`
 - `packages/core-connectors/vitest.config.ts`
+- `packages/core-domain/src/index.ts`
 - `packages/core-domain/src/types/assistant-request-plan.ts`
 - `packages/core-domain/src/types/billing.ts`
 - `packages/core-domain/src/types/connectors.ts`
@@ -7189,6 +6836,7 @@ The tail of this list is where "referenced once, by its own re-export" hides.
 - `packages/core-memory/src/correction-store.ts`
 - `packages/core-memory/src/decay.ts`
 - `packages/core-memory/src/forgetting-to-remember.ts`
+- `packages/core-memory/src/index.ts`
 - `packages/core-memory/src/kg-extraction.ts`
 - `packages/core-memory/src/kg-llm-refinement.ts`
 - `packages/core-memory/src/knowledge-graph.ts`
@@ -7196,8 +6844,10 @@ The tail of this list is where "referenced once, by its own re-export" hides.
 - `packages/core-memory/src/router-integration.ts`
 - `packages/core-memory/src/service.ts`
 - `packages/core-memory/src/spreading-activation.ts`
+- `packages/core-memory/src/temporal-anticipation.ts`
 - `packages/core-memory/vitest.config.ts`
 - `packages/core-providers/src/capability-registry.ts`
+- `packages/core-providers/src/index.ts`
 - `packages/core-providers/src/pricing/live-pricing.ts`
 - `packages/core-providers/src/registry.ts`
 - `packages/core-providers/src/types.ts`
@@ -7216,6 +6866,7 @@ The tail of this list is where "referenced once, by its own re-export" hides.
 - `packages/core-search/src/fetch-and-rerank.ts`
 - `packages/core-search/src/fetch-cascade.ts`
 - `packages/core-search/src/governed-transport.ts`
+- `packages/core-search/src/index.ts`
 - `packages/core-search/src/mcp-client.ts`
 - `packages/core-search/src/mobile.ts`
 - `packages/core-search/src/parallel-web-search-cascade.ts`
@@ -7246,114 +6897,240 @@ The tail of this list is where "referenced once, by its own re-export" hides.
 - `packages/core-security/src/crypto.ts`
 - `packages/core-security/src/index.ts`
 - `packages/core-security/vitest.config.ts`
+- `packages/core-tools/src/image-generation.ts`
+- `packages/core-tools/src/index.ts`
+- `packages/core-tools/src/tool-function-calling.ts`
+- `packages/core-tools/src/tool-runtime.ts`
+- `packages/core-tools/src/types.ts`
+- `ui/src/App.tsx`
+- `ui/src/components/chat/agent-model-picker.tsx`
+- `ui/src/components/chat/artifact-card.tsx`
+- `ui/src/components/chat/chat-composer.tsx`
+- `ui/src/components/chat/chat-panel.tsx`
+- `ui/src/components/chat/mcq-interrupt-card.tsx`
+- `ui/src/components/chat/message-bubble.tsx`
+- `ui/src/components/chat/now-doing-strip.tsx`
+- `ui/src/components/chat/pending-queue-chips.tsx`
+- `ui/src/components/chat/progress-steps.tsx`
+- `ui/src/components/chat/session-tabs.tsx`
+- `ui/src/components/chat/session-timeline.tsx`
+- `ui/src/components/chat/tool-chip.tsx`
+- `ui/src/components/chat/turn-checkpoint.tsx`
+- `ui/src/components/nps-prompt.tsx`
+- `ui/src/components/onboarding-modal.tsx`
+- `ui/src/components/panels/agent-builder-panel.tsx`
+- `ui/src/components/panels/agents-models-section.tsx`
+- `ui/src/components/panels/analytics-panel.tsx`
+- `ui/src/components/panels/analytics-sections.tsx`
+- `ui/src/components/panels/automation-editor.tsx`
+- `ui/src/components/panels/automations-panel.tsx`
+- `ui/src/components/panels/capability-matrix-panel.tsx`
+- `ui/src/components/panels/connectors-panel.tsx`
+- `ui/src/components/panels/discover-section.tsx`
+- `ui/src/components/panels/feedback-panel.tsx`
+- `ui/src/components/panels/guard-panel.tsx`
+- `ui/src/components/panels/home-launchpad.tsx`
+- `ui/src/components/panels/local-models-panel.tsx`
+- `ui/src/components/panels/memory-panel.tsx`
+- `ui/src/components/panels/runtime-session-section.tsx`
+- `ui/src/components/panels/schedules-section.tsx`
+- `ui/src/components/panels/settings-panel.tsx`
+- `ui/src/components/panels/settings-providers.tsx`
+- `ui/src/components/panels/settings-sections-extra.tsx`
+- `ui/src/components/panels/settings-sections-security.tsx`
+- `ui/src/components/panels/settings-sections-studio.tsx`
+- `ui/src/components/panels/settings-sections.tsx`
+- `ui/src/components/panels/settings-shared.tsx`
+- `ui/src/components/panels/skills-panel.tsx`
+- `ui/src/components/panels/tasks-rail.tsx`
+- `ui/src/components/panels/usage-metrics-section.tsx`
+- `ui/src/components/shell/ai-pointer.tsx`
+- `ui/src/components/shell/center-column.tsx`
+- `ui/src/components/shell/cockpit-slideover.tsx`
+- `ui/src/components/shell/command-palette.tsx`
+- `ui/src/components/shell/companion-chip.tsx`
+- `ui/src/components/shell/keyboard-shortcuts.tsx`
+- `ui/src/components/shell/left-sidebar.tsx`
+- `ui/src/components/shell/notifications-popover.tsx`
+- `ui/src/components/shell/right-rail.tsx`
+- `ui/src/components/shell/runtime-status-banner.tsx`
+- `ui/src/components/shell/setup-gate.tsx`
+- `ui/src/components/shell/status-bar.tsx`
+- `ui/src/components/shell/title-bar.tsx`
+- `ui/src/components/shell/toast-bridge.tsx`
+- `ui/src/components/shell/vault-gate.tsx`
+- `ui/src/components/theme-provider.tsx`
 - `ui/src/components/ui/accordion.tsx`
 - `ui/src/components/ui/alert-dialog.tsx`
 - `ui/src/components/ui/alert.tsx`
 - `ui/src/components/ui/aspect-ratio.tsx`
+- `ui/src/components/ui/avatar.tsx`
+- `ui/src/components/ui/badge.tsx`
 - `ui/src/components/ui/breadcrumb.tsx`
+- `ui/src/components/ui/button.tsx`
 - `ui/src/components/ui/calendar.tsx`
+- `ui/src/components/ui/card.tsx`
 - `ui/src/components/ui/carousel.tsx`
 - `ui/src/components/ui/chart.tsx`
 - `ui/src/components/ui/checkbox.tsx`
+- `ui/src/components/ui/collapsible.tsx`
 - `ui/src/components/ui/command.tsx`
 - `ui/src/components/ui/context-menu.tsx`
+- `ui/src/components/ui/dialog.tsx`
 - `ui/src/components/ui/drawer.tsx`
+- `ui/src/components/ui/dropdown-menu.tsx`
+- `ui/src/components/ui/empty-state.tsx`
 - `ui/src/components/ui/error-state.tsx`
 - `ui/src/components/ui/form.tsx`
 - `ui/src/components/ui/hover-card.tsx`
 - `ui/src/components/ui/input-otp.tsx`
+- `ui/src/components/ui/input.tsx`
+- `ui/src/components/ui/label.tsx`
+- `ui/src/components/ui/loading-state.tsx`
 - `ui/src/components/ui/menubar.tsx`
 - `ui/src/components/ui/navigation-menu.tsx`
 - `ui/src/components/ui/pagination.tsx`
+- `ui/src/components/ui/popover.tsx`
+- `ui/src/components/ui/progress.tsx`
 - `ui/src/components/ui/radio-group.tsx`
 - `ui/src/components/ui/resizable.tsx`
+- `ui/src/components/ui/scroll-area.tsx`
+- `ui/src/components/ui/select.tsx`
+- `ui/src/components/ui/separator.tsx`
+- `ui/src/components/ui/sheet.tsx`
 - `ui/src/components/ui/sidebar.tsx`
+- `ui/src/components/ui/skeleton.tsx`
+- `ui/src/components/ui/slider.tsx`
 - `ui/src/components/ui/sonner.tsx`
+- `ui/src/components/ui/switch.tsx`
+- `ui/src/components/ui/table.tsx`
+- `ui/src/components/ui/tabs.tsx`
+- `ui/src/components/ui/textarea.tsx`
+- `ui/src/components/ui/toast.tsx`
+- `ui/src/components/ui/toaster.tsx`
 - `ui/src/components/ui/toggle-group.tsx`
+- `ui/src/components/ui/toggle.tsx`
+- `ui/src/components/ui/tooltip.tsx`
 - `ui/src/components/views/artifact-view.tsx`
+- `ui/src/components/views/audit-view.tsx`
+- `ui/src/components/views/blueprint-view.tsx`
+- `ui/src/components/views/browse-view.tsx`
+- `ui/src/components/views/chat-overlay.tsx`
 - `ui/src/components/views/desktop-view.tsx`
+- `ui/src/components/views/diff-view.tsx`
+- `ui/src/components/views/folder-view.tsx`
 - `ui/src/components/views/generative-view.tsx`
+- `ui/src/components/views/generative/generative-ui.tsx`
+- `ui/src/components/views/ide/diff-rail.tsx`
+- `ui/src/components/views/ide/editor-tabs.tsx`
+- `ui/src/components/views/ide/explorer-panel.tsx`
 - `ui/src/components/views/ide/ide-workbench.tsx`
+- `ui/src/components/views/ide/monaco-pane.tsx`
+- `ui/src/components/views/ide/problems-panel.tsx`
+- `ui/src/components/views/ide/scm-panel.tsx`
+- `ui/src/components/views/kanban-view.tsx`
+- `ui/src/components/views/local-server-view.tsx`
+- `ui/src/components/views/office-docx-view.tsx`
+- `ui/src/components/views/office-file-switcher.tsx`
+- `ui/src/components/views/office-open-bar.tsx`
 - `ui/src/components/views/office-pdf-view.tsx`
+- `ui/src/components/views/office-pptx-view.tsx`
+- `ui/src/components/views/office-ribbon.tsx`
 - `ui/src/components/views/office-xlsx-view.tsx`
 - `ui/src/components/views/pdf-canvas.tsx`
+- `ui/src/components/views/progress-view.tsx`
+- `ui/src/components/views/shell-view.tsx`
+- `ui/src/components/views/storage-view.tsx`
+- `ui/src/components/views/trajectory-view.tsx`
 - `ui/src/globals.d.ts`
+- `ui/src/hooks/use-mobile.ts`
+- `ui/src/hooks/use-toast.ts`
+- `ui/src/lib/acp.ts`
+- `ui/src/lib/agent-backend.ts`
+- `ui/src/lib/agent-builder.ts`
+- `ui/src/lib/agent-registry.ts`
+- `ui/src/lib/agents.ts`
+- `ui/src/lib/artifact.ts`
+- `ui/src/lib/at-refs.ts`
+- `ui/src/lib/attachments.ts`
+- `ui/src/lib/audit.ts`
+- `ui/src/lib/bridge.ts`
+- `ui/src/lib/browser.ts`
+- `ui/src/lib/calendar.ts`
+- `ui/src/lib/capabilities.ts`
+- `ui/src/lib/capability-status.ts`
+- `ui/src/lib/catalog-models.ts`
+- `ui/src/lib/checkpoints.ts`
+- `ui/src/lib/chief-handoff.ts`
+- `ui/src/lib/citations.ts`
+- `ui/src/lib/cockpit.ts`
+- `ui/src/lib/connections.ts`
+- `ui/src/lib/connector-scopes.ts`
+- `ui/src/lib/cua-dag.ts`
+- `ui/src/lib/desktop-apps.ts`
+- `ui/src/lib/desktop.ts`
+- `ui/src/lib/discovery.ts`
 - `ui/src/lib/doctor.ts`
+- `ui/src/lib/errors.ts`
+- `ui/src/lib/feedback.ts`
+- `ui/src/lib/first-run.ts`
+- `ui/src/lib/fs.ts`
+- `ui/src/lib/fuzzy.ts`
+- `ui/src/lib/git.ts`
+- `ui/src/lib/guard.ts`
+- `ui/src/lib/i18n.ts`
+- `ui/src/lib/interrupts.ts`
+- `ui/src/lib/layout.ts`
+- `ui/src/lib/local-models.ts`
+- `ui/src/lib/lsp.ts`
+- `ui/src/lib/mcp.ts`
+- `ui/src/lib/memory.ts`
+- `ui/src/lib/model-fit.ts`
+- `ui/src/lib/model-routing.ts`
+- `ui/src/lib/models-download.ts`
+- `ui/src/lib/monaco.ts`
+- `ui/src/lib/nps.ts`
+- `ui/src/lib/oauth.ts`
+- `ui/src/lib/occupancy.ts`
+- `ui/src/lib/office.ts`
+- `ui/src/lib/openai-server.ts`
+- `ui/src/lib/perf.ts`
+- `ui/src/lib/personas.ts`
+- `ui/src/lib/plain-language.ts`
 - `ui/src/lib/plan-draft.ts`
+- `ui/src/lib/provider-groups.ts`
+- `ui/src/lib/providers.ts`
+- `ui/src/lib/recovery.ts`
+- `ui/src/lib/runtime.ts`
+- `ui/src/lib/scheduler.ts`
+- `ui/src/lib/session-recording.ts`
+- `ui/src/lib/settings.ts`
+- `ui/src/lib/skills.ts`
+- `ui/src/lib/spend.ts`
+- `ui/src/lib/spreadsheet.ts`
+- `ui/src/lib/stagger.ts`
+- `ui/src/lib/storage.ts`
+- `ui/src/lib/store.ts`
+- `ui/src/lib/tasks.ts`
+- `ui/src/lib/tauri.ts`
+- `ui/src/lib/terminal-split.ts`
+- `ui/src/lib/terminal.ts`
+- `ui/src/lib/trajectory.ts`
+- `ui/src/lib/ui-prefs.ts`
+- `ui/src/lib/utils.ts`
+- `ui/src/lib/ux-metrics.ts`
+- `ui/src/lib/ux.ts`
+- `ui/src/lib/version.ts`
+- `ui/src/lib/voice.ts`
+- `ui/src/lib/walkthrough.ts`
+- `ui/src/lib/work.ts`
+- `ui/src/test/dom-harness.tsx`
 - `ui/vite.config.ts`
 
 ### 11.5 TS/TSX files imported ONLY by tests (test-only modules)
 
-68 files.
+0 files.
 
-- `ARCH/archive/coordinator-loop/agent-patterns.ts`
-- `ARCH/archive/coordinator-loop/chat.ts`
-- `ARCH/archive/coordinator-loop/chunking.ts`
-- `ARCH/archive/coordinator-loop/citations.ts`
-- `ARCH/archive/coordinator-loop/context-providers.ts`
-- `ARCH/archive/coordinator-loop/edit-strategies.ts`
-- `ARCH/archive/coordinator-loop/first-class-tools.ts`
-- `ARCH/archive/coordinator-loop/intent.ts`
-- `ARCH/archive/coordinator-loop/mention.ts`
-- `ARCH/archive/coordinator-loop/plan.ts`
-- `ARCH/archive/coordinator-loop/prompt.ts`
-- `ARCH/archive/coordinator-loop/tools.ts`
-- `ARCH/archive/core-engine/src/engine.ts`
-- `ARCH/archive/core-engine/src/index.ts`
-- `ARCH/archive/core-engine/src/policy/permission-gate.ts`
-- `ARCH/archive/core-engine/src/policy/trust-ladder.ts`
-- `packages/coordinator/src/budget.ts`
-- `packages/coordinator/src/capability-seams.ts`
-- `packages/coordinator/src/catalog.ts`
-- `packages/coordinator/src/channel-a.ts`
-- `packages/coordinator/src/combo-pick.ts`
-- `packages/coordinator/src/context-trace.ts`
-- `packages/coordinator/src/cua-brief.ts`
-- `packages/coordinator/src/cua-perceive.ts`
-- `packages/coordinator/src/cua-replan.ts`
-- `packages/coordinator/src/cua-route.ts`
-- `packages/coordinator/src/cua-skill.ts`
-- `packages/coordinator/src/cua-stop.ts`
-- `packages/coordinator/src/cua-verify.ts`
-- `packages/coordinator/src/dream-diary.ts`
-- `packages/coordinator/src/external-inbox.ts`
-- `packages/coordinator/src/fabric.ts`
-- `packages/coordinator/src/fleet.ts`
-- `packages/coordinator/src/goal.ts`
-- `packages/coordinator/src/guard.ts`
-- `packages/coordinator/src/h32.ts`
-- `packages/coordinator/src/mcp-catalog.ts`
-- `packages/coordinator/src/mcp-install.ts`
-- `packages/coordinator/src/mcp-manager.ts`
-- `packages/coordinator/src/migration-import.ts`
-- `packages/coordinator/src/patch-overlay.ts`
-- `packages/coordinator/src/persona-registry.ts`
-- `packages/coordinator/src/reflection.ts`
-- `packages/coordinator/src/resumable.ts`
-- `packages/coordinator/src/router.ts`
-- `packages/coordinator/src/runtime-bind.ts`
-- `packages/coordinator/src/skill-warm.ts`
-- `packages/coordinator/src/spend-split.ts`
-- `packages/coordinator/src/stream-session.ts`
-- `packages/coordinator/src/surfaces.ts`
-- `packages/coordinator/src/waterfall.ts`
-- `packages/core-agents/src/index.ts`
-- `packages/core-connectors/src/adapters/github-adapter.ts`
-- `packages/core-connectors/src/adapters/notion-oauth-adapter.ts`
-- `packages/core-connectors/src/adapters/rss-adapter.ts`
-- `packages/core-connectors/src/adapters/telegram-adapter.ts`
-- `packages/core-connectors/src/adapters/weather-adapter.ts`
-- `packages/core-connectors/src/connection-manager.ts`
-- `packages/core-connectors/src/orchestrator.ts`
-- `packages/core-memory/src/temporal-anticipation.ts`
-- `packages/core-providers/src/index.ts`
-- `packages/core-tools/src/index.ts`
-- `packages/core-tools/src/types.ts`
-- `ui/src/lib/calendar.ts`
-- `ui/src/lib/catalog-models.ts`
-- `ui/src/lib/chief-handoff.ts`
-- `ui/src/lib/model-routing.ts`
-- `ui/src/test/dom-harness.tsx`
 
 ### 11.6 Tauri commands with no static `invoke()` call site
 
@@ -7425,7 +7202,7 @@ matches unrelated identifiers. Counts above 50 are flagged `(noisy)` and carry n
 | `file_outline` | `codeintel_cmds` | 0 | 2 |
 | `repomap_build` | `codeintel_cmds` | 0 | 4 |
 | `agui_send` | `crate` | 0 | 6 |
-| `version` | `crate` | 1 | 773 (noisy) |
+| `version` | `crate` | 1 | 777 (noisy) |
 
 
 ---
@@ -7628,7 +7405,7 @@ matches unrelated identifiers. Counts above 50 are flagged `(noisy)` and carry n
 
 ## 13. Non-source inventory — every remaining tracked file
 
-The 166 tracked files that are not Rust, TypeScript, or an npm manifest. Every one has a `####`
+The 167 tracked files that are not Rust, TypeScript, or an npm manifest. Every one has a `####`
 entry below — nothing is summarised away at this level. Line counts are omitted for binaries.
 The `wired:` verdicts in §13.7 are name searches over CI YAML, `package.json` scripts, and sibling scripts — the
 same heuristic class as §11, so a script invoked through a variable or a wrapper reads as unwired.
@@ -7641,9 +7418,9 @@ same heuristic class as §11, so a script invoked through a variable or a wrappe
 | §13.4 | 26 |
 | §13.5 | 7 |
 | §13.6 | 35 |
-| §13.7 | 40 |
+| §13.7 | 41 |
 | §13.8 | 24 |
-| **TOTAL** | **166** |
+| **TOTAL** | **167** |
 
 ### 13.1 Rust manifests
 
@@ -8073,7 +7850,7 @@ same heuristic class as §11, so a script invoked through a variable or a wrappe
 - purpose: P70.D gate — the user-facing surfaces that describe and repair the install.
 - wired: CI ×1 · package.json ×1
 
-#### `scripts/check-doc-refs.mjs` — 15.3 KB · 348 lines
+#### `scripts/check-doc-refs.mjs` — 15.5 KB · 350 lines
 - purpose: P69.E11 — cross-document reference validator.
 - wired: CI ×1 · package.json ×1 · other scripts ×1
 
@@ -8191,6 +7968,9 @@ same heuristic class as §11, so a script invoked through a variable or a wrappe
 - purpose: P70.E — release qualification harness (E1–E12).
 - wired: CI ×2 · package.json ×2 · other scripts ×2
 
+#### `scripts/run-windows-v1-validation.ps1` — 53.5 KB · binary
+- `run-windows-v1-validation.ps1` — 53.5 KB
+
 #### `scripts/verify-packaged-e2e.mjs` — 4.7 KB · 133 lines
 - purpose: A missing file is a FAILED check, not a stack trace: a path that moved (or
 - wired: CI ×1
@@ -8294,7 +8074,7 @@ _None._
 
 ## 14. Documentation index — every tracked `.md`
 
-**All 200 Markdown files** carry an entry: title, size, and opening sentence. This closes the gap where the
+**All 202 Markdown files** carry an entry: title, size, and opening sentence. This closes the gap where the
 first draft said the corpus was "listed with their headings" but was in fact only listed by name. These are the repo's
 claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in them, not capability drift — tag them [C] per §0.
 
@@ -8315,9 +8095,10 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 | docs/ | 4 | 376 |
 | docs/codebase/ | 10 | 977 |
 | docs/release/ | 4 | 208 |
-| root — specs, handover, and this map | 17 | 14,198 |
+| docs/testing/ | 2 | 892 |
+| root — specs, handover, and this map | 17 | 14,234 |
 | ui/ — UI design docs | 1 | 83 |
-| **TOTAL** | **200** | **42,916** |
+| **TOTAL** | **202** | **43,844** |
 
 ### 14.1 .agents/
 
@@ -9250,7 +9031,19 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 
 - opening: **Signals (all local-first, none is telemetry):**
 
-### 14.14 root — specs, handover, and this map
+### 14.14 docs/testing/
+
+#### `docs/testing/README.md` — 46 lines · 2.2 KB
+> Windows v1 validation artifacts
+
+- opening: This directory contains the operator-facing artifacts for validating the Windows v1 candidate on a real Windows host.
+
+#### `docs/testing/windows-v1-runbook.md` — 846 lines · 36.6 KB
+> Windows v1 validation runbook
+
+- opening: This is the operator procedure for a later Windows validation run.
+
+### 14.15 root — specs, handover, and this map
 
 #### `AGENTS.md` — 309 lines · 14.3 KB
 > Repository Agent Instructions
@@ -9270,10 +9063,10 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 
 - opening: Read [`ARCH/CORE.md`](ARCH/CORE.md) — the root architecture authority — and [`AGENTS.md`](AGENTS.md), which is the durable contract for any agent or human working here.
 
-#### `CURRENT_RUN.md` — 2,552 lines · 296.3 KB
+#### `CURRENT_RUN.md` — 2,588 lines · 300.3 KB
 > CURRENT RUN STATE — Task Handover & Checkpoint
 
-- opening: - Complete the requested read-only audit of the 20 `BRIEFS`, the permitted `clone2` comparator repositories, and the relevant `clone3` comparator areas, then produce one evidence-backed add/upgrade/optimize/reject disposition for EveryAIOS.
+- opening: - Fully specify and permanently reconcile the Chat Presentation Projection contract (collapsible closed-by-default sub-boxes, multi-tool drawers, CLI stream normalization, large payload spooling, zero
 
 #### `DESKTOP-APP-SPEC.md` — 1,595 lines · 341.8 KB
 > DESKTOP-APP-SPEC.md — Complete Product Specification
@@ -9340,7 +9133,7 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 
 - opening: **Date**: September 16, 2026 **Target**: EveryAIOS Desktop Cowork Runtime & Multi-Agent Swarm Subsystems **Scope**: Two-Plane Native Architecture, External Agent Swapping (OpenCode, Grok Build, Codex)
 
-### 14.15 ui/ — UI design docs
+### 14.16 ui/ — UI design docs
 
 #### `ui/DESIGN-SYSTEM.md` — 83 lines · 7.0 KB
 > EveryAIOS Design System (P11.1)
@@ -9360,7 +9153,7 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 | ---: | --- | --- | ---: | ---: | ---: |
 | 1 | `runtime_status` | `crate` | 1 | 1 | 0 |
 | 2 | `sidecar_probe` | `crate` | 1 | 1 | 0 |
-| 3 | `version` | `crate` | 0 | 1 | 773 (noisy) |
+| 3 | `version` | `crate` | 0 | 1 | 777 (noisy) |
 | 4 | `catalog_sync_plan` | `catalog_cmds` | 0 | 0 | 0 |
 | 5 | `catalog_sync_refresh` | `catalog_cmds` | 0 | 0 | 0 |
 | 6 | `catalog_status` | `catalog_cmds` | 0 | 0 | 2 |
@@ -9528,7 +9321,7 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 | 168 | `scheduler_duplicate` | `scheduler_cmds` | 1 | 1 | 0 |
 | 169 | `scheduler_export` | `scheduler_cmds` | 1 | 1 | 0 |
 | 170 | `scheduler_battery` | `scheduler_cmds` | 1 | 1 | 0 |
-| 171 | `scheduler_fire_event` | `scheduler_cmds` | 1 | 1 | 0 |
+| 171 | `scheduler_fire_event` | `scheduler_cmds` | 1 | 2 | 0 |
 | 172 | `scheduler_fire_webhook` | `scheduler_cmds` | 0 | 0 | 0 |
 | 173 | `scheduler_nudges` | `scheduler_cmds` | 1 | 1 | 0 |
 | 174 | `scheduler_nudge` | `scheduler_cmds` | 1 | 1 | 0 |
@@ -9786,7 +9579,7 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 - `crates/everyaios-core/src/bin/` — mock-worker.rs
 - `crates/everyaios-core/src/connectors/` — browser_session.rs, calendar.rs, gmail.rs, graph.rs, gws.rs, imap_smtp.rs, mod.rs, native.rs, read_first.rs, scopes.rs, workspace.rs
 - `crates/everyaios-core/src/models/` — best.rs, cache.rs, fit.rs, hf.rs, local_url.rs, mlx.rs, mod.rs, probe.rs, store.rs
-- `crates/everyaios-core/tests/` — acceptance_edit_ladder.rs, acceptance_terminal_automation.rs, acceptance_upgrade_evidence.rs, p10_bench.rs, p10_e2e.rs, p10_security.rs, p50_gates.rs, sidecar_handoff.rs, worker_pool.rs
+- `crates/everyaios-core/tests/` — acceptance_edit_ladder.rs, acceptance_terminal_automation.rs, acceptance_upgrade_evidence.rs, automation_v1.rs, p10_bench.rs, p10_e2e.rs, p10_security.rs, p50_gates.rs, recovery_replay.rs, sidecar_handoff.rs, worker_pool.rs
 - `crates/everyaios-core/tests/fixtures/` — p64_edit_ladder.json
 - `crates/everyaios-desktop/` — Cargo.toml
 - `crates/everyaios-desktop/src/` — apps.rs, launch.rs, lib.rs, ocr.rs, policy.rs, readiness.rs, router.rs, types.rs, verify.rs
@@ -9803,7 +9596,7 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 - `crates/everyaios-mcp/` — Cargo.toml
 - `crates/everyaios-mcp/src/` — attach.rs, hijack.rs, lib.rs, loopback.rs, manager.rs, npx.rs, protocol.rs, record.rs, remote.rs, server.rs, store.rs
 - `crates/everyaios-mcp/src/bin/` — mcp-standalone-server.rs, mock-mcp-server.rs
-- `crates/everyaios-mcp/tests/` — attach.rs, external_client.rs, p10_external_client.rs, p50_mcp_e2e.rs
+- `crates/everyaios-mcp/tests/` — attach.rs, external_client.rs, p10_external_client.rs, p50_mcp_e2e.rs, streamable_http.rs
 - `crates/everyaios-memory/` — Cargo.toml
 - `crates/everyaios-memory/src/` — abort.rs, actr.rs, avoid.rs, bench.rs, bm25.rs, branch.rs, cache.rs, classify.rs, cognee.rs, compaction.rs, embedding.rs, fsrs.rs, fusion.rs, ghost.rs, graph.rs, janus.rs, journey.rs, lazy_graph.rs, lib.rs, maintain.rs, paging.rs, passport.rs, planner.rs, reference.rs, reinforce.rs, repair.rs, rerank.rs, rtk.rs, saved.rs, seek.rs, summary.rs, taste.rs, usage.rs
 - `crates/everyaios-memory/tests/` — acceptance_memory_fusion.rs
@@ -9832,6 +9625,7 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 - `docs/codebase/` — README.md, architecture.md, components.md, data-and-state.md, decisions.md, external-systems.md, flows.md, freshness.json, hotspots.md, invariants.md, tests-and-verification.md
 - `docs/packaging/` — budgets.json
 - `docs/release/` — launch-checklist.md, post-v1.md, retrospective-pack.md, rollout-and-hotfix.md
+- `docs/testing/` — README.md, windows-v1-runbook.md
 - `packages/coordinator/` — package.json, tsconfig.json
 - `packages/coordinator/src/` — agent-builder.test.ts, agui.ts, budget.test.ts, budget.ts, capability-seams.test.ts, capability-seams.ts, catalog.test.ts, catalog.ts, channel-a.test.ts, channel-a.ts, combo-pick.test.ts, combo-pick.ts, companion.ts, connector-bridge.ts, context-trace.test.ts, context-trace.ts, core-providers.smoke.test.ts, cua-brief.test.ts, cua-brief.ts, cua-perceive.test.ts, cua-perceive.ts, cua-replan.test.ts, cua-replan.ts, cua-route.test.ts, cua-route.ts, cua-skill.test.ts, cua-skill.ts, cua-stop.test.ts, cua-stop.ts, cua-verify.test.ts, cua-verify.ts, dream-diary.test.ts, dream-diary.ts, external-inbox.test.ts, external-inbox.ts, fabric.test.ts, fabric.ts, fleet.test.ts, fleet.ts, frame.ts, goal.test.ts, goal.ts, guard.test.ts, guard.ts, h32.test.ts, h32.ts, heap.test.ts, heap.ts, index.test.ts, index.ts, live-agent-harness.test.ts, mcp-bridge.test.ts, mcp-bridge.ts, mcp-catalog.test.ts, mcp-catalog.ts, mcp-install.test.ts, mcp-install.ts, mcp-manager.test.ts, mcp-manager.ts, message.ts, migration-import.test.ts, migration-import.ts, observations.test.ts, observations.ts, orphan.ts, patch-overlay.test.ts, patch-overlay.ts, persona-registry.test.ts, persona-registry.ts, primary-agent.test.ts, primary-agent.ts, reflection-agui.test.ts, reflection.ts, resumable.test.ts, resumable.ts, router-scorer.test.ts, router.ts, run-identity.ts, runtime-bind.test.ts, runtime-bind.ts, scheduler.test.ts, scheduler.ts, scorer.test.ts, scorer.ts, skill-warm.test.ts, skill-warm.ts, spend-split.test.ts, spend-split.ts, stream-session.test.ts, stream-session.ts, surfaces.test.ts, surfaces.ts, waterfall.test.ts, waterfall.ts, work-events.ts
 - `packages/core-agents/` — package.json, tsconfig.json
@@ -9887,7 +9681,7 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 - `packages/core-tools/src/` — image-generation.ts, index.ts, tool-function-calling.ts, tool-runtime.ts, types.ts
 - `packages/core-tools/src/__tests__/` — tool-runtime.test.ts
 - `packaging/winget/` — EveryAIOS.EveryAIOS.installer.yaml, EveryAIOS.EveryAIOS.locale.en-US.yaml, EveryAIOS.EveryAIOS.yaml
-- `scripts/` — check-app-metadata.mjs, check-arch-invariants.mjs, check-artifact-hygiene.mjs, check-diagnostics-surface.mjs, check-doc-refs.mjs, check-doc-sync.mjs, check-licences.mjs, check-native-deps.mjs, check-prompt-steering.mjs, check-public-surface.mjs, check-release-matrix.mjs, check-size-budget.mjs, check-store-schemas.mjs, check-update-pipeline.mjs, check-updater-keys.mjs, check-versions.mjs, check-vocabulary.mjs, clean-profile-boot-check.mjs, gen-codebase-map.mjs, gen-icons.py, gen-release-surface.mjs, gen-sbom.mjs, ipc-parity.mjs, measure-perf-p45.mjs, p45-live-measurements.json, release-qualify.mjs, verify-packaged-e2e.mjs, zen-free-probe.mjs
+- `scripts/` — check-app-metadata.mjs, check-arch-invariants.mjs, check-artifact-hygiene.mjs, check-diagnostics-surface.mjs, check-doc-refs.mjs, check-doc-sync.mjs, check-licences.mjs, check-native-deps.mjs, check-prompt-steering.mjs, check-public-surface.mjs, check-release-matrix.mjs, check-size-budget.mjs, check-store-schemas.mjs, check-update-pipeline.mjs, check-updater-keys.mjs, check-versions.mjs, check-vocabulary.mjs, clean-profile-boot-check.mjs, gen-codebase-map.mjs, gen-icons.py, gen-release-surface.mjs, gen-sbom.mjs, ipc-parity.mjs, measure-perf-p45.mjs, p45-live-measurements.json, release-qualify.mjs, run-windows-v1-validation.ps1, verify-packaged-e2e.mjs, zen-free-probe.mjs
 - `scripts/e2e/` — debug-cancel.mjs, debug-probe.mjs, failure-injection.mjs, searxng-settings.yml, security-gate.mjs, vertical-chat.mjs
 - `scripts/e2e/lib/` — protocol.mjs, provider.mjs
 - `src-tauri/` — Cargo.lock, Cargo.toml, build.rs, tauri.conf.json
@@ -9900,25 +9694,25 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 - `ui/scripts/` — build.mjs, check-monaco-dompurify.mjs
 - `ui/src/` — App.tsx, globals.css, globals.d.ts, guard-main.ts, main.tsx
 - `ui/src/components/` — nps-prompt.tsx, onboarding-modal.test.ts, onboarding-modal.tsx, theme-provider.tsx
-- `ui/src/components/chat/` — agent-model-picker.dom.test.tsx, agent-model-picker.tsx, artifact-card.tsx, chat-composer.tsx, chat-panel.tsx, mcq-interrupt-card.tsx, message-bubble.tsx, now-doing-strip.tsx, pending-queue-chips.tsx, progress-steps.tsx, session-tabs.tsx, session-timeline.tsx, tool-chip.tsx, turn-checkpoint.tsx
-- `ui/src/components/panels/` — agent-builder-panel.tsx, agents-models-section.dom.test.tsx, agents-models-section.tsx, analytics-panel.tsx, analytics-sections.tsx, automation-editor.tsx, automations-panel.tsx, capability-matrix-panel.tsx, computer-use-section.dom.test.tsx, connectors-panel.tsx, discover-section.tsx, feedback-panel.tsx, guard-panel.tsx, home-launchpad.tsx, local-models-panel.tsx, memory-panel.tsx, runtime-session-section.tsx, schedules-section.tsx, settings-panel.tsx, settings-providers.tsx, settings-sections-extra.tsx, settings-sections-security.tsx, settings-sections-studio.tsx, settings-sections.tsx, settings-shared.tsx, skills-panel.tsx, tasks-rail.tsx, usage-metrics-section.tsx
-- `ui/src/components/shell/` — ai-pointer.tsx, center-column.tsx, cockpit-slideover.tsx, command-palette.tsx, companion-chip.tsx, keyboard-shortcuts.tsx, left-sidebar.tsx, notifications-popover.tsx, right-rail.tsx, runtime-status-banner.tsx, setup-gate.tsx, status-bar.dom.test.tsx, status-bar.tsx, title-bar.tsx, toast-bridge.tsx, vault-gate.tsx
+- `ui/src/components/chat/` — agent-model-picker.dom.test.tsx, agent-model-picker.tsx, artifact-card.tsx, casual-layer.dom.test.tsx, chat-composer.tsx, chat-panel.tsx, mcq-interrupt-card.tsx, message-bubble.tsx, now-doing-strip.tsx, pending-queue-chips.tsx, progress-steps.tsx, session-tabs.tsx, session-timeline.tsx, tool-chip.tsx, turn-checkpoint.tsx
+- `ui/src/components/panels/` — agent-builder-panel.tsx, agents-models-section.dom.test.tsx, agents-models-section.tsx, analytics-panel.tsx, analytics-sections.tsx, automation-editor.tsx, automations-panel.tsx, capability-matrix-panel.tsx, computer-use-section.dom.test.tsx, connectors-panel.dom.test.tsx, connectors-panel.tsx, discover-section.tsx, feedback-panel.tsx, guard-panel.tsx, home-launchpad.tsx, local-models-panel.tsx, memory-panel.tsx, runtime-session-section.tsx, schedules-section.tsx, settings-panel.tsx, settings-providers.tsx, settings-sections-extra.tsx, settings-sections-security.tsx, settings-sections-studio.tsx, settings-sections.tsx, settings-shared.tsx, skills-panel.tsx, tasks-rail.tsx, usage-metrics-section.tsx
+- `ui/src/components/shell/` — ai-pointer.tsx, center-column.tsx, cockpit-slideover.tsx, command-palette.tsx, companion-chip.tsx, keyboard-shortcuts.tsx, left-sidebar.tsx, notifications-popover.tsx, p0-shell.dom.test.tsx, right-rail.tsx, runtime-status-banner.tsx, setup-gate.tsx, status-bar.dom.test.tsx, status-bar.tsx, title-bar.tsx, toast-bridge.tsx, vault-gate.tsx
 - `ui/src/components/ui/` — accordion.tsx, alert-dialog.tsx, alert.tsx, aspect-ratio.tsx, avatar.tsx, badge.tsx, breadcrumb.tsx, button.tsx, calendar.tsx, card.tsx, carousel.tsx, chart.tsx, checkbox.tsx, collapsible.tsx, command.tsx, context-menu.tsx, dialog.tsx, drawer.tsx, dropdown-menu.tsx, empty-state.tsx, error-state.tsx, form.tsx, hover-card.tsx, input-otp.tsx, input.tsx, label.tsx, loading-state.tsx, menubar.tsx, navigation-menu.tsx, pagination.tsx, popover.tsx, progress.tsx, radio-group.tsx, resizable.tsx, scroll-area.tsx, select.tsx, separator.tsx, sheet.tsx, sidebar.tsx, skeleton.tsx, slider.tsx, sonner.tsx, switch.tsx, table.tsx, tabs.tsx, textarea.tsx, toast.tsx, toaster.tsx, toggle-group.tsx, toggle.tsx, tooltip.tsx
 - `ui/src/components/views/` — artifact-view.tsx, audit-view.tsx, blueprint-view.tsx, browse-view.tsx, chat-overlay.tsx, desktop-view.tsx, diff-view.tsx, folder-view.tsx, generative-view.tsx, kanban-view.tsx, local-server-view.tsx, office-docx-view.tsx, office-file-switcher.tsx, office-open-bar.tsx, office-pdf-view.tsx, office-pptx-view.tsx, office-ribbon.tsx, office-xlsx-view.tsx, pdf-canvas.tsx, progress-view.tsx, shell-view.tsx, storage-view.tsx, trajectory-view.tsx
 - `ui/src/components/views/generative/` — generative-ui.tsx
 - `ui/src/components/views/ide/` — diff-rail.tsx, editor-tabs.tsx, explorer-panel.tsx, ide-workbench.tsx, monaco-pane.tsx, problems-panel.tsx, scm-panel.tsx
 - `ui/src/hooks/` — use-mobile.ts, use-toast.ts
-- `ui/src/lib/` — acp.ts, agent-backend.test.ts, agent-backend.ts, agent-builder.ts, agent-ownership.test.ts, agent-registry.ts, agents.ts, artifact.ts, at-refs.ts, attachments.test.ts, attachments.ts, audit.ts, autonomy.test.ts, bridge-agent-send.test.ts, bridge.ts, browser.ts, calendar.test.ts, calendar.ts, capabilities.ts, capability-status.test.ts, capability-status.ts, catalog-models.test.ts, catalog-models.ts, chat-event-routing.test.ts, checkpoints-preflight.test.ts, checkpoints-restore.test.ts, checkpoints.ts, chief-handoff.test.ts, chief-handoff.ts, chief-pin.test.ts, citations.test.ts, citations.ts, cockpit.ts, connections.ts, connector-scopes.ts, cua-dag.test.ts, cua-dag.ts, design-tokens.test.ts, desktop-apps.test.ts, desktop-apps.ts, desktop.ts, discovery.ts, doctor.ts, error-ttfb.test.ts, errors.test.ts, errors.ts, feedback.ts, first-run.test.ts, first-run.ts, fs.ts, fuzzy.test.ts, fuzzy.ts, git.ts, guard-autonomy.test.ts, guard-ux.test.ts, guard.ts, i18n.ts, interrupts.test.ts, interrupts.ts, layout.ts, local-models.ts, lsp.ts, mcp.ts, memory.ts, model-fit.test.ts, model-fit.ts, model-routing.test.ts, model-routing.ts, models-download.ts, monaco.ts, nps.test.ts, nps.ts, oauth.ts, occupancy.test.ts, occupancy.ts, office-open-bar.test.ts, office.ts, openai-server.ts, perf.ts, personas.ts, plain-language.test.ts, plain-language.ts, plan-draft.ts, project-groups.test.ts, provider-groups.test.ts, provider-groups.ts, providers.test.ts, providers.ts, queue-while-generating.test.ts, reasoning-stream.test.ts, recovery.test.ts, recovery.ts, rewind-goals-queue.test.ts, runtime.test.ts, runtime.ts, scheduler.ts, session-recording.test.ts, session-recording.ts, session-truth.test.ts, settings-groups.test.ts, settings.ts, skills-surfaces.test.ts, skills.ts, spend.test.ts, spend.ts, spreadsheet.ts, stagger.ts, storage.ts, store.ts, tasks-contract.test.ts, tasks.ts, tauri.ts, terminal-split.test.ts, terminal-split.ts, terminal.test.ts, terminal.ts, theme-persist.test.ts, trajectory.ts, ui-prefs.ts, utils.ts, ux-metrics.ts, ux.ts, version.ts, voice.test.ts, voice.ts, walkthrough.test.ts, walkthrough.ts, work.test.ts, work.ts
+- `ui/src/lib/` — acp.ts, agent-backend.test.ts, agent-backend.ts, agent-builder.ts, agent-ownership.test.ts, agent-registry.ts, agents.ts, artifact.ts, at-refs.ts, attachments.test.ts, attachments.ts, audit.ts, autonomy.test.ts, bridge-agent-send.test.ts, bridge.ts, browser.ts, calendar.test.ts, calendar.ts, capabilities.ts, capability-status.test.ts, capability-status.ts, catalog-models.test.ts, catalog-models.ts, chat-event-routing.test.ts, checkpoints-preflight.test.ts, checkpoints-restore.test.ts, checkpoints.ts, chief-handoff.test.ts, chief-handoff.ts, chief-pin.test.ts, citations.test.ts, citations.ts, cockpit.ts, connections.ts, connector-scopes.ts, cua-dag.test.ts, cua-dag.ts, design-tokens.test.ts, desktop-apps.test.ts, desktop-apps.ts, desktop.ts, discovery.ts, doctor.ts, error-ttfb.test.ts, errors.test.ts, errors.ts, feedback.ts, first-run.test.ts, first-run.ts, fs.ts, fuzzy.test.ts, fuzzy.ts, git.ts, guard-autonomy.test.ts, guard-ux.test.ts, guard.ts, i18n.ts, interrupts.test.ts, interrupts.ts, layout.ts, local-models.ts, lsp.ts, mcp.ts, memory.ts, model-fit.test.ts, model-fit.ts, model-routing.test.ts, model-routing.ts, models-download.ts, monaco.ts, nps.test.ts, nps.ts, oauth.ts, occupancy.test.ts, occupancy.ts, office-open-bar.test.ts, office.ts, openai-server.ts, perf.ts, personas.ts, plain-language.test.ts, plain-language.ts, plan-draft.ts, project-groups.test.ts, provider-groups.test.ts, provider-groups.ts, providers.test.ts, providers.ts, queue-while-generating.test.ts, reasoning-stream.test.ts, recovery.test.ts, recovery.ts, rewind-goals-queue.test.ts, runtime.test.ts, runtime.ts, scheduler.test.ts, scheduler.ts, session-recording.test.ts, session-recording.ts, session-truth.test.ts, settings-groups.test.ts, settings.ts, skills-surfaces.test.ts, skills.ts, spend.test.ts, spend.ts, spreadsheet.ts, stagger.ts, storage.ts, store.ts, tasks-contract.test.ts, tasks.ts, tauri.ts, terminal-split.test.ts, terminal-split.ts, terminal.test.ts, terminal.ts, theme-persist.test.ts, trajectory.ts, ui-prefs.ts, utils.ts, ux-metrics.ts, ux.ts, version.ts, voice.test.ts, voice.ts, walkthrough.test.ts, walkthrough.ts, work.test.ts, work.ts
 - `ui/src/test/` — dom-harness.tsx
 
 ### 15.4 Census
 
 | Extension | Files |
 | --- | ---: |
-| `.rs` | 508 |
-| `.ts` | 477 |
-| `.md` | 200 |
-| `.tsx` | 146 |
+| `.rs` | 511 |
+| `.ts` | 478 |
+| `.md` | 202 |
+| `.tsx` | 149 |
 | `.json` | 43 |
 | `.mjs` | 35 |
 | `.log` | 34 |
@@ -9933,12 +9727,13 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 | `.txt` | 1 |
 | `.plist` | 1 |
 | `.service` | 1 |
+| `.ps1` | 1 |
 | `.ico` | 1 |
 | `.js` | 1 |
 | `.css` | 1 |
-| **TOTAL tracked** | **1510** |
+| **TOTAL tracked** | **1520** |
 
-Lines counted across the 1503 tracked text files at generation time: **441,181** (this map excluded — self-referential).
+Lines counted across the 1512 tracked text files at generation time: **4,44,901** (this map excluded — self-referential).
 
 ### 15.5 Coverage audit — is any tracked file unaccounted for?
 
@@ -9946,12 +9741,12 @@ Each section registers the files it gives an entry to; this table is a diff agai
 
 | Section | Files accounted for |
 | --- | ---: |
-| §9 Rust — per-file `####` | 508 |
-| §10 TS/TSX — per-file `####` | 623 |
+| §9 Rust — per-file `####` | 511 |
+| §10 TS/TSX — per-file `####` | 627 |
 | §12.2 npm manifests | 13 |
-| §13 non-source inventory | 166 |
-| §14 documentation index | 200 |
-| **TOTAL** | **1510 / 1510** |
+| §13 non-source inventory | 167 |
+| §14 documentation index | 202 |
+| **TOTAL** | **1520 / 1520** |
 
 **100% of tracked files have an entry, and that is mechanically enforced:** the generator exits non-zero if this
 list is ever non-empty. Note what this does *not* claim — an entry is accounting, not explanation. §9/§10

@@ -1,5 +1,80 @@
 # CURRENT RUN STATE — Task Handover & Checkpoint
 
+## Complete Line-by-Line Markdown Documentation Audit Handover — 2026-09-25
+
+### Active Goal
+- Perform an exhaustive, line-by-line manual audit and analysis of **every single Markdown (`.md`) file** in `desktop_app/` (all 30 `ARCH/` subsystem contracts, 8 ADRs, 2 archives, living specifications, `docs/` tree, deploy guides, design system, and test reports).
+- Identify and eliminate any remaining stale statements, legacy terminology, unarchived pre-thaw text, or path/census discrepancies without using automated scripts as a substitute for reading.
+
+### Where We Stopped
+- **Read and Verified Line-by-Line (Every Single .md File in `desktop_app/`):**
+  1. **All 30 `ARCH/` Subsystem Contracts & Indexes:**
+     - `ARCH/CORE.md` (733 lines) — Single root authority, 7 planes, 16 primitives, 27 invariants (I1–I27), single ownership matrix, defect resolutions.
+     - `ARCH/00-INDEX.md` (129 lines) — Derived index, 21 Rust workspace members, 13 subsystem contracts, 8 ADRs, 2 archives.
+     - `ARCH/01-SYSTEM-ARCHITECTURE.md` (156 lines) — Plane mapping, 4-question coupling test, WAL SQLite concurrency.
+     - `ARCH/02-MODULE-LAYOUT.md` (177 lines) — 8 function groups, 21 crates, single owner matrix, component dispositions.
+     - `ARCH/03-BYOK-KEYRINGS.md` (153 lines) — Re-scoped EveryAIOS credential broker, `local` auth-mode definition, 429 failover.
+     - `ARCH/04-OFFICE-ENGINE.md` (146 lines) — Surgical OOXML byte-preserving patcher, IronCalc 0.8.3 recalc, ADR-0008 leases, CUA visual mutation prohibition.
+     - `ARCH/05-TOKEN-ECONOMY.md` (241 lines) — Six context contracts, normative 7-step optimization order, RTK compression, CCR blob spooling.
+     - `ARCH/06-SECURITY-GUARDRAILS.md` (322 lines) — 7-layer defense, `netfloor` SSRF, `pathfloor`, Guard-2 tickets, Merkle audit, secret protection.
+     - `ARCH/07-MEMORY-CONTEXT.md` (79 lines) — Four memory classes (Context, Episodic, Knowledge, Procedural), memory strategies.
+     - `ARCH/08-BROWSER-LAYER.md` (179 lines) — Tiered browser engine (Lightpanda default / Chrome CDP), session vault, separate CUA boundary.
+     - `ARCH/09-FEATURE-MATRIX.md` (241 lines) — 166 capability rows (A1–J24), status breakdown, exact tracking notes.
+     - `ARCH/10-BUILD-PLAN.md` (91 lines) — Phase gates P0–P12 with verifiable exit criteria.
+     - `ARCH/11-AI-CHAT-FEATURES.md` (184 lines) — Copy/Convert/Reject derivation, projection UI vs Turn Coordinator split.
+     - `ARCH/12-UI-SPEC.md` (1030 lines) — Cockpit layout, §3.2a/b Collapsible Sub-boxes & Grouped Tools, two-pane agent picker, cool-blue tokens.
+     - `ARCH/13-PROMPT-ANATOMY.md` (84 lines) — Context passport projection (`src-tauri/src/acp_cmds.rs`), byte-stable CACHE_BOUNDARY.
+     - `ARCH/15-CONNECT-STORE.md` (363 lines) — Remote MCP, OAuth 2.1 PKCE/device flows, 5-meta-tool catalog, Voidtools Everything search.
+     - `ARCH/AGENT.md` (412 lines) — `AgentBinding`, retired "Chief" terminology, §5.4 External Subagents Settings Roster Configuration Plane.
+     - `ARCH/EXTERNAL-AGENTS.md` (546 lines) — ACP/MCP bridge, §3.1 Loopback Channel B delegation, wire JSON-RPC schemas, cowork tool affinity steering.
+     - `ARCH/SESSION.md` (232 lines) — Space/Project/Workspace/Chat/Session hierarchy, session kinds (`interactive`, `automation`, `delegated`), ADR-0008 projections.
+     - `ARCH/WORK.md` (250 lines) — Durable Work/Run/Step/Effect/Receipt/Event chain, canonical event vocabulary, projections rule.
+     - `ARCH/CONTEXT.md` (365 lines) — History vs Context surface, normative 7-step reduction, ContextPassport, route-derived capacity.
+     - `ARCH/ROUTING.md` (137 lines) — Agent resolver, credential ownership, usage/cost observability, external agent models.
+     - `ARCH/UI.md` (252 lines) — UI as projection, §1.1 Collapsible Sub-boxes & Grouped Drawer projection, File Workbench cascade.
+     - `ARCH/DESKTOP.md` (237 lines) — Computer Use Agent (CUA), 4-tier click ladder, patch-aligned coordinate quantization, `computer_use.*` facade.
+     - `ARCH/AUTOMATION.md` (352 lines) — Automation definitions, occurrences, Work compiler, scheduler boundary.
+     - `ARCH/RECOVERY.md` (253 lines) — 5 inputs, uncertain effect state, TOCTOU/lease fencing, turn-atomic multi-file snapshots, PID birth identity.
+     - `ARCH/SECURITY.md` (358 lines) — One security gate, single authorization model, ticket lifecycle, vault-only custody, central floors.
+     - `ARCH/CAPABILITIES.md` (243 lines) — Capability packs, 4-way availability state, progressive disclosure, stable facades, no pack-owned work.
+     - `ARCH/MEMORY.md` (253 lines) — 4 memory classes, bi-temporal schema, non-touching channel, observer->reflector pipeline, 2-tier retrieval.
+     - `ARCH/DIAGRAMS.md` (1214 lines) — 30 Mermaid diagrams, canonical diagram 0 backbone, Channel B sequence, AST deflection loop.
+  2. **All 8 ADRs in `ARCH/ADR/`:**
+     - `0001-connector-platform-mcp-first.md`, `0002-ui-v2-cockpit-replaces-v1-router-pages.md`, `0003-architecture-thaw-core-authority.md`, `0004-behaviour-profile-invariant.md`, `0005-external-agents-are-the-v1-engines.md`, `0006-session-kinds.md`, `0007-windows-first-v1-qualification.md`, `0008-session-workbench-projection-and-resource-leases.md`.
+  3. **All Archived Documents in `ARCH/archive/`:**
+     - `16-CHAT-LOOP-RUST-PORT.md` (201 lines), `17-NATIVE-AGENT.md` (624 lines).
+  4. **Root Living Specifications & Documents:**
+     - `DESKTOP-APP-SPEC.md` (1595 lines), `TODO.md` (2850 lines), `README.md` (347 lines), `SPEC-CHANGELOG.md` (2855 lines), `SUPPORT-MATRIX.md` (110 lines), `SECURITY.md` (68 lines), `PRIVACY.md` (52 lines), `PACKAGING.md` (118 lines), `COMPETITIVE-POSITIONING.md` (79 lines), `CONTRIBUTING.md` (59 lines), `TEST-CASES.md` (1034 lines), `testcases.md` (343 lines), `UI-DESIGN-PROMPT.md` (360 lines), `UX-TESTING-PLAN.md` (67 lines), `deploy/BYO-HOST.md` (105 lines), `ui/DESIGN-SYSTEM.md` (83 lines).
+  5. **`docs/` Directory Tree:**
+     - `docs/codebase/README.md`, `architecture.md`, `components.md`, `flows.md`, `data-and-state.md`, `external-systems.md`, `tests-and-verification.md`, `invariants.md`, `decisions.md`, `hotspots.md`.
+     - `docs/release/launch-checklist.md`, `rollout-and-hotfix.md`, `post-v1.md`, `retrospective-pack.md`.
+     - `docs/testing/README.md`, `windows-v1-runbook.md`.
+     - `docs/download.md`, `install-layout.md`, `signing.md`, `updating.md`.
+
+- **Reconciled & Corrected during Audit:**
+  - `README.md:338`: Updated crate count to 21 Rust workspace crates and 10 TypeScript packages.
+  - `docs/codebase/README.md:34`: Updated from 22 to 21-cargo workspace.
+  - `docs/codebase/architecture.md:13`: Updated layer diagram from 22 to 21-crate workspace.
+  - `docs/codebase/components.md:80,101`: Updated package counts to 10 packages.
+  - `scripts/check-doc-refs.mjs`: Added cross-platform path normalization so document citations and relative links resolve consistently across POSIX and Windows.
+  - `scripts/gen-codebase-map.mjs`: Updated to `execFileSync` to support UNC repository roots seamlessly on Windows.
+
+### Validation
+- `node scripts/check-doc-sync.mjs` — **PASS** (166 capabilities in sync; TODO.md 1649 = 1353 done + 296 open matches header; shell chrome v4.06 matches changelog).
+- `node scripts/check-doc-refs.mjs` — **PASS** (100% of links and document references resolve across all `.md` files).
+- `node scripts/gen-codebase-map.mjs --check` — **PASS** (100% of tracked files accounted for in `CODEBASE-MAP.md`).
+- `node scripts/ipc-parity.mjs` — **PASS** (350 registered commands, 218 UI call sites, 0 broken, 100% coverage).
+
+### Next Exact Steps
+1. Proceed with implementing `P64.11` in `ui/src/components/chat/message-bubble.tsx` and `ui/src/components/chat/tool-chip.tsx` (collapsible sub-boxes and grouped multi-tool execution drawers).
+2. Implement `P64.12` in `ui/src/components/chat/message-bubble.tsx` (`<memory_passport>` inspectable pill and subagent attribution badges).
+3. Implement `P63.12` in `ui/src/components/panels/agents-models-section.tsx` (external subagent configuration cards with primary/subagent toggles, domain tags, concurrency, and budgets).
+
+### Decisions & Gotchas
+- Every single Markdown file across the codebase is now verified, aligned with ADR-0003 thaw, ADR-0005 external agent engines, ADR-0006 session kinds, ADR-0008 typed resource leases, and the single-spine Work/Event/Receipt/Audit architecture.
+
+---
+
 ## Chat Presentation Projection & External Subagent Roster Specification Handover — 2026-09-24
 
 ### Active Goal

@@ -335,7 +335,7 @@ Yes — build it from source and you get everything described above, today. What
 <summary><strong>How do I contribute or report a bug?</strong></summary>
 <br/>
 
-Open an issue or PR on GitHub. The full codebase — all 22 Rust crates, 11 TypeScript packages, and the React cockpit — is here. The [`TODO.md`](TODO.md) lists exactly what's built, what's open, and what's next.
+Open an issue or PR on GitHub. The full codebase — all 21 Rust crates, 10 TypeScript packages, and the React cockpit — is here. The [`TODO.md`](TODO.md) lists exactly what's built, what's open, and what's next.
 
 </details>
 

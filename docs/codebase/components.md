@@ -77,7 +77,7 @@ Responsibilities are each crate's own module doc (`crates/*/src/lib.rs`):
   `live_*` naming; live tests require `EVERYAIOS_LIVE_TEST=1`), plus
   `#[cfg(test)]` unit modules in 382 source files.
 
-## L1 — Sidecar (`packages/`, 11 workspace packages)
+## L1 — Sidecar (`packages/`, 10 workspace packages)
 
 - **`coordinator`** — turn coordination (load state, build context, project tools, delegate, observe,
   verify, recover) + IPC handler; spawns per
@@ -98,7 +98,7 @@ Responsibilities are each crate's own module doc (`crates/*/src/lib.rs`):
   entirely: the package is `ARCH/archive/core-engine/` and the coordinator loop is
   `ARCH/archive/coordinator-loop/`, because `ADR-0005` defers the built-in engine to post-v1 and the loop
   belongs to the bound agent. `LAYER-1` now asserts neither returns. Current package count: **10** (was 11).
-- **Namespace unified (P69.D23, landed 2026-09-20):** all eleven packages publish as `@everyaios/*` —
+- **Namespace unified (P69.D23, landed 2026-09-20):** all ten packages publish as `@everyaios/*` —
   manifests, imports, `pnpm-workspace.yaml`, lockfile and the CI vendored-package guard moved in one pass.
   Imports resolve to each package's `src/index.ts` (not the gitignored `dist/`).
 - **Boundary:** no file-level imports in either direction between `packages/`
