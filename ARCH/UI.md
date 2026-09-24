@@ -3,6 +3,11 @@
 > **Status:** Subsystem contract, derived from [`CORE.md`](CORE.md) §3 and §5. Owns what the shell may read,
 > what it may never own, and how a human inspects a resource. Invariants it must not weaken:
 > **I3, I4, I12, I15**. Interaction detail remains in `12-UI-SPEC.md`; this document is the boundary.
+>
+> **Projection/lease amendment (2026-09-24):** [`ADR/0008`](ADR/0008-session-workbench-projection-and-resource-leases.md)
+> defines `SessionWorkbenchProjection` and `LensState` as non-authoritative per-Session UI projections. The
+> shell may show typed resource references and safe lease status, but it never owns a physical resource,
+> permission, bearer, or canonical execution state.
 
 ---
 
@@ -28,7 +33,8 @@ ripple into components.
 | **Canonical** | **nothing** | — the UI owns no durable truth (I3, I4) |
 | Projection | a rendered view of canonical state | work status, timeline, artifact list, agent activity |
 | Cache | a local copy with a defined invalidation rule | fetched rows, viewer metadata |
-| Ephemeral UI state | interaction state with no durability claim | selected pane, open tabs, expanded rows, composer text, focus |
+| Ephemeral UI state | interaction state with no durability claim | selected pane, expanded rows, transient composer text before a draft is persisted, focus |
+| Session input record | a durable pre-submit draft reference owned by the Session projection; it is not Work execution state | persisted composer draft and attachment metadata; submission creates a Work/Run queue item |
 
 **Optimistic presentation** is permitted only where it is explicitly safe and visibly reconciled; it must
 never assert a completed effect before the receipt exists.
@@ -44,6 +50,26 @@ a second source of truth and must be deleted, not synchronized.
 Every durable change the user makes goes `UI → IPC → Work Gateway`, and an effect additionally passes Guard.
 The shell is **not**: an alternate kernel, an alternate Work database, an alternate security engine, or an
 alternate event log.
+
+### 3.1 SessionWorkbenchProjection and LensState
+
+The UI reads one **non-authoritative** `SessionWorkbenchProjection` per canonical `SessionId`, derived from the
+`Session → Work → Run → AgentBinding` chain. It may hold per-session active/open lens order, typed
+`ResourceRef` values, resource generations, safe lease attachments, drafts, queue/wait/review/receipt
+references, and freshness (`fresh | rebuilding | stale | unavailable`). It must not hold physical handles,
+bearer/token material, provider-private state, or a second copy of Work/Run/Guard state.
+
+- **Session switch:** restore only the selected Session's own lenses, drafts, queues, and resource references.
+  Never transfer the previous Session's active tab, lease, or physical resource implicitly.
+- **Resource state:** a missing, stale, conflicting, or revoked resource is rendered as such; mutating controls
+  are disabled until re-observation/reattachment. The UI never falls back to another Session's resource.
+- **Interaction records:** drafts are pre-submit Session input; submitted prompts are Work/Run queue items;
+  steering is an active-Run control; questions/reviews are Work/Run waits; approvals are Guard-owned; receipts
+  are audit-owned. The projection displays and routes these; it does not decide or complete them.
+- **Mutations:** opening a lens is a projection action; acquiring/releasing a resource lease and every effect
+  go through the Work Gateway/ToolService/Guard path. Lease status is never treated as permission.
+- **Privacy:** safe ids, generations, conflict classes, and availability may cross IPC; credentials, cookies,
+  provider tokens, and lease bearers may not. See ADR-0008 §§1–4 and §6 for the full model and pending matrix.
 
 ---
 
@@ -65,7 +91,8 @@ FileResource
 ```
 
 There is no `MarkdownFile`, `PDFFile`, `RustFile` at the system level. There is a resource, and a registry of
-viewers that can render it.
+viewers that can render it. Opening it adds a typed `ResourceRef` and a per-Session `LensState`; it does not
+transfer physical ownership or acquire a lease merely because a tab was opened.
 
 ### 4.1 Viewer selection cascade
 
@@ -136,7 +163,7 @@ mechanism behind the perceived speed — they are architectural, not cosmetic.
 | Invariant | How |
 |---|---|
 | I3 — one historical truth | §1; the UI renders projections, never its own history |
-| I4 — one owner per state | §2's table; §2's consolidation targets |
+| I4 — one owner per state | §2's table; §2's consolidation targets; §3.1's projection is derived and per-Session |
 | I12 — one authorization model | §3; the UI never decides allow/deny |
 | I15 — no false claims | §2's optimistic rule; §4.3's truncation disclosure; no "completed" before a receipt |
 | I16 — prefix stability | §6's keyed incremental rendering keeps the *view* stable without touching provider context |

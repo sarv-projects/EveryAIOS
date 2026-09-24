@@ -4,6 +4,11 @@
 > Design rules: **surgical, byte-preserving** edits (never full re-serialize), **deterministic math** (never LLM-computed), **render-anywhere** UI. Patterns: GenOffice block-patch + Rust xlsx sidecar (doc 28), LibreOffice as conformance oracle (doc 29), OOXML parts-direct editing (web research, 2026), `everyaios-office` OOXML extractors + renderers (built).
 > **Full-Stack Module:** Module 5 — Work-Native Primitives (Office, Browser, CUA) (`crates/everyaios-office`, IronCalc 0.8.3, OOXML patcher).
 > **Ownership ([`CORE.md`](CORE.md) §4, §9):** the Office engine belongs to EveryAIOS, not to any agent — the shared plane belongs to the environment, the agent’s own plane belongs to whichever agent is bound. The built-in runtime reaches it through the shared façades exactly as an external agent does, and holds no private copy (it is unprivileged, `ADR/0003`). One Rust implementation behind both the native task-shaped façade and the MCP façade.
+>
+> **Projection/lease amendment (2026-09-24):** [`ADR/0008`](ADR/0008-session-workbench-projection-and-resource-leases.md)
+> adds document identity/revision/digest, shared view leases, exclusive edit leases, and explicit apply
+> outcomes around this one engine. The Office resource remains engine-owned; a Session projection only holds a
+> typed reference. CUA remains prohibited from mutating Office files (§4.7).
 
 ## 4.1 The core principle: OOXML = ZIP + XML parts
 
@@ -57,6 +62,30 @@ Everything opened becomes **ingestible in one click** → ingest pipeline (`ever
 - **Rollback:** `snapshotBefore` (GenOffice hook, doc 28 §2) — the pre-edit ZIP is kept for one-click undo + crash recovery; writes are atomic (write temp ZIP → fsync → rename).
 - **Edge cases:** locked files, encrypted OOXML (password) → clear error + offer LibreOffice/office app; broken ZIPs → salvage extract + repair report; huge sheets (1M+ rows) → virtualized + async; .doc/.xls/.ppt legacy → convert-to-docx/xlsx/pptx on open (or read-only).
 - **Deterministic planner failure modes:** planner has a schema + a fallback to LLM-direct (with audit flag) when the regex DSL can't parse the user's intent; the fallback is always permission-gated like any mutating tool.
+
+### 4.4.1 Document identity, leases, and apply outcomes
+
+A document is addressed by a typed `ResourceRef` containing canonical real path, file identity, revision, and
+content digest. The digest/revision is re-read immediately before a patch and before commit; a mismatch is a
+stale-generation refusal, never an implicit overwrite. A **view lease** is compatible for multiple Sessions;
+an **edit lease** is exclusive for one Work/Run owner. A second writer receives a conflict or Work/Run wait and
+must re-observe/rebase after the current holder releases.
+
+Every save follows the existing snapshot → patch → verify → atomic commit path. Its externally visible outcome
+is one of:
+
+- `clean`: the requested change set was applied and verification passed;
+- `partial`: a bounded subset committed, with the exact applied/unapplied change set and a rollback reference;
+- `uncertain`: the process cannot prove whether the change committed, so it remains `uncertain` and requires
+  reconciliation;
+- `failed`: the change did not commit and the failure is proven.
+
+`partial` is never rounded up to success, and `uncertain` is never mapped to success, failure, or cancellation.
+Snapshots and receipts remain owned by the shared Office/Work/Audit path. The Session/UI projection shows the
+resource reference, lease status, revision, outcome, and receipt without taking ownership. CUA clicking,
+keyboard input, OCR, or vision remains prohibited for Office mutation; all mutation uses this one native engine
+and its Guard-gated path. The same-resource, stale-generation, crash, and cross-Session cases are required
+pending acceptance rows in [`ADR-0008`](ADR/0008-session-workbench-projection-and-resource-leases.md).
 
 ## 4.5 Module assignment
 

@@ -15,6 +15,11 @@
 > Windows runtime and release evidence, recovery, and live acceptance. It changes scope and evidence policy
 > only: it adds no canonical primitive, owner, event log, runtime, or authorization authority, and it leaves
 > the voice family post-v1.
+>
+> **Projection/lease clarification (2026-09-24):** [`ADR/0008`](ADR/0008-session-workbench-projection-and-resource-leases.md)
+> adds only a derived `SessionWorkbenchProjection` boundary and a typed Work/Run-owned `ResourceLease`/fencing
+> contract around the existing identity spine. A projection is not a Workbench primitive or truth owner; a
+> lease is not permission. The full normative model and pending acceptance matrix live in the ADR.
 
 ---
 
@@ -110,7 +115,8 @@ These are the objects the architecture is *made of*. Introducing a new canonical
 
 Supporting contracts — defined in their own documents, deliberately **not** new primitives:
 `AgentBinding`, `AgentAdapter`, `AgentBridge`, `ContextSurface`, `ContextPassport`, `CapabilityPack`,
-`ResourceRef`, `ViewerProvider`, `ModelRoute`.
+`ResourceRef`, `ViewerProvider`, `ModelRoute`, plus the derived `SessionWorkbenchProjection` and typed
+Work/Run-owned `ResourceLease` boundary defined by [`ADR/0008`](ADR/0008-session-workbench-projection-and-resource-leases.md).
 
 ### 3.1 The three-way distinction that must never collapse
 
@@ -147,6 +153,8 @@ defect, not a preference.
 | Who owns **credentials**? | `everyaios-vault` | nothing else holds key material |
 | Who owns **tools**? | `everyaios-core` `ToolRegistry` | TS / MCP / UI schemas derive from it |
 | Who owns **agents**? | `everyaios-agents` `AgentRegistry` | TS is a read-only façade |
+| Who owns **the Session workbench projection**? | the Session-scoped projection owner derives a non-authoritative read model from canonical Work/Run/Binding records; the Session owns only its projection attachment and references | the UI holds only a non-authoritative projection, lens state, and safe references ([`ADR/0008`](ADR/0008-session-workbench-projection-and-resource-leases.md)) |
+| Who owns **resource leases and fences**? | Work/Run kernel state, enforced by the resource engine | a Session may attach a lease reference; Guard remains the sole authorization authority |
 | Who owns **memory**? | `everyaios-memory` (storage) + `core-memory` (reasoning only) | algorithms are strategies |
 
 The same matrix, as a dependency rule for CI (§12):
@@ -310,6 +318,28 @@ class of bugs — the Session must never be identified by "whichever provider tr
 The v1 qualification rule in [`ADR/0007`](ADR/0007-windows-first-v1-qualification.md) requires the same
 distinction to be preserved across the Work/Run/Binding owner chain, per-Session host handles,
 cancellation, and reconnect; a provider id is never promoted to a canonical id.
+
+### 7.2.1 Session projection and resource-lease boundary
+
+[`ADR/0008`](ADR/0008-session-workbench-projection-and-resource-leases.md) adds a supporting boundary around
+this chain; it does not add a primitive:
+
+```text
+canonical SessionId → WorkId → RunId → AgentBindingId → typed ResourceRef/lease attachment
+```
+
+`SessionWorkbenchProjection` is a derived, non-authoritative read model keyed by the canonical `SessionId`.
+The kernel derives it from Session, Work, Run, Binding, Event, and Receipt records and may rebuild it from an
+event cursor. A Session may retain per-session lens state, resource references, lease attachments, and
+pre-submit draft references, but those are presentation/attachment data—not physical resource ownership and
+not a second execution state machine.
+
+`ResourceLease` is a typed Work/Run-owned concurrency and fencing contract. It carries the resource identity,
+generation, access class, lease lifecycle, and fence; it does not grant permission. Guard remains the only
+authorization authority, `ToolService` and the shared engines remain the executors, and Vault remains the
+credential custodian. A lease bearer or other possession secret never crosses renderer or IPC. The full
+lifetime table, contention rules, and pending edge-case matrix are normative in ADR-0008; this section is the
+CORE-level derivation only.
 
 ### 7.3 AgentAdapter — capability-driven, not per-agent branches
 
@@ -699,3 +729,4 @@ The invariants that are machine-checkable should be machines' work, not reviewer
 | `../TODO.md` | delivery status, sequencing, and every unit of work |
 | `../RESEARCH/` | explicitly non-normative research |
 | `ADR/` | why a specific implementation was chosen |
+| [`ADR/0008`](ADR/0008-session-workbench-projection-and-resource-leases.md) | non-authoritative Session workbench projection, typed resource leases, generation fencing, and the pending edge-case acceptance matrix |

@@ -2,6 +2,10 @@
 
 > **Status:** Subsystem contract, derived from [`CORE.md`](CORE.md) §9. Owns how capability is packaged,
 > enabled, exposed and consumed. Invariants it must not weaken: **I4, I12, I16, I26**.
+>
+> **Projection/lease amendment (2026-09-24):** [`ADR/0008`](ADR/0008-session-workbench-projection-and-resource-leases.md)
+> limits a capability pack to typed handles, resource descriptors, viewers, and safe projections. Packs cannot
+> own SessionWorkbench state, resource leases/fences, Work/Run execution, retries, or audit.
 
 ---
 
@@ -196,6 +200,26 @@ There is no `BrowserWork`, `OfficeWork`, `MemoryWork` or `SearchRuntime`. Every 
 single path: `Work → Step → Effect → Guard → Executor → Receipt → Event`. A pack that acquires its own
 progress state, its own retry loop, or its own audit trail has become a runtime and will be rejected in
 review (I4, I12).
+
+### 10.1 Typed handles and the projection boundary
+
+A capability pack may contribute a typed `ResourceRef` shape, a capability/viewer descriptor, a bounded
+read-only projection, or a safe availability/generation result. Those are adapters into the shared plane. They
+are not a place to keep `SessionWorkbenchProjection`/`LensState`, acquire or release a `ResourceLease`, decide
+Guard policy, execute a Work/Run, retry an effect, or write an audit/Receipt.
+
+The ownership path remains:
+
+```text
+capability pack → typed handle/projection → ToolService + Work/Run → Guard → shared engine
+                                      ↘ resource lease/fence (Work/Run owner)
+```
+
+The pack's manifest may declare required permissions and resource identity requirements, but the effective
+set still intersects Session/Work scope and Guard policy (§4). A pack that needs its own state machine,
+resource owner, retry loop, or receipt store is a runtime and is rejected under §10. The full projection/lease
+contention and edge-case rules are normative in [`ADR/0008`](ADR/0008-session-workbench-projection-and-resource-leases.md)
+§2–§6; no Channel B or pack implementation is claimed by this amendment.
 
 ---
 

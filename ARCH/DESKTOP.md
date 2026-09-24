@@ -3,6 +3,15 @@
 > **Status:** Subsystem contract, derived from [`CORE.md`](CORE.md). Covers **OS computer use** — a different
 > environment from the browser and deliberately never merged with it. Invariants it must not weaken:
 > **I7, I12, I13, I14, I15**.
+>
+> **v1 scope clarification (2026-09-24):** [`ADR/0007`](ADR/0007-windows-first-v1-qualification.md)
+> makes real Windows WGC/UIA/ConPTY behavior, OS-enforced child containment, and x64/ARM64 acceptance v1
+> release obligations. Code, cross-compilation, and supervisor cleanup are not runtime qualification.
+> Voice/STT/TTS/wake-word/audio remain post-v1.
+>
+> **Projection/lease amendment (2026-09-24):** [`ADR/0008`](ADR/0008-session-workbench-projection-and-resource-leases.md)
+> adds target identity/generation, observation-versus-action leases, foreground takeover, and stale-ref rules.
+> A Desktop target remains physically engine-owned; a Session projection only references it.
 
 ---
 
@@ -50,6 +59,31 @@ DesktopSnapshot
 `observe → act → invalidate → re-observe → verify`. Never snapshot → click → click → click on stale refs.
 This is the same invariant the browser layer enforces; two surfaces, one rule.
 
+### 3.1 Target identity, observation/action leases, and takeover
+
+A Desktop `ResourceRef` identifies the host plus window/app/target, with process birth identity where the host
+can prove it and a target generation. A window title, coordinate, screenshot id, or stale element ref is not a
+lease. The canonical owner context is `SessionId → WorkId → RunId → AgentBindingId`; the Session projection
+stores only that reference, generation, and safe status.
+
+- **Observation lease:** permits a bounded snapshot/accessibility observation. Multiple observers may coexist
+  only under the Desktop resource policy, and an observation never grants permission to act.
+- **Action/control lease:** exclusive for the physical target. A click, keystroke, foreground activation, or
+  other action requires a current Work/Run lease and Guard authorization.
+- **Foreground takeover:** a user takeover is an explicit native gesture. The old holder is paused/checkpointed,
+  its lease is revoked and fenced, and the new user-controlled lease is issued before the next action. The
+  agent is notified and must re-observe; prior refs are invalid.
+- **Pause/resume:** pausing freezes the action path without releasing canonical Work history. Resuming
+  revalidates the target generation/fence and either reuses a still-valid lease or reports a conflict/stale
+  target. A binding switch changes only the actor, not the Work/Run lease owner.
+- **Cross-Session contention:** another Session cannot use a target because it can see the same window title,
+  screenshot, or UI ref. It receives a typed conflict and must wait or explicitly take over; it never steals
+  the physical target or silently retargets coordinates.
+
+The full lease contract and the pending physical-target, stale-generation, crash, and takeover acceptance rows
+are normative in [`ADR/0008`](ADR/0008-session-workbench-projection-and-resource-leases.md). This section does
+not make Desktop control Windows-qualified.
+
 ---
 
 ## 4. Background vs foreground
@@ -88,8 +122,8 @@ Linux tooling reachable without shipping a Linux desktop build.
 
 | Platform | v1 artifact | Desktop control | Notes |
 |---|---|---|---|
-| Windows 10 22H2 / 11 (x64, arm64) | **shipped** (`.msi` WiX + `.exe` NSIS) | UIA (invoke-first) and Graphics Capture — **acceptance pass required before the row closes** | The v1 target. |
-| Windows via WSL2 (Ubuntu 22.04/24.04) | **supported host for agents**, no separate artifact | n/a — WSL runs *agents*, not the cockpit | Linux-native agent binaries + their ACP entrypoints run here; paths resolve through the named distro and never enter a native Windows spawn (`P66.1`). |
+| Windows 10 22H2 / 11 (x64, arm64) | **v1 target** (`.msi` WiX + `.exe` NSIS; both architectures) | UIA (invoke-first), Graphics Capture, and ConPTY — **acceptance pass required before qualification** | The v1 target. `shipped` is not a support claim until a real Windows install and acceptance record exist. |
+| Windows via WSL2 (Ubuntu 22.04/24.04) | **supported host for agents**, no separate cockpit artifact | n/a — WSL runs *agents*, not the cockpit | Linux-native agent binaries + their ACP entrypoints run here; paths resolve through the named distro and never enter a native Windows spawn (`P66.1`). |
 | macOS | **out of v1** | not claimed | Blocked by the same evidence rule; no signing/notarization work is in v1 scope. |
 | Native Linux desktop | **out of v1** | verified on this host, and that is the point — the verified platform is not the shipped one | The verification runs here; the artifact is not published. |
 
@@ -107,6 +141,20 @@ until a real Windows acceptance pass exists (I15). The see-pane contract — sho
 sees, with an escape hatch — applies whenever desktop control is active. Shipping a Windows-first v1 with
 these open is allowed only because `SUPPORT-MATRIX.md` and the installer state them, never because they were
 quietly dropped (`P70.D6`).
+
+### 6.3 v1 Windows runtime enforcement
+
+The v1 release obligation is stronger than “the code contains a Windows API.” The actual ACP/MCP/child
+launch path must attach an OS-enforced policy: AppContainer or restricted-token isolation as appropriate,
+Job-Object process/resource containment, an explicit environment/credential boundary, and a fail-closed
+result when the requested backend is unavailable. Job-Object orphan prevention in the supervisor is a
+lifecycle safeguard, not by itself proof that an agent or tool ran confined. A capability string,
+`Ambient` fallback, or Windows cross-compile cannot satisfy this section.
+
+WGC must return real pixels for an occluded target, UIA must prove invoke/hit-testing and accessibility
+truth, and ConPTY must run a real interactive shell and profile on the shipped host. These are v1
+acceptance surfaces under [`ADR/0007`](ADR/0007-windows-first-v1-qualification.md), not post-v1
+enhancements. No Windows acceptance record exists at the time of this amendment.
 
 ---
 
@@ -127,7 +175,9 @@ quietly dropped (`P70.D6`).
 Policy hardening around allow-lists and risky classes is already partly landed; what this document adds is
 the **separation from browser**, the strict observe/act/invalidate loop as a written contract, and the
 explicit admission that the Windows halves are unverified. Desktop-as-agent-tool attachment and the
-computer-use DAG live in the existing implementation; this contract bounds them.
+computer-use DAG live in the existing implementation; this contract bounds them. The v1 expansion in
+[`ADR/0007`](ADR/0007-windows-first-v1-qualification.md) makes the missing native enforcement and live
+Windows evidence release-blocking; it does not change desktop ownership or create a second executor.
 
 ---
 

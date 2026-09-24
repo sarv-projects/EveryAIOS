@@ -7,6 +7,11 @@ external protocol surfaces live in [EXTERNAL-AGENTS.md](EXTERNAL-AGENTS.md) and 
 > **v1 scope clarification (2026-09-24):** [`ADR/0007`](ADR/0007-windows-first-v1-qualification.md)
 > requires the binding contract to qualify on real Windows, live external agents, and Channel B. A source
 > seam or a provider handshake is not a qualified binding; voice/STT/TTS/wake-word/audio remain post-v1.
+>
+> **Projection/lease amendment (2026-09-24):** [`ADR/0008`](ADR/0008-session-workbench-projection-and-resource-leases.md)
+> keeps provider-private state binding-owned while resource leases and fences remain Work/Run-owned. A
+> binding may exercise a lease in its canonical owner context; it never owns the lease or the physical
+> resource.
 
 ---
 
@@ -123,6 +128,25 @@ empty MCP-server list, and the production ACP client has no `session/load`/`sess
 Cancellation hooks and binding preparation are therefore **implemented — unverified**, not a qualified
 v1 lifecycle. The exact evidence and acceptance condition live in [`ADR/0007`](ADR/0007-windows-first-v1-qualification.md).
 
+### 3.3 Binding-private state and Work/Run-owned leases
+
+[`ADR/0008`](ADR/0008-session-workbench-projection-and-resource-leases.md) makes the lifetime split explicit:
+
+- **Binding-owned/private:** `provider_session_id`, provider transcript, native prompt/context state,
+  provider cache, agent-specific config, and other adapter-private material. These may be parked, resumed,
+  or discarded by adapter policy, but never become a canonical Session/Work id or UI projection state.
+- **Work/Run-owned:** the `ResourceLease` record, resource generation, access class, fence, renewal/release,
+  and reclaim state for a physical resource. The binding is the actor that may exercise a valid lease; it is
+  not the lease owner.
+- **Session-owned projection:** safe `ResourceRef` and lease attachments shown in the per-Session workbench
+  projection. The Session does not own the browser tab, document, Desktop target, provider process, or bearer.
+
+Before a binding acts on a resource, it presents the host-derived `(SessionId, WorkId, RunId, AgentBindingId)`
+context and the opaque internal lease handle to the Rust owner. The owner revalidates the resource generation
+and fence; a stale actor is refused. A lease is concurrency/fencing, not permission: Guard remains the sole
+authorization decider and Vault remains the credential custodian. The full typed contract, same-resource
+contention rules, and edge-case matrix are in ADR-0008 §§2, 3, and 6.
+
 ---
 
 ## 4. Shared vs private
@@ -135,6 +159,7 @@ v1 lifecycle. The exact evidence and acceptance condition live in [`ADR/0007`](A
 | Memory and context snapshot / passport | agent-specific config and internal summaries |
 | Approvals, capability grants, budget | provider-side context cache |
 | Event history, verification results, receipts, usage | native tool bookkeeping, agent-private memory |
+| Work/Run resource-lease records, generations, and fences | an internal, non-exported handle used only while this binding is the active actor |
 
 The rule: **provider-specific state is private and resumable; EveryAIOS session state is canonical and
 shared** (I25). None of the right-hand column may become the authoritative owner of the Session.
@@ -286,10 +311,12 @@ On switch:
 
 1. finish or safely cancel the current turn;
 2. checkpoint the Work; persist the provider session reference and agent-private state;
-3. generate a **ContextPassport** (see [CONTEXT.md](CONTEXT.md));
-4. mark the outgoing binding `parked`;
-5. activate the incoming binding and attach the AgentBridge;
-6. inject the passport; continue.
+3. preserve the Work/Run-owned lease and its fence; do not copy a bearer into the binding projection;
+4. generate a **ContextPassport** (see [CONTEXT.md](CONTEXT.md));
+5. mark the outgoing binding `parked`;
+6. activate the incoming binding and attach the AgentBridge in the same canonical owner context;
+7. revalidate every attached resource generation/fence before use; stale resources are re-opened or reported;
+8. inject the passport; continue.
 
 **Park before kill.** A parked binding keeps its process if resources allow, so switching back is near
 instant. If resources are tight, a parked binding becomes `suspended` — its provider session id stays
@@ -297,7 +324,9 @@ persisted and resuming recreates the process. Parked bindings are reclaimed by t
 by an arbitrary timeout inside the adapter.
 
 `resume_session` is the adapter's job, including ACP version differences (v1 `session/load` vs v2
-`session/resume`). The coordinator must not contain protocol-version logic.
+`session/resume`). The coordinator must not contain protocol-version logic. A provider restart changes the
+provider-handle generation and invalidates old provider-bound handles; it does not change Session/Work/Run
+identity or silently transfer a lease. ADR-0008 §2.4 and its pending acceptance rows govern this boundary.
 
 ---
 

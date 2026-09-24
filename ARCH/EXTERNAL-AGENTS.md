@@ -9,6 +9,11 @@
 > v1 qualification obligations. It does not turn an absent protocol method or an empty MCP-server list
 > into a capability. ACP v2 is narrowly unsupported in this release until explicitly implemented and
 > qualified; voice/STT/TTS/wake-word/audio remain post-v1.
+>
+> **Projection/lease amendment (2026-09-24):** [`ADR/0008`](ADR/0008-session-workbench-projection-and-resource-leases.md)
+> requires the authenticated ACP/MCP connection to derive the canonical `Session → Work → Run → AgentBinding`
+> owner context. Caller arguments, transport headers, and JSON-RPC ids are not owner selectors; lease bearer
+> custody remains Rust-private and never crosses renderer/IPC.
 
 ---
 
@@ -59,6 +64,28 @@ politely.
 
 Explicitly rejected: a long-lived local endpoint exposing "everything" with no identity. That is a second
 security gate, which I12 forbids.
+
+### 2.1.1 Authenticated owner context and private lease custody
+
+The host, not the caller, derives the canonical owner tuple for every ACP/MCP connection and request:
+
+```text
+authenticated connection → (SessionId, WorkId, RunId, AgentBindingId)
+                                      ↓
+                         Work/Run ResourceLease + generation/fence
+```
+
+A transport header may authenticate the connection, but it cannot select a Work, Session, or Binding. Tool
+arguments, metadata, browser/MCP headers, and JSON-RPC request/notification ids are correlation or payload
+data only; a mismatch with the host-derived tuple is refused. A provider/session id received from an agent is
+adapter-private state, never a replacement canonical owner. Reconnect re-derives the tuple from the trusted
+Rust owner and replays the Work event cursor; it does not trust a renderer-provided owner or create a new Work.
+
+A Channel B lease is supervised and private to the Rust host. The renderer and Tauri IPC receive only safe
+lease id, generation, fence/status, and typed resource-reference fields. Bearer/token material never crosses
+that boundary, is never placed in a projection, event, error, or log, and cannot be reconstructed from a
+caller argument. The complete identity, lease, contention, and crash matrix is normative in ADR-0008 §§1–3
+and §6; implementation and qualification remain pending.
 
 ### 2.2 The bridge performs no effects
 
@@ -215,6 +242,9 @@ new_session() · load_session()  (ACP v1) · resume_session()  (ACP v2) · close
 
 - Resume must **not** require replaying the whole conversation (that is what `ContextPassport` is for).
 - MCP bridge data is re-attached on resume with the same Space/Session/Work/capability scope.
+- Resource leases are revalidated by Work/Run owner context and generation/fence before a reattached call; a
+  provider restart creates a new private provider-handle generation but does not change Session/Work/Run.
+- The host keeps any lease bearer private; ACP/MCP payloads and renderer-facing status contain no bearer/token.
 - Version differences (`load` vs `resume`) live inside the adapter.
 - A capability the agent negotiates as absent must degrade, never throw.
 

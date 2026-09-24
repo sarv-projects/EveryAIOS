@@ -11,6 +11,11 @@
 > **The user requirement, verbatim:** *"don't forget browser. agentic OS means to replace everything — from browser to file editor to coding to basically everything. Can we use something lightweight? It must hold all types of search engines, all types of accounts (stored tokens), allow the agent autonomous permission-gated access via stored accounts, and handle captchas of all types."*
 > **Full-Stack Module:** Module 5 — Work-Native Primitives (Office, Browser, CUA) (`crates/everyaios-browser`, `crates/everyaios-cdp`, 37 CDP tools).
 > **Ownership ([`CORE.md`](CORE.md) §4, §9):** this crate is the **shared plane** — one `BrowserService` façade ([`CAPABILITIES.md`](CAPABILITIES.md)). No agent, including the built-in runtime, holds a private browser: a navigation's destination floor, session vault, ownership and audit are identical regardless of who asked. An external agent's *own* browser capability (where its integrated CLI exposes one) stays native-first per the resolution policy; the EveryAIOS browser is the fallback, not a replacement.
+>
+> **Projection/lease amendment (2026-09-24):** [`ADR/0008`](ADR/0008-session-workbench-projection-and-resource-leases.md)
+> requires browser profiles/tabs to be typed resource references in the canonical `Session → Work → Run →
+> AgentBinding` scope. The browser account/session-vault record is not the canonical `SessionId`; profile/tab
+> sharing is explicit and generation-fenced.
 
 ## 8.0 The façade — one `BrowserService`, replaceable strategies underneath
 
@@ -33,6 +38,30 @@ Launch: `--remote-debugging-port=0 --user-data-dir=<~/.everyaios/browser-profile
 
 - **Profile = the user's logins**: sign in once in the agent browser (or one-click Chrome profile import — "sign in here", zero magic).
 - **Ownership isolation:** every tab has an owner: `mine | user | other-agent`. User tabs are never touched unless the user asks; agent tabs grouped per agent; closing an agent session closes its tab group; per-page claims recorded in the audit DB (`tab_claims` — `TabRegistry` + sync/claim/release, P2.6).
+
+### 8.1.1 Canonical scope, profiles, tabs, and leases
+
+A browser account/session-vault record identifies stored authentication material for a site/account. It is
+**not** the EveryAIOS `SessionId`, and it must not be used to select a Work, Run, or AgentBinding. The
+canonical owner context for a browser action is derived by the host as
+`SessionId → WorkId → RunId → AgentBindingId`; the browser engine returns a typed `ResourceRef` for the
+profile and tab.
+
+Profile mode is explicit:
+
+- **Isolated profile:** the profile identity is scoped to its owner tuple. Another Session cannot infer,
+  enumerate, or attach it from a URL, account record, or caller argument. Navigation, tab creation, and
+  action use the profile's own resource generation.
+- **Shared profile:** a declared shared-profile policy may allow observation of the same profile/tab across
+  Sessions. Observation leases can coexist only when the policy says so; edit/action/control remains
+  exclusive and Work/Run lease-fenced. Sharing is never inferred from a matching site account.
+
+A tab's identity includes profile id, target/tab id, and document/navigation generation. Navigation or target
+replacement changes the resource generation; an old tab ref or lease is stale and cannot act until the browser
+re-observes. The Session projection stores only safe `ResourceRef`, generation, availability, and lease status;
+it never stores cookies, account credentials, a bearer, or a physical CDP handle. Browser account records stay
+in the vault/adapter owner, and the full same-resource and acceptance rules are normative in
+[`ADR-0008`](ADR/0008-session-workbench-projection-and-resource-leases.md).
 
 ## 8.2 The 37-tool catalog (everyaios-mcp)
 

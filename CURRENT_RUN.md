@@ -1,6 +1,149 @@
 # CURRENT RUN STATE — Task Handover & Checkpoint
 
-## Latest Handover — 2026-09-23 v1 Delivery Implementation Pass (P70 + P69 gates)
+## ADR-0008 Documentation Handover — 2026-09-24
+
+### Active Goal
+- Record the adopted `SessionWorkbenchProjection` and typed Work/Run-owned `ResourceLease`/fencing contract
+  across the architecture and delivery surfaces without implementing the projection or Channel B.
+- Preserve the single Work/Event/Receipt/Audit, ToolService/engine, Guard, Vault, and capability authorities.
+
+### Where We Stopped
+- Added the authoritative [`ARCH/ADR/0008-session-workbench-projection-and-resource-leases.md`](ARCH/ADR/0008-session-workbench-projection-and-resource-leases.md).
+  It defines the full projection shape, `LensState`, owner/lifetime table, contention and generation rules,
+  deletion/reattachment, interaction-record ownership, and a pending edge-case acceptance matrix.
+- Synchronized concise derivations in `ARCH/00-INDEX.md`, `CORE.md`, `SESSION.md`, `WORK.md`, `AGENT.md`,
+  `EXTERNAL-AGENTS.md`, `UI.md`, `12-UI-SPEC.md`, `CAPABILITIES.md`, `08-BROWSER-LAYER.md`,
+  `04-OFFICE-ENGINE.md`, `DESKTOP.md`, `RECOVERY.md`, `SECURITY.md`, and `AUTOMATION.md`.
+- Added open delivery row `P71.10` in `TODO.md` (no existing checkbox flipped) and appended the dated ADR-0008
+  provenance entry to `SPEC-CHANGELOG.md`; current delivery count is **1646 = 1353 done + 293 open**.
+- No Rust, TypeScript, UI, tests, generated files, workflows, lockfiles, or forbidden sibling trees were edited by the documentation lane. The parent applied three non-blocking review clarifications: resource/lease generation wording in RECOVERY, actor-binding transition handling in ADR-0008, and Session projection ownership wording in CORE. The focused documentation change is committed; unrelated runtime/UI source changes remain outside it. The parent performs the required push after this handover update.
+- Independent bounded ADR review returned **APPROVE WITH NOTES**; the notes were applied. Documentation checks were rerun after the corrections: refs, doc sync, codebase-map freshness, and diff check PASS; the architecture-invariant gate remains blocked only by the 10 known concurrent source findings.
+
+### Validation
+- `node scripts/check-doc-refs.mjs` — **PASS**.
+- `node scripts/check-doc-sync.mjs` — **PASS** (166 capabilities; 1646 = 1353 + 293).
+- `node scripts/gen-codebase-map.mjs` regenerated `CODEBASE-MAP.md` for 1510 tracked files; `node scripts/gen-codebase-map.mjs --check` — **PASS**.
+- `git diff --check` — **PASS**.
+- `node scripts/check-arch-invariants.mjs` — **FAILED on the existing concurrent source tree**; it reports
+  five E3-MCP findings in `crates/everyaios-mcp/src/server.rs` and five E4-WORK-CREATION findings in
+  `crates/everyaios-core/src/execution.rs`, `src-tauri/src/acp_cmds.rs`, and `src-tauri/src/scheduler_fire.rs`.
+  The documentation lane did not alter those source findings.
+
+### Next Exact Steps
+1. Implement open `P71.10`: the SessionWorkbenchProjection schema, Work/Run lease coordinator, recovery/rebuild, UI projection, security tests, and real-host qualification.
+2. Keep `P71.10` open until implementation and qualification evidence exists; the ADR is a contract decision, not an implementation claim.
+3. Reconcile the existing concurrent source-lane failures separately; do not hide or reclassify them in docs.
+4. Run a fresh protocol/security gate and only then implement/mount Tauri Channel B; do not advertise it before that gate is GO.
+
+### Decisions & Gotchas
+- `SessionWorkbenchProjection` is a derived read model keyed by canonical `SessionId`; it is not a Workbench
+  primitive, runtime, event log, permission system, or second source of truth.
+- `ResourceLease` is a Work/Run concurrency/fencing record, not a Guard permission; lease possession material
+  stays Rust-private and never crosses renderer/IPC/logs.
+- A Session deletion detaches projection/lens/UI state while surviving Work/Run records and leases remain
+  canonical; reattachment rebuilds from the event cursor.
+- Unknown post-effect outcomes remain `uncertain`; no path may infer success, failure, or cancellation.
+
+---
+
+## Latest Handover — 2026-09-24 v1 convergence / Gate 1 remediation
+
+### Active Goal
+- Complete the Windows-first, external-agent-only v1 without adding a second runtime, scheduler, approval system, event log, or capability authority.
+- Finish ACP/MCP safety remediation and Tauri Channel B integration only after the final protocol gate is GO.
+- Reconcile the OpenWork-informed UI work without copying restricted source/assets.
+
+### Where We Stopped
+- Gate 1 attempt 3 is **NO-GO** for Tauri Channel B mounting. Material blockers remain in Tauri lease ownership/mounting, out-of-band shutdown ordering, cancellation outcome mapping, Rust-private lease custody, adversarial ACP frame handling, MCP mutation outcome/cache safety, and strict loopback response validation.
+- ACP and MCP crate-level remediation from the previous pass is independently green: ACP all-targets passed 141 unit tests plus non-ignored integration/bin targets; MCP all-targets passed 76 unit tests plus non-ignored integration and 12 Streamable HTTP tests.
+- New bounded remediation lanes are active for ACP adversarial framing/cancellation, MCP mutation outcomes/loopback parsing, and a read-only Tauri Channel B seam map.
+- First-run shell/narrow-layout UI work is independently validated: 14 focused tests pass and scoped `git diff --check` passes. It consolidates first-run ownership, attention-first grouping, and a 900px accessible drawer/lens-tab fallback.
+- Casual task UX changes are independently validated: 6 focused DOM tests (3 connector + 3 casual-layer) pass, `pnpm run type-check` passes, and scoped `git diff --check` passes. The connector `storeLoading` regression is repaired.
+- No production Channel B lease owner/mount has been added. No Windows x64/ARM64 qualification, P70.E1–E12 sign-off, or release claim exists.
+
+### Next Exact Steps
+1. Finish and independently validate the casual UI repair, then run the full UI typecheck and focused UI tests.
+2. Await the ACP, MCP, and Tauri-seam lanes; run their scoped all-target tests and inspect diffs.
+3. Reconcile all protocol results, then obtain a fresh explicit GO/NO-GO review before any Tauri Channel B implementation.
+4. Implement one supervised, Rust-private MCP lease per canonical binding/session; reuse it for `session/new` and `session/load`; route calls through the existing Guard → ToolService → audit/receipt path; enforce Work/Session/Run identity and cross-binding isolation.
+5. Add Tauri integration and adversarial tests, including bounded shutdown, uncertain cancellation recovery, descriptor custody, shared-façade admission, idempotency, and no bearer exposure through IPC.
+6. Run integrated Rust/UI/security/architecture gates, update delivery documents honestly, execute the Windows runbook on real x64/ARM64 hosts, and only then assess P70 sign-off.
+7. Before final handoff, inspect the complete diff, check for secrets/generated files, update `CURRENT_RUN.md`, and commit/push only verified intended changes with a vendor-neutral message.
+
+### Decisions & Gotchas
+- Tauri must not advertise Channel B merely because negotiated capabilities contain `mcpCapabilities.http`; the badge requires a live supervised lease.
+- Lease bearer state remains in Rust and must never cross renderer/Tauri IPC. Rehydrate only from a trusted Rust owner if a boundary is unavoidable.
+- Local cancellation without provider observation is uncertain/recoverable, never durable cancellation or failure.
+- ACP protocol desync, oversized frames, and pending-raw overflow require fail-closed quarantine; retrying the same handle is not safe.
+- MCP unknown post-effect outcomes must not be replayed. Retryable approval/availability refusals must not be cached as terminal effects.
+- UI work preserves EveryAIOS’s truthful readiness, Guard authority, semantic tokens, focus behavior, and reduced-motion behavior; comparator code/assets are not copied.
+- Linux/mock-process evidence does not qualify the Windows-first release path.
+
+## Previous Handover — 2026-09-24 ADR-0007 documentation/status synchronization
+
+### Active Goal
+- Expand and synchronize the Windows-first v1 scope and qualification documentation without changing source
+  code, flipping delivery checkboxes, claiming unverified work complete, committing, or pushing.
+
+### Where We Stopped
+- Added the v1 scope/qualification table and current evidence limitations to `DESKTOP-APP-SPEC.md` (lines 27–44),
+  including ACP identity/lifecycle/Channel B, automation admission/provenance, Windows enforcement/release,
+  Rust 2024/clippy/rustfmt/full tests, recovery/replay/audit/receipts, live Office snapshots/rollback,
+  PDF/browser/accessibility/CUA/agent acceptance, real Windows hosts, sequential upgrades, clean-machine
+  install/uninstall, and the
+  all-`PASS` `P70.E1`–`P70.E12` sign-off. The capability index/build-surface notes and H15/H28/H30/H31 rows
+  are synchronized at lines 157, 359, 372, 374–375, and 1428.
+- Synchronized the capability triple: `ARCH/09-FEATURE-MATRIX.md` (scope note and H15/H28/H30/H31 rows,
+  lines 14, 161, 174, 177–178) and `capabilities.yaml` (mixed-scope note plus H15/H28 post-v1 flags and
+  H30/H31 source notes, lines 14–15, 650, 728, 741, 747). H31 remains a mixed row: cited text research is
+  capability identity, while audio-digest output is post-v1.
+- Added the published qualification table and explicit non-claims to `SUPPORT-MATRIX.md` (lines 26–42 and
+  70–80), and corrected the Windows artifact cells to say target/not yet qualified rather than shipped.
+- Added the ADR-0007 delivery-status block and voice qualifiers to `TODO.md` (lines 173–178, 1580,
+  2557–2575, 2623, 2633). No checkbox was flipped; `check-doc-sync` still reports 1645 = 1353 done + 292
+  open. P70.E2 and P70.E12 now state the full Rust/quality matrix and all-E1–E12 sign-off rule.
+- Added the dated ADR-0007 amendment to `SPEC-CHANGELOG.md` (lines 20–47), without a new version heading so
+  the current v4.06 lockstep remains valid. Added only scope/status labels to `ARCH/12-UI-SPEC.md` (lines
+  8–13, 237, 889); no visual-design changes.
+- Prior ADR-0007 architecture synchronization remains in `ARCH/00-INDEX.md`, `ARCH/CORE.md`, `ARCH/AGENT.md`,
+  `ARCH/EXTERNAL-AGENTS.md`, `ARCH/AUTOMATION.md`, `ARCH/DESKTOP.md`, `ARCH/RECOVERY.md`, and
+  `ARCH/15-CONNECT-STORE.md` (including the current live gaps: empty ACP `mcpServers`, absent ACP resume,
+  scheduler provenance bypass, fresh `ExecutionKernel`, and no Windows acceptance/sign-off).
+- Validation performed: `node scripts/check-doc-sync.mjs` **PASS**; `node scripts/check-doc-refs.mjs`
+  **PASS**; `git diff --check` **PASS**; `node scripts/check-arch-invariants.mjs` **FAILED** on the current
+  tree at `src-tauri/src/acp_cmds.rs:2123` (`E4-WORK-CREATION`). No source, test-suite, UI, build, or
+  release-artifact validation was run for this documentation pass. No commit or push was made.
+- The worktree also contains unrelated concurrent changes: modified
+  `crates/everyaios-core/src/automation_runtime.rs` and
+  `crates/everyaios-core/src/scheduler_service.rs`, plus untracked `docs/testing/README.md`,
+  `docs/testing/windows-v1-runbook.md`, and `scripts/run-windows-v1-validation.ps1`. They were not
+  edited or reverted by this documentation pass.
+
+### Next Exact Steps
+1. Review the complete documentation diff and decide separately whether to address the existing architecture
+   invariant finding; do not hide or reclassify it in documentation.
+2. Review the concurrent source/untracked work separately, then regenerate the codebase map only after the
+   owning implementation change is complete.
+3. Execute the real Windows qualification work and record evidence for ACP/Channel B, automation provenance,
+   Office/PDF/browser/accessibility/CUA/live-agent flows, recovery/replay, sequential upgrades, and
+   clean-machine install/uninstall.
+4. Re-run the four documentation checks after any documentation revision; only an all-`PASS`
+   `P70.E1`–`P70.E12` record can close the release sign-off.
+
+### Decisions & Gotchas
+- ADR-0007 amends scope and qualification policy only; it adds no canonical primitive, runtime, registry,
+  event log, scheduler, recovery authority, or authorization system.
+- ACP v1 is the qualified baseline; ACP v2 remains narrowly unsupported until an explicit adapter and
+  acceptance record exist. Empty Channel B, missing resume, and production automation provenance bypass
+  remain visible gaps, not implied capabilities.
+- Voice input, STT, TTS, wake-word, voice memo, and audio-digest output remain post-v1 exclusions. H31 is
+  intentionally mixed-scope rather than being erased from the v1 capability identity.
+- `Implemented — unverified`, `blocked`, `runnable`, and `open` are not interchangeable with `pass`; the
+  documentation deliberately preserves the current gaps and checkbox arithmetic.
+- The architecture-invariant failure is in the current source tree and was not fixed because this task is
+  documentation/status-only.
+
+## Previous Handover — 2026-09-23 v1 Delivery Implementation Pass (P70 + P69 gates)
 
 ### Active Goal
 Implement the remaining v1 delivery work: the P70 release programme end to end, then the mechanically-enforceable P69/P71 invariant rows — verifying each against the tree before flipping, and recording residuals honestly.

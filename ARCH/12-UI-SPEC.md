@@ -5,6 +5,17 @@
 > and interaction *detail*. `DESKTOP.md` owns the **boundary**: the UI is a projection, it owns no durable
 > truth, it mutates only through the Work Gateway, and the File Workbench opens any resource through a viewer
 > registry. **User-facing vocabulary is Chat, not Session** (see [`SESSION.md`](SESSION.md) §2): the sweep has landed — the sidebar, title bar, new-button, composer and palette labels below all read **Chat**. `Session` survives only as the internal/API term (`P69.A23` closed).
+>
+> **v1 scope/status clarification (2026-09-24):** This is a layout and interaction contract, not a Windows
+> qualification record. The cockpit must show the canonical projection and keep `implemented — unverified`,
+> `blocked`, `runnable`, and `open` states distinct. Voice input, speech-to-text, TTS, wake-word, voice memo,
+> and audio-digest output are explicit post-v1 exclusions; a disabled or staged control is not a v1 capability
+> claim. See [`ADR/0007`](ADR/0007-windows-first-v1-qualification.md).
+>
+> **Projection/lease amendment (2026-09-24):** [`ADR/0008`](ADR/0008-session-workbench-projection-and-resource-leases.md)
+> defines the per-Session `SessionWorkbenchProjection`/`LensState` contract. These are non-authoritative UI
+> projections: active/open lenses, drafts, queues, approvals, receipts, and resource references render from
+> canonical owners, never become a second kernel or permission system, and never carry bearer/token material.
 
 ## 0. Projection contract — what the UI reads, never owns, and how it mutates (`P69.A23`)
 
@@ -14,6 +25,34 @@
 - **Owns:** no durable truth. Every store entry is projection, cache (with an invalidation rule), or ephemeral UI state (selection, tabs, composer text) per UI.md §2. Optimistic presentation never asserts a completed effect before the receipt exists.
 - **Mutates:** only through the Work Gateway — `UI → Tauri IPC → Work Gateway`, with effects additionally passing Guard (agent/automation paths carry an `AuthorizationTicket`; human UI acts through a trusted native gesture). The shell is never an alternate kernel, Work database, security engine, or event log.
 - **Timeline:** the Progress view (§4.3) renders the canonical event log; the Chat vocabulary rule applies throughout this document.
+
+### 0.1 LensState, per-Session projection, and resource honesty
+
+[`ADR-0008`](ADR/0008-session-workbench-projection-and-resource-leases.md) is the boundary contract for the
+right rail and all viewports. The shell reads one non-authoritative `SessionWorkbenchProjection` keyed by the
+canonical `SessionId`; it composes `Session → Work → Run → AgentBinding` owners and safe `ResourceRef`/lease
+attachments. `LensState` records the active/open lens, view order, observed resource generation, and
+availability (`available | stale | unavailable | conflicting | pending`). It does not own a physical browser,
+Office, Desktop, or provider resource.
+
+- **Per-session persistence:** `activeView`, open lens order, selected resource references, and unsubmitted
+  drafts are keyed by the current Chat/Session. Switching Chats restores only the selected Session's lens
+  state; it never transfers a tab, queue, lease, or physical handle from the previous Chat.
+- **Resource states:** stale generation, missing resource, revoked lease, and cross-Session conflict are
+  explicit states. Disable mutating controls, explain the safe reason, and offer re-observe/reopen/reattach;
+  never silently fall back to another resource or claim live access.
+- **Drafts and queues:** a composer draft is durable pre-submit input; a submitted prompt becomes a Work/Run
+  queue item with an event-cursor identity. Steering is an active-Run control, not a queue item. A question or
+  review is attached to its exact Work/Run; an approval card is Guard-owned; a receipt is audit-owned.
+- **Takeover:** user takeover is a native-gesture request. The old lease is fenced before user-controlled
+  action, Guard still decides the effect, and the agent resumes from a checkpoint with stale refs invalidated.
+- **Privacy:** IPC/UI payloads may contain safe ids, generations, availability, and conflict classes only—no
+  bearer, token, cookie, private provider state, or credential value.
+- **Responsive/accessibility:** the projection must preserve the rail/center/viewport layout, provide a
+  keyboard-reachable lens switcher and focus restoration, announce freshness/lease conflicts and queue/approval
+  changes to assistive technology, avoid color-only status, honor reduced motion/text zoom, and keep the
+  center conversation/now-doing strip visible when the viewport collapses. The complete edge-case matrix is
+  ADR-0008 §6 and remains pending implementation/qualification.
 
 ---
 
@@ -228,8 +267,8 @@ Displayed when the agent creates/edits a file. Shows:
 | `+` button | Attach files, images, screenshots, URLs |
 | Text input | Main prompt area (multiline, auto-expand) |
 | Mode selector | Normal / Plan / Research / Quick / Code — **SUPERSEDED (2026-09-10):** the shipped composer is the SPEC three-control taxonomy (WHO Agent ▾ / WHAT Work-Mode Auto·Plan·Build·Research / HOW MUCH Autonomy Sandbox·Ask·Auto·Maximum, default `[Auto] [Ask]`); Code/browser/Office/terminal are capabilities inside Build, not modes. See SPEC composer section. **Casual (v3.9, 2026-09-13):** the row collapses to one plain autonomy dial (`Look only · Ask me first · Balanced · Just do it`); Agent ▾ / Work Mode ▾ are power-only. Display layer over the same `PermissionMode` — no policy change. |
-| 🎙 Microphone | Voice-to-text recording |
-| 🔊 Speaker | Read-aloud toggle (H28 — offline sherpa-onnx TTS by default; hosts Piper voices, ⚠️ piper archived) |
+| 🎙 Microphone | Voice-to-text recording — **post-v1**, disabled/honest until qualified |
+| 🔊 Speaker | Read-aloud toggle (H28 — **post-v1**, disabled/honest until qualified; offline sherpa-onnx TTS remains deferred) |
 | ▶ Send | Submit message (Enter also works) |
 | Slash commands | **Agent-dependent (H32).** Built-in runtime bound: EveryAIOS `/help` `/mode` `/model` `/undo` `/compact` `/clear` `/export` (local intercept). ACP agent: live `available_commands_update` list; submit `/name args` as `session/prompt` text — do **not** intercept EveryAIOS slash. No per-harness hardcoded tables. |
 | `!macro` | Knowledge macro expansion (e.g., `!deploy-checklist`) — inbuilt composer only |
@@ -454,7 +493,7 @@ interface ViewDefinition {
 ```
 
 - Core four + Office + Progress are first-party views using this contract; plugins use the same `+` slot
-- **Per-session persistence** (Cursor bug fix): activeViewId, officeDocId, railCollapsed, splitRatio, browseMode (clean | my-chrome), composerMode (agent | plan | research | quick | code) saved per sessionId — switching chats restores exactly what you left; a new chat starts rail-collapsed until a tool needs a view
+- **Per-session persistence** (session-state fix): activeViewId, officeDocId, railCollapsed, splitRatio, browseMode (clean | my-chrome), composerMode (agent | plan | research | quick | code) saved per sessionId — switching chats restores exactly what you left; a new chat starts rail-collapsed until a tool needs a view. These are `LensState`/projection preferences, not ownership of a physical resource; the scope and reattachment rules are normative in [`ADR/0008`](ADR/0008-session-workbench-projection-and-resource-leases.md) §1.3 and §4.
 
 ### 4.3 Progress View (view.progress)
 
@@ -681,10 +720,14 @@ Unified timeline of all agent actions:
 ### 5.2 Interrupt (User Takes Over)
 1. User clicks **⏸ Pause** button (or agent asks for input)
 2. "● Live" → "⏸ Paused" indicator
-3. All panels become interactive/editable
+3. All panels become interactive/editable only after the native user gesture and the Work/Run lease transition succeed
 4. Shell toggles to writable
 5. Code editor accepts input
 6. Browser allows clicking/typing
+
+A takeover request against a conflicting or stale lease shows the conflict and leaves the old holder fenced;
+it never transfers a physical handle implicitly. The agent is notified and its prior element/resource refs are
+invalidated. Guard still authorizes each mutating effect.
 
 ### 5.3 Resume
 1. User clicks **▶ Resume** button
@@ -692,6 +735,9 @@ Unified timeline of all agent actions:
 3. User types: "Fixed the formula in B4, updated chart title"
 4. Agent receives context and continues
 5. Panels return to read-only, "● Live" restores
+
+Resume reuses the same canonical Session/Work/Run/Binding context and Work/Run-owned lease or fence; it does not
+invent a new owner. These takeover and stale-generation cases are required pending acceptance rows in ADR-0008 §6.
 
 ---
 
@@ -880,7 +926,7 @@ Unified timeline of all agent actions:
 - **Storage intelligence UI (D9–D12/G7/G8):** Files tab gains a **treemap view** (squarified, stable extension-hashing colors), disk-usage summary, duplicate-group reports, large-file finder list, and a **storage-health card** (drive thresholds, cleanup plans — D12) — all with Guard-2 diff-card cleanup; a **global instant-search palette** (`Cmd+K`-adjacent, FTS5 filename index) matches the Everything/UltraSearch UX (doc 49); the search palette and research flows use the **tiered cascade (G8)** — cached <10ms, 50-page parallel fetch (doc 52 §4)
 - **Generative UI (H25):** sandboxed live components in chat (§3.2); AG-UI wire protocol
 - **Resumable streams (H27):** reconnecting chip + resume-from-last-token (§3.2)
-- **Voice I/O:** input bar mic (H15, offline STT options Vosk/sherpa-onnx/whisper.cpp + optional wake word) + speaker read-aloud toggle (H28, offline TTS default) — all local-first, BYOK for cloud voices only
+- **Voice I/O (post-v1 exclusion):** H15 voice input, speech-to-text, and wake-word plus H28 TTS/read-aloud are not v1 acceptance surfaces. Any staged mic or speaker control must be disabled/honest, must not inject a transcript or audio result, and must not be presented as qualified. The text/cited research portion of H31 may remain in scope; its audio-digest output remains post-v1 under [`ADR/0007`](ADR/0007-windows-first-v1-qualification.md).
 - **Image generation (A10):** chat image tool → provider endpoint (GPT-Image-1/DALL·E 3/Flux/SD/MCP), results as ref-handle artifact cards
 - **Clipboard (H26):** guard-ticketed clipboard read/write tools; history panel opt-in
 

@@ -2,6 +2,11 @@
 
 > **Status:** Subsystem contract, derived from [`CORE.md`](CORE.md) §6 and §7.5. Owns authorization,
 > credentials and evidence. Invariants it must not weaken: **I7, I10, I11, I12, I13, I14, I15**.
+>
+> **Projection/lease amendment (2026-09-24):** [`ADR/0008`](ADR/0008-session-workbench-projection-and-resource-leases.md)
+> requires Guard checks to bind the canonical `SessionId → WorkId → RunId → AgentBindingId` owner context and,
+> where applicable, `ResourceRef`/generation/lease/fence. A lease is a concurrency fact, never a permission or
+> a second authorization model.
 
 ---
 
@@ -59,6 +64,27 @@ mint (from risk + operation + read-only)
   user may not approve "reorganize my files" and have new mutations minted later under it.
 - **Control-plane separation:** operations that only make sense before a decision (e.g. extending a pending
   card's TTL) are explicitly denied to the agent side and reachable only from the control plane.
+
+### 3.1 Identity-bound lease checks
+
+For a resource-backed effect, Guard's validation and any ticket it mints/consumes bind the canonical owner
+context `(SessionId, WorkId, RunId, AgentBindingId)` plus the exact `ResourceRef`, resource generation, and—when
+present—the `lease_id`/fence. The host derives this context from the authenticated ACP/MCP/Work connection;
+caller arguments, transport headers, and JSON-RPC ids cannot select a different Session, Work, or Binding.
+A mismatch, missing generation, revoked lease, or stale fence fails closed before the executor is reached.
+
+A `ResourceLease` answers **which Work/Run may exercise a resource concurrently**. It does not answer whether
+the effect is allowed. Guard remains the sole authorization authority, with the same risk, path/network,
+sandbox, approval, and audit rules; a valid lease cannot widen a capability or replace a ticket. A user takeover
+is a native-gesture request followed by a Guard decision, and the old holder is fenced before the new action.
+
+Lease possession material never crosses the renderer or Tauri IPC. Public errors, audit rows, projections, and
+logs may carry safe lease ids, generations, and conflict classes only. Logout or a configuration-scope change
+invalidates private authentication/lease access without rewriting canonical identity; the next use must
+re-authenticate or re-resolve scope. Unknown post-effect outcomes remain `uncertain` and are handled by
+[`RECOVERY.md`](RECOVERY.md), never converted to success, failure, or cancellation. The full binding and
+contention matrix is normative in [`ADR/0008`](ADR/0008-session-workbench-projection-and-resource-leases.md)
+and remains pending security qualification.
 
 ---
 

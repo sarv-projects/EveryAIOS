@@ -3,6 +3,11 @@
 > **Status:** Subsystem contract, derived from [`CORE.md`](CORE.md) §3 and §5. Owns the execution primitives,
 the canonical event vocabulary, and the rule that every read surface is a projection. Invariants it must not
 weaken: **I3, I4, I6, I7, I9**.
+>
+> **Projection/lease amendment (2026-09-24):** [`ADR/0008`](ADR/0008-session-workbench-projection-and-resource-leases.md)
+> makes Work/Run/Event/Receipt the sole truth spine and derives the non-authoritative
+> `SessionWorkbenchProjection` from it. Work/Run own resource lease attachments and fencing; Workbench
+> references never become execution, permission, or recovery authorities.
 
 ---
 
@@ -117,6 +122,35 @@ Two consequences that are easy to violate:
    kernel owns.
 2. A read model that cannot be rebuilt from events is either derived state with a documented cache rule, or
    a bug. There is no third option.
+
+### 6.1 Workbench references and interaction semantics
+
+[`ADR/0008`](ADR/0008-session-workbench-projection-and-resource-leases.md) derives the cockpit's
+`SessionWorkbenchProjection` from the existing `Session → Work → Run → AgentBinding` chain. It changes none
+of the truth owners in §2, §4, or §5:
+
+- Work owns its durable objective and the queue of accepted user prompts.
+- Run owns one execution attempt, its waits, in-flight effect, and active resource-lease/fence state.
+- Event/Receipt/Audit own historical truth and evidence. A Workbench reference is only a typed pointer to
+  those records, never a replacement event log, receipt, or retry state machine.
+- Session/UI may retain a logical projection, lens state, and pre-submit draft reference. A draft is not a
+  prompt until submitted; submission creates a durable Work/Run queue item before dispatch.
+
+The input vocabulary is intentionally distinct:
+
+| Surface record | Owner | Semantics |
+|---|---|---|
+| **Prompt queue** | Work/Run | Ordered durable user intents accepted for that Work/Run; cancellable and replayable. It is not an in-memory UI list. |
+| **Steering** | Active Run coordination | A bounded control such as pause, redirect, narrow scope, or interrupt. It is not a queued prompt and never silently becomes a new Work. A stale target reports `not_applied` or raises a question. |
+| **Review** | Work/Run | A request to inspect a plan, diff, or pending effect. It grants no authority and is separate from approval. |
+| **Question / user input** | Work/Run wait | A question is bound to the exact Work/Run and resource generation; its answer is an event on that chain. |
+| **Approval** | Guard, linked to the effect | The native human/automation decision for one exact authorization ticket. UI rendering never decides it. |
+| **Receipt** | Audit/Work receipt chain | Evidence of observation/verification. The projection can display a reference and uncertainty, never manufacture success. |
+
+A Session's lens may point at any of these records, but switching lenses or Sessions cannot change their
+owner. Deleting a Session detaches the projection and its draft/lens state; surviving Work/Run queues, events,
+receipts, and leases remain addressable and recoverable. The complete contention, generation, crash, and
+secret-custody matrix is normative in ADR-0008 §6 and remains pending implementation/qualification.
 
 ---
 

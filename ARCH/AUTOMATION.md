@@ -4,6 +4,16 @@
 > Owns the **automation definition**, its **revisions**, its **triggers and occurrences**, and the **Work
 > factory** that turns a triggered revision into ordinary Work. It owns **no execution**.
 > Invariants it must not weaken: **I4, I6, I8, I9, I26**.
+>
+> **v1 scope clarification (2026-09-24):** [`ADR/0007`](ADR/0007-windows-first-v1-qualification.md)
+> makes durable revision/occurrence identity, `compile_work` on the production firing path, event/webhook
+> admission, and pending/uncertain/cancelled handling v1 qualification obligations. It adds no scheduler
+> state machine or canonical primitive. Voice/STT/TTS/wake-word/audio remain post-v1.
+>
+> **Projection/lease amendment (2026-09-24):** [`ADR/0008`](ADR/0008-session-workbench-projection-and-resource-leases.md)
+> applies the same `Session → Work → Run → AgentBinding` identity, non-authoritative projection, and
+> Work/Run-owned resource leases to headless automation Sessions. It does not create hidden Chats or move
+> durable admission/occurrence ownership into the scheduler.
 > **Added by [`ADR/0005`](ADR/0005-external-agents-are-the-v1-engines.md) and `P71`.** Automation is already
 > implemented (`everyaios-core/src/{scheduler_service,automation_runtime}.rs`, the `automations-panel` and
 > `automation-editor` surfaces); this document is the contract those implementations must converge on.
@@ -68,9 +78,18 @@ Automation ──▶ revision 4 ──▶ Work created ──▶ Work records re
 Every Work created by an automation records `automation_id` · `automation_revision_id` ·
 `trigger_occurrence_id`. Editing affects future runs; it never rewrites a durable Work (**I4**, **I6**).
 
-> **Identity gap (`P71`):** the canonical IDs above do not exist yet in `everyaios-types`.
-> `RunSnapshot.task_version` gestures at this and must not be mistaken for it. Until the IDs land, revision
-> immutability is a documented obligation without an enforceable key.
+> **v1 identity requirement ([`ADR/0007`](ADR/0007-windows-first-v1-qualification.md)).** The IDs above
+> are v1 release obligations, even though the canonical schema and production firing wiring are not yet
+> complete. `revision_id` must be content-addressed and immutable for the life of a Work; `occurrence_id`
+> must identify one trigger admission durably; both must be stamped on the Work created by that occurrence.
+> They are fields/provenance on existing records, not new canonical primitives.
+>
+> **Current gap (2026-09-24):** `everyaios-core/src/automation_runtime.rs:150`–`193` implements
+> `compile_work` and its provenance fields, but `src-tauri/src/scheduler_fire.rs:177`–`210` creates the
+> automation Work/Run directly and does not call that factory. `scheduler_service.rs:743`–`754` records
+> `mark_fired` as a job timestamp and advances the schedule; it is not yet the durable occurrence identity
+> required above. The compiler and its focused tests are **implemented — unverified**, not production
+> provenance evidence.
 
 ## 4. Triggers and occurrences
 
@@ -84,6 +103,22 @@ Every Work created by an automation records `automation_id` · `automation_revis
 Every trigger produces an **Occurrence** record before any Work exists. An occurrence is what makes
 deduplication, misfire accounting and "why did this run?" answerable — three questions a bare cron entry
 cannot answer.
+
+**Occurrence admission is part of v1 qualification.** The admission path validates event/webhook
+authenticity, schema, scope, frequency, and misfire policy, then durably records the automation id, the
+immutable revision id, and the occurrence id before Work creation. The occurrence-to-Work mapping is
+one-to-one for a first firing and remains stable across retries and reconnects. A later trigger firing
+gets a later occurrence; it never reuses an old occurrence to hide a duplicate.
+
+The existing Work/Event/Receipt vocabulary carries the admission states without a scheduler-owned
+state machine:
+
+- `pending`: the occurrence is durably admitted but Work admission is not complete;
+- `uncertain`: admission or effect completion cannot be proven and must be reconciled before retry;
+- `cancelled`: cancellation won the monotonic race and no later attempt re-opens that occurrence.
+
+`pending` is occurrence admission state, `uncertain` is the existing uncertain-effect/Recoverable
+projection, and `cancelled` is the existing Work cancellation state. None is a new primitive.
 
 > **Server-free honesty (I15).** A closed, offline laptop cannot receive an internet webhook. The contract
 > therefore supports, in this order: **polling** → **app-running listener** → **user-hosted ingress**
@@ -109,9 +144,11 @@ The factory's obligations:
 It must **not** execute effects, hold execution state, or retry effects. Those belong to the Work kernel
 (`WORK.md` §2) and to `RECOVERY.md`.
 
-> **Current-code note (`P71.3c`):** `everyaios-core/src/automation_runtime.rs` currently *is* a runtime
-> (`AutomationRuntime::run`/`run_step` executing `run_code`, `online_search`, `email`, `calendar`). It must
-> converge on this section: a compiler that produces Work.
+> **Current-code note (`P71.3c` + ADR-0007, 2026-09-24):** `everyaios-core/src/automation_runtime.rs`
+> is now the compiler seam and exposes `compile_work` with the required provenance fields. The remaining
+> v1 gap is the production firing path: `src-tauri/src/scheduler_fire.rs` still constructs Work/Run and
+> invokes the bound ACP turn directly. That path must call the factory and carry the durable occurrence
+> through Work, Run, and recovery before the automation row can be qualified.
 
 ---
 
@@ -228,6 +265,28 @@ second source of truth for Session identity is exactly the **I4** failure. What 
 > Chat, 1:1) · `automation` (no Chat, normal) · `delegated` (no Chat, explicit). The requirement below is
 > therefore **settled as a rule**, not an open question; what remains is implementation (`P71.8`).
 
+### 10.1 Headless identity, projection, and resource scope
+
+An automation firing uses the same canonical owner chain as an interactive turn:
+
+```text
+automation SessionId → WorkId → RunId → AgentBindingId → ResourceRef/lease attachment
+```
+
+The automation Session has **no hidden Chat**. The Work factory, Work/Run/Event/Receipt/Audit spine, and
+resource engines retain their existing owners; the scheduler retains only definitions, triggers, admission,
+and durable occurrence identity. A `SessionWorkbenchProjection` for an automation Session is a read model that
+can be rendered by the Automation screen or attached later to a continuation Chat, but it is not a scheduler
+run ledger, execution state machine, or second event log.
+
+A headless Run uses the same Work/Run-owned `ResourceLease` generation/fence rules as an interactive Run.
+Browser profiles/tabs, Office documents, Desktop targets, and provider-private handles remain typed resource
+references; the automation Session does not own the physical resource. Missing/stale resources, lease
+contention, crash/reclaim, logout, and config-scope changes follow ADR-0008 and `RECOVERY.md`/`SECURITY.md` with
+the same honest `uncertain` outcome. The acceptance matrix, including no-Chat automation and no bearer/token
+in UI/IPC/logs, is normative in [`ADR/0008`](ADR/0008-session-workbench-projection-and-resource-leases.md) and
+remains pending implementation/qualification.
+
 ---
 
 ## 11. UI contract
@@ -236,8 +295,13 @@ second source of truth for Session identity is exactly the **I4** failure. What 
 
 - the automation list — name · schedule or trigger · bound agent · enabled
 - per-automation actions — **Run now** · Edit · Enable/Disable · Duplicate · Export
-- recent runs with an honest status — running · completed · failed · **waiting for approval**
+- recent runs with an honest status — pending · running · completed · failed · **uncertain** · **cancelled** ·
+  **waiting for approval**; a `pending` or `uncertain` occurrence is never rendered as success
 - export/import as `*.automation.json`, **never** carrying a secret (only `credential_ref`)
+
+The v1 evidence rule is that the list and history are projections of the canonical Work/Event/Receipt
+spine. They do not establish occurrence provenance or execution completion; those require the factory
+and recovery paths named in [`ADR/0007`](ADR/0007-windows-first-v1-qualification.md).
 
 Runs/Steps/effects stay behind the details affordance. A user who never opens it should still be able to
 tell at a glance whether their morning job ran.
@@ -263,6 +327,9 @@ tell at a glance whether their morning job ran.
 - `scheduler_service.rs` → **trigger plane** (`P71.3d`): remove the execution state machine and the model
   assumptions; keep cron/interval/event/webhook/window, battery policy, misfire policy, admissions.
 - `RunSnapshot.task_version` → superseded by `automation_revision_id` once the canonical IDs land (`P71.4`).
+- [`ADR/0007`](ADR/0007-windows-first-v1-qualification.md) makes the remaining production call from
+  `scheduler_fire.rs` into `compile_work`, durable occurrence admission, and the existing Work recovery
+  semantics a v1 release gate; it does not add a scheduler-owned executor.
 - The `automations-panel` / `automation-editor` / `schedules-section` surfaces keep their UX; what changes is
   what they are allowed to be an authority over — nothing (`UI.md` §1).
 

@@ -4,6 +4,11 @@
 does not restate them. Read CORE first — the invariants it must not weaken (I4, I6, I23, I24, I25) are
 defined there.
 
+> **Projection/lease amendment (2026-09-24):** [`ADR/0008`](ADR/0008-session-workbench-projection-and-resource-leases.md)
+makes `Session → Work → Run → AgentBinding` explicit and defines a non-authoritative, per-Session
+`SessionWorkbenchProjection` with typed resource references and Work/Run-owned lease attachments. A Session
+owns that logical view, not the physical browser/Office/Desktop/provider resource.
+
 ---
 
 ## 1. The problem this document solves
@@ -60,7 +65,7 @@ flowchart TD
     NS --> SEN["SESSION (kind: automation | delegated)"]
     SE --> WK["WORK (one or more)"]
     SEN --> WK
-    WK --> AB["AGENT BINDINGS"]
+    WK --> AB["RUN → AGENT BINDING"]
 ```
 
 | Primitive | Meaning | Required? |
@@ -71,6 +76,17 @@ flowchart TD
 | **Chat** | One conversation — the user's object | yes for `interactive` Sessions; **none** for `automation`/`delegated` (ADR-0006) |
 | **Session** | Canonical context, events, artifacts, bindings. Behind a Chat when `interactive`; standalone when `automation`/`delegated` | **yes — every Work has one** |
 | **Work** | The durable objective inside a Session (see CORE §5) | per objective |
+
+The canonical owner chain is explicit and non-singleton:
+
+```text
+SessionId → WorkId → RunId → AgentBindingId
+```
+
+A Session may contain several Works, a Work several Runs, and a binding may be switched without changing
+Session or Work identity. `SessionWorkbenchProjection` is a per-Session read model over that chain; it is not
+an owner of the physical resources named by its `ResourceRef` values. The typed lease attached to a resource
+belongs to the Work/Run, while the Session retains only a safe attachment/reference.
 
 > **Why Space exists at all:** "workspace" is already overloaded by every agent CLI (working directory).
 > Giving the top-level container a distinct name keeps `Workspace` meaning exactly one thing — physical
@@ -127,10 +143,10 @@ Work → Session → Project → Space → User
 | Trigger fires (scheduler · event) | create an `automation` Session **with no Chat** and compile its Work (`WORK.md` §7, `AUTOMATION.md` §5) — never a hidden Chat |
 | Open a run | attach a Chat to that existing non-interactive Session; the 1:1 rule then applies to it |
 | Explicit out-of-session delegation | create a `delegated` Session (ordinary child Work does **not** — it stays in its parent's Session, I8) |
-| Resume Chat | rehydrate Session **from the event log**, never from model memory; re-attach bindings |
+| Resume Chat | rehydrate Session **from the event log**, never from model memory; re-attach bindings and rebuild its `SessionWorkbenchProjection` from the acknowledged cursor |
 | Switch agent | **must not** create a Session — see [AGENT.md](AGENT.md) and invariant I24 |
 | Move to / from Project | update the association only; history, events and artifacts unchanged |
-| Delete Chat | delete the Session and its projections; **retain** audit and receipts under the audit retention policy |
+| Delete Chat | delete/detach the Session projection, lens state, and UI handles; **retain** Work/Run records, queues, events, audit, receipts, and Work-owned leases under their owners; a surviving Work can be reattached later |
 
 ---
 
@@ -148,6 +164,33 @@ Session S123
 
 Work is the durable unit (I6): it survives crashes, pauses, agent switches and UI disconnects. A Session is
 the container that makes a Work reachable; it is **not** a second durability mechanism.
+
+### 7.1 Projection, interactive/headless behavior, and reattachment
+
+A `SessionWorkbenchProjection` is a non-authoritative read model keyed by canonical `SessionId`. It contains
+per-session active/open lens state, typed resource references, safe lease attachments, draft references, and
+references to Work/Run queue, wait, review, and receipt records. It is rebuilt from canonical records and the
+event cursor; it is never a second execution state machine. The full model and contention rules are in
+[`ADR/0008`](ADR/0008-session-workbench-projection-and-resource-leases.md) §1–§4.
+
+- **Interactive:** the Chat is the user-facing view of the Session. Lens state and unsubmitted drafts belong to
+  that Session's projection and survive a renderer reload. Submitting a draft creates a durable Work/Run queue
+  item; it does not make the UI the owner of the Work. An unpromoted draft follows the Session's explicit
+  retention/deletion policy and is never silently promoted after a restart.
+- **Headless/delegated:** an automation or delegated Session uses the same identity, projection, and lease
+  rules without a hidden Chat. A later “open run” attaches a fresh continuation Chat to the existing
+  Session/Work; it does not mint a replacement owner chain.
+- **Switching:** selecting another Chat restores only that Session's own lens and resource references. A
+  shared resource may be visible in both projections, but no lease, physical handle, draft, queue, or active
+  lens transfers implicitly.
+- **Deletion:** deleting a Session detaches its projection, lens state, and UI handles. Surviving Work/Run
+  records, queues, events, receipts, and Work-owned leases remain canonical and continue under recovery. A
+  later reattach replays from the last acknowledged event cursor and marks the projection rebuilding/stale
+  until complete; it never fabricates a clean resource or completion state.
+
+Session deletion therefore means “detach this view,” not “delete every physical or durable thing the view
+touched.” The edge-case acceptance rows, including missing/stale resources and logout/config-scope changes,
+are normative in ADR-0008 §6 and remain pending qualification.
 
 ---
 

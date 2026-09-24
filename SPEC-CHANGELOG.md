@@ -6,7 +6,7 @@ This file records historical decisions, research transfers, implementation updat
 
 Each entry records the date or release marker, change category, affected sections or capability IDs, decision, implementation impact, and verification. Historical entries below are preserved; new entries must use this structure.
 
-**Point-in-time rule — how to read every number below.** Every count in an entry — capability total, TODO census, test counts, version marker — is that entry's own verification evidence **at that date**. This file is an archive; entries are never rewritten to today's numbers, so a dated number is not a stale number. Read `census stays 157` in the v3.69–v3.75 entries as exact: the nine native-plane rows (**B10 · B11 · C14 · C15 · F16 · I14–I17**) landed later, in **v3.76**, which is why those entries and the current contract differ without either being wrong. The only *current* numbers live in `capabilities.yaml` / `ARCH/09-FEATURE-MATRIX.md` / `DESKTOP-APP-SPEC.md` §0 (capability identity) and in `TODO.md`'s live-count line (delivery); `scripts/check-doc-sync.mjs` machine-checks those two. The only *current architecture* is `ARCH/CORE.md` plus its subsystem contracts, as amended by `ARCH/ADR/0001–0006` — in particular [`ADR/0005`](ARCH/ADR/0005-external-agents-are-the-v1-engines.md) (external agents are the v1 engines; the built-in engine defers to post-v1) and [`ADR/0006`](ARCH/ADR/0006-session-kinds.md) (session kinds), which **supersede any earlier engine or session statement in an entry below**. If a number anywhere else disagrees with them, the number is historical and the three identity surfaces plus the live-count line win.
+**Point-in-time rule — how to read every number below.** Every count in an entry — capability total, TODO census, test counts, version marker — is that entry's own verification evidence **at that date**. This file is an archive; entries are never rewritten to today's numbers, so a dated number is not a stale number. Read `census stays 157` in the v3.69–v3.75 entries as exact: the nine native-plane rows (**B10 · B11 · C14 · C15 · F16 · I14–I17**) landed later, in **v3.76**, which is why those entries and the current contract differ without either being wrong. The only *current* numbers live in `capabilities.yaml` / `ARCH/09-FEATURE-MATRIX.md` / `DESKTOP-APP-SPEC.md` §0 (capability identity) and in `TODO.md`'s live-count line (delivery); `scripts/check-doc-sync.mjs` machine-checks those two. The only *current architecture* is `ARCH/CORE.md` plus its subsystem contracts, as amended by `ARCH/ADR/0001–0008` — in particular [`ADR/0005`](ARCH/ADR/0005-external-agents-are-the-v1-engines.md) (external agents are the v1 engines; the built-in engine defers to post-v1), [`ADR/0006`](ARCH/ADR/0006-session-kinds.md) (session kinds), and [`ADR/0007`](ARCH/ADR/0007-windows-first-v1-qualification.md) (expanded v1 scope and all-`PASS` qualification policy), and [`ADR/0008`](ARCH/ADR/0008-session-workbench-projection-and-resource-leases.md) (non-authoritative Session projection and typed resource leases), which **supersede any earlier engine, session, scope, projection, or lease statement in an entry below**. If a number anywhere else disagrees with them, the number is historical and the three identity surfaces plus the live-count line win.
 
 ## Documentation ownership
 
@@ -15,6 +15,36 @@ Each entry records the date or release marker, change category, affected section
 - `ARCH/` contains architecture, module ownership, data-flow, protocol, and deployment detail.
 - `TODO.md` contains delivery status, open work, blockers, and evidence links.
 - A citation or implementation detail may remain in the spec only when it is itself a current behavioral constraint; its historical or evidentiary explanation belongs here.
+
+---
+## 2026-09-24 — ADR-0007: Windows-first v1 scope and qualification amendment
+
+**Change category:** scope, qualification policy, and delivery-status documentation only. No capability identity,
+runtime, registry, workflow, or source implementation changed in this pass.
+
+**Decision:** [`ADR-0007`](ARCH/ADR/0007-windows-first-v1-qualification.md) expands the Windows-first v1
+release obligations without changing the existing primitive or ownership model. The product contract, support
+matrix, capability triple, delivery queue, and UI contract now make the following requirements explicit: ACP
+`Session → Work → Run → AgentBinding` identity and lifecycle with per-handle cancellation/reconnect/resume and
+Channel B; durable automation occurrence/revision provenance through the production `compile_work` boundary;
+real Windows x64/ARM64 runtime enforcement, WGC/UIA/ConPTY, install, signing, updater, clean-machine
+uninstall, and sequential upgrade/rollback evidence; Rust 2024 formatting, clippy with warnings denied, and the
+complete workspace test matrix; production `ExecutionKernel` recovery, full Work replay, durable audit and
+per-effect receipts; real Office snapshot/rollback and PDF redaction, browser/accessibility/Desktop-CUA/
+live-agent acceptance; and one `P70.E1`–`P70.E12` sign-off in which every item is `PASS`. Voice input,
+speech-to-text, TTS, wake-word, voice
+memo, and audio-digest output remain explicit post-v1 exclusions.
+
+**Current evidence preserved:** Channel B is not bound in the live ACP launch (`mcpServers` is empty), production
+ACP resume/load is absent, the scheduler firing path bypasses the automation compiler's provenance contract, the
+live relay still constructs a fresh `ExecutionKernel`, no real Windows acceptance record exists, and the release
+harness has no all-`PASS` sign-off. The capability triple keeps H15/H28/H30 post-v1 and identifies H31's audio
+portion as post-v1 while retaining its text-research identity; no rows or checkbox counts were changed.
+
+**Verification:** `node scripts/check-doc-sync.mjs` **PASS**; `node scripts/check-doc-refs.mjs` **PASS**;
+`git diff --check` **PASS**. `node scripts/check-arch-invariants.mjs` **FAILED** on the current tree with the
+existing `E4-WORK-CREATION` finding at `src-tauri/src/acp_cmds.rs:2123`; no source, test-suite, UI, or
+release-artifact verification was performed by this documentation amendment.
 
 ---
 ## v4.06 — 2026-09-23 — P69.E9: the prefix-stability guard (I16 gets enforcement)
@@ -2766,3 +2796,34 @@ Six P50.3 queue items landed and verified; no capability IDs added or changed (c
 > **v3.3 changes:** NOOA deep-dive (doc 39) — **new C10 Pass-by-reference context** (live refs + bounded previews via script-eval; never serialize what you can reference) + **algorithm #32 ACT-R activation & spontaneous recall** (NOOA memory: retention half-life × log1p(strength), importance ≥8 protected, associative semantic+keyword+recency+graph recall, typed supports/contradicts/derived-from edges, pre-turn spontaneous context block) → 07 §7.7, 05 §5.9, 06 §6.6; **F13 now informed by DeerFlow 2.0 channels** (10 IM adapters + run_policy + dedupe_store, doc 39 §B1); microsandbox hypervisor resolved = **libkrun** (doc 39 §B2). Ledger 151 → **152**; matrix 100 → **101** rows.
 > **v3.1 changes (on top of v3.0):** adds **C9 Taste profile** (auto-learned coding-preferences with confidence scores — Command Code `taste-1` pattern, doc 37) + algorithm #31; ledger 147 → **151**; matrix 99 → **100** rows; doc 37 added.
 > **v3.0 changes:** folds in research docs 35–36 (Open WebUI / Vane / Open WebUI Computer / Composio-community batch), the complete ARCH set (12 docs, `desktop_app/ARCH/`), the browser tiered-engine stack + Session Vault + challenge handler (08 §8.8–8.10), multi-key BYOK key-rings (03), surgical office engine (04), token economy (05), dual-guard security (06), memory + the 7 algorithms (07), and the feature matrix grown **62 → 99 rows** (E10–E14 browser, F12 harness-driving, F13 messaging bridges, H17 widgets, H18 remote handoff). **Every shipped algorithm is now marked 🔁 TO BE RETESTED on the desktop target.**
+
+---
+## 2026-09-24 — ADR-0008: Session workbench projection and resource leases
+
+**Change category:** architecture decision and provenance only. No source, UI, test, workflow, generated
+file, or lockfile was changed by this documentation lane.
+
+**Decision:** [`ADR/0008`](ARCH/ADR/0008-session-workbench-projection-and-resource-leases.md) accepts a
+non-authoritative `SessionWorkbenchProjection` keyed by canonical `SessionId`, composed from the explicit
+`Session → Work → Run → AgentBinding` owner chain, and a typed Work/Run-owned `ResourceLease`/generation-fencing
+contract. A Session owns only the logical projection, safe resource references, lease attachments, lens state,
+and draft references; it does not own physical browser, Office, Desktop, or provider resources. The shared
+engines, ToolService, Guard, Vault, capability registry, Work/Event/Receipt spine, and Audit remain the single
+authorities. The projection is not a new Workbench primitive, runtime, event log, permission system, or second
+source of truth.
+
+**Scope and provenance:** the ADR carries the normative lifetime/ownership table, contention rules, and edge-case
+acceptance matrix. `ARCH/00-INDEX.md`, `ARCH/CORE.md`, and the Session/Work/Agent/External-Agent/UI/Capability/
+Browser/Office/Desktop/Recovery/Security/Automation contracts now carry concise derivations and cross-references
+rather than duplicating that model. `TODO.md` adds open row `P71.10` with the required implementation and
+qualification tests; no existing checkbox or pass claim was changed.
+
+**Implementation impact:** none in this lane. The projection, lease coordinator, resource adapters, Channel B
+mount, and live qualification remain explicitly pending. The matrix is a contract for future tests, including
+two-Session document viewing, concurrent writers, stale generations, shared/isolated browser resources, Desktop
+target leases, binding/provider restart, takeover, per-Session lens restoration, durable drafts/queues,
+question/approval/receipt ownership, crash recovery, Session deletion/reattachment, headless automation,
+missing/stale resources, logout/config-scope changes, secret non-disclosure, and unknown outcomes.
+
+**Verification:** documentation references and delivery synchronization are checked separately by the parent
+orchestrator. No implementation, build, runtime, Windows-host, or Channel-B acceptance is claimed here.

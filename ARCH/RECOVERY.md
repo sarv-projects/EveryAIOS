@@ -2,6 +2,15 @@
 
 > **Status:** Subsystem contract, derived from [`CORE.md`](CORE.md) §5.2 and §6. Owns what happens after a
 > crash, a kill, a disconnect or a lease loss. Invariants it must not weaken: **I6, I7, I15**.
+>
+> **v1 scope clarification (2026-09-24):** [`ADR/0007`](ADR/0007-windows-first-v1-qualification.md)
+> makes production `ExecutionKernel` recovery, full Work replay, durable audit/receipt handling, and
+> live crash/reconnect evidence v1 qualification obligations. Recovery still composes the one Work/Event/
+> Receipt spine; it is not a second runtime or authority. Voice/STT/TTS/wake-word/audio remain post-v1.
+>
+> **Projection/lease amendment (2026-09-24):** [`ADR/0008`](ADR/0008-session-workbench-projection-and-resource-leases.md)
+> adds resource generation/fence, held-lease reclaim, and event-cursor projection rebuild rules. These extend
+> recovery of the existing spine; they do not create a second recovery authority or event log.
 
 ---
 
@@ -99,6 +108,32 @@ an honesty violation.
 Both are recovery concerns, not only concurrency concerns: they are what stop a resumed Work from writing
 over someone else's newer state.
 
+### 6.1 Resource lease, generation, and projection recovery
+
+`ResourceLease` recovery follows the same Work/Run owner chain as execution; it is not scheduler state and not
+a UI lock. On restart, replay the lease lifecycle facts from the existing durable Work/event/audit records,
+then for each live lease:
+
+1. verify the Work/Run owner tuple and the resource's current identity/generation;
+2. compare the recorded fence with the current fence and reject any stale checkpoint, renewal, or commit;
+3. if the holder is alive, renew only within the same generation and owner tuple;
+4. if the holder is gone, mark the lease `uncertain`/`reclaim_pending` until process/resource identity and any
+   in-flight effect are reconciled;
+5. fence the old generation before granting a replacement lease; never transfer a bearer or physical handle;
+6. record release, expiry, revocation, reclaim, and uncertainty as durable evidence, then rebuild the
+   `SessionWorkbenchProjection` from the last acknowledged event cursor.
+
+A crash while a lease is held therefore does **not** make the resource immediately free. A crash after an
+effect but before its receipt remains `uncertain` under §3, even if the lease can later be reclaimed; the
+receipt/effect outcome is reconciled independently. A missing resource produces `unavailable`, and a changed
+file/browser/Desktop generation produces `stale`; neither may be converted to success or silently retargeted.
+
+Logout or a configuration-scope change invalidates private authentication/lease access without changing the
+canonical Session/Work identity. Re-authentication or scope re-resolution creates a new resource/lease generation
+and fence only after the old generation is fenced; it does not create a new canonical Session, Work, or provider-
+session identity. The edge-case matrix in [`ADR/0008`](ADR/0008-session-workbench-projection-and-resource-leases.md)
+is normative and remains pending qualification.
+
 ---
 
 ## 7. Checkpoints
@@ -109,6 +144,33 @@ phase transitions and before any irreversible effect — not on a timer, and nev
 
 A Work that is `Recoverable` is presented to the user as resumable **with what is known and what is
 unknown**, not with a confident summary that hides the ambiguous effect.
+
+### 7.1 v1 production recovery and full replay qualification
+
+A checkpoint primitive is not production recovery. For the v1 gate, restart must reconstruct the
+canonical Work chain from durable records: Work and Session ownership, `SessionKind`, Run identity,
+automation revision/occurrence provenance when present, AgentBinding state and private provider-session
+reference, checkpoints, pending approvals, and the last acknowledged event sequence. Replay must be
+idempotent and must refuse a malformed or incomplete record rather than manufacture a clean state.
+
+The durable ordering remains:
+
+```text
+intent → attempt → effect → observation → verification → receipt/event
+```
+
+If the process dies after an attempt but before its receipt, recovery reports `uncertain`, reconciles
+before retry, and never converts the missing observation into `failed` or `succeeded`. Audit append and
+receipt persistence must be on the production path, not only in isolated kernel tests. Client reconnect
+replays from the last acknowledged Work event sequence and re-attaches the existing binding; it does not
+create a replacement Work.
+
+**Current limitation (2026-09-24):** `crates/everyaios-core/src/work_gateway.rs` opens and replays a
+durable Work journal and rebuilds binding projections, but `crates/everyaios-core/src/chat.rs:1127`–`1154`
+constructs a fresh `ExecutionKernel::new()` in the live relay. Full cross-surface replay, production
+recovery wiring, and durable per-effect receipt attachment are therefore **implemented — unverified /
+open**, not a qualified v1 claim. The exact qualification rule is in
+[`ADR/0007`](ADR/0007-windows-first-v1-qualification.md).
 
 ---
 
@@ -128,7 +190,9 @@ unknown**, not with a confident summary that hides the ambiguous effect.
 The durable kernel persistence, per-effect receipts and per-surface verification already exist and are the
 foundation here. What this document adds is the **contract**: the ordering, the uncertain classification,
 and the rule that recovery branches on the declared idempotency class rather than on optimism. Regression
-coverage (crash at each phase, kill mid-effect, lease loss, append-only resume) is `P69.F9`.
+coverage (crash at each phase, kill mid-effect, lease loss, append-only resume) is `P69.F9`. Under
+[`ADR/0007`](ADR/0007-windows-first-v1-qualification.md), that coverage must be connected to the live
+ExecutionKernel/WorkGateway path and demonstrated on the qualified Windows release candidate.
 
 ---
 
