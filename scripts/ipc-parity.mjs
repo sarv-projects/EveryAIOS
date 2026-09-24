@@ -24,7 +24,7 @@ const shellDir = "src-tauri/src";
 
 function walk(dir, out = []) {
   for (const ent of readdirSync(join(root, dir))) {
-    const p = join(dir, ent);
+    const p = join(dir, ent).replace(/\\/g, "/");
     if (statSync(join(root, p)).isDirectory()) {
       walk(p, out);
     } else if (/\.(ts|tsx|rs|mjs)$/.test(ent) && !/\.(test|spec)\./.test(ent)) {
