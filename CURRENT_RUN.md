@@ -1,5 +1,45 @@
 # CURRENT RUN STATE — Task Handover & Checkpoint
 
+## Final Comparative Audit Reconciliation — 2026-09-24
+
+### Active Goal
+- Complete the requested read-only audit of the 20 `BRIEFS`, the permitted `clone2` comparator repositories, and the relevant `clone3` comparator areas, then produce one evidence-backed add/upgrade/optimize/reject disposition for EveryAIOS.
+- Preserve the Windows-first, external-agent-only architecture: one Work/Event/Receipt/Audit spine, one Guard authorization point, one Vault credential custodian, one capability registry, and no second scheduler or reasoning loop.
+
+### Where We Stopped
+- All audit lanes are complete and reconciled: agent/runtime, browser/Office/utility, memory/recovery/automation, and the final focused gateway/platform subset.
+- Final platform disposition: selectively adapt OpenChamber queue/recovery and grant invalidation; adapt OpenBridge review/accept/discard and session-scoped permission UX; adapt cc-switch circuit breaking, account-bound failover, staged backup, OAuth generation locking, and redaction; adapt LiteLLM routing, admission, budget, redaction, and migration algorithms only.
+- No comparator was adopted wholesale. No source, assets, branding, or restricted content were copied. License-restricted repositories remain pattern-read/evidence-only.
+- The read-only audit did not modify product source, run builds/tests, perform VM/network/release validation, commit, or push.
+- Product implementation is not complete: durable memory convergence, `P71.10` SessionWorkbenchProjection/typed ResourceLease, cross-surface network-floor proof, Tauri Channel B, remaining architecture-invariant findings, and Windows x64/ARM64 qualification are still open.
+- `ARCH/RECOVERY.md` and `ARCH/AUTOMATION.md` contain stale limitation wording that should be reconciled after the implementation status is rechecked.
+
+### Validation
+- Comparative findings are source-inspection evidence only; no comparator runtime behavior was independently qualified.
+- Earlier documentation checks passed: refs, doc sync, codebase-map freshness, and `git diff --check`.
+- The architecture-invariant gate still reports the known source findings: five `E3-MCP` and five `E4-WORK-CREATION` findings in the current tree.
+- Windows x64/ARM64 acceptance and all-`PASS` `P70.E1`–`P70.E12` sign-off remain incomplete.
+
+### Next Exact Steps
+1. Implement durable, convergent memory writes with an outbox, sequence/idempotency keys, surfaced persistence errors, and uncertain reconciliation.
+2. Implement `P71.10` SessionWorkbenchProjection and Rust-private typed ResourceLease/fencing with rebuildable projections and contention tests.
+3. Audit and prove one Guard/netfloor policy across browser, connectors, downloads, workers, redirects, and other network surfaces.
+4. Reconcile the ten architecture-invariant findings, then run the protocol/security gate before mounting Tauri Channel B.
+5. Implement Channel B with canonical Session/Work/Run resolution, Rust-private lease custody, Guard/ToolService routing, durable receipts, cancellation fencing, and bounded shutdown.
+6. Add automation liveness/repair projections, context recovery, Office outcome completeness, accessibility, and offline/diagnostic states.
+7. Execute the Windows x64/ARM64 runbook, collect the required evidence, and only then assess `P70.E1`–`P70.E12` sign-off.
+8. Review and commit/push verified runtime changes in focused commits without staging unrelated work.
+
+### Decisions & Gotchas
+- Comparative repositories contribute patterns and mechanisms, not canonical owners.
+- The selected external agent owns its native reasoning loop; EveryAIOS owns shared effects and their authorization, receipt, and recovery.
+- Unknown post-effect outcomes remain `uncertain`; no code path may infer success, failure, or cancellation.
+- Process-local locks, approval maps, queues, and caches are not durable authority.
+- OpenBridge's referenced `kwwk` submodule is empty in the inspected checkout, so its actual agent-loop behavior remains unverified.
+- No comparator source inspection substitutes for Windows acceptance, adversarial testing, or release evidence.
+
+---
+
 ## ADR-0008 Documentation Handover — 2026-09-24
 
 ### Active Goal
