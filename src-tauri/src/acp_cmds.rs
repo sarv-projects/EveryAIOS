@@ -28,12 +28,13 @@
 //! module is the app-level state holder + policy seam.
 
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use everyaios_acp::{
-    AcpSession, AuthMethod, AvailableCommand, ClientInfo, ConfigOption, Distribution, Installer,
-    LaunchRegistry, PermissionDecision, Platform, PolicyVerdict, ProcessTransport, PromptContent,
-    PromptOutcome, RegistryClient, RegistryPolicy, ToolCall, ToolKind,
+    AcpCancelHandle, AcpError, AcpSession, AuthMethod, AvailableCommand, ClientInfo, ConfigOption,
+    Distribution, Installer, LaunchRegistry, PermissionDecision, Platform, PolicyVerdict,
+    ProcessTransport, PromptContent, PromptOutcome, RegistryClient, RegistryPolicy, ToolCall,
+    ToolKind,
 };
 use everyaios_core::config::Config;
 use everyaios_core::{ExecutionPhase, ExecutionTrigger, GuardDecision};
@@ -115,7 +116,7 @@ fn resolve_native_binary(command: &str) -> Option<std::path::PathBuf> {
 /// `(auth_required, has_session)`. A handle only exists when the `initialize`
 /// handshake succeeded, which is what makes `ProtocolCompatible` observable.
 fn live_facts(handle: &AcpHandle) -> (bool, bool) {
-    (handle.auth_required, handle.session.session_id().is_some())
+    (handle.auth_required, handle.provider_session_id.is_some())
 }
 
 /// P71.3f — the cold readiness derivation (no live session): registry presence,
@@ -292,6 +293,182 @@ static LAUNCH_REGISTRY_MEMO: std::sync::Mutex<
     Option<(Option<std::time::SystemTime>, LaunchRegistry)>,
 > = std::sync::Mutex::new(None);
 
+/// The canonical owner of one ACP turn path.
+///
+/// `session_id` is the EveryAIOS Session identity supplied by the caller. The
+/// provider's own ACP session id is deliberately not part of this value; it
+/// lives on [`AcpHandle::provider_session_id`] and in the durable binding.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub(crate) struct AcpCanonicalOwner {
+    pub session_id: String,
+    pub work_id: String,
+    pub binding_id: String,
+}
+
+/// The typed identity/lifecycle failures that must stop a turn before provider
+/// I/O. Keeping these distinct from ACP protocol errors prevents a missing
+/// Work/AgentBinding bridge from silently degrading into an unowned prompt.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum AcpIdentityError {
+    MissingApplicationSession,
+    MissingProviderSession,
+    WorkGatewayUnavailable,
+    Work(String),
+    Execution(String),
+    Binding(String),
+    OwnerMismatch {
+        handle: String,
+        expected_session: String,
+        actual_session: String,
+    },
+    WorkOwnerMismatch {
+        work_id: String,
+        expected_session: String,
+        actual_session: Option<String>,
+    },
+    BindingOwnerMismatch {
+        binding_id: String,
+        expected_session: String,
+        actual_session: String,
+    },
+    BindingMismatch {
+        handle: String,
+        expected_binding: String,
+        actual_binding: String,
+    },
+    ProviderSessionConflict {
+        binding_id: String,
+        expected: String,
+        actual: Option<String>,
+    },
+    NoCanonicalOwner {
+        handle: String,
+    },
+}
+
+impl std::fmt::Display for AcpIdentityError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::MissingApplicationSession => {
+                write!(f, "ACP turn requires an application Session id")
+            }
+            Self::MissingProviderSession => {
+                write!(f, "ACP handle has no provider session id")
+            }
+            Self::WorkGatewayUnavailable => {
+                write!(f, "sidecar Work Gateway unavailable; refusing an unowned ACP turn")
+            }
+            Self::Work(message) => write!(f, "canonical Work unavailable: {message}"),
+            Self::Execution(message) => write!(f, "canonical Run unavailable: {message}"),
+            Self::Binding(message) => write!(f, "AgentBinding unavailable: {message}"),
+            Self::OwnerMismatch {
+                handle,
+                expected_session,
+                actual_session,
+            } => write!(
+                f,
+                "ACP handle {handle} belongs to Session {actual_session}, not requested Session {expected_session}"
+            ),
+            Self::WorkOwnerMismatch {
+                work_id,
+                expected_session,
+                actual_session,
+            } => write!(
+                f,
+                "Work {work_id} is owned by {:?}, not requested Session {expected_session}",
+                actual_session.as_deref().unwrap_or("<none>")
+            ),
+            Self::BindingOwnerMismatch {
+                binding_id,
+                expected_session,
+                actual_session,
+            } => write!(
+                f,
+                "AgentBinding {binding_id} belongs to Session {actual_session}, not requested Session {expected_session}"
+            ),
+            Self::BindingMismatch {
+                handle,
+                expected_binding,
+                actual_binding,
+            } => write!(
+                f,
+                "ACP handle {handle} is bound to AgentBinding {actual_binding}, not requested {expected_binding}"
+            ),
+            Self::ProviderSessionConflict {
+                binding_id,
+                expected,
+                actual,
+            } => write!(
+                f,
+                "AgentBinding {binding_id} is attached to provider session {:?}, not {expected}",
+                actual.as_deref().unwrap_or("<none>")
+            ),
+            Self::NoCanonicalOwner { handle } => {
+                write!(f, "ACP handle {handle} has no canonical Session/Work/Binding owner")
+            }
+        }
+    }
+}
+
+impl std::error::Error for AcpIdentityError {}
+
+/// Per-handle session storage. The small wrapper keeps the legacy
+/// `session.cancel()` call shape source-compatible for the control-channel
+/// module while routing new cancellation through the independent hook.
+pub(crate) struct AcpSessionSlot {
+    inner: Arc<Mutex<AcpSession<ProcessTransport>>>,
+    cancel: AcpCancelHandle,
+    provider_session_id: Arc<Mutex<Option<String>>>,
+}
+
+impl AcpSessionSlot {
+    fn new(session: AcpSession<ProcessTransport>, provider_session_id: Option<String>) -> Self {
+        let cancel = session.cancellation_handle();
+        Self {
+            inner: Arc::new(Mutex::new(session)),
+            cancel,
+            provider_session_id: Arc::new(Mutex::new(provider_session_id)),
+        }
+    }
+
+    fn lock(&self) -> Result<std::sync::MutexGuard<'_, AcpSession<ProcessTransport>>, String> {
+        self.inner.lock().map_err(|e| e.to_string())
+    }
+
+    fn set_provider_session_id(&self, session_id: Option<String>) {
+        if let Ok(mut current) = self.provider_session_id.lock() {
+            *current = session_id;
+        }
+    }
+
+    fn cancellation_handle(&self) -> AcpCancelHandle {
+        self.cancel.clone()
+    }
+
+    /// Compatibility cancellation for the existing control-channel caller.
+    /// It uses the independent writer and therefore does not wait for a
+    /// prompt's per-handle session mutex.
+    pub(crate) fn cancel(&mut self) -> Result<(), everyaios_acp::AcpError> {
+        let session_id = self
+            .provider_session_id
+            .lock()
+            .map_err(|_| everyaios_acp::AcpError::NotReady)?
+            .clone()
+            .ok_or(everyaios_acp::AcpError::NotReady)?;
+        self.cancel.request(&session_id).map_err(everyaios_acp::AcpError::Io)
+    }
+}
+
+impl Clone for AcpSessionSlot {
+    fn clone(&self) -> Self {
+        Self {
+            inner: Arc::clone(&self.inner),
+            cancel: self.cancel.clone(),
+            provider_session_id: Arc::clone(&self.provider_session_id),
+        }
+    }
+}
+
 /// A live ACP agent session + the id it was launched under.
 pub(crate) struct AcpHandle {
     pub agent_id: String,
@@ -318,7 +495,34 @@ pub(crate) struct AcpHandle {
     /// (`ARCH/CONTEXT.md` §4: prefix mutations must be intentional AND
     /// observable).
     pub prefix_guard: everyaios_acp::PrefixGuard,
-    pub session: AcpSession<ProcessTransport>,
+    /// The provider-native ACP session identity. It is never used as the
+    /// EveryAIOS Session id and is persisted only on the AgentBinding.
+    pub provider_session_id: Option<String>,
+    /// The canonical owner claimed by the first prompt. A handle is valid only
+    /// for this Session/Work/Binding tuple once claimed.
+    pub owner: Option<AcpCanonicalOwner>,
+    /// The current durable Run id, replaced for each prompt on this Work.
+    pub run_id: Option<String>,
+    /// The provider session is per-handle state. The Arc lets a prompt hold
+    /// only this handle's mutex across blocking provider I/O; the global map
+    /// mutex is released before prompt/approval work begins.
+    pub session: AcpSessionSlot,
+    /// A lock-free cancellation hook for the provider session.
+    pub cancel: AcpCancelHandle,
+}
+
+impl AcpHandle {
+    pub(crate) fn application_session_id(&self) -> Option<&str> {
+        self.owner.as_ref().map(|owner| owner.session_id.as_str())
+    }
+
+    pub(crate) fn work_id(&self) -> Option<&str> {
+        self.owner.as_ref().map(|owner| owner.work_id.as_str())
+    }
+
+    pub(crate) fn binding_id(&self) -> Option<&str> {
+        self.owner.as_ref().map(|owner| owner.binding_id.as_str())
+    }
 }
 
 /// One launched-session summary for the picker/harness list.
@@ -328,7 +532,19 @@ pub struct AcpHandleInfo {
     pub(crate) handle: String,
     agent_id: String,
     agent_name: String,
+    /// The provider-native ACP session id. Retained under the historical field
+    /// name for existing callers; it is not the application Session id.
     session_id: String,
+    #[serde(default)]
+    provider_session_id: String,
+    #[serde(default)]
+    application_session_id: String,
+    #[serde(default)]
+    work_id: String,
+    #[serde(default)]
+    binding_id: String,
+    #[serde(default)]
+    run_id: String,
     protocol: String,
     /// True when the agent needs authentication before it will accept a
     /// session (the UI renders the "Sign in" surface from `authMethods`).
@@ -348,7 +564,12 @@ impl From<(&AcpHandle, &str)> for AcpHandleInfo {
             handle: handle.to_string(),
             agent_id: h.agent_id.clone(),
             agent_name: h.agent_id.clone(),
-            session_id: h.session.session_id().unwrap_or("").to_string(),
+            session_id: h.provider_session_id.clone().unwrap_or_default(),
+            provider_session_id: h.provider_session_id.clone().unwrap_or_default(),
+            application_session_id: h.application_session_id().unwrap_or_default().to_string(),
+            work_id: h.work_id().unwrap_or_default().to_string(),
+            binding_id: h.binding_id().unwrap_or_default().to_string(),
+            run_id: h.run_id.clone().unwrap_or_default(),
             protocol: "acp".to_string(),
             auth_required: h.auth_required,
             auth_methods: h.auth_methods.clone(),
@@ -1336,6 +1557,9 @@ pub fn acp_launch(
     // moved into the handle map, so both the handle and the launch response
     // report the same list.
     let config_options = session.config_options().to_vec();
+    let provider_session_id = (!session_id.is_empty()).then(|| session_id.clone());
+    let session = AcpSessionSlot::new(session, provider_session_id.clone());
+    let cancel = session.cancellation_handle();
     state
         .acp_sessions
         .lock()
@@ -1351,7 +1575,11 @@ pub fn acp_launch(
                 available_commands: Vec::new(),
                 config_options: config_options.clone(),
                 prefix_guard: everyaios_acp::PrefixGuard::new(),
+                provider_session_id,
+                owner: None,
+                run_id: None,
                 session,
+                cancel,
             },
         );
 
@@ -1359,7 +1587,12 @@ pub fn acp_launch(
         handle,
         agent_id,
         agent_name,
-        session_id,
+        provider_session_id: session_id.clone(),
+        session_id: session_id.clone(),
+        application_session_id: String::new(),
+        work_id: String::new(),
+        binding_id: String::new(),
+        run_id: String::new(),
         protocol: "acp".to_string(),
         auth_required,
         auth_methods,
@@ -1381,15 +1614,22 @@ pub fn acp_authenticate(
     handle: String,
     method_id: String,
 ) -> Result<serde_json::Value, String> {
-    let mut sessions = state.acp_sessions.lock().map_err(|e| e.to_string())?;
-    let entry = sessions
-        .get_mut(&handle)
-        .ok_or_else(|| format!("unknown ACP handle: {handle}"))?;
+    // Copy only the per-handle session handle out of the registry. The global
+    // map lock is never held across authenticate/session-new I/O.
+    let (session, cwd) = {
+        let sessions = state.acp_sessions.lock().map_err(|e| e.to_string())?;
+        let entry = sessions
+            .get(&handle)
+            .ok_or_else(|| format!("unknown ACP handle: {handle}"))?;
+        (entry.session.clone(), entry.cwd.clone())
+    };
 
-    let result = entry
-        .session
-        .authenticate(&method_id)
-        .map_err(|e| format!("acp authenticate failed: {e}"))?;
+    let result = {
+        let mut session = session.lock().map_err(|e| e.to_string())?;
+        session
+            .authenticate(&method_id)
+            .map_err(|e| format!("acp authenticate failed: {e}"))?
+    };
 
     // url-type: hand the URL back — the user must complete login first.
     if let Some(url) = result.url {
@@ -1398,14 +1638,27 @@ pub fn acp_authenticate(
 
     // agent-type (or completed url-type): the connection is authenticated;
     // retry the session the launch couldn't create.
-    let session_id = match entry.session.session_new(&entry.cwd, vec![]) {
-        Ok(sid) => sid,
-        Err(everyaios_acp::AcpError::AuthRequired) => {
-            return Err("still auth_required after authenticate".to_string());
-        }
-        Err(e) => return Err(format!("acp session/new after auth failed: {e}")),
+    let (session_id, config_options) = {
+        let mut session = session.lock().map_err(|e| e.to_string())?;
+        let session_id = match session.session_new(&cwd, vec![]) {
+            Ok(sid) => sid,
+            Err(everyaios_acp::AcpError::AuthRequired) => {
+                return Err("still auth_required after authenticate".to_string());
+            }
+            Err(e) => return Err(format!("acp session/new after auth failed: {e}")),
+        };
+        (session_id, session.config_options().to_vec())
     };
-    entry.auth_required = false;
+    {
+        let mut sessions = state.acp_sessions.lock().map_err(|e| e.to_string())?;
+        let entry = sessions
+            .get_mut(&handle)
+            .ok_or_else(|| format!("unknown ACP handle: {handle}"))?;
+        entry.auth_required = false;
+        entry.provider_session_id = Some(session_id.clone());
+        entry.session.set_provider_session_id(Some(session_id.clone()));
+        entry.config_options = config_options;
+    }
     Ok(serde_json::json!({ "ok": true, "sessionId": session_id }))
 }
 
@@ -1490,14 +1743,15 @@ fn build_acp_prompt_with_passport(state: &State<'_, AppState>, text: &str) -> (S
 /// chat context (the return path folds only visible assistant text). Best
 /// effort: a logging failure never fails the turn.
 fn append_acp_tool_log(
-    session_id: &str,
+    application_session_id: &str,
+    provider_session_id: &str,
     handle: &str,
     agent_id: &str,
     text: &str,
     outcome: &PromptOutcome,
     prefix_event: everyaios_acp::PrefixEvent,
 ) {
-    let safe: String = session_id
+    let safe: String = application_session_id
         .chars()
         .map(|c| {
             if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
@@ -1536,6 +1790,8 @@ fn append_acp_tool_log(
             .map(|d| d.as_millis() as u64)
             .unwrap_or(0),
         "handle": handle,
+        "applicationSessionId": application_session_id,
+        "providerSessionId": provider_session_id,
         "agentId": agent_id,
         "promptPrefix": prompt_prefix,
         "stopReason": outcome.stop_reason.as_str(),
@@ -1740,22 +1996,33 @@ pub fn acp_session_set_config_option(
     config_id: String,
     value: serde_json::Value,
 ) -> Result<Vec<ConfigOption>, String> {
+    let session = {
+        let sessions = state.acp_sessions.lock().map_err(|e| e.to_string())?;
+        sessions
+            .get(&handle)
+            .ok_or_else(|| format!("unknown ACP handle: {handle}"))?
+            .session
+            .clone()
+    };
+    let options = {
+        let mut session = session.lock().map_err(|e| e.to_string())?;
+        session
+            .set_config_option(&config_id, value)
+            .map_err(|e| e.to_string())?
+    };
     let mut sessions = state.acp_sessions.lock().map_err(|e| e.to_string())?;
     let entry = sessions
         .get_mut(&handle)
         .ok_or_else(|| format!("unknown ACP handle: {handle}"))?;
-    let options = entry
-        .session
-        .set_config_option(&config_id, value)
-        .map_err(|e| e.to_string())?;
     entry.config_options = options.clone();
     Ok(options)
 }
 
 /// P53.5 — read the per-session tool observability file (newest last).
-/// Empty until the first ACP turn lands for that session. A missing file is
-/// honest emptiness, not an error. The session id is sanitized exactly like
-/// the writer (`append_acp_tool_log`) so reads cannot escape the dir.
+/// Empty until the first ACP turn lands for that application Session. A
+/// missing file is honest emptiness, not an error. The application Session id
+/// is sanitized exactly like the writer (`append_acp_tool_log`) so reads cannot
+/// escape the dir; the provider session id is never used as a path.
 #[tauri::command]
 pub fn acp_tool_log(session_id: String) -> Result<Vec<serde_json::Value>, String> {
     let safe: String = session_id
@@ -1789,6 +2056,406 @@ pub fn acp_tool_log(session_id: String) -> Result<Vec<serde_json::Value>, String
     }
     Ok(out)
 }
+/// The deterministic canonical Work id for an application Session. The
+/// scheduler already uses the Session id as its Work id, so reusing it here
+/// resolves that existing Work instead of creating a second owner.
+fn canonical_work_id(session_id: &str) -> String {
+    session_id.to_string()
+}
+
+fn canonical_binding_id(session_id: &str, work_id: &str, agent_id: &str) -> String {
+    format!("acp-binding:{session_id}:{work_id}:{agent_id}")
+}
+
+type AcpRelayPlanes = (
+    Arc<Mutex<everyaios_core::WorkGateway>>,
+    Arc<Mutex<everyaios_core::ExecutionKernel>>,
+);
+
+fn relay_planes(
+    state: &State<'_, AppState>,
+) -> Result<AcpRelayPlanes, AcpIdentityError> {
+    let relay = state
+        .chat_relay
+        .lock()
+        .map_err(|_| AcpIdentityError::WorkGatewayUnavailable)?;
+    let relay = relay
+        .as_ref()
+        .ok_or(AcpIdentityError::WorkGatewayUnavailable)?;
+    Ok((relay.work_gateway(), relay.executions()))
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct AcpTurnIdentity {
+    owner: AcpCanonicalOwner,
+    run_id: String,
+}
+
+/// Resolve the one durable Work/Run/Binding tuple before any provider prompt.
+///
+/// The Work id is the application Session id for the interactive path. If a
+/// Work already exists under that id, its owner is checked rather than being
+/// overwritten. A provider session is only ever stored on the binding's
+/// private `provider_session_id` field.
+fn prepare_acp_turn(
+    gateway: &mut everyaios_core::WorkGateway,
+    kernel: &mut everyaios_core::ExecutionKernel,
+    application_session_id: &str,
+    agent_id: &str,
+    provider_session_id: &str,
+    objective: &str,
+) -> Result<AcpTurnIdentity, AcpIdentityError> {
+    let application_session_id = application_session_id.trim();
+    let agent_id = agent_id.trim();
+    let provider_session_id = provider_session_id.trim();
+    if application_session_id.is_empty() {
+        return Err(AcpIdentityError::MissingApplicationSession);
+    }
+    if agent_id.is_empty() {
+        return Err(AcpIdentityError::Binding("agent id is empty".into()));
+    }
+    if provider_session_id.is_empty() {
+        return Err(AcpIdentityError::MissingProviderSession);
+    }
+
+    let work_id = canonical_work_id(application_session_id);
+    let address = gateway
+        .create_work_in_session(
+            work_id.clone(),
+            None,
+            Some(application_session_id.to_string()),
+            everyaios_types::SessionKind::Interactive,
+            objective,
+        )
+        .map_err(AcpIdentityError::Work)?;
+    if address.session_id.as_deref() != Some(application_session_id) {
+        return Err(AcpIdentityError::WorkOwnerMismatch {
+            work_id,
+            expected_session: application_session_id.to_string(),
+            actual_session: address.session_id,
+        });
+    }
+
+    let deterministic_binding_id =
+        canonical_binding_id(application_session_id, &work_id, agent_id);
+    let existing = gateway
+        .bindings_for(&work_id)
+        .into_iter()
+        .find(|binding| {
+            binding.session_id.as_str() == application_session_id
+                && binding.agent_id.as_str() == agent_id
+        })
+        .cloned();
+    let binding_id = existing
+        .as_ref()
+        .map(|binding| binding.binding_id.as_str().to_string())
+        .unwrap_or(deterministic_binding_id);
+    if binding_id.is_empty() {
+        return Err(AcpIdentityError::Binding(
+            "matching AgentBinding has an empty id".into(),
+        ));
+    }
+    let mut activated_here = false;
+    if let Some(binding) = existing {
+        if binding.session_id.as_str() != application_session_id {
+            return Err(AcpIdentityError::BindingOwnerMismatch {
+                binding_id: binding.binding_id.as_str().to_string(),
+                expected_session: application_session_id.to_string(),
+                actual_session: binding.session_id.as_str().to_string(),
+            });
+        }
+        if binding.work_id.as_str() != work_id || binding.agent_id.as_str() != agent_id {
+            return Err(AcpIdentityError::Binding(format!(
+                "binding {} is not owned by Work {work_id} and agent {agent_id}",
+                binding.binding_id
+            )));
+        }
+        match binding.state {
+            everyaios_types::BindingLifecycle::Active => {
+                if binding
+                    .provider_session_id
+                    .as_deref()
+                    .is_some_and(|id| id != provider_session_id)
+                {
+                    return Err(AcpIdentityError::ProviderSessionConflict {
+                        binding_id,
+                        expected: provider_session_id.to_string(),
+                        actual: binding.provider_session_id,
+                    });
+                }
+                if binding.provider_session_id.is_none() {
+                    gateway
+                        .transition_agent_binding(
+                            &binding_id,
+                            "activated",
+                            Some(provider_session_id.to_string()),
+                        )
+                        .map_err(AcpIdentityError::Binding)?;
+                }
+            }
+            everyaios_types::BindingLifecycle::Parked => {
+                gateway
+                    .transition_agent_binding(
+                        &binding_id,
+                        "activated",
+                        Some(provider_session_id.to_string()),
+                    )
+                    .map_err(AcpIdentityError::Binding)?;
+                activated_here = true;
+            }
+            everyaios_types::BindingLifecycle::Resuming => {
+                gateway
+                    .transition_agent_binding(
+                        &binding_id,
+                        "resumed",
+                        Some(provider_session_id.to_string()),
+                    )
+                    .map_err(AcpIdentityError::Binding)?;
+                activated_here = true;
+            }
+            everyaios_types::BindingLifecycle::Dead | everyaios_types::BindingLifecycle::Unavailable => {
+                return Err(AcpIdentityError::Binding(format!(
+                    "binding {binding_id} is {:?}",
+                    binding.state
+                )));
+            }
+        }
+    } else {
+        let binding = everyaios_types::AgentBinding {
+            binding_id: everyaios_types::AgentBindingId::new(binding_id.clone()),
+            session_id: everyaios_types::SessionId::new(application_session_id),
+            work_id: everyaios_types::WorkId::new(work_id.clone()),
+            agent_id: everyaios_types::AgentId::new(agent_id),
+            adapter_id: None,
+            protocol: everyaios_types::AgentProtocol::Acp,
+            provider_session_id: None,
+            model: None,
+            mode: None,
+            capability_manifest: Vec::new(),
+            governance_mode: everyaios_types::AgentGovernanceMode::SelfContained,
+            bridge_id: None,
+            state: everyaios_types::BindingLifecycle::Parked,
+            usage: Default::default(),
+            last_event_seq: 0,
+            private_state_ref: None,
+        };
+        gateway
+            .create_agent_binding(binding)
+            .map_err(AcpIdentityError::Binding)?;
+        gateway
+            .transition_agent_binding(
+                &binding_id,
+                "activated",
+                Some(provider_session_id.to_string()),
+            )
+            .map_err(AcpIdentityError::Binding)?;
+        activated_here = true;
+    }
+
+    // A caller may already have opened the canonical Run (the host automation
+    // path does this before it enters ACP). Reuse an active Run for this
+    // Session; otherwise start a new Run for this prompt. Never overwrite a
+    // missing kernel record with a fresh id: that would make recovery
+    // ambiguous.
+    let existing_execution = gateway.execution_id(&work_id).map(str::to_string);
+    let (execution, reused_execution) = if let Some(existing_id) = existing_execution {
+        let Some(existing) = kernel.get(&existing_id) else {
+            return Err(AcpIdentityError::Execution(format!(
+                "Work {work_id} points at missing Run {existing_id}"
+            )));
+        };
+        if existing.session_id != application_session_id {
+            return Err(AcpIdentityError::Execution(format!(
+                "Run {existing_id} belongs to Session {}, not {application_session_id}",
+                existing.session_id
+            )));
+        }
+        if let Ok(context) = serde_json::from_str::<serde_json::Value>(&existing.context_snapshot) {
+            if let Some(bound_agent) = context.get("agentId").and_then(serde_json::Value::as_str) {
+                if bound_agent != agent_id {
+                    return Err(AcpIdentityError::Execution(format!(
+                        "Run {existing_id} is owned by agent {bound_agent}, not {agent_id}"
+                    )));
+                }
+            }
+            if let Some(bound_binding) = context.get("bindingId").and_then(serde_json::Value::as_str) {
+                if bound_binding != binding_id {
+                    return Err(AcpIdentityError::Binding(format!(
+                        "Run {existing_id} is bound to {bound_binding}, not {binding_id}"
+                    )));
+                }
+            }
+        }
+        let resumable = matches!(
+            existing.state,
+            ExecutionPhase::Ready
+                | ExecutionPhase::Running
+                | ExecutionPhase::WaitingTool
+                | ExecutionPhase::WaitingApproval
+                | ExecutionPhase::WaitingUser
+                | ExecutionPhase::Checkpointed
+                | ExecutionPhase::Paused
+                | ExecutionPhase::Recoverable
+        );
+        if resumable {
+            if existing.state != ExecutionPhase::Running {
+                if let Err(error) = kernel.transition(&existing_id, ExecutionPhase::Running) {
+                    if activated_here {
+                        let _ = gateway.transition_agent_binding(&binding_id, "suspended", None);
+                    }
+                    return Err(AcpIdentityError::Execution(error));
+                }
+                if let Err(error) = gateway.record_execution_transition(
+                    &work_id,
+                    &existing_id,
+                    everyaios_types::WorkState::Running,
+                ) {
+                    let _ = kernel.transition(&existing_id, ExecutionPhase::Failed);
+                    if activated_here {
+                        let _ = gateway.transition_agent_binding(&binding_id, "suspended", None);
+                    }
+                    return Err(AcpIdentityError::Work(error));
+                }
+            }
+            (existing_id, true)
+        } else {
+            let execution = kernel
+                .begin(
+                    ExecutionTrigger::Acp,
+                    application_session_id,
+                    objective,
+                    None,
+                    String::new(),
+                    serde_json::json!({
+                        "sessionId": application_session_id,
+                        "workId": work_id,
+                        "bindingId": binding_id,
+                        "agentId": agent_id,
+                        "providerSessionId": provider_session_id,
+                    })
+                    .to_string(),
+                    vec![],
+                )
+                .id;
+            (execution, false)
+        }
+    } else {
+        let execution = kernel
+            .begin(
+                ExecutionTrigger::Acp,
+                application_session_id,
+                objective,
+                None,
+                String::new(),
+                serde_json::json!({
+                    "sessionId": application_session_id,
+                    "workId": work_id,
+                    "bindingId": binding_id,
+                    "agentId": agent_id,
+                    "providerSessionId": provider_session_id,
+                })
+                .to_string(),
+                vec![],
+            )
+            .id;
+        (execution, false)
+    };
+
+    if !reused_execution {
+        if let Err(error) = kernel.transition(&execution, ExecutionPhase::Running) {
+            if activated_here {
+                let _ = gateway.transition_agent_binding(&binding_id, "suspended", None);
+            }
+            return Err(AcpIdentityError::Execution(error));
+        }
+        if let Err(error) = gateway.bind_execution(&work_id, &execution) {
+            let _ = kernel.transition(&execution, ExecutionPhase::Failed);
+            if activated_here {
+                let _ = gateway.transition_agent_binding(&binding_id, "suspended", None);
+            }
+            return Err(AcpIdentityError::Work(error));
+        }
+        if let Err(error) = gateway.record_execution_transition(
+            &work_id,
+            &execution,
+            everyaios_types::WorkState::Running,
+        ) {
+            let _ = kernel.transition(&execution, ExecutionPhase::Failed);
+            if activated_here {
+                let _ = gateway.transition_agent_binding(&binding_id, "suspended", None);
+            }
+            return Err(AcpIdentityError::Work(error));
+        }
+    }
+
+    Ok(AcpTurnIdentity {
+        owner: AcpCanonicalOwner {
+            session_id: application_session_id.to_string(),
+            work_id,
+            binding_id,
+        },
+        run_id: execution,
+    })
+}
+
+fn transition_acp_run(
+    state: &State<'_, AppState>,
+    work_id: &str,
+    execution_id: &str,
+    work_state: everyaios_types::WorkState,
+) -> Result<(), String> {
+    let (gateway, kernel) = relay_planes(state).map_err(|e| e.to_string())?;
+    let mut gateway = gateway.lock().map_err(|e| e.to_string())?;
+    gateway
+        .record_execution_transition(work_id, execution_id, work_state)
+        .map_err(|e| e.to_string())?;
+    let phase = match work_state {
+        everyaios_types::WorkState::WaitingApproval => ExecutionPhase::WaitingApproval,
+        everyaios_types::WorkState::WaitingTool => ExecutionPhase::WaitingTool,
+        everyaios_types::WorkState::WaitingUser => ExecutionPhase::WaitingUser,
+        everyaios_types::WorkState::Checkpointed => ExecutionPhase::Checkpointed,
+        everyaios_types::WorkState::Paused => ExecutionPhase::Paused,
+        everyaios_types::WorkState::Recoverable => ExecutionPhase::Recoverable,
+        everyaios_types::WorkState::Completed => ExecutionPhase::Completed,
+        everyaios_types::WorkState::Failed => ExecutionPhase::Failed,
+        everyaios_types::WorkState::Cancelled => ExecutionPhase::Cancelled,
+        everyaios_types::WorkState::Verifying => ExecutionPhase::Verifying,
+        everyaios_types::WorkState::Created
+        | everyaios_types::WorkState::Planning
+        | everyaios_types::WorkState::Ready
+        | everyaios_types::WorkState::Running => ExecutionPhase::Running,
+    };
+    let mut kernel = kernel.lock().map_err(|e| e.to_string())?;
+    kernel.transition(execution_id, phase).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+fn record_acp_binding_usage(
+    state: &State<'_, AppState>,
+    owner: &AcpCanonicalOwner,
+    usage: Option<&everyaios_acp::PromptUsage>,
+) -> Result<(), String> {
+    let Some(usage) = usage.filter(|usage| usage.reported()) else {
+        return Ok(());
+    };
+    let (gateway, _) = relay_planes(state).map_err(|e| e.to_string())?;
+    let mut gateway = gateway.lock().map_err(|e| e.to_string())?;
+    gateway
+        .record_binding_usage(
+            &owner.binding_id,
+            everyaios_types::BindingUsage {
+                input_tokens: usage.input_tokens,
+                output_tokens: usage.output_tokens,
+                cost_micros: usage
+                    .cost_usd
+                    .map(|cost| (cost * 1_000_000.0).round().max(0.0) as u64)
+                    .unwrap_or(0),
+            },
+        )
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}
+
 /// Drive one ACP prompt turn. The agent's `session/request_permission`
 /// requests route through the shared Guard-2 service: `Allow` auto-allows,
 /// `Block` denies, and `Ask` denies the current turn while minting a ticket
@@ -1802,118 +2469,193 @@ pub fn acp_prompt(
     refs: Option<Vec<String>>,
     session_id: Option<String>,
 ) -> Result<serde_json::Value, String> {
-    let mut sessions = state.acp_sessions.lock().map_err(|e| e.to_string())?;
-    let entry = sessions
-        .get_mut(&handle)
-        .ok_or_else(|| format!("unknown ACP handle: {handle}"))?;
-
-    if entry.auth_required {
-        return Err("agent requires sign-in — run acp_authenticate first".to_string());
+    // The caller's Session id is the canonical EveryAIOS identity. Never
+    // replace it with the provider's ACP session id.
+    let application_session_id = session_id
+        .ok_or_else(|| AcpIdentityError::MissingApplicationSession.to_string())?;
+    if application_session_id.trim().is_empty() {
+        return Err(AcpIdentityError::MissingApplicationSession.to_string());
     }
-
-    let agent_id = entry.agent_id.clone();
-    // P71.2c — the **turn gates** live here now, because this is the one path a
-    // v1 turn takes (the `start_stream` dispatch they used to guard is deleted
-    // with the built-in engine, ADR-0005 §2).
-    //
-    // (1) P71.3f readiness: a turn runs only for a `Ready` agent; otherwise it
-    //     fails closed **with the state named** (the run-level failure record
-    //     `ARCH/AUTOMATION.md` §9 requires), never a generic engine error. The
-    //     live handle is the strongest available evidence — it exists only after
-    //     `initialize` negotiated — and a handle without a session is
-    //     `ProtocolCompatible`, which is not yet a runnable turn.
-    let readiness = agent_readiness_with_live(&agent_id, Some(live_facts(entry)));
-    if !readiness.is_ready() {
-        return Err(format!(
-            "agent '{agent_id}' is not ready: {readiness} — {}",
-            readiness.summary()
-        ));
-    }
-    // (2) J11 session budget: refusing here is the same guarantee the deleted
-    //     pre-flight gave — nothing is dispatched once a session is at its
-    //     limit. A caller that names no session (a bare `acpx run` style turn)
-    //     has no session ledger to consult and is not gated.
-    if let Some(sid) = session_id.as_deref().filter(|s| !s.is_empty()) {
-        if let Ok(relay) = state.chat_relay.lock() {
-            if let Some(relay) = relay.as_ref() {
-                relay
-                    .preflight_session_budget(sid)
-                    .map_err(|e| e.to_string())?;
-            }
-        }
-    }
-    let session_id = entry.session.session_id().unwrap_or("acp").to_string();
-    let guard = Arc::clone(&state.guard_service);
-    drop(sessions);
-
-    let exec_id = {
-        let relay = state.chat_relay.lock().ok();
-        relay.as_ref().and_then(|g| g.as_ref()).map(|r| {
-            let kernel = r.executions();
-            let mut k = kernel.lock().unwrap_or_else(|e| e.into_inner());
-            let ex = k.begin(
-                ExecutionTrigger::Acp,
-                &session_id,
-                &text,
-                None,
-                String::new(),
-                serde_json::json!({ "handle": handle, "agentId": agent_id }).to_string(),
-                vec![],
-            );
-            let _ = k.transition(&ex.id, ExecutionPhase::Running);
-            ex.id
-        })
-    };
-
-    let mut sessions = state.acp_sessions.lock().map_err(|e| e.to_string())?;
-    let entry = sessions
-        .get_mut(&handle)
-        .ok_or_else(|| format!("unknown ACP handle: {handle}"))?;
-
-    // P38 (spec §4.2.5a §2) — the external Chief gets the same memory
-    // passport + governance context as the inbuilt path: prepend the warm set
-    // (C10) and the honest governance block before the turn text.
-    // P53.4 — compact-before-swap handoff bundle: the UI injects the live
-    // compacted view (post-/compact transcript + goal/plan/tickets + file
-    // refs, tool blobs stripped) on the first ACP turn after inbuilt work.
-    // It rides ahead of the memory passport (newest context first) and is
-    // bounded (the builder caps it) so a huge transcript never floods the
-    // agent's context. Absent = a same-Chief follow-up turn.
-    // P69.E9 — the guard observes the shell-owned stable prefix every turn;
-    // a handoff bundle is the *declared* cache-boundary event (CONTEXT.md
-    // §4: compaction ⇒ fresh baseline, permitted but observable).
-    let (mut prompt_text, prefix_fingerprint) = build_acp_prompt_with_passport(&state, &text);
-    // P69.E9 — the guard observes the shell-owned stable prefix every turn;
-    // a handoff bundle is the *declared* cache-boundary event (CONTEXT.md
-    // §4: compaction ⇒ fresh baseline, permitted but observable).
+    let application_session_id = application_session_id.trim().to_string();
     let handoff_declared = handoff
         .as_ref()
         .map(|h| !h.trim().is_empty())
         .unwrap_or(false);
-    let prefix_event = entry
-        .prefix_guard
-        .observe(prefix_fingerprint, handoff_declared);
-    if prefix_event == everyaios_acp::PrefixEvent::UndeclaredMutation {
-        // Loud, per the row: churn the caller did not declare. Never fatal —
-        // refusing an external agent's turn over a metrics problem would
-        // break the session; the observability log is the enforcement.
-        eprintln!(
-            "P69.E9 I16 violation: stable-prefix mutation without a declared \
-             cache-boundary event on ACP session {session_id} (handle {handle})"
+
+    // Copy per-handle state out of the global registry and release the global
+    // lock before any provider I/O. The per-handle session mutex serializes
+    // turns for this handle; the cancellation hook remains independent.
+    let (
+        agent_id,
+        cwd,
+        embedded_context,
+        provider_session_id,
+        session,
+        cancel,
+        existing_owner,
+    ) = {
+        let sessions = state.acp_sessions.lock().map_err(|e| e.to_string())?;
+        let entry = sessions
+            .get(&handle)
+            .ok_or_else(|| format!("unknown ACP handle: {handle}"))?;
+        if entry.auth_required {
+            return Err("agent requires sign-in — run acp_authenticate first".to_string());
+        }
+        let readiness = agent_readiness_with_live(&entry.agent_id, Some(live_facts(entry)));
+        if !readiness.is_ready() {
+            return Err(format!(
+                "agent '{}' is not ready: {readiness} — {}",
+                entry.agent_id,
+                readiness.summary()
+            ));
+        }
+        let (agent_id, cwd, embedded_context, provider_session_id, session, cancel) = (
+            entry.agent_id.clone(),
+            entry.cwd.clone(),
+            entry.embedded_context,
+            entry.provider_session_id.clone(),
+            entry.session.clone(),
+            entry.cancel.clone(),
         );
+        (
+            agent_id,
+            cwd,
+            embedded_context,
+            provider_session_id,
+            session,
+            cancel,
+            entry.owner.clone(),
+        )
+    };
+
+    let provider_session_id = provider_session_id
+        .ok_or_else(|| AcpIdentityError::MissingProviderSession.to_string())?;
+    if provider_session_id.trim().is_empty() {
+        return Err(AcpIdentityError::MissingProviderSession.to_string());
     }
+    if let Some(owner) = existing_owner.as_ref() {
+        if owner.session_id != application_session_id {
+            return Err(AcpIdentityError::OwnerMismatch {
+                handle: handle.clone(),
+                expected_session: application_session_id,
+                actual_session: owner.session_id.clone(),
+            }
+            .to_string());
+        }
+        if owner.work_id != canonical_work_id(&application_session_id) {
+            return Err(AcpIdentityError::WorkOwnerMismatch {
+                work_id: owner.work_id.clone(),
+                expected_session: application_session_id,
+                actual_session: Some(owner.session_id.clone()),
+            }
+            .to_string());
+        }
+    }
+
+    // J11 session budget is checked against the application Session, never a
+    // provider transcript id.
+    if let Ok(relay) = state.chat_relay.lock() {
+        if let Some(relay) = relay.as_ref() {
+            relay
+                .preflight_session_budget(&application_session_id)
+                .map_err(|e| e.to_string())?;
+        }
+    }
+
+    // Serialize this handle's lifecycle and prompt. No global handle-map lock
+    // is held while WorkGateway journaling or ACP I/O runs.
+    let mut provider_session = session.lock().map_err(|e| e.to_string())?;
+    {
+        let sessions = state.acp_sessions.lock().map_err(|e| e.to_string())?;
+        let entry = sessions
+            .get(&handle)
+            .ok_or_else(|| format!("unknown ACP handle: {handle}"))?;
+        if let Some(owner) = entry.owner.as_ref() {
+            if owner.session_id != application_session_id {
+                return Err(AcpIdentityError::OwnerMismatch {
+                    handle: handle.clone(),
+                    expected_session: application_session_id,
+                    actual_session: owner.session_id.clone(),
+                }
+                .to_string());
+            }
+        }
+    }
+    provider_session.reset_cancellation();
+
+    let (gateway, kernel) = relay_planes(&state).map_err(|e| e.to_string())?;
+    let identity = {
+        let mut gateway = gateway.lock().map_err(|e| e.to_string())?;
+        let mut kernel = kernel.lock().map_err(|e| e.to_string())?;
+        prepare_acp_turn(
+            &mut gateway,
+            &mut kernel,
+            &application_session_id,
+            &agent_id,
+            &provider_session_id,
+            &text,
+        )
+        .map_err(|e| e.to_string())?
+    };
+
+    // Publish the canonical owner only after Work/Run/Binding durability has
+    // succeeded. A handle that was concurrently claimed by another Session is
+    // rejected before provider I/O.
+    {
+        let mut sessions = state.acp_sessions.lock().map_err(|e| e.to_string())?;
+        let entry = sessions
+            .get_mut(&handle)
+            .ok_or_else(|| format!("unknown ACP handle: {handle}"))?;
+        if let Some(owner) = entry.owner.as_ref() {
+            if owner.session_id != application_session_id {
+                return Err(AcpIdentityError::OwnerMismatch {
+                    handle: handle.clone(),
+                    expected_session: application_session_id,
+                    actual_session: owner.session_id.clone(),
+                }
+                .to_string());
+            }
+            if owner != &identity.owner {
+                return Err(AcpIdentityError::BindingMismatch {
+                    handle: handle.clone(),
+                    expected_binding: identity.owner.binding_id.clone(),
+                    actual_binding: owner.binding_id.clone(),
+                }
+                .to_string());
+            }
+        }
+        entry.owner = Some(identity.owner.clone());
+        entry.run_id = Some(identity.run_id.clone());
+    }
+
+    let (mut prompt_text, prefix_fingerprint) =
+        build_acp_prompt_with_passport(&state, &text);
+    let prefix_event = {
+        let mut sessions = state.acp_sessions.lock().map_err(|e| e.to_string())?;
+        let entry = sessions
+            .get_mut(&handle)
+            .ok_or_else(|| format!("unknown ACP handle: {handle}"))?;
+        let event = entry
+            .prefix_guard
+            .observe(prefix_fingerprint, handoff_declared);
+        if event == everyaios_acp::PrefixEvent::UndeclaredMutation {
+            eprintln!(
+                "ACP stable-prefix mutation without a declared cache-boundary event on \
+                 application Session {application_session_id}, provider session {provider_session_id} \
+                 (handle {handle})"
+            );
+        }
+        event
+    };
     if let Some(bundle) = handoff.as_ref().map(|h| h.trim()).filter(|h| !h.is_empty()) {
         let capped: String = bundle.chars().take(6000).collect();
         prompt_text = format!("<chief_handoff>\n{capped}\n</chief_handoff>\n\n{prompt_text}");
     }
 
-    // P53.8 — send resource blocks only when the agent advertised
-    // `promptCapabilities.embeddedContext`; otherwise the text suffix remains
-    // the honest fallback. Paths are confined to the requested workspace.
-    let content = if entry.embedded_context {
+    let content = if embedded_context {
         let mut blocks = vec![PromptContent::text(prompt_text.clone())];
         for reference in refs.as_deref().unwrap_or_default() {
-            if let Some(resource) = read_workspace_resource(&entry.cwd, reference) {
+            if let Some(resource) = read_workspace_resource(&cwd, reference) {
                 blocks.push(PromptContent::resource(resource.0, resource.1, resource.2));
             }
         }
@@ -1922,155 +2664,202 @@ pub fn acp_prompt(
         vec![PromptContent::text(prompt_text.clone())]
     };
 
+    let guard = Arc::clone(&state.guard_service);
     let mut pending_tickets: Vec<String> = Vec::new();
-    let outcome = entry
-        .session
-        .prompt_with_content(content, |req| {
-            // A poisoned guard lock means an earlier decision panicked mid-way.
-            // Fail **closed**: a permission we cannot evaluate is denied, never
-            // granted, and never a panic that takes the whole turn down.
-            let Ok(mut g) = guard.lock() else {
-                return PermissionDecision::deny();
-            };
-            let (op, risk) = map_tool_call(&req.tool_call);
-            let paths: Vec<String> = req
-                .tool_call
-                .locations
-                .iter()
-                .map(|l| l.uri.clone())
-                .collect();
-            let decision = DecisionPackage::new(req.tool_call.title.clone())
-                .with_risk(risk)
-                .with_paths(paths);
-            let args_hash = hash_tool_args(&req.tool_call);
-            match g.evaluate(
-                &session_id,
-                &agent_id,
-                &req.tool_call.tool_call_id,
-                op,
-                decision,
-                &args_hash,
-                0,
-            ) {
-                GuardDecision::Allow { ticket_id } => {
-                    // S0.6: file/terminal (brokered) ops always consume the
-                    // minted ticket. Uncontrolled ACP surface is labeled
-                    // elsewhere; it never gets a ticketless write.
-                    if is_brokered_op(&op) {
-                        match g.use_ticket(&ticket_id, &args_hash) {
-                            Ok(()) => PermissionDecision::allow(),
-                            Err(_) => PermissionDecision::deny(),
-                        }
+    let prompt_result = provider_session.prompt_with_content(content, |req| {
+        if cancel.is_requested() {
+            return PermissionDecision::deny();
+        }
+        let Ok(mut g) = guard.lock() else {
+            return PermissionDecision::deny();
+        };
+        let (op, risk) = map_tool_call(&req.tool_call);
+        let paths: Vec<String> = req
+            .tool_call
+            .locations
+            .iter()
+            .map(|l| l.uri.clone())
+            .collect();
+        let decision = DecisionPackage::new(req.tool_call.title.clone())
+            .with_risk(risk)
+            .with_paths(paths);
+        let args_hash = hash_tool_args(&req.tool_call);
+        match g.evaluate(
+            &application_session_id,
+            &agent_id,
+            &req.tool_call.tool_call_id,
+            op,
+            decision,
+            &args_hash,
+            0,
+        ) {
+            GuardDecision::Allow { ticket_id } => {
+                if is_brokered_op(&op) {
+                    match g.use_ticket(&ticket_id, &args_hash) {
+                        Ok(()) if !cancel.is_requested() => PermissionDecision::allow(),
+                        _ => PermissionDecision::deny(),
+                    }
+                } else {
+                    let _ = g.use_ticket(&ticket_id, &args_hash);
+                    if cancel.is_requested() {
+                        PermissionDecision::deny()
                     } else {
-                        let _ = g.use_ticket(&ticket_id, &args_hash);
                         PermissionDecision::allow()
                     }
                 }
-                GuardDecision::Block { .. } => PermissionDecision::deny(),
-                GuardDecision::Ask { ticket_id } => {
-                    pending_tickets.push(ticket_id.clone());
-                    let rx = g.watch_ticket(&ticket_id);
-                    drop(g);
-                    let approved = rx
-                        .recv_timeout(std::time::Duration::from_secs(300))
-                        .unwrap_or(false);
-                    let Ok(mut g) = guard.lock() else {
-                        return PermissionDecision::deny();
-                    };
-                    if approved {
-                        match g.use_ticket(&ticket_id, &args_hash) {
-                            Ok(()) => PermissionDecision::allow(),
-                            Err(_) => PermissionDecision::deny(),
-                        }
-                    } else {
-                        PermissionDecision::deny()
-                    }
-                }
             }
-        })
-        .map_err(|e| e.to_string())?;
-    drop(sessions);
-
-    // P53.1 — harvest the agent's live slash vocabulary: the most recent
-    // `available_commands_update` on this turn replaces the handle's stored
-    // list (agents re-advertise on every turn; stale lists never persist).
-    // P53.5 — append the turn's tool history to the per-session observability
-    // file (metrics the user can open; never imported into chat context).
-    {
-        let mut sessions = state.acp_sessions.lock().map_err(|e| e.to_string())?;
-        if let Some(entry) = sessions.get_mut(&handle) {
-            for u in &outcome.updates {
-                if u.is_available_commands_update() && !u.available_commands.is_empty() {
-                    entry.available_commands = u.available_commands.clone();
-                }
-                if u.is_config_option_update() && !u.config_options.is_empty() {
-                    entry.config_options = u.config_options.clone();
+            GuardDecision::Block { .. } => PermissionDecision::deny(),
+            GuardDecision::Ask { ticket_id } => {
+                pending_tickets.push(ticket_id.clone());
+                let rx = g.watch_ticket(&ticket_id);
+                drop(g);
+                let approved = loop {
+                    if cancel.is_requested() {
+                        break false;
+                    }
+                    match rx.recv_timeout(std::time::Duration::from_millis(250)) {
+                        Ok(value) => break value,
+                        Err(std::sync::mpsc::RecvTimeoutError::Timeout) => continue,
+                        Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break false,
+                    }
+                };
+                let Ok(mut g) = guard.lock() else {
+                    return PermissionDecision::deny();
+                };
+                if approved && !cancel.is_requested() {
+                    match g.use_ticket(&ticket_id, &args_hash) {
+                        Ok(()) => PermissionDecision::allow(),
+                        Err(_) => PermissionDecision::deny(),
+                    }
+                } else {
+                    PermissionDecision::deny()
                 }
             }
         }
-        append_acp_tool_log(
-            &session_id,
-            &handle,
-            &agent_id,
-            &text,
-            &outcome,
-            prefix_event,
-        );
-    }
+    });
+    drop(provider_session);
 
-    // P71.4 — the turn's usage is an **observation**. The agent's own report is
-    // recorded with its source named; an agent that reports nothing is counted
-    // as *unreported*, never rendered as a measured zero. Nothing here
-    // estimates tokens from prompt length — that would be invented precision
-    // (`ARCH/ROUTING.md` §5, I15).
-    // Clone the `Arc` out of the relay so the memory lock outlives the relay
-    // borrow (the same pattern `memory_cmds::memory_arc` uses).
+    let outcome = match prompt_result {
+        Ok(outcome) => outcome,
+        Err(AcpError::Cancelled) => {
+            let _ = transition_acp_run(
+                &state,
+                &identity.owner.work_id,
+                &identity.run_id,
+                everyaios_types::WorkState::Cancelled,
+            );
+            return Err("ACP turn cancelled".to_string());
+        }
+        Err(error) => {
+            let _ = transition_acp_run(
+                &state,
+                &identity.owner.work_id,
+                &identity.run_id,
+                everyaios_types::WorkState::Failed,
+            );
+            return Err(format!("ACP prompt failed: {error}"));
+        }
+    };
+
+    let latest_config = {
+        let session = session.lock().map_err(|e| e.to_string())?;
+        session.config_options().to_vec()
+    };
+    {
+        let mut sessions = state.acp_sessions.lock().map_err(|e| e.to_string())?;
+        if let Some(entry) = sessions.get_mut(&handle) {
+            entry.config_options = latest_config;
+            for update in &outcome.updates {
+                if update.is_available_commands_update() && !update.available_commands.is_empty() {
+                    entry.available_commands = update.available_commands.clone();
+                }
+                if update.is_config_option_update() && !update.config_options.is_empty() {
+                    entry.config_options = update.config_options.clone();
+                }
+            }
+        }
+    }
+    append_acp_tool_log(
+        &application_session_id,
+        &provider_session_id,
+        &handle,
+        &agent_id,
+        &text,
+        &outcome,
+        prefix_event,
+    );
+
+    // The durable binding receives the same agent-reported usage observation
+    // as the memory ledger; no provider credential or model value crosses this
+    // boundary.
+    let binding_usage_error =
+        record_acp_binding_usage(&state, &identity.owner, outcome.usage.as_ref()).err();
+
     let memory_arc = state
         .chat_relay
         .lock()
         .ok()
         .and_then(|relay| relay.as_ref().map(|r| r.memory()));
     if let Some(mem) = memory_arc {
-        {
-            if let Ok(mut m) = mem.lock() {
-                // The run's primary agent is whoever drove this turn — the one
-                // fact only the turn path knows.
-                m.set_primary_agent(&agent_id);
-                match outcome.usage {
-                    Some(u) if u.reported() => m.record_usage_from(
-                        everyaios_core::UsageSource::AgentReport,
-                        &agent_id,
-                        // The agent owns its own credential, so the turn is
-                        // billed to the agent rather than to one of our keys.
-                        &agent_id,
-                        &session_id,
-                        u.input_tokens,
-                        u.output_tokens,
-                        u.cached_read_tokens > 0,
-                        u.cached_read_tokens,
-                        u.cached_write_tokens,
-                        u.cost_usd.unwrap_or(0.0),
-                    ),
-                    _ => m.record_usage_unreported(&agent_id),
-                }
+        if let Ok(mut m) = mem.lock() {
+            m.set_primary_agent(&agent_id);
+            match outcome.usage {
+                Some(u) if u.reported() => m.record_usage_from(
+                    everyaios_core::UsageSource::AgentReport,
+                    &agent_id,
+                    &agent_id,
+                    &application_session_id,
+                    u.input_tokens,
+                    u.output_tokens,
+                    u.cached_read_tokens > 0,
+                    u.cached_read_tokens,
+                    u.cached_write_tokens,
+                    u.cost_usd.unwrap_or(0.0),
+                ),
+                _ => m.record_usage_unreported(&agent_id),
             }
         }
     }
 
-    if let Some(ref eid) = exec_id {
-        if let Ok(relay) = state.chat_relay.lock() {
-            if let Some(r) = relay.as_ref() {
-                let kernel = r.executions();
-                let mut k = kernel.lock().unwrap_or_else(|e| e.into_inner());
-                if pending_tickets.is_empty() {
-                    let _ = k.transition(eid, ExecutionPhase::Verifying);
-                    let _ = k.transition(eid, ExecutionPhase::Completed);
-                } else {
-                    let _ = k.transition(eid, ExecutionPhase::WaitingApproval);
-                }
-            }
-        }
-    }
+    let transition_error = if outcome.stop_reason == everyaios_acp::StopReason::Cancelled {
+        transition_acp_run(
+            &state,
+            &identity.owner.work_id,
+            &identity.run_id,
+            everyaios_types::WorkState::Cancelled,
+        )
+        .err()
+    } else if pending_tickets.is_empty() {
+        transition_acp_run(
+            &state,
+            &identity.owner.work_id,
+            &identity.run_id,
+            everyaios_types::WorkState::Verifying,
+        )
+        .and_then(|_| {
+            transition_acp_run(
+                &state,
+                &identity.owner.work_id,
+                &identity.run_id,
+                everyaios_types::WorkState::Completed,
+            )
+        })
+        .err()
+    } else {
+        transition_acp_run(
+            &state,
+            &identity.owner.work_id,
+            &identity.run_id,
+            everyaios_types::WorkState::WaitingApproval,
+        )
+        .err()
+    };
+    let lifecycle_error = match (transition_error, binding_usage_error) {
+        (Some(transition), Some(usage)) => Some(format!("{transition}; binding usage: {usage}")),
+        (Some(transition), None) => Some(transition),
+        (None, Some(usage)) => Some(format!("binding usage: {usage}")),
+        (None, None) => None,
+    };
 
     let final_text = outcome
         .updates
@@ -2087,37 +2876,208 @@ pub fn acp_prompt(
 
     Ok(serde_json::json!({
         "handle": handle,
+        "applicationSessionId": identity.owner.session_id,
+        "workId": identity.owner.work_id,
+        "bindingId": identity.owner.binding_id,
+        "runId": identity.run_id,
+        "providerSessionId": provider_session_id,
         "stopReason": outcome.stop_reason.as_str(),
         "updateCount": outcome.updates.len(),
         "permissionCount": outcome.permissions.len(),
         "pendingTickets": pending_tickets,
         "finalText": final_text,
         "updates": outcome.updates,
-        "executionId": exec_id,
+        "executionId": identity.run_id,
+        "lifecycleError": lifecycle_error,
     }))
 }
 
-/// Interrupt the ongoing ACP turn (`session/cancel` notification).
-#[tauri::command]
-pub fn acp_cancel(state: State<'_, AppState>, handle: String) -> Result<(), String> {
-    let mut sessions = state.acp_sessions.lock().map_err(|e| e.to_string())?;
-    let entry = sessions
-        .get_mut(&handle)
-        .ok_or_else(|| format!("unknown ACP handle: {handle}"))?;
-    entry.session.cancel().map_err(|e| e.to_string())
+fn validate_cancel_owner(
+    handle: &str,
+    owner: Option<&AcpCanonicalOwner>,
+    requested_session: Option<&str>,
+    requested_binding: Option<&str>,
+) -> Result<(), AcpIdentityError> {
+    let Some(owner) = owner else {
+        if requested_session.is_some() || requested_binding.is_some() {
+            return Err(AcpIdentityError::NoCanonicalOwner {
+                handle: handle.to_string(),
+            });
+        }
+        return Err(AcpIdentityError::NoCanonicalOwner {
+            handle: handle.to_string(),
+        });
+    };
+    if let Some(session_id) = requested_session {
+        if owner.session_id != session_id {
+            return Err(AcpIdentityError::OwnerMismatch {
+                handle: handle.to_string(),
+                expected_session: session_id.to_string(),
+                actual_session: owner.session_id.clone(),
+            });
+        }
+    }
+    if let Some(binding_id) = requested_binding {
+        if owner.binding_id != binding_id {
+            return Err(AcpIdentityError::BindingMismatch {
+                handle: handle.to_string(),
+                expected_binding: binding_id.to_string(),
+                actual_binding: owner.binding_id.clone(),
+            });
+        }
+    }
+    Ok(())
 }
 
-/// Tear an ACP session down (kill + reap) and drop its handle.
+fn cancel_one_acp_handle(
+    state: &State<'_, AppState>,
+    handle: &str,
+    cancel: &AcpCancelHandle,
+    provider_session_id: &str,
+    owner: Option<&AcpCanonicalOwner>,
+    run_id: Option<&str>,
+) -> Result<(), String> {
+    cancel
+        .request(provider_session_id)
+        .map_err(|e| format!("ACP cancellation request failed for {handle}: {e}"))?;
+    if let (Some(owner), Some(run_id)) = (owner, run_id) {
+        // The provider notification is already sent; report a durable Work
+        // transition failure rather than pretending the Run was cancelled.
+        transition_acp_run(
+            state,
+            &owner.work_id,
+            run_id,
+            everyaios_types::WorkState::Cancelled,
+        )?;
+    }
+    Ok(())
+}
+
+/// Interrupt one canonical ACP turn. The optional owner fields are checked
+/// against the handle before the provider notification is sent; a handle that
+/// belongs to another Session is never used as a fallback.
+#[tauri::command]
+pub fn acp_cancel(
+    state: State<'_, AppState>,
+    handle: String,
+    session_id: Option<String>,
+    binding_id: Option<String>,
+) -> Result<(), String> {
+    let (cancel, provider_session_id, owner, run_id) = {
+        let sessions = state.acp_sessions.lock().map_err(|e| e.to_string())?;
+        let entry = sessions
+            .get(&handle)
+            .ok_or_else(|| format!("unknown ACP handle: {handle}"))?;
+        validate_cancel_owner(
+            &handle,
+            entry.owner.as_ref(),
+            session_id.as_deref(),
+            binding_id.as_deref(),
+        )
+        .map_err(|e| e.to_string())?;
+        let provider_session_id = entry
+            .provider_session_id
+            .clone()
+            .ok_or_else(|| AcpIdentityError::MissingProviderSession.to_string())?;
+        (
+            entry.cancel.clone(),
+            provider_session_id,
+            entry.owner.clone(),
+            entry.run_id.clone(),
+        )
+    };
+    // The global map lock is released before writing to the provider pipe.
+    cancel_one_acp_handle(
+        &state,
+        &handle,
+        &cancel,
+        &provider_session_id,
+        owner.as_ref(),
+        run_id.as_deref(),
+    )
+}
+
+/// Cancel every live ACP handle owned by one application Session. This is the
+/// scoped stop seam used by the control-channel `agent_stop` path; callers must
+/// use it instead of enumerating agent ids.
+#[allow(dead_code)] // the control-channel writer owns the final call site
+pub(crate) fn cancel_acp_for_session(
+    state: &State<'_, AppState>,
+    session_id: &str,
+) -> Result<Vec<String>, String> {
+    let owner_handles = state.acp_handles_for_session(session_id)?;
+    let owner_set: std::collections::HashSet<String> = owner_handles.into_iter().collect();
+    let handles: Vec<(String, AcpCancelHandle, String, AcpCanonicalOwner, Option<String>)> = {
+        let sessions = state.acp_sessions.lock().map_err(|e| e.to_string())?;
+        sessions
+            .iter()
+            .filter_map(|(handle, entry)| {
+                if !owner_set.contains(handle) {
+                    return None;
+                }
+                let owner = entry.owner.as_ref()?;
+                Some((
+                    handle.clone(),
+                    entry.cancel.clone(),
+                    entry
+                        .provider_session_id
+                        .clone()
+                        .unwrap_or_default(),
+                    owner.clone(),
+                    entry.run_id.clone(),
+                ))
+            })
+            .collect()
+    };
+    let mut cancelled = Vec::new();
+    let mut errors = Vec::new();
+    for (handle, cancel, provider, owner, run_id) in handles {
+        if provider.is_empty() {
+            errors.push(format!("{handle}: {}", AcpIdentityError::MissingProviderSession));
+            continue;
+        }
+        match cancel_one_acp_handle(
+            state,
+            &handle,
+            &cancel,
+            &provider,
+            Some(&owner),
+            run_id.as_deref(),
+        ) {
+            Ok(()) => cancelled.push(handle),
+            Err(error) => errors.push(error),
+        }
+    }
+    if errors.is_empty() {
+        Ok(cancelled)
+    } else {
+        Err(errors.join("; "))
+    }
+}
+
+/// Tear an ACP session down (kill + reap) and drop its handle. The provider
+/// process is shut down outside the global registry lock, then the durable
+/// binding is parked when a WorkGateway is available.
 #[tauri::command]
 pub fn acp_shutdown(state: State<'_, AppState>, handle: String) -> Result<bool, String> {
-    let mut sessions = state.acp_sessions.lock().map_err(|e| e.to_string())?;
-    match sessions.remove(&handle) {
-        Some(mut entry) => {
-            entry.session.shutdown();
-            Ok(true)
-        }
-        None => Ok(false),
+    let (session, owner) = {
+        let mut sessions = state.acp_sessions.lock().map_err(|e| e.to_string())?;
+        let Some(entry) = sessions.remove(&handle) else {
+            return Ok(false);
+        };
+        (entry.session.clone(), entry.owner)
+    };
+    {
+        let mut session = session.lock().map_err(|e| e.to_string())?;
+        session.shutdown();
     }
+    if let Some(owner) = owner {
+        if let Ok((gateway, _)) = relay_planes(&state) {
+            let mut gateway = gateway.lock().map_err(|e| e.to_string())?;
+            let _ = gateway.transition_agent_binding(&owner.binding_id, "suspended", None);
+        }
+    }
+    Ok(true)
 }
 
 /// Live ACP handles (the harness list in the cockpit).
@@ -2224,6 +3184,189 @@ fn url_host(url: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn missing_application_or_provider_identity_fails_closed() {
+        let mut gateway = everyaios_core::WorkGateway::new();
+        let mut kernel = everyaios_core::ExecutionKernel::new();
+        assert!(matches!(
+            prepare_acp_turn(
+                &mut gateway,
+                &mut kernel,
+                "",
+                "agent",
+                "provider",
+                "objective",
+            ),
+            Err(AcpIdentityError::MissingApplicationSession)
+        ));
+        assert!(matches!(
+            prepare_acp_turn(
+                &mut gateway,
+                &mut kernel,
+                "application",
+                "agent",
+                "",
+                "objective",
+            ),
+            Err(AcpIdentityError::MissingProviderSession)
+        ));
+        assert!(gateway.list_work().is_empty());
+    }
+
+    #[test]
+    fn canonical_owner_keeps_provider_ids_separate_for_shared_agent() {
+        let mut gateway = everyaios_core::WorkGateway::new();
+        let mut kernel = everyaios_core::ExecutionKernel::new();
+        let first = prepare_acp_turn(
+            &mut gateway,
+            &mut kernel,
+            "application-a",
+            "shared-agent",
+            "provider-a",
+            "first",
+        )
+        .unwrap();
+        let second = prepare_acp_turn(
+            &mut gateway,
+            &mut kernel,
+            "application-b",
+            "shared-agent",
+            "provider-b",
+            "second",
+        )
+        .unwrap();
+
+        assert_eq!(first.owner.session_id, "application-a");
+        assert_eq!(second.owner.session_id, "application-b");
+        assert_ne!(first.owner.binding_id, second.owner.binding_id);
+        assert_eq!(
+            gateway
+                .agent_binding(&first.owner.binding_id)
+                .and_then(|b| b.provider_session_id.as_deref()),
+            Some("provider-a")
+        );
+        assert_eq!(
+            gateway
+                .agent_binding(&second.owner.binding_id)
+                .and_then(|b| b.provider_session_id.as_deref()),
+            Some("provider-b")
+        );
+        assert_eq!(kernel.get(&first.run_id).unwrap().session_id, "application-a");
+        assert_eq!(kernel.get(&second.run_id).unwrap().session_id, "application-b");
+    }
+
+    #[test]
+    fn existing_active_run_is_resolved_instead_of_replaced() {
+        let mut gateway = everyaios_core::WorkGateway::new();
+        let mut kernel = everyaios_core::ExecutionKernel::new();
+        gateway
+            .create_work_in_session(
+                "automation-session",
+                None,
+                Some("automation-session".into()),
+                everyaios_types::SessionKind::Automation,
+                "scheduled objective",
+            )
+            .unwrap();
+        let existing = kernel
+            .begin(
+                ExecutionTrigger::Scheduler,
+                "automation-session",
+                "scheduled objective",
+                None,
+                String::new(),
+                r#"{"trigger":"scheduler"}"#.into(),
+                vec![],
+            )
+            .id;
+        kernel.transition(&existing, ExecutionPhase::Running).unwrap();
+        gateway.bind_execution("automation-session", &existing).unwrap();
+        gateway
+            .record_execution_transition(
+                "automation-session",
+                &existing,
+                everyaios_types::WorkState::Running,
+            )
+            .unwrap();
+
+        let identity = prepare_acp_turn(
+            &mut gateway,
+            &mut kernel,
+            "automation-session",
+            "scheduled-agent",
+            "provider-1",
+            "scheduled objective",
+        )
+        .unwrap();
+        assert_eq!(identity.run_id, existing);
+        assert_eq!(gateway.execution_id("automation-session"), Some(existing.as_str()));
+    }
+
+    #[test]
+    fn binding_and_run_replay_from_the_work_journal() {
+        let path = std::env::temp_dir().join(format!(
+            "everyaios-acp-identity-{}-{}.jsonl",
+            std::process::id(),
+            ACP_COUNTER.fetch_add(1, Ordering::Relaxed)
+        ));
+        let mut gateway = everyaios_core::WorkGateway::open(&path).unwrap();
+        let mut kernel = everyaios_core::ExecutionKernel::new();
+        let identity = prepare_acp_turn(
+            &mut gateway,
+            &mut kernel,
+            "replay-session",
+            "replay-agent",
+            "provider-replay",
+            "replay",
+        )
+        .unwrap();
+        gateway
+            .record_binding_usage(
+                &identity.owner.binding_id,
+                everyaios_types::BindingUsage {
+                    input_tokens: 7,
+                    output_tokens: 3,
+                    cost_micros: 11,
+                },
+            )
+            .unwrap();
+        drop(gateway);
+        drop(kernel);
+
+        let replay = everyaios_core::WorkGateway::open(&path).unwrap();
+        let binding = replay.agent_binding(&identity.owner.binding_id).unwrap();
+        assert_eq!(binding.session_id.as_str(), "replay-session");
+        assert_eq!(binding.provider_session_id.as_deref(), Some("provider-replay"));
+        assert_eq!(binding.usage.input_tokens, 7);
+        assert_eq!(binding.usage.output_tokens, 3);
+        assert_eq!(binding.usage.cost_micros, 11);
+        assert_eq!(replay.execution_id("replay-session"), Some(identity.run_id.as_str()));
+        assert_eq!(replay.get_work("replay-session").unwrap().session_id.as_deref(), Some("replay-session"));
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn owner_validation_rejects_a_handle_from_another_session() {
+        let owner = AcpCanonicalOwner {
+            session_id: "session-a".into(),
+            work_id: "session-a".into(),
+            binding_id: "binding-a".into(),
+        };
+        assert!(validate_cancel_owner("h1", Some(&owner), Some("session-a"), None).is_ok());
+        let other = AcpCanonicalOwner {
+            session_id: "session-b".into(),
+            work_id: "session-b".into(),
+            binding_id: "binding-b".into(),
+        };
+        assert!(validate_cancel_owner("h2", Some(&other), Some("session-b"), None).is_ok());
+        let error = validate_cancel_owner("h1", Some(&owner), Some("session-b"), None)
+            .expect_err("a handle cannot be reused by another Session");
+        assert!(matches!(error, AcpIdentityError::OwnerMismatch { .. }));
+        let binding_error = validate_cancel_owner("h1", Some(&owner), Some("session-a"), Some("binding-b"))
+            .expect_err("a handle cannot be reused by another binding");
+        assert!(matches!(binding_error, AcpIdentityError::BindingMismatch { .. }));
+    }
 
     #[test]
     fn delete_tool_maps_to_high_risk_delete() {

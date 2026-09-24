@@ -679,9 +679,10 @@ impl MemoryService {
         // built-in vocabulary v1 does not have and produced a share from a
         // guess. `null` = no attribution, and a surface must render that as
         // "not attributed" rather than 0% (I15).
-        let spend = self.usage.primary_worker_split().map(|(primary, worker)| {
-            crate::split_primary_spend(primary, worker)
-        });
+        let spend = self
+            .usage
+            .primary_worker_split()
+            .map(|(primary, worker)| crate::split_primary_spend(primary, worker));
         json!({
             "total": self.usage.total(),
             "cacheHitRate": self.usage.cache_hit_rate(),

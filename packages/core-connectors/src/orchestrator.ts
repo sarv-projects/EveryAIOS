@@ -2,10 +2,12 @@ import type {
   ConnectorAdapter,
   ConnectorContext,
   ConnectorFilter,
+  ConnectorName,
   ConnectorResult,
   UserQuery,
   MemoryFact,
 } from '@everyaios/core-domain';
+import { hasConnectorHostTransport } from './connection-manager.js';
 
 /**
  * ConnectorOrchestrator per spec §12.2 and blueprint §15.1.
@@ -22,10 +24,64 @@ export interface ConnectorPlan {
   filters: Record<string, ConnectorFilter>;
 }
 
+/** Marker implemented by adapters whose authenticated HTTP path is host-owned. */
+export interface HostMediatedConnectorAdapter extends ConnectorAdapter {
+  readonly credentialMode: 'host-mediated';
+}
+
+export type ConnectorExecutionStatus = 'completed' | 'unavailable';
+
 export interface ConnectorExecutionResult {
   source: string;
   result: ConnectorResult;
   compressedSnippet?: string;
+  status: ConnectorExecutionStatus;
+  /** Stable, non-secret explanation for a disabled connector path. */
+  reason?: string;
+}
+
+function isHostMediated(adapter: ConnectorAdapter): adapter is HostMediatedConnectorAdapter {
+  return (adapter as Partial<HostMediatedConnectorAdapter>).credentialMode === 'host-mediated';
+}
+
+const CREDENTIAL_FILTER_KEYS = new Set([
+  'accesstoken',
+  'accesskey',
+  'apikey',
+  'authorization',
+  'botoken',
+  'cookie',
+  'key',
+  'password',
+  'secret',
+  'token',
+]);
+
+function normalizedCredentialKey(key: string): string {
+  return key.toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+function withoutCredentialFields(filter: ConnectorFilter): ConnectorFilter {
+  const safe: ConnectorFilter = {};
+  for (const [key, value] of Object.entries(filter)) {
+    const normalized = normalizedCredentialKey(key);
+    if (
+      CREDENTIAL_FILTER_KEYS.has(normalized) ||
+      normalized.includes('apikey') ||
+      normalized.includes('accesstoken') ||
+      normalized.includes('password') ||
+      normalized.includes('secret') ||
+      normalized.includes('token')
+    ) {
+      continue;
+    }
+    safe[key] = value;
+  }
+  return safe;
+}
+
+function emptyResult(source: ConnectorName): ConnectorResult {
+  return { items: [], totalCount: 0, source };
 }
 
 export class ConnectorOrchestrator {
@@ -72,29 +128,35 @@ export class ConnectorOrchestrator {
   }
 
   /**
-   * execute: run the planned adapters. Minimal compression here (full text kept small by adapters).
-   * `tokenResolver` is called for each adapter and can inject a fresh OAuth/API token into ctx.filter.token.
+   * Execute the planned adapters.
+   *
+   * Credential-bearing adapters never receive secret fields. They are routed
+   * through the Rust connector transport; when that transport is not attached
+   * they return an explicit unavailable result instead of a raw-token fallback.
    */
   async execute(
     plan: ConnectorPlan,
     baseContext: Partial<ConnectorContext>,
-    deps: { tokenResolver?: (name: string) => Promise<string | null> } = {},
   ): Promise<ConnectorExecutionResult[]> {
     const results: ConnectorExecutionResult[] = [];
 
     const runOne = async (adapter: ConnectorAdapter) => {
+      if (isHostMediated(adapter) && !hasConnectorHostTransport()) {
+        results.push({
+          source: adapter.name,
+          result: emptyResult(adapter.name),
+          status: 'unavailable',
+          reason: 'Rust connector host transport is not attached',
+        });
+        return;
+      }
+
       const ctx: ConnectorContext = {
         userId: baseContext.userId || 'local',
         query: baseContext.query || { text: '' },
-        filter: plan.filters[adapter.name] || {},
+        filter: withoutCredentialFields(plan.filters[adapter.name] || {}),
+        ...(baseContext.signal ? { signal: baseContext.signal } : {}),
       };
-
-      if (deps.tokenResolver) {
-        const token = await deps.tokenResolver(adapter.name).catch(() => null);
-        if (token) {
-          ctx.filter = { ...ctx.filter, token };
-        }
-      }
 
       const result = await adapter.fetch(ctx);
       // very light "compression" for now (already done in adapter usually)
@@ -104,6 +166,7 @@ export class ConnectorOrchestrator {
         source: adapter.name,
         result,
         compressedSnippet: compressed,
+        status: 'completed',
       });
     };
 

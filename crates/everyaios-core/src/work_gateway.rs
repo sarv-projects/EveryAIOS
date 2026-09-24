@@ -5,8 +5,8 @@
 //! it does not execute effects. Remote clients, multi-node failover, and
 //! platform sandbox enforcement remain explicit follow-up seams.
 
-pub use everyaios_types::AutonomyLevel;
 use everyaios_blueprint::DelegationGauge;
+pub use everyaios_types::AutonomyLevel;
 use everyaios_types::{
     AgentBinding, BindingLifecycle, BindingUsage, RiskLevel, SessionKind, WaitCondition, WorkId,
     WorkState,
@@ -1018,7 +1018,8 @@ impl WorkGateway {
             WorkEvent::Runtime(RuntimeEvent::AgentBindingUsageRecorded { binding_id, usage }) => {
                 if let Some(b) = self.agent_bindings.get_mut(binding_id) {
                     b.usage.input_tokens = b.usage.input_tokens.saturating_add(usage.input_tokens);
-                    b.usage.output_tokens = b.usage.output_tokens.saturating_add(usage.output_tokens);
+                    b.usage.output_tokens =
+                        b.usage.output_tokens.saturating_add(usage.output_tokens);
                     b.usage.cost_micros = b.usage.cost_micros.saturating_add(usage.cost_micros);
                     b.last_event_seq = event.sequence;
                 }
@@ -1065,7 +1066,7 @@ impl WorkGateway {
             SessionKind::Interactive,
             objective,
         )
-        .expect("interactive Work requires no owning Session")
+        .expect("durable interactive Work creation failed")
     }
 
     /// P71.8a/b — create a Work in a Session of an explicit [`SessionKind`].
@@ -1108,7 +1109,7 @@ impl WorkGateway {
                 ..Default::default()
             },
         );
-        self.append(
+        if let Err(error) = self.append(
             &id,
             WorkEvent::Domain(DomainEvent::WorkCreated {
                 objective: objective.into(),
@@ -1117,7 +1118,11 @@ impl WorkGateway {
                 parent_work_id: None,
             }),
             None,
-        );
+        ) {
+            self.works.remove(&id);
+            self.presence.remove(&id);
+            return Err(error);
+        }
         Ok(address)
     }
 
@@ -1174,7 +1179,7 @@ impl WorkGateway {
                 ..Default::default()
             },
         );
-        self.append(
+        if let Err(error) = self.append(
             &id,
             WorkEvent::Domain(DomainEvent::WorkCreated {
                 objective: objective.into(),
@@ -1183,7 +1188,11 @@ impl WorkGateway {
                 parent_work_id: Some(parent_work_id.to_string()),
             }),
             None,
-        );
+        ) {
+            self.works.remove(&id);
+            self.presence.remove(&id);
+            return Err(error);
+        }
         Ok(address)
     }
 
@@ -1230,14 +1239,16 @@ impl WorkGateway {
         })
     }
 
-    /// P71.3a — whether a Work's presence is terminal (completed or failed).
-    /// A missing presence row is **not** terminal: a Work nobody has reported
-    /// on yet still occupies its concurrency slot.
+    /// P71.3a — whether a Work's presence is terminal (completed, failed, or
+    /// cancelled). A missing presence row is **not** terminal: a Work nobody
+    /// has reported on yet still occupies its concurrency slot.
     pub fn presence_is_terminal(&self, work_id: &str) -> bool {
         self.presence.get(work_id).is_some_and(|p| {
             matches!(
                 p.state,
-                Some(WorkPresenceState::Completed) | Some(WorkPresenceState::Failed)
+                Some(WorkPresenceState::Completed)
+                    | Some(WorkPresenceState::Failed)
+                    | Some(WorkPresenceState::Cancelled)
             )
         })
     }
@@ -1362,15 +1373,16 @@ impl WorkGateway {
                 run_id: run.clone(),
                 reason: reason.unwrap_or("subagent failed").to_string(),
             }),
-            WorkState::Cancelled => {
-                WorkEvent::Domain(DomainEvent::RunCancelled { run_id: run.clone() })
-            }
-            _ => WorkEvent::Domain(DomainEvent::RunCompleted { run_id: run.clone() }),
+            WorkState::Cancelled => WorkEvent::Domain(DomainEvent::RunCancelled {
+                run_id: run.clone(),
+            }),
+            _ => WorkEvent::Domain(DomainEvent::RunCompleted {
+                run_id: run.clone(),
+            }),
         };
-        self.append(&child, event, None)
-            .ok_or("append child run terminal event")?;
+        self.append(&child, event, None)?;
         self.set_work_state(&child, &run, outcome, None);
-        let _ = self.terminate_agent_session(&child, &session);
+        self.terminate_agent_session(&child, &session)?;
         Ok(ChildWorkRef {
             work_id: child,
             run_id: run,
@@ -1379,13 +1391,8 @@ impl WorkGateway {
     }
 
     pub fn bind_execution(&mut self, work_id: &str, execution_id: &str) -> Result<(), String> {
-        if !self.works.contains_key(work_id) {            return Err("unknown work".into());
-        }
-        self.execution_ids
-            .insert(work_id.to_string(), execution_id.to_string());
-        if let Some(address) = self.works.get_mut(work_id) {
-            address.current_run_id = Some(execution_id.to_string());
-            address.version = address.version.saturating_add(1);
+        if !self.works.contains_key(work_id) {
+            return Err("unknown work".into());
         }
         self.append(
             work_id,
@@ -1393,8 +1400,13 @@ impl WorkGateway {
                 patch: serde_json::json!({"executionId": execution_id}),
             }),
             None,
-        )
-        .ok_or("failed to append binding")?;
+        )?;
+        self.execution_ids
+            .insert(work_id.to_string(), execution_id.to_string());
+        if let Some(address) = self.works.get_mut(work_id) {
+            address.current_run_id = Some(execution_id.to_string());
+            address.version = address.version.saturating_add(1);
+        }
         Ok(())
     }
     pub fn execution_id(&self, work_id: &str) -> Option<&str> {
@@ -1406,23 +1418,30 @@ impl WorkGateway {
     pub fn list_work(&self) -> Vec<&WorkAddress> {
         self.works.values().collect()
     }
-    pub fn archive_work(&mut self, id: &str) -> bool {
-        if self.works.contains_key(id) {
-            let _ = self.append(
-                id,
-                WorkEvent::Domain(DomainEvent::WorkUpdated {
-                    patch: serde_json::json!({"archived": true}),
-                }),
-                None,
-            );
-            self.works.remove(id);
-            if let Some(p) = self.presence.get_mut(id) {
-                p.state = Some(WorkPresenceState::Completed);
-            }
-            true
-        } else {
-            false
+    /// Archive a Work only after its durable archival event is acknowledged.
+    pub fn try_archive_work(&mut self, id: &str) -> Result<bool, String> {
+        if !self.works.contains_key(id) {
+            return Ok(false);
         }
+        self.append(
+            id,
+            WorkEvent::Domain(DomainEvent::WorkUpdated {
+                patch: serde_json::json!({"archived": true}),
+            }),
+            None,
+        )?;
+        self.works.remove(id);
+        if let Some(p) = self.presence.get_mut(id) {
+            p.state = Some(WorkPresenceState::Completed);
+        }
+        Ok(true)
+    }
+
+    /// Compatibility wrapper for callers that only expose a boolean result.
+    /// New RPC and mutation paths should use [`Self::try_archive_work`] so a
+    /// journal failure is surfaced rather than reduced to `false`.
+    pub fn archive_work(&mut self, id: &str) -> bool {
+        self.try_archive_work(id).unwrap_or(false)
     }
 
     /// Append a steering instruction as a durable Work-level event. The
@@ -1446,7 +1465,6 @@ impl WorkGateway {
             }),
             None,
         )
-        .ok_or("unknown work".into())
     }
 
     /// Queue a review item and emit its semantic event.
@@ -1456,13 +1474,13 @@ impl WorkGateway {
         }
         let work_id = item.work_id.clone();
         let review_id = item.review_id.clone();
-        self.add_review(item);
-        self.append(
+        let envelope = self.append(
             &work_id,
             WorkEvent::Domain(DomainEvent::ReviewRequested { review_id }),
             None,
-        )
-        .ok_or("failed to append review".into())
+        )?;
+        self.add_review(item);
+        Ok(envelope)
     }
 
     // ======== P49.10 PtySession lifecycle ========
@@ -1478,6 +1496,16 @@ impl WorkGateway {
         if !self.works.contains_key(work_id) {
             return Err("unknown work".into());
         }
+        let envelope = self.append(
+            work_id,
+            WorkEvent::Runtime(RuntimeEvent::PtyStarted {
+                pty_id: pty_id.to_string(),
+                process_id,
+                rows,
+                cols,
+            }),
+            None,
+        )?;
         self.ptys.insert(
             pty_id.to_string(),
             PtySession {
@@ -1489,17 +1517,7 @@ impl WorkGateway {
                 output: String::new(),
             },
         );
-        self.append(
-            work_id,
-            WorkEvent::Runtime(RuntimeEvent::PtyStarted {
-                pty_id: pty_id.to_string(),
-                process_id,
-                rows,
-                cols,
-            }),
-            None,
-        )
-        .ok_or("append PtyStarted".into())
+        Ok(envelope)
     }
     pub fn resize_pty(
         &mut self,
@@ -1508,13 +1526,11 @@ impl WorkGateway {
         rows: u16,
         cols: u16,
     ) -> Result<WorkEventEnvelope, String> {
-        let pty = self.ptys.get_mut(pty_id).ok_or("unknown pty")?;
+        let pty = self.ptys.get(pty_id).ok_or("unknown pty")?;
         if pty.state != "running" && pty.state != "paused" {
             return Err(format!("pty is {}", pty.state));
         }
-        pty.rows = rows;
-        pty.cols = cols;
-        self.append(
+        let envelope = self.append(
             work_id,
             WorkEvent::Runtime(RuntimeEvent::PtyResize {
                 pty_id: pty_id.to_string(),
@@ -1522,8 +1538,11 @@ impl WorkGateway {
                 cols,
             }),
             None,
-        )
-        .ok_or("append PtyResize".into())
+        )?;
+        let pty = self.ptys.get_mut(pty_id).ok_or("unknown pty")?;
+        pty.rows = rows;
+        pty.cols = cols;
+        Ok(envelope)
     }
     pub fn write_pty_output(
         &mut self,
@@ -1531,6 +1550,17 @@ impl WorkGateway {
         pty_id: &str,
         chunk: &str,
     ) -> Result<WorkEventEnvelope, String> {
+        if !self.ptys.contains_key(pty_id) {
+            return Err("unknown pty".into());
+        }
+        let envelope = self.append(
+            work_id,
+            WorkEvent::Runtime(RuntimeEvent::PtyOutput {
+                pty_id: pty_id.to_string(),
+                chunk: chunk.to_string(),
+            }),
+            None,
+        )?;
         let pty = self.ptys.get_mut(pty_id).ok_or("unknown pty")?;
         pty.output.push_str(chunk);
         const CAP: usize = 64 * 1024;
@@ -1538,15 +1568,7 @@ impl WorkGateway {
             let s = pty.output.len() - CAP;
             pty.output = pty.output[s..].to_string();
         }
-        self.append(
-            work_id,
-            WorkEvent::Runtime(RuntimeEvent::PtyOutput {
-                pty_id: pty_id.to_string(),
-                chunk: chunk.to_string(),
-            }),
-            None,
-        )
-        .ok_or("append PtyOutput".into())
+        Ok(envelope)
     }
     pub fn signal_pty(
         &mut self,
@@ -1565,7 +1587,6 @@ impl WorkGateway {
             }),
             None,
         )
-        .ok_or("append PtySignal".into())
     }
     pub fn pause_pty(&mut self, pty_id: &str) -> Result<(), String> {
         let pty = self.ptys.get_mut(pty_id).ok_or("unknown pty")?;
@@ -1589,17 +1610,22 @@ impl WorkGateway {
         pty_id: &str,
         code: Option<i32>,
     ) -> Result<WorkEventEnvelope, String> {
-        let pty = self.ptys.get_mut(pty_id).ok_or("unknown pty")?;
-        pty.state = "exited".into();
-        self.append(
+        if !self.ptys.contains_key(pty_id) {
+            return Err("unknown pty".into());
+        }
+        let envelope = self.append(
             work_id,
             WorkEvent::Runtime(RuntimeEvent::PtyExit {
                 pty_id: pty_id.to_string(),
                 code,
             }),
             None,
-        )
-        .ok_or("append PtyExit".into())
+        )?;
+        self.ptys
+            .get_mut(pty_id)
+            .ok_or("unknown pty")?
+            .state = "exited".into();
+        Ok(envelope)
     }
     pub fn snapshot_terminal(&self, pty_id: &str) -> Option<PtySession> {
         self.ptys.get(pty_id).cloned()
@@ -1622,6 +1648,14 @@ impl WorkGateway {
         if !self.works.contains_key(work_id) {
             return Err("unknown work".into());
         }
+        let envelope = self.append(
+            work_id,
+            WorkEvent::Runtime(RuntimeEvent::WorktreeCreated {
+                worktree_id: worktree_id.to_string(),
+                branch: branch.to_string(),
+            }),
+            None,
+        )?;
         self.worktrees.insert(
             worktree_id.to_string(),
             WorktreeBinding {
@@ -1636,15 +1670,7 @@ impl WorkGateway {
                 status: "created".into(),
             },
         );
-        self.append(
-            work_id,
-            WorkEvent::Runtime(RuntimeEvent::WorktreeCreated {
-                worktree_id: worktree_id.to_string(),
-                branch: branch.to_string(),
-            }),
-            None,
-        )
-        .ok_or("append WorktreeCreated".into())
+        Ok(envelope)
     }
     pub fn attach_worktree(
         &mut self,
@@ -1652,21 +1678,24 @@ impl WorkGateway {
         worktree_id: &str,
         run_id: &str,
     ) -> Result<WorkEventEnvelope, String> {
-        let wt = self
-            .worktrees
-            .get_mut(worktree_id)
-            .ok_or("unknown worktree")?;
-        wt.run_id = run_id.to_string();
-        wt.status = "attached".into();
-        self.append(
+        if !self.worktrees.contains_key(worktree_id) {
+            return Err("unknown worktree".into());
+        }
+        let envelope = self.append(
             work_id,
             WorkEvent::Runtime(RuntimeEvent::WorktreeAttached {
                 worktree_id: worktree_id.to_string(),
                 run_id: run_id.to_string(),
             }),
             None,
-        )
-        .ok_or("append WorktreeAttached".into())
+        )?;
+        let wt = self
+            .worktrees
+            .get_mut(worktree_id)
+            .ok_or("unknown worktree")?;
+        wt.run_id = run_id.to_string();
+        wt.status = "attached".into();
+        Ok(envelope)
     }
     pub fn snapshot_worktree(&self, worktree_id: &str) -> Option<WorktreeBinding> {
         self.worktrees.get(worktree_id).cloned()
@@ -1677,56 +1706,61 @@ impl WorkGateway {
         worktree_id: &str,
         into: &str,
     ) -> Result<WorkEventEnvelope, String> {
-        let wt = self
-            .worktrees
-            .get_mut(worktree_id)
-            .ok_or("unknown worktree")?;
-        wt.status = "merged".into();
-        self.append(
+        if !self.worktrees.contains_key(worktree_id) {
+            return Err("unknown worktree".into());
+        }
+        let envelope = self.append(
             work_id,
             WorkEvent::Runtime(RuntimeEvent::WorktreeMerged {
                 worktree_id: worktree_id.to_string(),
                 into: into.to_string(),
             }),
             None,
-        )
-        .ok_or("append WorktreeMerged".into())
+        )?;
+        self.worktrees
+            .get_mut(worktree_id)
+            .ok_or("unknown worktree")?
+            .status = "merged".into();
+        Ok(envelope)
     }
     pub fn revert_worktree(
         &mut self,
         work_id: &str,
         worktree_id: &str,
     ) -> Result<WorkEventEnvelope, String> {
-        let wt = self
-            .worktrees
-            .get_mut(worktree_id)
-            .ok_or("unknown worktree")?;
-        wt.status = "reverted".into();
-        self.append(
+        if !self.worktrees.contains_key(worktree_id) {
+            return Err("unknown worktree".into());
+        }
+        let envelope = self.append(
             work_id,
             WorkEvent::Runtime(RuntimeEvent::WorktreeReverted {
                 worktree_id: worktree_id.to_string(),
             }),
             None,
-        )
-        .ok_or("append WorktreeReverted".into())
+        )?;
+        self.worktrees
+            .get_mut(worktree_id)
+            .ok_or("unknown worktree")?
+            .status = "reverted".into();
+        Ok(envelope)
     }
     pub fn destroy_worktree(
         &mut self,
         work_id: &str,
         worktree_id: &str,
     ) -> Result<WorkEventEnvelope, String> {
-        if self.worktrees.remove(worktree_id).is_none() {
+        if !self.worktrees.contains_key(worktree_id) {
             return Err("unknown worktree".into());
         }
-        self.append(
+        let envelope = self.append(
             work_id,
             WorkEvent::Runtime(RuntimeEvent::WorktreeDestroyed {
                 worktree_id: worktree_id.to_string(),
             }),
             None,
-        )
-        .ok_or("append WorktreeDestroyed".into())
+        )?;
+        self.worktrees.remove(worktree_id);
+        Ok(envelope)
     }
 
     // ======== P49.12 AgentSession lifecycle ========
@@ -1745,6 +1779,15 @@ impl WorkGateway {
         if !self.works.contains_key(work_id) {
             return Err("unknown work".into());
         }
+        let envelope = self.append(
+            work_id,
+            WorkEvent::Runtime(RuntimeEvent::AgentSessionSpawned {
+                agent_session_id: agent_session_id.to_string(),
+                agent_id: agent_id.to_string(),
+                lifetime: lifetime.as_str().to_string(),
+            }),
+            None,
+        )?;
         self.agent_sessions.insert(
             agent_session_id.to_string(),
             AgentSession {
@@ -1760,16 +1803,7 @@ impl WorkGateway {
                 attached: matches!(lifetime, AgentLifetime::PersistentAttachedSession),
             },
         );
-        self.append(
-            work_id,
-            WorkEvent::Runtime(RuntimeEvent::AgentSessionSpawned {
-                agent_session_id: agent_session_id.to_string(),
-                agent_id: agent_id.to_string(),
-                lifetime: lifetime.as_str().to_string(),
-            }),
-            None,
-        )
-        .ok_or("append AgentSessionSpawned".into())
+        Ok(envelope)
     }
     pub fn send_subagent_message(
         &mut self,
@@ -1792,27 +1826,30 @@ impl WorkGateway {
             }),
             None,
         )
-        .ok_or("append AgentSessionMessage".into())
+
     }
     pub fn attach_agent_session(
         &mut self,
         work_id: &str,
         agent_session_id: &str,
     ) -> Result<WorkEventEnvelope, String> {
+        if !self.agent_sessions.contains_key(agent_session_id) {
+            return Err("unknown agent session".into());
+        }
+        let envelope = self.append(
+            work_id,
+            WorkEvent::Runtime(RuntimeEvent::AgentSessionAttached {
+                agent_session_id: agent_session_id.to_string(),
+            }),
+            None,
+        )?;
         let s = self
             .agent_sessions
             .get_mut(agent_session_id)
             .ok_or("unknown agent session")?;
         s.attached = true;
         s.runtime_state = "attached".into();
-        self.append(
-            work_id,
-            WorkEvent::Runtime(RuntimeEvent::AgentSessionAttached {
-                agent_session_id: agent_session_id.to_string(),
-            }),
-            None,
-        )
-        .ok_or("append AgentSessionAttached".into())
+        Ok(envelope)
     }
     pub fn detach_agent_session(
         &mut self,
@@ -1827,17 +1864,17 @@ impl WorkGateway {
         if lt == AgentLifetime::EphemeralChild {
             return self.terminate_agent_session(work_id, agent_session_id);
         }
-        let s = self.agent_sessions.get_mut(agent_session_id).unwrap();
-        s.attached = false;
-        s.runtime_state = "detached".into();
-        self.append(
+        let envelope = self.append(
             work_id,
             WorkEvent::Runtime(RuntimeEvent::AgentSessionDetached {
                 agent_session_id: agent_session_id.to_string(),
             }),
             None,
-        )
-        .ok_or("append AgentSessionDetached".into())
+        )?;
+        let s = self.agent_sessions.get_mut(agent_session_id).unwrap();
+        s.attached = false;
+        s.runtime_state = "detached".into();
+        Ok(envelope)
     }
     pub fn steer_agent_session(
         &mut self,
@@ -1854,48 +1891,55 @@ impl WorkGateway {
             }),
             None,
         )
-        .ok_or("append AgentSessionSteered".into())
+
     }
     pub fn checkpoint_agent_session(
         &mut self,
         work_id: &str,
         agent_session_id: &str,
     ) -> Result<WorkEventEnvelope, String> {
-        let s = self
+        let cp = self
             .agent_sessions
-            .get_mut(agent_session_id)
-            .ok_or("unknown agent session")?;
-        s.last_checkpoint = s.last_checkpoint.saturating_add(1);
-        let cp = s.last_checkpoint;
-        self.append(
+            .get(agent_session_id)
+            .ok_or("unknown agent session")?
+            .last_checkpoint
+            .saturating_add(1);
+        let envelope = self.append(
             work_id,
             WorkEvent::Runtime(RuntimeEvent::AgentSessionCheckpointed {
                 agent_session_id: agent_session_id.to_string(),
                 checkpoint: cp,
             }),
             None,
-        )
-        .ok_or("append AgentSessionCheckpointed".into())
+        )?;
+        self.agent_sessions
+            .get_mut(agent_session_id)
+            .ok_or("unknown agent session")?
+            .last_checkpoint = cp;
+        Ok(envelope)
     }
     pub fn terminate_agent_session(
         &mut self,
         work_id: &str,
         agent_session_id: &str,
     ) -> Result<WorkEventEnvelope, String> {
+        if !self.agent_sessions.contains_key(agent_session_id) {
+            return Err("unknown agent session".into());
+        }
+        let envelope = self.append(
+            work_id,
+            WorkEvent::Runtime(RuntimeEvent::AgentSessionTerminated {
+                agent_session_id: agent_session_id.to_string(),
+            }),
+            None,
+        )?;
         let s = self
             .agent_sessions
             .get_mut(agent_session_id)
             .ok_or("unknown agent session")?;
         s.runtime_state = "terminated".into();
         s.attached = false;
-        self.append(
-            work_id,
-            WorkEvent::Runtime(RuntimeEvent::AgentSessionTerminated {
-                agent_session_id: agent_session_id.to_string(),
-            }),
-            None,
-        )
-        .ok_or("append AgentSessionTerminated".into())
+        Ok(envelope)
     }
     pub fn agent_session(&self, agent_session_id: &str) -> Option<&AgentSession> {
         self.agent_sessions.get(agent_session_id)
@@ -1929,20 +1973,16 @@ impl WorkGateway {
         binding.state = BindingLifecycle::Parked;
         binding.last_event_seq = 0;
         let work_id = binding.work_id.as_str().to_string();
-        self.agent_bindings
-            .insert(binding_id.clone(), binding.clone());
         let envelope = self
             .append(
                 &work_id,
                 WorkEvent::Runtime(RuntimeEvent::AgentBindingCreated {
-                    binding: Box::new(binding),
+                    binding: Box::new(binding.clone()),
                 }),
                 None,
-            )
-            .ok_or("append AgentBindingCreated")?;
-        if let Some(b) = self.agent_bindings.get_mut(&binding_id) {
-            b.last_event_seq = envelope.sequence;
-        }
+        )?;
+        binding.last_event_seq = envelope.sequence;
+        self.agent_bindings.insert(binding_id, binding);
         Ok(envelope)
     }
 
@@ -2008,8 +2048,7 @@ impl WorkGateway {
             }
         }
         let envelope = self
-            .append(&work_id, event, None)
-            .ok_or("append AgentBinding transition")?;
+            .append(&work_id, event, None)?;
         let binding = self
             .agent_bindings
             .get_mut(binding_id)
@@ -2043,13 +2082,15 @@ impl WorkGateway {
                     usage,
                 }),
                 None,
-            )
-            .ok_or("append AgentBindingUsageRecorded")?;
+            )?;
         let binding = self
             .agent_bindings
             .get_mut(binding_id)
             .ok_or("unknown agent binding")?;
-        binding.usage.input_tokens = binding.usage.input_tokens.saturating_add(usage.input_tokens);
+        binding.usage.input_tokens = binding
+            .usage
+            .input_tokens
+            .saturating_add(usage.input_tokens);
         binding.usage.output_tokens = binding
             .usage
             .output_tokens
@@ -2170,8 +2211,9 @@ impl WorkGateway {
             // P69.D14 — the delegation tree below a Work (child Works, each
             // carrying its parent link). Read-only; children only ever come
             // into existence through `delegate_child_work`.
-            "work/children" => serde_json::to_value(self.children_of(&s("workId")))
-                .map_err(|e| e.to_string()),
+            "work/children" => {
+                serde_json::to_value(self.children_of(&s("workId"))).map_err(|e| e.to_string())
+            }
             // P69.B2 — durable agent bindings. The binding, not the process, is
             // the unit that survives a restart; usage is recorded as deltas so
             // replay cannot double-count.
@@ -2197,21 +2239,41 @@ impl WorkGateway {
                 };
                 ev(self.record_binding_usage(&s("bindingId"), usage)?)
             }
-            "work/bindings" => serde_json::to_value(self.bindings_for(&s("workId")))
-                .map_err(|e| e.to_string()),
+            "work/bindings" => {
+                serde_json::to_value(self.bindings_for(&s("workId"))).map_err(|e| e.to_string())
+            }
             // ---- P49.1 — canonical addressing ----
-            "work/create" => serde_json::to_value(self.create_work(
-                s("workId"),
-                opt_s("projectId"),
-                opt_s("sessionId"),
-                s("objective"),
-            ))
-            .map_err(|e| e.to_string()),
+            "work/create" => {
+                let work_id = s("workId");
+                if work_id.is_empty() {
+                    return Err("work/create requires workId".into());
+                }
+                let session_kind = p
+                    .get("sessionKind")
+                    .and_then(Value::as_str)
+                    .map(everyaios_types::SessionKind::parse)
+                    .unwrap_or(everyaios_types::SessionKind::Interactive);
+                serde_json::to_value(self.create_work_in_session(
+                    work_id,
+                    opt_s("projectId"),
+                    opt_s("sessionId"),
+                    session_kind,
+                    s("objective"),
+                )?)
+                .map_err(|e| e.to_string())
+            }
             "work/get" => {
                 serde_json::to_value(self.get_work(&s("workId"))).map_err(|e| e.to_string())
             }
             "work/list" => serde_json::to_value(self.list_work()).map_err(|e| e.to_string()),
-            "work/archive" => Ok(Value::Bool(self.archive_work(&s("workId")))),
+            "work/snapshot" => serde_json::to_value(self.snapshot(&s("workId")))
+                .map_err(|e| e.to_string()),
+            "work/events" => serde_json::to_value(self.replay_from(
+                &s("workId"),
+                p.get("fromSequence").and_then(Value::as_u64).unwrap_or(0),
+            ))
+            .map_err(|e| e.to_string()),
+            "work/archive" => Ok(Value::Bool(self.try_archive_work(&s("workId"))?)),
             "work/locator" => match self.get_work(&s("workId")) {
                 Some(address) => Ok(Value::String(address.locator())),
                 None => Err("unknown work".into()),
@@ -2228,12 +2290,27 @@ impl WorkGateway {
                         .map_err(|e| e.to_string())?;
                 serde_json::to_value(self.pair_node(node)?).map_err(|e| e.to_string())
             }
+            "work/node_register" => {
+                let node: ExecutionNode = serde_json::from_value(
+                    p.get("node").cloned().ok_or("work/node_register requires node")?,
+                )
+                .map_err(|e| e.to_string())?;
+                self.register_node(node)?;
+                Ok(serde_json::json!({"registered": true}))
+            }
+            "work/node_heartbeat" => {
+                let node_id = s("nodeId");
+                let at_ms = p.get("atMs").and_then(Value::as_u64).unwrap_or_else(now_ms);
+                Ok(serde_json::json!({
+                    "healthy": self.heartbeat_node(&node_id, at_ms)
+                }))
+            }
             "work/node_verify" => {
                 serde_json::to_value(self.verify_node(&s("nodeId"))?).map_err(|e| e.to_string())
             }
             "work/node_bind" => serde_json::to_value(self.bind_node(&s("nodeId"), &s("workId"))?)
                 .map_err(|e| e.to_string()),
-            "work/node_unbind" => Ok(Value::Bool(self.unbind_node(&s("nodeId")))),
+            "work/node_unbind" => Ok(Value::Bool(self.try_unbind_node(&s("nodeId"))?)),
             "work/node_migrate" => serde_json::to_value(self.migrate_run(
                 &s("runId"),
                 &s("nodeId"),
@@ -2268,6 +2345,44 @@ impl WorkGateway {
             "work/authority" => {
                 serde_json::to_value(self.authority(&s("runId"))).map_err(|e| e.to_string())
             }
+            "work/lease_acquire" => {
+                let run_id = s("runId");
+                let node_id = s("nodeId");
+                if run_id.is_empty() || node_id.is_empty() {
+                    return Err("work/lease_acquire requires runId and nodeId".into());
+                }
+                let ttl_ms = p.get("ttlMs").and_then(Value::as_u64).unwrap_or(30_000);
+                serde_json::to_value(self.acquire_run_authority(&run_id, &node_id, ttl_ms)?)
+                    .map_err(|e| e.to_string())
+            }
+            "work/lease_validate" => {
+                let run_id = s("runId");
+                let node_id = s("nodeId");
+                let token = p
+                    .get("fencingToken")
+                    .and_then(Value::as_u64)
+                    .ok_or("work/lease_validate requires fencingToken")?;
+                if run_id.is_empty() || node_id.is_empty() {
+                    return Err("work/lease_validate requires runId and nodeId".into());
+                }
+                Ok(serde_json::json!({
+                    "valid": self.validate_fencing_token(&run_id, &node_id, token)
+                }))
+            }
+            "work/lease_release" => {
+                let run_id = s("runId");
+                let node_id = s("nodeId");
+                let token = p
+                    .get("fencingToken")
+                    .and_then(Value::as_u64)
+                    .ok_or("work/lease_release requires fencingToken")?;
+                if run_id.is_empty() || node_id.is_empty() {
+                    return Err("work/lease_release requires runId and nodeId".into());
+                }
+                Ok(serde_json::json!({
+                    "released": self.release_authority(&run_id, &node_id, token)
+                }))
+            }
             // ---- P49.9 — client handshake ----
             "work/client_connect" => serde_json::to_value(
                 self.connect_client(
@@ -2280,7 +2395,19 @@ impl WorkGateway {
                 )?,
             )
             .map_err(|e| e.to_string()),
-            "work/client_detach" => Ok(Value::Bool(self.detach_client(&s("clientId")))),
+            "work/client_attach" => {
+                let client: ClientSession = serde_json::from_value(
+                    p.get("client")
+                        .cloned()
+                        .ok_or("work/client_attach requires client")?,
+                )
+                .map_err(|e| e.to_string())?;
+                self.attach_client(client)?;
+                Ok(serde_json::json!({"attached": true}))
+            }
+            "work/client_detach" => Ok(serde_json::json!({
+                "detached": self.try_detach_client(&s("clientId"))?
+            })),
             "work/clients" => {
                 serde_json::to_value(self.clients_for(&s("workId"))).map_err(|e| e.to_string())
             }
@@ -2312,19 +2439,47 @@ impl WorkGateway {
                         .map_err(|e| e.to_string())?;
                 ev(self.request_review(item)?)
             }
-            "work/review_resolve" => ev(self.resolve_review_with(&s("reviewId"), &s("state"))?),
+            "work/review_add" => {
+                let item: ReviewItem = serde_json::from_value(
+                    p.get("review")
+                        .cloned()
+                        .ok_or("work/review_add requires review")?,
+                )
+                .map_err(|e| e.to_string())?;
+                self.request_review(item)?;
+                Ok(serde_json::json!({"queued": true}))
+            }
+            "work/review_resolve" => {
+                if let Some(state) = p.get("state").and_then(Value::as_str) {
+                    ev(self.resolve_review_with(&s("reviewId"), state)?)
+                } else {
+                    let review_id = s("reviewId");
+                    if !self.reviews.contains_key(&review_id) {
+                        return Ok(serde_json::json!({"resolved": false}));
+                    }
+                    self.resolve_review_with(&review_id, "resolved")?;
+                    Ok(serde_json::json!({"resolved": true}))
+                }
+            }
             // ---- P49.14 — steering ----
             "work/steer" => {
-                let instruction = SteeringInstruction {
-                    work_id: s("workId"),
-                    run_id: opt_s("runId"),
-                    source_client: s("clientId"),
-                    instruction: s("instruction"),
-                    scope: s("scope"),
-                    priority: p.get("priority").and_then(Value::as_u64).unwrap_or(50) as u8,
-                    created_at_ms: now_ms(),
-                };
-                ev(self.queue_steering(instruction)?)
+                if let Some(raw) = p.get("instruction").filter(|value| value.is_object()) {
+                    let instruction: SteeringInstruction = serde_json::from_value(raw.clone())
+                        .map_err(|e| e.to_string())?;
+                    self.queue_steering(instruction)?;
+                    Ok(serde_json::json!({"queued": true}))
+                } else {
+                    let instruction = SteeringInstruction {
+                        work_id: s("workId"),
+                        run_id: opt_s("runId"),
+                        source_client: s("clientId"),
+                        instruction: s("instruction"),
+                        scope: s("scope"),
+                        priority: p.get("priority").and_then(Value::as_u64).unwrap_or(50) as u8,
+                        created_at_ms: now_ms(),
+                    };
+                    ev(self.queue_steering(instruction)?)
+                }
             }
             "work/steer_interrupt" => {
                 ev(self.interrupt_current_step(&s("workId"), &s("clientId"), &s("reason"))?)
@@ -2377,21 +2532,41 @@ impl WorkGateway {
                 Ok(Value::String(path.display().to_string()))
             }
             "work/attachment_expire" => Ok(Value::Bool(self.expire_attachment(&s("attachmentId")))),
+            "work/presence" => serde_json::to_value(self.presence(&s("workId")))
+                .map_err(|e| e.to_string()),
+            "work/thought" => {
+                let work_id = s("workId");
+                let text = s("text");
+                if work_id.is_empty() || text.is_empty() {
+                    return Err("work/thought requires workId and text".into());
+                }
+                self.record_thought(&work_id, &text)?;
+                Ok(serde_json::json!({"recorded": true}))
+            }
             other => Err(format!("unknown work method: {other}")),
         }
     }
 
+    /// Append an event and acknowledge it only after the journal is durable.
+    ///
+    /// The sequence is reserved for this attempt, but it is not committed to
+    /// the gateway until the record has been written, flushed, and synced. A
+    /// failed write therefore leaves both the sequence and the in-memory event
+    /// projection unchanged, so callers can propagate the error instead of
+    /// continuing with an event that will disappear on restart.
     pub fn append(
         &mut self,
         work_id: &str,
         event: WorkEvent,
         causal_parent: Option<u64>,
-    ) -> Option<WorkEventEnvelope> {
+    ) -> Result<WorkEventEnvelope, String> {
         if !self.works.contains_key(work_id) {
-            return None;
+            return Err("unknown work".into());
         }
         let sequence = self.next_seq;
-        self.next_seq += 1;
+        let next_sequence = sequence
+            .checked_add(1)
+            .ok_or("work journal sequence overflow")?;
         let envelope = WorkEventEnvelope {
             work_id: work_id.into(),
             sequence,
@@ -2402,25 +2577,27 @@ impl WorkGateway {
             causal_parent,
         };
         if let Some(path) = &self.journal {
-            let mut file = match OpenOptions::new().create(true).append(true).open(path) {
-                Ok(file) => file,
-                Err(_) => return None,
-            };
-            let line = match serde_json::to_string(&envelope) {
-                Ok(line) => line,
-                Err(_) => return None,
-            };
-            if writeln!(file, "{line}").is_err() || file.flush().is_err() {
-                return None;
-            }
+            let mut file = OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(path)
+                .map_err(|e| format!("open work journal: {e}"))?;
+            let line = serde_json::to_string(&envelope)
+                .map_err(|e| format!("serialize work event: {e}"))?;
+            writeln!(file, "{line}").map_err(|e| format!("write work journal: {e}"))?;
+            file.flush()
+                .map_err(|e| format!("flush work journal: {e}"))?;
+            file.sync_all()
+                .map_err(|e| format!("sync work journal: {e}"))?;
         }
+        self.next_seq = next_sequence;
         self.events
             .entry(work_id.into())
             .or_default()
             .push(envelope.clone());
         self.subscribers
             .retain(|subscriber| subscriber.send(envelope.clone()).is_ok());
-        Some(envelope)
+        Ok(envelope)
     }
     pub fn replay_from(&self, work_id: &str, sequence: u64) -> Vec<WorkEventEnvelope> {
         self.events
@@ -2463,8 +2640,7 @@ impl WorkGateway {
                 approved,
             }),
             None,
-        )
-        .ok_or("failed to append approval")?;
+        )?;
         Ok(())
     }
 
@@ -2491,8 +2667,7 @@ impl WorkGateway {
             }),
             _ => return Err("unknown effect phase".into()),
         };
-        self.append(work_id, event, None)
-            .ok_or("failed to append effect")?;
+        self.append(work_id, event, None)?;
         Ok(())
     }
 
@@ -2519,8 +2694,7 @@ impl WorkGateway {
             work_id,
             WorkEvent::Presence(PresenceEvent::AgentThoughtSummary { text: text.into() }),
             None,
-        )
-        .ok_or("failed to append thought")?;
+        )?;
         if let Some(p) = self.presence.get_mut(work_id) {
             p.current_surface = Some(text.into());
         }
@@ -2542,8 +2716,7 @@ impl WorkGateway {
                 artifact_id: artifact_id.into(),
             }
         };
-        self.append(work_id, WorkEvent::Domain(event), None)
-            .ok_or("failed to append artifact")?;
+        self.append(work_id, WorkEvent::Domain(event), None)?;
         Ok(())
     }
 
@@ -2570,8 +2743,7 @@ impl WorkGateway {
             return Err("execution/work binding mismatch".into());
         }
         let event = transition_event(execution_id, state, None);
-        self.append(work_id, event, None)
-            .ok_or("failed to append execution transition")?;
+        self.append(work_id, event, None)?;
         self.set_work_state(work_id, execution_id, state, None);
         Ok(())
     }
@@ -2591,8 +2763,7 @@ impl WorkGateway {
         }
         let state = wait.work_state();
         let event = transition_event(execution_id, state, Some(wait.clone()));
-        self.append(work_id, event, None)
-            .ok_or("failed to append wait transition")?;
+        self.append(work_id, event, None)?;
         self.set_work_state(work_id, execution_id, state, Some(wait.clone()));
         Ok(())
     }
@@ -2606,35 +2777,39 @@ impl WorkGateway {
         if !self.works.contains_key(&client.work_id) {
             return Err("unknown work".into());
         }
-        let p = self.presence.get_mut(&client.work_id).unwrap();
-        if !p.active_clients.contains(&client.client_id) {
-            p.active_clients.push(client.client_id.clone());
-        }
         self.append(
             &client.work_id,
             WorkEvent::Operational(OperationalEvent::SessionAttached {
                 client_id: client.client_id.clone(),
             }),
             None,
-        );
+        )?;
+        let p = self.presence.get_mut(&client.work_id).unwrap();
+        if !p.active_clients.contains(&client.client_id) {
+            p.active_clients.push(client.client_id.clone());
+        }
         self.clients.insert(client.client_id.clone(), client);
         Ok(())
     }
-    pub fn detach_client(&mut self, client_id: &str) -> bool {
-        let Some(c) = self.clients.remove(client_id) else {
-            return false;
+    pub fn try_detach_client(&mut self, client_id: &str) -> Result<bool, String> {
+        let Some(c) = self.clients.get(client_id).cloned() else {
+            return Ok(false);
         };
-        if let Some(p) = self.presence.get_mut(&c.work_id) {
-            p.active_clients.retain(|x| x != client_id);
-        }
         self.append(
             &c.work_id,
             WorkEvent::Operational(OperationalEvent::SessionDetached {
                 client_id: client_id.into(),
             }),
             None,
-        );
-        true
+        )?;
+        self.clients.remove(client_id);
+        if let Some(p) = self.presence.get_mut(&c.work_id) {
+            p.active_clients.retain(|x| x != client_id);
+        }
+        Ok(true)
+    }
+    pub fn detach_client(&mut self, client_id: &str) -> bool {
+        self.try_detach_client(client_id).unwrap_or(false)
     }
     pub fn register_node(&mut self, node: ExecutionNode) -> Result<(), String> {
         if node.node_id.is_empty() {
@@ -2705,12 +2880,10 @@ impl WorkGateway {
             .filter(|r| r.work_id == work_id && !is_terminal_review_state(&r.state))
             .collect()
     }
+    /// Compatibility wrapper for the legacy boolean review door. The state is
+    /// changed only after the durable resolution event is acknowledged.
     pub fn resolve_review(&mut self, id: &str) -> bool {
-        let Some(review) = self.reviews.get_mut(id) else {
-            return false;
-        };
-        review.state = "resolved".into();
-        true
+        self.resolve_review_with(id, "resolved").is_ok()
     }
     pub fn resolve_capability(
         &self,
@@ -2986,7 +3159,7 @@ impl WorkGateway {
                 node_id: node_id.into(),
             }),
             None,
-        );
+        )?;
         if let Some(node) = self.nodes.get_mut(node_id) {
             node.health = "bound".into();
         }
@@ -2997,7 +3170,7 @@ impl WorkGateway {
     }
 
     /// Unbind every Work bound to a node; the Work survives (architectural law).
-    pub fn unbind_node(&mut self, node_id: &str) -> bool {
+    pub fn try_unbind_node(&mut self, node_id: &str) -> Result<bool, String> {
         let work_ids: Vec<String> = self
             .works
             .iter()
@@ -3005,25 +3178,33 @@ impl WorkGateway {
             .map(|(k, _)| k.clone())
             .collect();
         if work_ids.is_empty() {
-            return false;
+            return Ok(false);
         }
         for id in &work_ids {
-            if let Some(address) = self.works.get_mut(id) {
-                address.node_id = None;
-                address.version = address.version.saturating_add(1);
-            }
             self.append(
                 id,
                 WorkEvent::Operational(OperationalEvent::NodeDisconnected {
                     node_id: node_id.into(),
                 }),
                 None,
-            );
+            )?;
+        }
+        for id in &work_ids {
+            if let Some(address) = self.works.get_mut(id) {
+                address.node_id = None;
+                address.version = address.version.saturating_add(1);
+            }
         }
         if let Some(node) = self.nodes.get_mut(node_id) {
             node.health = "verified".into();
         }
-        true
+        Ok(true)
+    }
+
+    /// Compatibility wrapper for boolean-only callers; new RPC paths use the
+    /// fallible form so a failed journal write cannot be mistaken for success.
+    pub fn unbind_node(&mut self, node_id: &str) -> bool {
+        self.try_unbind_node(node_id).unwrap_or(false)
     }
 
     // ---- P49.4 — RunAuthority (lease + fencing) ----
@@ -3160,18 +3341,18 @@ impl WorkGateway {
             .get(review_id)
             .cloned()
             .ok_or("unknown review item")?;
-        if let Some(item) = self.reviews.get_mut(review_id) {
-            item.state = state.to_string();
-        }
-        self.append(
+        let envelope = self.append(
             &review.work_id,
             WorkEvent::Domain(DomainEvent::ApprovalResolved {
                 ticket_id: review_id.into(),
                 approved: state == "approved",
             }),
             None,
-        )
-        .ok_or_else(|| "failed to append review resolution".to_string())
+        )?;
+        if let Some(item) = self.reviews.get_mut(review_id) {
+            item.state = state.to_string();
+        }
+        Ok(envelope)
     }
 
     pub fn approve_review_item(&mut self, review_id: &str) -> Result<WorkEventEnvelope, String> {
@@ -3231,7 +3412,6 @@ impl WorkGateway {
             }),
             None,
         )
-        .ok_or_else(|| "unknown work".to_string())
     }
 
     // ---- P49.15 — RuntimeManifest ----
@@ -3247,14 +3427,14 @@ impl WorkGateway {
         }
         manifest.work_id = work_id.to_string();
         manifest.refresh_hash();
-        self.manifests.insert(work_id.to_string(), manifest.clone());
         self.append(
             work_id,
             WorkEvent::Domain(DomainEvent::WorkUpdated {
                 patch: serde_json::json!({"runtimeManifest": manifest.config_hash}),
             }),
             None,
-        );
+        )?;
+        self.manifests.insert(work_id.to_string(), manifest.clone());
         Ok(manifest)
     }
 
@@ -3326,7 +3506,8 @@ mod tests {
                 run_id: "r1".into(),
             }),
             Some(0),
-        );
+        )
+        .unwrap();
         let e = g.replay_from("w1", 1);
         assert_eq!(e.len(), 1);
         assert!(e[0].event.semantic());
@@ -3443,11 +3624,13 @@ mod tests {
             Some("s".into()),
             "persist me",
         );
-        first.append(
-            "w-journal",
-            WorkEvent::Domain(DomainEvent::RunQueued { run_id: "r".into() }),
-            None,
-        );
+        first
+            .append(
+                "w-journal",
+                WorkEvent::Domain(DomainEvent::RunQueued { run_id: "r".into() }),
+                None,
+            )
+            .unwrap();
         drop(first);
         let second = WorkGateway::open(&path).unwrap();
         assert!(second.get_work("w-journal").is_some());
@@ -3469,6 +3652,57 @@ mod tests {
         assert!(home.join("work").join("events.jsonl").exists());
         std::env::remove_var("EVERYAIOS_HOME");
         let _ = std::fs::remove_dir_all(home);
+    }
+
+    #[test]
+    fn append_failure_does_not_advance_sequence_or_expose_event() {
+        let root = std::env::temp_dir().join(format!(
+            "everyaios-work-append-failure-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let journal = root.join("events.jsonl");
+        let mut gateway = WorkGateway::open(&journal).unwrap();
+        gateway.create_work("w-durable", None, None, "durable");
+
+        // A regular file where the journal's parent directory must be makes the
+        // append fail before a record can be acknowledged.
+        let blocker = root.join("not-a-directory");
+        std::fs::write(&blocker, b"x").unwrap();
+        gateway.journal = Some(blocker.join("events.jsonl"));
+        let before_sequence = gateway.next_seq;
+        let before_events = gateway.events("w-durable").len();
+
+        let error = gateway
+            .append(
+                "w-durable",
+                WorkEvent::Domain(DomainEvent::RunQueued {
+                    run_id: "r-failed".into(),
+                }),
+                None,
+            )
+            .expect_err("journal failure must be surfaced");
+        assert!(error.contains("open work journal"), "got: {error}");
+        assert_eq!(gateway.next_seq, before_sequence);
+        assert_eq!(gateway.events("w-durable").len(), before_events);
+
+        // A later successful append reuses the reserved sequence; the failed
+        // attempt did not burn a number or expose a phantom event.
+        gateway.journal = Some(root.join("repaired.jsonl"));
+        let envelope = gateway
+            .append(
+                "w-durable",
+                WorkEvent::Domain(DomainEvent::RunQueued {
+                    run_id: "r-repaired".into(),
+                }),
+                None,
+            )
+            .unwrap();
+        assert_eq!(envelope.sequence, before_sequence);
+        assert_eq!(gateway.events("w-durable").len(), before_events + 1);
+
+        let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]
@@ -3501,7 +3735,8 @@ mod tests {
             "w1",
             WorkEvent::Domain(DomainEvent::RunQueued { run_id: "r".into() }),
             None,
-        );
+        )
+        .unwrap();
         let event = rx.recv().unwrap();
         assert_eq!(event.work_id, "w1");
         assert_eq!(event.sequence, 1);
@@ -3635,7 +3870,10 @@ mod tests {
         assert_eq!(presence.state, Some(WorkPresenceState::Running));
         assert_eq!(presence.wait, None);
 
-        assert_eq!(WorkState::try_parse("waiting_tool"), Some(WorkState::WaitingTool));
+        assert_eq!(
+            WorkState::try_parse("waiting_tool"),
+            Some(WorkState::WaitingTool)
+        );
         assert_eq!(WorkState::try_parse("some_day"), None);
     }
 
@@ -3730,11 +3968,20 @@ mod tests {
             .expect_err("a running state is not a terminal outcome");
         assert!(err.contains("terminal outcome"), "got: {err}");
         let child = g
-            .finish_child_work("w-parent", "t1", WorkState::Cancelled, Some("user stopped it"))
+            .finish_child_work(
+                "w-parent",
+                "t1",
+                WorkState::Cancelled,
+                Some("user stopped it"),
+            )
             .unwrap();
         let presence = g.presence(&child.work_id).unwrap();
         assert_eq!(presence.work_state, Some(WorkState::Cancelled));
         assert_eq!(presence.state, Some(WorkPresenceState::Cancelled));
+        // Cancellation is terminal for delegation accounting too; otherwise a
+        // stopped child permanently consumes the parent's concurrency slot.
+        let gauge = g.delegation_gauge("w-parent").unwrap();
+        assert_eq!(gauge.active, 0);
     }
 
     #[test]

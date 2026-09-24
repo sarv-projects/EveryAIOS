@@ -2,11 +2,11 @@
  * Finnhub connector — live stock, forex, and crypto quotes.
  *
  * Free tier: 60 requests / minute (https://finnhub.io/pricing).
- * Used by ChatGPT, Gemini to produce hallucination-free market prices.
+ * Used to produce grounded market prices.
  *
- * Auth: API key only — set FINNHUB_API_KEY on Cloudflare Worker KV binding,
- * or include `filter.apiKey` directly. Adapter prefers filter value, falls
- * back to ctx.env.FINNHUB_API_KEY when orchestrator injects env.
+ * Auth: the Rust host resolves the vault-owned API key and injects it into
+ * either the header or query form required by Finnhub. This adapter never
+ * receives key material.
  *
  * Endpoints used:
  *   /quote      — current price for a stock/ETF/crypto by symbol
@@ -21,23 +21,22 @@ import type {
   MemoryFact,
   UserQuery,
 } from '@everyaios/core-domain';
+import { requestConnector } from '../connection-manager.js';
 
 const FINNHUB_API = 'https://finnhub.io/api/v1';
 const CONNECTOR_NAME = 'finnhub' as const;
 
 export class FinnhubAdapter implements ConnectorAdapter {
   readonly name = CONNECTOR_NAME;
+  readonly credentialMode = 'host-mediated' as const;
   readonly metadataSchema = {
     fields: [
       { name: 'query', type: 'string' as const, description: 'Ticker symbol or company name (e.g. "AAPL" or "Tesla")' },
-      { name: 'apiKey', type: 'string' as const, description: 'Finnhub API key (free tier)' },
     ],
   };
 
   async isAuthorized(_userId: string): Promise<boolean> {
-    // Token presence (filter.apiKey) enforced at fetch time; the
-    // orchestrator pre-checks authorization before invoking.
-    return true;
+    return true; // Credential resolution is host-owned
   }
 
   scoreRelevance(query: UserQuery, _memory: MemoryFact[]): number {
@@ -54,13 +53,9 @@ export class FinnhubAdapter implements ConnectorAdapter {
   }
 
   async fetch(ctx: ConnectorContext): Promise<ConnectorResult> {
-    const f = ctx.filter as { query?: string; apiKey?: string; type?: 'stock' | 'forex' | 'crypto' };
-    const apiKey =
-      f.apiKey ||
-      ((ctx as unknown as { env?: { FINNHUB_API_KEY?: string } }).env?.FINNHUB_API_KEY) ||
-      '';
+    const f = ctx.filter as { query?: string; type?: 'stock' | 'forex' | 'crypto' };
     const q = (f.query || '').trim();
-    if (!apiKey || !q) {
+    if (!q) {
       return { items: [], totalCount: 0, source: CONNECTOR_NAME };
     }
 
@@ -78,7 +73,13 @@ export class FinnhubAdapter implements ConnectorAdapter {
         const url = `${FINNHUB_API}/forex/rates?base=${encodeURIComponent(base)}&symbol=${encodeURIComponent(
           quote.toUpperCase(),
         )}`;
-        const res = await fetch(url, { headers: { 'X-Finnhub-Token': apiKey } });
+        const res = await requestConnector({
+          connector: CONNECTOR_NAME,
+          userId: ctx.userId,
+          request: { url, method: 'GET' },
+          ...(ctx.signal ? { signal: ctx.signal } : {}),
+        });
+        if (!res) return { items: [], totalCount: 0, source: CONNECTOR_NAME };
         if (!res.ok) {
           return {
             items: [
@@ -115,10 +116,13 @@ export class FinnhubAdapter implements ConnectorAdapter {
       let symbol = ticker;
       if (!symbol) {
         // Use /search to disambiguate company names.
-        const searchRes = await fetch(
-          `${FINNHUB_API}/search?q=${encodeURIComponent(q)}&token=${encodeURIComponent(apiKey)}`,
-        );
-        if (searchRes.ok) {
+        const searchRes = await requestConnector({
+          connector: CONNECTOR_NAME,
+          userId: ctx.userId,
+          request: { url: `${FINNHUB_API}/search?q=${encodeURIComponent(q)}`, method: 'GET' },
+          ...(ctx.signal ? { signal: ctx.signal } : {}),
+        });
+        if (searchRes?.ok) {
           const data = (await searchRes.json()) as { result?: Array<{ symbol: string }> };
           symbol = data.result?.[0]?.symbol;
         }
@@ -127,7 +131,13 @@ export class FinnhubAdapter implements ConnectorAdapter {
         return { items: [], totalCount: 0, source: CONNECTOR_NAME };
       }
 
-      const res = await fetch(`${FINNHUB_API}/quote?symbol=${encodeURIComponent(symbol)}&token=${encodeURIComponent(apiKey)}`);
+      const res = await requestConnector({
+        connector: CONNECTOR_NAME,
+        userId: ctx.userId,
+        request: { url: `${FINNHUB_API}/quote?symbol=${encodeURIComponent(symbol)}`, method: 'GET' },
+        ...(ctx.signal ? { signal: ctx.signal } : {}),
+      });
+      if (!res) return { items: [], totalCount: 0, source: CONNECTOR_NAME };
       if (!res.ok) {
         return {
           items: [
@@ -191,9 +201,4 @@ export class FinnhubAdapter implements ConnectorAdapter {
     }
   }
 
-  /** 
-   * Token refresh is handled by the Cloudflare Worker OAuth proxy.
-   * This adapter assumes a valid token is injected via filter.token.
-   * @see packages/cloudflare-server/src/index.ts OAuth refresh routes
-   */
 }

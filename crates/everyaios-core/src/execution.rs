@@ -1123,7 +1123,8 @@ impl ExecutionKernel {
                     "fuse" | "Fuse" => crate::multirun::FuseMode::Fuse,
                     _ => crate::multirun::FuseMode::KeepBest,
                 };
-                let run = crate::multirun::MultiRun::new(id, work_id, agent_ids, worktree_ids, mode)?;
+                let run =
+                    crate::multirun::MultiRun::new(id, work_id, agent_ids, worktree_ids, mode)?;
                 let collected = params.get("outcomes").and_then(Value::as_array).map(|arr| {
                     arr.iter()
                         .enumerate()

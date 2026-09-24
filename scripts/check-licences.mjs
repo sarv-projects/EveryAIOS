@@ -128,24 +128,50 @@ function normalize(raw) {
  * than inventing a licence.
  */
 const cratesIoCache = new Map();
+let cratesIoUnavailable = false;
 async function fetchCratesIoLicence(name, version) {
   const key = `${name}@${version}`;
+  if (cratesIoUnavailable) return null;
   if (cratesIoCache.has(key)) return cratesIoCache.get(key);
   let licence = null;
+  // AbortSignal.timeout uses an unref'd timer on supported Node releases. Keep
+  // a referenced timer for the request so an offline runner exits through the
+  // normal unresolved-licence failure instead of Node's unsettled-TLA exit 13.
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10_000);
   try {
     const res = await fetch(`https://crates.io/api/v1/crates/${encodeURIComponent(name)}/${encodeURIComponent(version)}`, {
       headers: { 'user-agent': 'everyaios-licence-gate (release compliance check)' },
-      signal: AbortSignal.timeout(10_000),
+      signal: controller.signal,
     });
     if (res.ok) {
       const body = await res.json();
       licence = normalize(body?.version?.license) || null;
+    } else if (res.status !== 404) {
+      cratesIoUnavailable = true;
     }
   } catch {
-    // offline / rate-limited: fall through to null
+    // offline / rate-limited: stop repeated network attempts and fall through
+    // to the actionable unresolved-licence result.
+    cratesIoUnavailable = true;
+  } finally {
+    clearTimeout(timeout);
   }
   cratesIoCache.set(key, licence);
   return licence;
+}
+
+function cargoRegistryRoots() {
+  const registrySrc = join(process.env.HOME ?? '', '.cargo/registry/src');
+  try {
+    return readdirSync(registrySrc).map((entry) => join(registrySrc, entry));
+  } catch (err) {
+    // A clean CI runner may not have fetched crate sources yet. Leave the local
+    // source set empty so the crates.io fallback can still resolve metadata;
+    // anything unresolved is inventoried and fails the gate.
+    if (err?.code === 'ENOENT') return [];
+    throw err;
+  }
 }
 
 async function collectRust() {
@@ -155,8 +181,7 @@ async function collectRust() {
   const out = [];
   const locks = ['crates/Cargo.lock', 'src-tauri/Cargo.lock'];
   const seen = new Set();
-  const registryRoots = readdirSync(join(process.env.HOME ?? '', '.cargo/registry/src'))
-    .map((d) => join(process.env.HOME ?? '', '.cargo/registry/src', d));
+  const registryRoots = cargoRegistryRoots();
   for (const lock of locks) {
     const raw = readFileSync(join(root, lock), 'utf8');
     for (const block of raw.split('[[package]]').slice(1)) {
@@ -346,10 +371,7 @@ function resolveUnresolvedRust() {
     // remotely — inventoried in the notices file under 'unresolved', and
     // failing the gate, because a release cannot ship with any unknown.
     const missing = [];
-    const registryRootsLocal = existsSync(join(process.env.HOME ?? '', '.cargo/registry/src'))
-      ? readdirSync(join(process.env.HOME ?? '', '.cargo/registry/src')).map((d) =>
-          join(process.env.HOME ?? '', '.cargo/registry/src', d))
-      : [];
+    const registryRootsLocal = cargoRegistryRoots();
     for (const dep of unresolvedRust) {
       const vendored = registryRootsLocal.some((reg) =>
         existsSync(join(reg, `${dep.name}-${dep.version}`, 'Cargo.toml.orig')) ||
@@ -369,7 +391,7 @@ function resolveUnresolvedRust() {
   if (unresolved.length > 0 && !writeNotices) {
     fail(
       `${unresolved.length} component(s) have no resolvable licence (not vendored locally and no crates.io record) — ` +
-        'the release cannot carry an unknown licence; see the notices file under \'Unresolved on this machine\'',
+        'the release cannot carry an unknown licence; make crates.io reachable or run `cargo fetch` before this gate, then rerun',
     );
   }
 

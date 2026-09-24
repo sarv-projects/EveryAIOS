@@ -321,7 +321,17 @@ impl Vault {
             conn.query_row(
                 "SELECT value FROM schema_meta WHERE key = 'schema_version'",
                 [],
-                |r| r.get::<_, String>(0).and_then(|s| s.parse().map(Some).map_err(|e| rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, Box::new(e)))),
+                |r| {
+                    r.get::<_, String>(0).and_then(|s| {
+                        s.parse().map(Some).map_err(|e| {
+                            rusqlite::Error::FromSqlConversionFailure(
+                                0,
+                                rusqlite::types::Type::Text,
+                                Box::new(e),
+                            )
+                        })
+                    })
+                },
             )
             .optional()?
             .flatten()
@@ -330,7 +340,10 @@ impl Vault {
         };
         if let Some(db) = recorded {
             if db > SCHEMA_VERSION {
-                return Err(VaultError::NewerSchema { db, app: SCHEMA_VERSION });
+                return Err(VaultError::NewerSchema {
+                    db,
+                    app: SCHEMA_VERSION,
+                });
             }
         }
         ensure_token_usage_scope_columns(&conn)?;

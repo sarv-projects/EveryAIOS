@@ -63,7 +63,7 @@ pub struct LiveBrowser {
     /// directly; its Drop is the whole point.
     #[allow(dead_code)]
     child: everyaios_cdp::BrowserChild,
-    client: std::sync::Arc<everyaios_cdp::CdpClient>,
+    client: std::sync::Arc<everyaios_browser::tiers::CdpNetworkGuard>,
     session_id: String,
     url: String,
     channel: everyaios_cdp::BrowserChannel,
@@ -74,7 +74,7 @@ pub struct LiveBrowser {
 /// Shared CDP backend injected into the agent `ToolService` so browser.*
 /// tools on the loop hit the same session as the browse view.
 struct LoopBrowser {
-    client: std::sync::Arc<everyaios_cdp::CdpClient>,
+    client: std::sync::Arc<everyaios_browser::tiers::CdpNetworkGuard>,
     session_id: String,
 }
 
@@ -143,6 +143,7 @@ impl everyaios_core::BrowserBackend for LoopBrowser {
             .decode(b64)
             .map_err(|e| e.to_string())?;
         std::fs::write(&path, bytes).map_err(|e| e.to_string())?;
+        ensure_network_guard_clean(&self.client)?;
         Ok(path.display().to_string())
     }
 
@@ -169,23 +170,26 @@ impl everyaios_core::BrowserBackend for LoopBrowser {
             .decode(b64)
             .map_err(|e| e.to_string())?;
         std::fs::write(&path, bytes).map_err(|e| e.to_string())?;
+        ensure_network_guard_clean(&self.client)?;
         Ok(path.display().to_string())
     }
 
     fn snapshot(&self) -> Result<String, String> {
         let actions = everyaios_browser::BrowserActions::new(&*self.client, Some(&self.session_id));
         let snap = actions.snapshot("loop").map_err(|e| e.to_string())?;
+        ensure_network_guard_clean(&self.client)?;
         Ok(snap.root.render())
     }
 
     fn navigate(&self, url: &str) -> Result<String, String> {
-        let _ = self.client.call_session(
-            &self.session_id,
-            "Page.navigate",
-            serde_json::json!({ "url": url }),
-        );
-        std::thread::sleep(std::time::Duration::from_millis(800));
-        Ok(url.to_string())
+        self.client
+            .navigate(
+                &self.session_id,
+                url,
+                std::time::Duration::from_millis(800),
+                true,
+            )
+            .map_err(|error| format!("browser navigate: {error}"))
     }
 
     fn act(
@@ -216,6 +220,7 @@ impl everyaios_core::BrowserBackend for LoopBrowser {
             }
             other => return Err(format!("unsupported act kind: {other}")),
         }
+        ensure_network_guard_clean(&self.client)?;
         Ok(kind)
     }
 }
@@ -226,8 +231,20 @@ fn lock_browser<'a>(
     state.browser.lock().map_err(|e| e.to_string())
 }
 
-fn actions(b: &LiveBrowser) -> everyaios_browser::BrowserActions<'_, everyaios_cdp::CdpClient> {
+fn actions(
+    b: &LiveBrowser,
+) -> everyaios_browser::BrowserActions<'_, everyaios_browser::tiers::CdpNetworkGuard> {
     everyaios_browser::BrowserActions::new(&*b.client, Some(&b.session_id))
+}
+
+fn ensure_network_guard_clean(
+    client: &everyaios_browser::tiers::CdpNetworkGuard,
+) -> Result<(), String> {
+    client.pump_network_guard();
+    if let Some(error) = client.take_network_error() {
+        return Err(format!("browser network guard: {error}"));
+    }
+    Ok(())
 }
 
 /// Spawn + connect a browser session (idempotent — returns current status if
@@ -237,6 +254,7 @@ pub fn browser_start(state: State<'_, AppState>) -> Result<serde_json::Value, St
     {
         let guard = lock_browser(&state)?;
         if let Some(b) = guard.as_ref() {
+            ensure_network_guard_clean(&b.client)?;
             return Ok(serde_json::json!({
                 "attached": true,
                 "url": b.url,
@@ -312,6 +330,15 @@ pub fn browser_start(state: State<'_, AppState>) -> Result<serde_json::Value, St
         .map_err(|e| format!("attach: {e}"))?;
 
     let client = std::sync::Arc::new(client);
+    let client = std::sync::Arc::new(
+        everyaios_browser::tiers::CdpNetworkGuard::enable(
+            std::sync::Arc::clone(&client),
+            &session.session_id,
+            everyaios_guard::netfloor::NetPolicy::strict(),
+            Vec::new(),
+        )
+        .map_err(|error| format!("enable browser network guard: {error}"))?,
+    );
     let live = LiveBrowser {
         child,
         client: std::sync::Arc::clone(&client),
@@ -353,13 +380,16 @@ pub fn browser_navigate(
     let b = guard
         .as_mut()
         .ok_or("browser not attached — start it first")?;
-    let _ = b.client.call_session(
-        &b.session_id,
-        "Page.navigate",
-        serde_json::json!({ "url": url }),
-    );
-    std::thread::sleep(std::time::Duration::from_millis(1500));
-    b.url = url.clone();
+    let final_url = b
+        .client
+        .navigate(
+            &b.session_id,
+            &url,
+            std::time::Duration::from_millis(1500),
+            true,
+        )
+        .map_err(|error| format!("browser navigate: {error}"))?;
+    b.url = final_url.clone();
     // P48.3 — human-initiated UI action: authorized by the user's own gesture
     // (navigate is side-effecting if the destination page mutates on load),
     // audited on the same Merkle chain as every other effect.
@@ -367,9 +397,9 @@ pub fn browser_navigate(
         &state,
         crate::control::AuthKind::HumanGesture,
         "browser.navigate",
-        serde_json::json!({ "url": url }),
+        serde_json::json!({ "url": final_url }),
     );
-    Ok(serde_json::json!({ "url": url }))
+    Ok(serde_json::json!({ "url": final_url }))
 }
 
 /// Accessibility snapshot of the current page (the P2.2 tree text).
@@ -382,6 +412,7 @@ pub fn browser_snapshot(state: State<'_, AppState>) -> Result<serde_json::Value,
     let snap = actions(b)
         .snapshot("browse")
         .map_err(|e| format!("snapshot: {e}"))?;
+    ensure_network_guard_clean(&b.client)?;
     Ok(serde_json::json!({
         "url": b.url,
         "documentId": snap.document_id,
@@ -399,6 +430,7 @@ pub fn browser_read(state: State<'_, AppState>) -> Result<serde_json::Value, Str
     let out = actions(b)
         .read(everyaios_browser::ReadMode::Full)
         .map_err(|e| format!("read: {e}"))?;
+    ensure_network_guard_clean(&b.client)?;
     Ok(serde_json::json!({ "url": b.url, "text": out.text }))
 }
 
@@ -417,6 +449,7 @@ pub fn browser_click(
             ref_id: ref_id.clone(),
         })
         .map_err(|e| format!("click {ref_id}: {e}"))?;
+    ensure_network_guard_clean(&b.client)?;
     let (added, removed) = match res.diff.as_ref() {
         Some(d) => (d.added_lines.clone(), d.removed_lines.clone()),
         None => (Vec::new(), Vec::new()),
@@ -461,6 +494,7 @@ pub fn browser_type(
         },
     };
     let res = actions(b).act(act).map_err(|e| format!("type: {e}"))?;
+    ensure_network_guard_clean(&b.client)?;
     let added = match res.diff.as_ref() {
         Some(d) => d.added_lines.clone(),
         None => Vec::new(),
@@ -558,14 +592,17 @@ pub fn browser_status(state: State<'_, AppState>) -> Result<serde_json::Value, S
         // P55.7 — `engine` is a fact, not a default: the attached session is
         // always the full engine, and saying so stops any surface implying the
         // tier-1 light engine is serving interaction.
-        Some(b) => Ok(serde_json::json!({
-            "attached": true,
-            "url": b.url,
-            "engine": "chrome",
-            "channel": b.channel,
-            "name": b.browser_name,
-            "version": b.browser_version,
-        })),
+        Some(b) => {
+            ensure_network_guard_clean(&b.client)?;
+            Ok(serde_json::json!({
+                "attached": true,
+                "url": b.url,
+                "engine": "chrome",
+                "channel": b.channel,
+                "name": b.browser_name,
+                "version": b.browser_version,
+            }))
+        }
         None => Ok(serde_json::json!({ "attached": false })),
     }
 }

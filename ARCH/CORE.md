@@ -9,6 +9,12 @@
 > model · one append-only event log · one Progress timeline · Work is the durable unit (`00-INDEX.md`).
 > **Evidence tiers:** **[S]** read from source · **[G]** graph fact from the codegraph index · **[D]**
 > doc-derived · **[NOT BUILT]** not yet implemented. Claims without a tier are normative contract.
+>
+> **v1 scope clarification (2026-09-24):** [`ADR/0007`](ADR/0007-windows-first-v1-qualification.md)
+> expands the v1 qualification obligations around the existing identity spine, ACP/automation boundaries,
+> Windows runtime and release evidence, recovery, and live acceptance. It changes scope and evidence policy
+> only: it adds no canonical primitive, owner, event log, runtime, or authorization authority, and it leaves
+> the voice family post-v1.
 
 ---
 
@@ -301,6 +307,9 @@ AgentBinding
 
 `provider_session_id` being a *different* value from the EveryAIOS Session id is what prevents an entire
 class of bugs — the Session must never be identified by "whichever provider transcript was touched last".
+The v1 qualification rule in [`ADR/0007`](ADR/0007-windows-first-v1-qualification.md) requires the same
+distinction to be preserved across the Work/Run/Binding owner chain, per-Session host handles,
+cancellation, and reconnect; a provider id is never promoted to a canonical id.
 
 ### 7.3 AgentAdapter — capability-driven, not per-agent branches
 
@@ -555,9 +564,11 @@ remainders), D15 (naming half), D19/D20 (`SCOPED` shrink plans).
 ### 11.3 Honest gaps
 
 Windows ConPTY (P68.7) and WGC/WinUia (P57.6/P66.7) are unimplemented and untested — no Windows host has
-run them. Non-Linux MCP confinement reports `Ambient`. Per-edge confidence is **not** persisted in the
-codegraph index (`edges.confidence` is NULL for all 2,203 edges), so graph confidence is whole-index, never
-per-edge.
+run them. Non-Linux MCP confinement reports `Ambient`. [`ADR/0007`](ADR/0007-windows-first-v1-qualification.md)
+makes real Windows runtime enforcement, WGC/UIA/ConPTY acceptance, and x64/ARM64 qualification v1 release
+obligations, so these remain limitations until a recorded Windows acceptance pass exists. Per-edge confidence
+is **not** persisted in the codegraph index (`edges.confidence` is NULL for all 2,203 edges), so graph
+confidence is whole-index, never per-edge.
 
 ---
 

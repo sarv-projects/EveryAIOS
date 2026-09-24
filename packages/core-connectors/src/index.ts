@@ -2,15 +2,10 @@
  * @everyaios/core-connectors
  *
  * Connector adapters for all supported services.
- * Each adapter follows the "click → auth → use" end-to-end flow:
  *
- *   1. User taps "Connect [Service]" in app UI
- *   2. If OAuth required → browser redirect → token stored in SecureStore
- *   3. If native → permission grant
- *   4. AI queries go through the adapter's fetch() with the stored token
- *
- * Token key pattern in SecureStore: `connector:{name}:token`
- * API key pattern: `connector:{name}:apikey`
+ * Credentialed connectors use the Rust host transport: the host owns OAuth
+ * completion, refresh, vault storage, credential injection, and egress. This
+ * package receives only an opaque handle and non-secret provider data.
  */
 
 export type { ConnectorAdapter } from '@everyaios/core-domain';
@@ -18,11 +13,21 @@ export {
   ConnectorOrchestrator,
   type ConnectorPlan,
   type ConnectorExecutionResult,
+  type ConnectorExecutionStatus,
+  type HostMediatedConnectorAdapter,
 } from './orchestrator.js';
 export {
   CONNECTOR_CATALOG,
-  fetchWorkerOAuthToken,
+  hasConnectorHostTransport,
+  requestConnector,
+  setConnectorHostTransport,
   type ConnectionInfo,
+  type ConnectorCredentialHandle,
+  type ConnectorHostHttpRequest,
+  type ConnectorHostRequest,
+  type ConnectorHostResponse,
+  type ConnectorHostTransport,
+  type ConnectorRequestInput,
   type ConnectorStatus,
 } from './connection-manager.js';
 export {
@@ -116,11 +121,11 @@ export function createDefaultRegistry(): ConnectorOrchestrator {
   orch.register(new GooglePlacesAdapter());    // Google Places (needs API key)
   orch.register(new FinnhubAdapter());         // Finnhub finance (API key)
 
-  // OAuth-based adapters (token passed via filter.token at fetch time)
+  // Host-mediated adapters receive only an opaque credential handle.
   orch.register(new NotionOAuthAdapter());
   orch.register(new DropboxAdapter());
   orch.register(new GoogleDriveOAuthAdapter());
-  // Microsoft Graph: one token, three sub-services
+  // Microsoft Graph: one host-owned account, three sub-services
   orch.register(new MicrosoftGraphAdapter('microsoft-mail', 'mail'));
   orch.register(new MicrosoftGraphAdapter('microsoft-calendar', 'calendar'));
   orch.register(new MicrosoftGraphAdapter('microsoft-onedrive', 'onedrive'));
@@ -128,15 +133,15 @@ export function createDefaultRegistry(): ConnectorOrchestrator {
   orch.register(new SpotifyAdapter());
   orch.register(new RedditAdapter());
   orch.register(new TodoistAdapter());
-  // Batch 3 (2026-07-23): Slack / SoundCloud OAuth + Trello personal-token
+  // Batch 3 connectors: Slack / SoundCloud OAuth + host-mediated Trello
   orch.register(new SlackAdapter());
   orch.register(new SoundcloudAdapter());
   orch.register(new TrelloAdapter());
   // AviationStack: API key, proxied through Worker because free tier is HTTP
   orch.register(new AviationstackAdapter());
 
-  // Token-based with optional auth
-  orch.register(new TelegramAdapter());        // BYO bot token
+  // Host-mediated bot connector
+  orch.register(new TelegramAdapter());
 
   // Composio managed-auth adapters (Gmail, Calendar, Tasks, Drive, …).
   // Auth + execute go through Worker → GCP; local adapters score relevance

@@ -388,8 +388,8 @@ pub fn verify_surface(check: &SurfaceCheck, ctx: &SurfaceContext) -> SurfaceVerd
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::manifest::HashAlgorithm;
+    use super::*;
 
     fn file_check() -> SurfaceCheck {
         SurfaceCheck::FileHash {

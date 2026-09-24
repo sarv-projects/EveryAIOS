@@ -20,13 +20,13 @@
 
 pub mod a2a;
 pub mod agent_backend;
-pub mod prefix_guard;
 pub mod chief;
 pub mod client;
 pub mod frame;
 pub mod harness_config;
 pub mod installer;
 pub mod messages;
+pub mod prefix_guard;
 pub mod registry;
 pub mod registry_client;
 pub mod registry_index;
@@ -38,12 +38,14 @@ pub use agent_backend::{
 };
 pub use chief::{
     build_chief_prompt, build_chief_prompt_with_steering, governance_mode, AcpChief, Approval,
-    ChiefAdapter, ChiefCapabilities, ChiefError, ChiefEvent, COWORK_AFFINITY_STEERING,
-    DelegateChief, EventStream, GovernedSession, PermissionRequest, SessionHandle, SessionOptions,
-    SessionState, UserMessage,
+    ChiefAdapter, ChiefCapabilities, ChiefError, ChiefEvent, DelegateChief, EventStream,
+    GovernedSession, PermissionRequest, SessionHandle, SessionOptions, SessionState, UserMessage,
+    COWORK_AFFINITY_STEERING,
 };
-pub use client::{AcpError, AcpSession, AcpTransport, ProcessTransport, PromptOutcome};
-pub use prefix_guard::{fingerprint_stable_prefix, PrefixEvent, PrefixGuard};
+pub use client::{
+    AcpCancelHandle, AcpCancelSender, AcpError, AcpSession, AcpTransport, ProcessTransport,
+    PromptOutcome,
+};
 pub use frame::{decode_messages, encode_message};
 pub use harness_config::{
     builtin_writers, ClaudeCodeConfig, CodexConfig, HarnessConfigError, HarnessConfigWriter,
@@ -58,9 +60,10 @@ pub use messages::{
     PermissionOptionKind, PermissionOutcome, PermissionRequestParams, PermissionResult, Position,
     PromptCapabilities, PromptContent, PromptUsage, SessionCapabilities, SessionNewParams,
     SessionNewResult, SessionPromptParams, SessionPromptResult, SessionUpdate,
-    SetConfigOptionParams,
-    SetConfigOptionResult, StopReason, TextRange, ToolCall, ToolKind, ToolStatus, PROTOCOL_VERSION,
+    SetConfigOptionParams, SetConfigOptionResult, StopReason, TextRange, ToolCall, ToolKind,
+    ToolStatus, PROTOCOL_VERSION,
 };
+pub use prefix_guard::{fingerprint_stable_prefix, PrefixEvent, PrefixGuard};
 pub use registry::{
     AuthMode, Distribution, HarnessManifest, HarnessProtocol, LaunchPlan, LaunchRegistry,
 };

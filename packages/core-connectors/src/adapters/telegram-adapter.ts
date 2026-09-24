@@ -8,32 +8,31 @@ import type {
   MemoryFact,
   UserQuery,
 } from '@everyaios/core-domain';
+import { requestConnector } from '../connection-manager.js';
 
 /**
- * Telegram Bot connector (user's own bot token from BotFather).
- * Day-0, zero platform cost.
+ * Telegram Bot connector — the bot credential is vault-owned by the Rust host.
+ * The `{credential}` path placeholder is expanded only inside the host.
  */
 const metadataSchema: ConnectorMetadataSchema = {
   fields: [
-    { name: 'botToken', type: 'string', description: 'Telegram bot token (from @BotFather)' },
     { name: 'chatId', type: 'string', description: 'Target chat id (user or group)' },
   ],
 };
 
 export class TelegramAdapter implements ConnectorAdapter {
   readonly name: ConnectorName = 'telegram';
+  readonly credentialMode = 'host-mediated' as const;
   readonly metadataSchema = metadataSchema;
 
-  private botToken: string | undefined;
-  private defaultChatId: string | undefined;
+  private readonly defaultChatId: string | undefined;
 
-  constructor(botToken?: string, defaultChatId?: string) {
-    this.botToken = botToken;
+  constructor(defaultChatId?: string) {
     this.defaultChatId = defaultChatId;
   }
 
   async isAuthorized(_userId: string): Promise<boolean> {
-    return !!this.botToken;
+    return true; // Credential resolution is host-owned
   }
 
   scoreRelevance(query: UserQuery, _memory: MemoryFact[]): number {
@@ -47,15 +46,16 @@ export class TelegramAdapter implements ConnectorAdapter {
 
   async fetch(ctx: ConnectorContext): Promise<ConnectorResult> {
     const f = (ctx.filter || {}) as Record<string, unknown>;
-    const token = (typeof f.botToken === 'string' ? f.botToken : this.botToken) ?? '';
     const chatId = (typeof f.chatId === 'string' ? f.chatId : this.defaultChatId) ?? '';
 
-    if (!token) {
-      return { items: [], totalCount: 0, source: 'telegram' };
-    }
-
     try {
-      const meRes = await fetch(`https://api.telegram.org/bot${token}/getMe`);
+      const meRes = await requestConnector({
+        connector: this.name,
+        userId: ctx.userId,
+        request: { url: 'https://api.telegram.org/bot{credential}/getMe', method: 'GET' },
+        ...(ctx.signal ? { signal: ctx.signal } : {}),
+      });
+      if (!meRes?.ok) return { items: [], totalCount: 0, source: this.name };
       const me = (await meRes.json()) as { result?: { username?: string } };
 
       const items: ConnectorResult['items'] = [
@@ -75,18 +75,9 @@ export class TelegramAdapter implements ConnectorAdapter {
         });
       }
 
-      return { items, totalCount: items.length, source: 'telegram' };
+      return { items, totalCount: items.length, source: this.name };
     } catch {
-      return { items: [], totalCount: 0, source: 'telegram' };
+      return { items: [], totalCount: 0, source: this.name };
     }
-  }
-
-  /** 
-   * Token refresh is handled by the Cloudflare Worker OAuth proxy.
-   * This adapter assumes a valid token is injected via filter.token.
-   * @see packages/cloudflare-server/src/index.ts OAuth refresh routes
-   */
-  async refreshToken(_userId: string): Promise<boolean> {
-    return !!this.botToken;
   }
 }

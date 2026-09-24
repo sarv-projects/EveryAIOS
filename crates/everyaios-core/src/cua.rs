@@ -965,7 +965,9 @@ pub fn classify_harness_model_case(
     let same_h = primary_harness
         .trim()
         .eq_ignore_ascii_case(worker_harness.trim());
-    let same_m = primary_model.trim().eq_ignore_ascii_case(worker_model.trim());
+    let same_m = primary_model
+        .trim()
+        .eq_ignore_ascii_case(worker_model.trim());
     match (same_h, same_m) {
         (false, _) => HarnessModelCase::A,
         (true, true) => HarnessModelCase::B,
@@ -1158,7 +1160,10 @@ mod tests {
         );
         assert!(brief.is_complete());
         assert_eq!(DelegationRole::parse("SCOUT"), Some(DelegationRole::Scout));
-        assert_eq!(DelegationRole::parse("verify"), Some(DelegationRole::Verifier));
+        assert_eq!(
+            DelegationRole::parse("verify"),
+            Some(DelegationRole::Verifier)
+        );
         assert_eq!(DelegationRole::parse("nope"), None);
         let mut node = CuaNode {
             id: "w".into(),
@@ -1243,7 +1248,10 @@ mod tests {
             ..Default::default()
         };
         assert!(node_contract_legal(&n));
-        assert_eq!(apply_delegation_act(&mut n, false), DelegationOutcome::Mismatch);
+        assert_eq!(
+            apply_delegation_act(&mut n, false),
+            DelegationOutcome::Mismatch
+        );
         assert_eq!(n.status, CuaNodeStatus::Running);
         assert_eq!(apply_delegation_act(&mut n, false), DelegationOutcome::Halt);
         assert_eq!(n.status, CuaNodeStatus::Halted);

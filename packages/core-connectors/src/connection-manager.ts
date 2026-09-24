@@ -2,13 +2,18 @@
  * ConnectionManager — end-to-end connector lifecycle inspired by Nango's pattern.
  *
  * Flow (per connector):
- *   1. User taps "Connect [Service]" → openAuthUrl() returns provider OAuth URL
- *   2. User authenticates in browser → provider redirects to our callback
- *   3. Cloudflare worker exchanges code for tokens, stores in KV
- *   4. Connector adapter reads token via getToken() for API calls
+ *   1. User taps "Connect [Service]" → the host opens the provider OAuth URL
+ *   2. User authenticates in the browser → the host completes the callback
+ *   3. The host exchanges and stores the credential in the Rust vault
+ *   4. TypeScript receives only an opaque handle and delegates the HTTP request
+ *
+ * The connector HTTP path is host-mediated. A missing host transport disables
+ * credentialed connectors; it never falls back to a bearer token in TypeScript.
  *
  * For native-only connectors (Calendar): no OAuth, just permission request → ready.
  */
+import type { ConnectorName } from '@everyaios/core-domain';
+
 export type ConnectorStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
 
 export interface ConnectionInfo {
@@ -22,7 +27,7 @@ export interface ConnectionInfo {
   requiresOAuth: boolean;
   /** Whether this connector is native-only (no server) */
   isNative: boolean;
-  /** OAuth provider name for the Cloudflare worker redirect */
+  /** OAuth provider name for the host-managed redirect */
   oauthProvider?: string;
   /** API cost tier */
   cost: 'free' | 'free-tier' | 'paid';
@@ -30,6 +35,155 @@ export interface ConnectionInfo {
   category: string;
   /** Optional badge: 'new' | 'interactive' */
   badge?: 'new' | 'interactive';
+}
+
+/**
+ * Non-secret metadata for a vault-owned connector credential.
+ *
+ * `handle` is an opaque Rust-owned reference (`vault:*` or `cred:*`), never
+ * the credential itself. The host resolves it inside the vault/Auth Bridge and
+ * injects the appropriate provider authentication before egress.
+ */
+export interface ConnectorCredentialHandle {
+  readonly handle: string;
+  readonly provider: string;
+  readonly expiresAtMs?: number;
+}
+
+export interface ConnectorHostHttpRequest {
+  readonly url: string;
+  readonly method: 'GET' | 'POST';
+  readonly headers?: Readonly<Record<string, string>>;
+  readonly body?: string;
+}
+
+export interface ConnectorHostRequest {
+  readonly connector: ConnectorName;
+  readonly userId: string;
+  readonly credential: ConnectorCredentialHandle;
+  readonly request: ConnectorHostHttpRequest;
+  readonly signal?: AbortSignal;
+}
+
+export interface ConnectorHostResponse {
+  readonly ok: boolean;
+  readonly status: number;
+  json(): Promise<unknown>;
+  text(): Promise<string>;
+}
+
+/**
+ * Rust-host seam for connector HTTP calls.
+ *
+ * The host owns credential resolution, refresh, and provider authentication.
+ * The response contains provider data only; the request crossing into this
+ * interface must not contain an Authorization header, API key, token, or
+ * password in its URL/body/headers.
+ */
+export interface ConnectorHostTransport {
+  resolveCredential(
+    connector: ConnectorName,
+    userId: string,
+  ): Promise<ConnectorCredentialHandle | null>;
+  request(req: ConnectorHostRequest): Promise<ConnectorHostResponse>;
+}
+
+export interface ConnectorRequestInput {
+  readonly connector: ConnectorName;
+  readonly userId: string;
+  readonly request: ConnectorHostHttpRequest;
+  readonly signal?: AbortSignal;
+}
+
+let activeConnectorHostTransport: ConnectorHostTransport | null = null;
+
+/** Attach the Rust connector transport; `null` safely disables credentialed connectors. */
+export function setConnectorHostTransport(transport: ConnectorHostTransport | null): void {
+  activeConnectorHostTransport = transport;
+}
+
+/** Whether a host-mediated connector transport is currently attached. */
+export function hasConnectorHostTransport(): boolean {
+  return activeConnectorHostTransport !== null;
+}
+
+const CREDENTIAL_QUERY_KEYS = new Set([
+  'accesstoken',
+  'accesskey',
+  'apikey',
+  'authorization',
+  'key',
+  'password',
+  'secret',
+  'token',
+]);
+
+function normalizedCredentialKey(key: string): string {
+  return key.toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+function isOpaqueCredentialHandle(handle: string): boolean {
+  return /^(?:vault|cred):\S+$/.test(handle);
+}
+
+function isCredentialFreeHttpRequest(request: ConnectorHostHttpRequest): boolean {
+  for (const name of Object.keys(request.headers ?? {})) {
+    const normalized = normalizedCredentialKey(name);
+    if (
+      normalized === 'authorization' ||
+      normalized === 'cookie' ||
+      normalized === 'setcookie' ||
+      normalized.includes('apikey') ||
+      normalized.includes('accesstoken') ||
+      normalized.includes('password') ||
+      normalized.includes('secret') ||
+      normalized.includes('token')
+    ) {
+      return false;
+    }
+  }
+
+  try {
+    const url = new URL(request.url);
+    for (const name of url.searchParams.keys()) {
+      if (CREDENTIAL_QUERY_KEYS.has(normalizedCredentialKey(name))) return false;
+    }
+  } catch {
+    return false;
+  }
+
+  return true;
+}
+
+/**
+ * Execute a connector request through the attached Rust host.
+ *
+ * `null` means no safe execution path is available (transport absent, connector
+ * disconnected, invalid handle, or credential-bearing request fields). Adapters
+ * treat that as unavailable; there is deliberately no raw-token fallback.
+ */
+export async function requestConnector(
+  input: ConnectorRequestInput,
+): Promise<ConnectorHostResponse | null> {
+  const transport = activeConnectorHostTransport;
+  if (!transport || !isCredentialFreeHttpRequest(input.request)) return null;
+
+  try {
+    const credential = await transport.resolveCredential(input.connector, input.userId);
+    if (!credential || !isOpaqueCredentialHandle(credential.handle)) return null;
+
+    return await transport.request({
+      connector: input.connector,
+      userId: input.userId,
+      credential,
+      request: input.request,
+      ...(input.signal ? { signal: input.signal } : {}),
+    });
+  } catch {
+    // Never surface/log a host error: a misbehaving bridge must not turn a
+    // credential or provider response into sidecar diagnostics.
+    return null;
+  }
 }
 
 export const CONNECTOR_CATALOG: ConnectionInfo[] = [
@@ -310,7 +464,7 @@ export const CONNECTOR_CATALOG: ConnectionInfo[] = [
     connectorId: 'google-places',
     label: 'Google Places',
     icon: 'location',
-    status: 'connected',
+    status: 'disconnected',
     message: 'Search POIs, restaurants, shops nearby',
     requiresOAuth: false,
     isNative: false,
@@ -354,7 +508,7 @@ export const CONNECTOR_CATALOG: ConnectionInfo[] = [
     connectorId: 'finnhub',
     label: 'Stocks & Markets',
     icon: 'trending-up',
-    status: 'connected',
+    status: 'disconnected',
     message: 'Real-time stock, forex & ETF quotes',
     requiresOAuth: false,
     isNative: false,
@@ -896,23 +1050,6 @@ export const CONNECTOR_CATALOG: ConnectionInfo[] = [
     category: 'Commerce',
   },
 ];
-
-export async function fetchWorkerOAuthToken(
-  connectionId: string,
-  deviceId: string,
-  baseUrl: string,
-): Promise<string | null> {
-  try {
-    const res = await fetch(`${baseUrl.replace(/\/$/, '')}/v1/connectors/token/${encodeURIComponent(connectionId)}`, {
-      headers: { 'x-device-id': deviceId },
-    });
-    if (!res.ok) return null;
-    const data = (await res.json()) as { accessToken?: string; provider?: string; expiresAt?: number };
-    return data.accessToken ?? null;
-  } catch {
-    return null;
-  }
-}
 
 /**
  * OAuth cost analysis per connector:

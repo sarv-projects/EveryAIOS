@@ -76,7 +76,9 @@ fn a_turn_completes_on_an_external_agent_alone() {
     let _ = session.session_new("/tmp", vec![]).expect("session/new");
 
     let outcome = session
-        .prompt("engine optional acceptance", |_| PermissionDecision::allow())
+        .prompt("engine optional acceptance", |_| {
+            PermissionDecision::allow()
+        })
         .expect("prompt turn");
     assert!(
         outcome.updates.iter().any(|u| u
@@ -198,7 +200,9 @@ fn the_built_in_engine_is_archived_or_deleted() {
         archived_loop.display()
     );
     assert!(
-        !root.join("crates/everyaios-core/src/native_loop.rs").exists(),
+        !root
+            .join("crates/everyaios-core/src/native_loop.rs")
+            .exists(),
         "native_loop.rs must not be back in the crate tree"
     );
 
@@ -211,5 +215,7 @@ fn the_built_in_engine_is_archived_or_deleted() {
         "the sidecar turn loop must be gone (P71.2c)"
     );
     // The archive keeps them recoverable and self-documenting.
-    assert!(root.join("ARCH/archive/coordinator-loop/README.md").exists());
+    assert!(root
+        .join("ARCH/archive/coordinator-loop/README.md")
+        .exists());
 }

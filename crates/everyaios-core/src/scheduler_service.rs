@@ -1711,7 +1711,8 @@ mod tests {
             .unwrap();
         assert!(svc.on_battery());
         // Pause/resume through the funnel.
-        svc.handle("scheduler/pause", &json!({ "id": "j1" })).unwrap();
+        svc.handle("scheduler/pause", &json!({ "id": "j1" }))
+            .unwrap();
         svc.handle("scheduler/resume", &json!({ "id": "j1", "now": now() }))
             .unwrap();
     }
@@ -2006,7 +2007,10 @@ mod tests {
             let slipped = svc.get("j-slip").unwrap();
             assert_eq!(slipped.last_fired_at, Some(now()));
             // …so it is not due again until its next occurrence.
-            assert!(svc.due(now() + 30).is_empty(), "both jobs' next fire is now+60");
+            assert!(
+                svc.due(now() + 30).is_empty(),
+                "both jobs' next fire is now+60"
+            );
             // Both jobs' next occurrence is now+60 — both fire once, then
             // mark_fired advances each. No replay of every missed occurrence.
             // (Order: both share next_run_at → registry insertion order.)

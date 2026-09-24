@@ -70,7 +70,13 @@ jobs:
       # P50.5.2 — live search legs run only with a SearXNG service; the
       # outage/offline legs always run.
       - name: P50.5.2 search E2E
-        run: cargo test -p everyaios-search --test p50_search_e2e
+        shell: bash
+        run: |
+          if [ -z "${EVERYAIOS_E2E_SEARXNG_URL:-}" ]; then
+            unset EVERYAIOS_E2E_SEARXNG_URL
+            echo "EVERYAIOS_E2E_SEARXNG_URL is empty; running with it unset so the live leg reports SKIP"
+          fi
+          cargo test -p everyaios-search --test p50_search_e2e
         env:
           EVERYAIOS_E2E_SEARXNG_URL: ${{ secrets.EVERYAIOS_E2E_SEARXNG_URL }}
 

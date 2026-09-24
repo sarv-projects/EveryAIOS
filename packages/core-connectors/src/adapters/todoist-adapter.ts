@@ -8,9 +8,10 @@ import type {
   UserQuery,
   MemoryFact,
 } from '@everyaios/core-domain';
+import { requestConnector } from '../connection-manager.js';
 
 /**
- * Todoist adapter — OAuth bearer, REST v2.
+ * Todoist adapter — host-mediated OAuth, REST v2.
  *
  * Free OAuth (registration is free on todoist.com). Used for productivity
  * queries ("add X to my todays", "what's on my list").
@@ -32,6 +33,7 @@ const TODOIST_API = 'https://api.todoist.com/rest/v2';
 
 export class TodoistAdapter implements ConnectorAdapter {
   readonly name: ConnectorName = 'todoist';
+  readonly credentialMode = 'host-mediated' as const;
   readonly metadataSchema = metadataSchema;
 
   async isAuthorized(_userId: string): Promise<boolean> {
@@ -59,8 +61,6 @@ export class TodoistAdapter implements ConnectorAdapter {
 
   async fetch(ctx: ConnectorContext): Promise<ConnectorResult> {
     const f = (ctx.filter || {}) as { query?: string; project_id?: string; limit?: number };
-    const token = (f as { token?: string }).token || '';
-    if (!token) return { items: [], totalCount: 0, source: this.name };
     const limit = Math.min(Math.max(Number(f.limit) || 15, 1), 50);
     const params = new URLSearchParams();
     if (f.project_id) params.set('project_id', f.project_id);
@@ -68,11 +68,13 @@ export class TodoistAdapter implements ConnectorAdapter {
     const url = `${TODOIST_API}/tasks?${params.toString() || `limit=${limit}`}`;
 
     try {
-      const res = await fetch(url, {
-        headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
-        signal: ctx.signal ?? null,
+      const res = await requestConnector({
+        connector: this.name,
+        userId: ctx.userId,
+        request: { url, method: 'GET', headers: { Accept: 'application/json' } },
+        ...(ctx.signal ? { signal: ctx.signal } : {}),
       });
-      if (!res.ok) return { items: [], totalCount: 0, source: this.name };
+      if (!res?.ok) return { items: [], totalCount: 0, source: this.name };
       const raw = (await res.json()) as Array<{
         id: string;
         content: string;
@@ -99,9 +101,4 @@ export class TodoistAdapter implements ConnectorAdapter {
     }
   }
 
-  /** 
-   * Token refresh is handled by the Cloudflare Worker OAuth proxy.
-   * This adapter assumes a valid token is injected via filter.token.
-   * @see packages/cloudflare-server/src/index.ts OAuth refresh routes
-   */
 }

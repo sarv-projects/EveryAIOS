@@ -53,10 +53,18 @@ pub use corpus::{
     builtin_fixtures, builtin_retrieval_cases, builtin_retrieval_corpus,
     builtin_retrieval_questions, RetrievalCase,
 };
-pub use evidence::{ApprovalEvent, ArtifactHash, EvidenceBundle};
 pub use everyaios_blueprint::verify::manifest::{
     Budgets, Constraint, EvidenceRequirement, HashAlgorithm, OutcomeCheck, TaskManifest,
 };
+pub use everyaios_blueprint::verify::status::{CompletionStatus, Score};
+pub use everyaios_blueprint::verify::surface::{
+    verify_surface, Surface, SurfaceCheck, SurfaceContext, SurfaceVerdict,
+};
+pub use everyaios_blueprint::verify::verifier::{
+    run_outcome_check, verify, verify_with_policy, OutcomeCheckResult, VerificationReport,
+    VerificationScore,
+};
+pub use evidence::{ApprovalEvent, ArtifactHash, EvidenceBundle};
 pub use report::{Finding, LoopReport};
 pub use retrieval::{
     score_retrieval, EvidenceSpan, ExpectedAnswer, RetrievalDocument, RetrievalQuestion,
@@ -67,17 +75,9 @@ pub use simulator::{
     compile as compile_demo, CompiledDemo, CompiledStep, SimulationFixture, SimulationReport,
     Simulator, StepVerdict,
 };
-pub use everyaios_blueprint::verify::status::{CompletionStatus, Score};
-pub use everyaios_blueprint::verify::surface::{
-    verify_surface, Surface, SurfaceCheck, SurfaceContext, SurfaceVerdict,
-};
 pub use store::EvidenceStore;
 pub use suite::{builtin_suite, AdversarialTask, FaultInjection, FaultKind, TaskCategory};
 pub use usage::{
     EfficiencyMetrics, GenericUsageParser, TurnClass, TurnKind, TurnStat, Usage, UsageParser,
     UsageParserRegistry,
-};
-pub use everyaios_blueprint::verify::verifier::{
-    run_outcome_check, verify, verify_with_policy, OutcomeCheckResult, VerificationReport,
-    VerificationScore,
 };

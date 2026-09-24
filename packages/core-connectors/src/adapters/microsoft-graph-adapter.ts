@@ -8,6 +8,7 @@ import type {
   UserQuery,
   MemoryFact,
 } from '@everyaios/core-domain';
+import { requestConnector } from '../connection-manager.js';
 
 /**
  * Microsoft Graph adapter — Outlook Mail / Calendar / OneDrive.
@@ -20,9 +21,9 @@ import type {
  *   - 'microsoft-calendar'  → Graph /me/events
  *   - 'microsoft-onedrive'  → Graph /me/drive/root/children
  *
- * All three share the same stored OAuth token
- * (`connector:token:${deviceId}:${connectionId}` from the Worker).
- * The caller passes the token in `ctx.filter.token`.
+ * All three use the same host-owned Microsoft OAuth account. TypeScript sends
+ * only query intent; the Rust host resolves the vault credential and performs
+ * the Graph request.
  */
 const GRAPH = 'https://graph.microsoft.com/v1.0';
 
@@ -37,6 +38,7 @@ const metadataSchema: ConnectorMetadataSchema = {
 
 export class MicrosoftGraphAdapter implements ConnectorAdapter {
   readonly name: ConnectorName;
+  readonly credentialMode = 'host-mediated' as const;
   readonly metadataSchema = metadataSchema;
   private readonly subService: MicrosoftSubService;
 
@@ -46,7 +48,7 @@ export class MicrosoftGraphAdapter implements ConnectorAdapter {
   }
 
   async isAuthorized(_userId: string): Promise<boolean> {
-    return true; // token presence enforced at fetch time
+    return true; // Credential resolution is host-owned
   }
 
   scoreRelevance(query: UserQuery, _memory: MemoryFact[]): number {
@@ -71,18 +73,9 @@ export class MicrosoftGraphAdapter implements ConnectorAdapter {
   }
 
   async fetch(ctx: ConnectorContext): Promise<ConnectorResult> {
-    const filter = (ctx.filter || {}) as { query?: string; top?: number; token?: string };
-    const token = filter.token || '';
+    const filter = (ctx.filter || {}) as { query?: string; top?: number };
     const top = Math.min(Math.max(Number(filter.top) || 10, 1), 25);
-
-    if (!token) {
-      return { items: [], totalCount: 0, source: this.name };
-    }
-
-    const headers: Record<string, string> = {
-      Authorization: `Bearer ${token}`,
-      ConsistencyLevel: 'eventual',
-    };
+    const headers: Record<string, string> = { ConsistencyLevel: 'eventual' };
 
     try {
       const query = (filter.query || '').trim();
@@ -127,8 +120,13 @@ export class MicrosoftGraphAdapter implements ConnectorAdapter {
         }
       }
 
-      const res = await fetch(url, { headers, signal: ctx.signal ?? null });
-      if (!res.ok) {
+      const res = await requestConnector({
+        connector: this.name,
+        userId: ctx.userId,
+        request: { url, method: 'GET', headers },
+        ...(ctx.signal ? { signal: ctx.signal } : {}),
+      });
+      if (!res?.ok) {
         return { items: [], totalCount: 0, source: this.name };
       }
       const data = (await res.json()) as { value?: Array<Record<string, unknown>> };
@@ -141,11 +139,6 @@ export class MicrosoftGraphAdapter implements ConnectorAdapter {
     }
   }
 
-  /** 
-   * Token refresh is handled by the Cloudflare Worker OAuth proxy.
-   * This adapter assumes a valid token is injected via filter.token.
-   * @see packages/cloudflare-server/src/index.ts OAuth refresh routes
-   */
 }
 
 function mapGraphRow(sub: MicrosoftSubService, row: Record<string, unknown>, idx: number): ConnectorResult['items'][number] {

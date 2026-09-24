@@ -8,15 +8,16 @@ import type {
   UserQuery,
   MemoryFact,
 } from '@everyaios/core-domain';
+import { requestConnector } from '../connection-manager.js';
 
 /**
  * Google Places (New) adapter — text search + nearby POI lookup.
  *
- * Uses Google Places API key (NOT OAuth — avoids CASA scope audit).
- * Free tier: $200/mo credit → ~28,000 basic-data text searches.
+ * Uses a vault-owned Google Places API key. The Rust host injects it after
+ * validating the request; this adapter never receives key material.
  *
  * Endpoints:
- *   POST https://places.googleapis.com/v1/places:searchText  (X-Goog-Api-Key header)
+ *   POST https://places.googleapis.com/v1/places:searchText (host injects auth)
  *   POST https://places.googleapis.com/v1/places:searchNearby
  */
 const metadataSchema: ConnectorMetadataSchema = {
@@ -34,11 +35,11 @@ const PLACES_API = 'https://places.googleapis.com/v1';
 
 export class GooglePlacesAdapter implements ConnectorAdapter {
   readonly name: ConnectorName = 'google-places';
+  readonly credentialMode = 'host-mediated' as const;
   readonly metadataSchema = metadataSchema;
 
   async isAuthorized(_userId: string): Promise<boolean> {
-    // API key model — usable if GOOGLE_PLACES_API_KEY is configured
-    return true;
+    return true; // Credential resolution is host-owned
   }
 
   scoreRelevance(query: UserQuery, _memory: MemoryFact[]): number {
@@ -57,11 +58,7 @@ export class GooglePlacesAdapter implements ConnectorAdapter {
   }
 
   async fetch(ctx: ConnectorContext): Promise<ConnectorResult> {
-    const f = (ctx.filter || {}) as { query?: string; lat?: number; lon?: number; radius?: number; open_now?: boolean; limit?: number; api_key?: string };
-    // API key may come from orchestrator (env), mobile (filter), or Worker proxy.
-    const apiKey = (f as { api_key?: string }).api_key ||
-      ((ctx as unknown as { env?: { GOOGLE_PLACES_API_KEY?: string } }).env?.GOOGLE_PLACES_API_KEY) || '';
-    if (!apiKey) return { items: [], totalCount: 0, source: this.name };
+    const f = (ctx.filter || {}) as { query?: string; lat?: number; lon?: number; radius?: number; open_now?: boolean; limit?: number };
     const limit = Math.min(Math.max(Number(f.limit) || 5, 1), 20);
     let url: string;
     let body: Record<string, unknown>;
@@ -80,18 +77,22 @@ export class GooglePlacesAdapter implements ConnectorAdapter {
     }
 
     try {
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Goog-Api-Key': apiKey,
-          'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.rating,places.priceLevel,places.types,places.currentOpeningHours.openNow,places.location',
-          Accept: 'application/json',
+      const res = await requestConnector({
+        connector: this.name,
+        userId: ctx.userId,
+        request: {
+          url,
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.rating,places.priceLevel,places.types,places.currentOpeningHours.openNow,places.location',
+            Accept: 'application/json',
+          },
+          body: JSON.stringify(body),
         },
-        body: JSON.stringify(body),
-        signal: ctx.signal ?? null,
+        ...(ctx.signal ? { signal: ctx.signal } : {}),
       });
-      if (!res.ok) return { items: [], totalCount: 0, source: this.name };
+      if (!res?.ok) return { items: [], totalCount: 0, source: this.name };
       const raw = (await res.json()) as { places?: Array<{
         id: string;
         displayName?: { text?: string };
@@ -125,9 +126,4 @@ export class GooglePlacesAdapter implements ConnectorAdapter {
     }
   }
 
-  /** 
-   * Token refresh is handled by the Cloudflare Worker OAuth proxy.
-   * This adapter assumes a valid token is injected via filter.token.
-   * @see packages/cloudflare-server/src/index.ts OAuth refresh routes
-   */
 }

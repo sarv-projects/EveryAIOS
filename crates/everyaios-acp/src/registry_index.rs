@@ -303,7 +303,11 @@ fn normalize_license_token(raw: &str) -> Option<String> {
     let t = raw.trim().to_ascii_lowercase();
     // Tolerate presentation suffixes ("MIT License", "Apache-2.0 license").
     let t = t.strip_suffix(" license").unwrap_or(&t).trim().to_string();
-    if t.is_empty() { None } else { Some(t) }
+    if t.is_empty() {
+        None
+    } else {
+        Some(t)
+    }
 }
 
 /// P69.C10 — **exact (normalized) license matching**, never substring sniffing.

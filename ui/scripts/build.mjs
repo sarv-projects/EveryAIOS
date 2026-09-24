@@ -54,3 +54,4 @@ function run(entry, args) {
 
 run(join(uiDir, 'node_modules', 'typescript', 'bin', 'tsc'), ['--noEmit'])
 run(join(uiDir, 'node_modules', 'vite', 'bin', 'vite.js'), ['build'])
+run(join(uiDir, 'scripts', 'check-monaco-dompurify.mjs'), [])

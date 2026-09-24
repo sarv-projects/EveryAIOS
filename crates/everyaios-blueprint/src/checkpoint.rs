@@ -7,11 +7,11 @@
 //! directory (blueprint → optional `AgentConfig` frontmatter).
 
 use crate::blueprint::Blueprint;
-use everyaios_types::CheckpointId;
 use crate::frontmatter::AgentConfig;
 #[cfg(test)]
 use crate::frontmatter::Isolation;
 use crate::md::{BlueprintDoc, MdError};
+use everyaios_types::CheckpointId;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use thiserror::Error;

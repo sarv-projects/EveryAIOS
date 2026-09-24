@@ -13,7 +13,7 @@ import type {
  * CoinGecko adapter — free crypto prices, no auth required.
  *
  * Free tier (public): 10-30 req/min. /coins/markets and /search endpoints.
- * For higher rate limits, users can plug their Demo API key via env or filter.
+ * Credential-bearing quota elevation is host-owned and never enters this adapter.
  *
  * Endpoints:
  *   GET https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids={ids}
@@ -56,16 +56,12 @@ export class CoingeckoAdapter implements ConnectorAdapter {
   }
 
   async fetch(ctx: ConnectorContext): Promise<ConnectorResult> {
-    const f = (ctx.filter || {}) as { query?: string; vs_currency?: string; limit?: number; api_key?: string };
-    // CoinGecko works without a key. Optional `api_key` comes from orchestrator env or mobile filter.
-    const apiKey = (f as { api_key?: string }).api_key ||
-      ((ctx as unknown as { env?: { COINGECKO_API_KEY?: string } }).env?.COINGECKO_API_KEY) || '';
+    const f = (ctx.filter || {}) as { query?: string; vs_currency?: string; limit?: number };
     if (!f.query) return { items: [], totalCount: 0, source: this.name };
     const vs = (f.vs_currency || 'usd').toLowerCase();
     const limit = Math.min(Math.max(Number(f.limit) || 5, 1), 25);
     const url = `${CG_API}/coins/markets?vs_currency=${encodeURIComponent(vs)}&ids=${encodeURIComponent(f.query.toLowerCase())}&order=market_cap_desc&per_page=${limit}&sparkline=false&price_change_percentage=24h`;
     const headers: Record<string, string> = { Accept: 'application/json' };
-    if (apiKey) headers['x-cg-demo-api-key'] = apiKey;
     const signal = (ctx as unknown as { signal?: AbortSignal }).signal;
 
     try {
@@ -76,7 +72,7 @@ export class CoingeckoAdapter implements ConnectorAdapter {
       if (!res.ok) {
         // Fallback: search endpoint to resolve coin id from name
         if (res.status === 404) {
-          return await this.searchFallback(f.query, apiKey, limit, signal);
+          return await this.searchFallback(f.query, limit, signal);
         }
         return { items: [], totalCount: 0, source: this.name };
       }
@@ -109,9 +105,8 @@ export class CoingeckoAdapter implements ConnectorAdapter {
     }
   }
 
-  private async searchFallback(query: string, apiKey: string, limit: number, signal: AbortSignal | undefined): Promise<ConnectorResult> {
+  private async searchFallback(query: string, limit: number, signal: AbortSignal | undefined): Promise<ConnectorResult> {
     const headers: Record<string, string> = { Accept: 'application/json' };
-    if (apiKey) headers['x-cg-demo-api-key'] = apiKey;
     try {
       const res = await fetch(`${CG_API}/search?query=${encodeURIComponent(query)}`, {
         headers,
@@ -133,9 +128,4 @@ export class CoingeckoAdapter implements ConnectorAdapter {
     }
   }
 
-  /** 
-   * Token refresh is handled by the Cloudflare Worker OAuth proxy.
-   * This adapter assumes a valid token is injected via filter.token.
-   * @see packages/cloudflare-server/src/index.ts OAuth refresh routes
-   */
 }

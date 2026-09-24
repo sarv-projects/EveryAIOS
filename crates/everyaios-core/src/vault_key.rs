@@ -342,22 +342,33 @@ mod tests {
 
     fn isolate() -> std::sync::MutexGuard<'static, ()> {
         let g = ENV.lock().unwrap_or_else(|e| e.into_inner());
-        std::env::remove_var("EVERYAIOS_VAULT_KEY");
-        std::env::remove_var("EVERYAIOS_VAULT_PASSPHRASE");
-        std::env::remove_var("EVERYAIOS_VAULT_KEYFILE");
-        std::env::remove_var("EVERYAIOS_ALLOW_GENERATED_KEY");
+        // SAFETY: `ENV` is held for the whole test, serializing the environment
+        // mutations performed by this test module.
+        unsafe {
+            std::env::remove_var("EVERYAIOS_VAULT_KEY");
+            std::env::remove_var("EVERYAIOS_VAULT_PASSPHRASE");
+            std::env::remove_var("EVERYAIOS_VAULT_KEYFILE");
+            std::env::remove_var("EVERYAIOS_ALLOW_GENERATED_KEY");
+        }
         g
     }
 
     #[test]
     fn env_wins_and_never_uses_placeholder() {
         let _g = isolate();
-        std::env::set_var("EVERYAIOS_VAULT_KEY", "from-env");
+        // SAFETY: `isolate` holds `ENV` for this test, so this environment
+        // mutation is serialized with the other vault-key tests.
+        unsafe {
+            std::env::set_var("EVERYAIOS_VAULT_KEY", "from-env");
+        }
         let r = resolve_vault_key(Path::new("/tmp")).unwrap();
         assert_eq!(r.origin, VaultKeyOrigin::Env);
         assert_eq!(r.key, "from-env");
         assert_ne!(r.key, "everyaios-core-dev-key-do-not-use");
-        std::env::remove_var("EVERYAIOS_VAULT_KEY");
+        // SAFETY: `isolate` still holds `ENV` for this test.
+        unsafe {
+            std::env::remove_var("EVERYAIOS_VAULT_KEY");
+        }
     }
 
     #[test]
@@ -368,37 +379,63 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let first = setup_vault_passphrase(&dir, "correct-horse").unwrap();
         assert_eq!(first.origin, VaultKeyOrigin::Passphrase);
-        std::env::set_var("EVERYAIOS_VAULT_PASSPHRASE", "correct-horse");
-        std::env::set_var("EVERYAIOS_VAULT_KEYFILE", dir.join(KEYFILE_NAME));
+        // SAFETY: `isolate` holds `ENV` for this test, so these environment
+        // mutations are serialized with the other vault-key tests.
+        unsafe {
+            std::env::set_var("EVERYAIOS_VAULT_PASSPHRASE", "correct-horse");
+            std::env::set_var("EVERYAIOS_VAULT_KEYFILE", dir.join(KEYFILE_NAME));
+        }
         let again = resolve_vault_key(&dir).unwrap();
         assert_eq!(again.key, first.key);
-        std::env::set_var("EVERYAIOS_VAULT_PASSPHRASE", "wrong-pass-xx");
+        // SAFETY: `isolate` still holds `ENV` for this test.
+        unsafe {
+            std::env::set_var("EVERYAIOS_VAULT_PASSPHRASE", "wrong-pass-xx");
+        }
         assert!(matches!(
             resolve_vault_key(&dir),
             Err(VaultKeyError::BadPassphrase)
         ));
-        std::env::remove_var("EVERYAIOS_VAULT_PASSPHRASE");
-        std::env::remove_var("EVERYAIOS_VAULT_KEYFILE");
+        // SAFETY: `isolate` still holds `ENV` for this test.
+        unsafe {
+            std::env::remove_var("EVERYAIOS_VAULT_PASSPHRASE");
+            std::env::remove_var("EVERYAIOS_VAULT_KEYFILE");
+        }
         let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn wrap_generated_then_unlock_keeps_sqlcipher_key() {
         let _g = isolate();
-        std::env::set_var("EVERYAIOS_ALLOW_GENERATED_KEY", "1");
+        // SAFETY: `isolate` holds `ENV` for this test, so these environment
+        // mutations are serialized with the other vault-key tests.
+        unsafe {
+            std::env::set_var("EVERYAIOS_ALLOW_GENERATED_KEY", "1");
+        }
         let dir = std::env::temp_dir().join(format!("vault-wrap-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
-        std::env::set_var("EVERYAIOS_VAULT_KEYFILE", dir.join(KEYFILE_NAME));
-        let gen = resolve_vault_key(&dir).unwrap();
-        assert_eq!(gen.origin, VaultKeyOrigin::Generated);
-        std::env::remove_var("EVERYAIOS_ALLOW_GENERATED_KEY");
+        // SAFETY: `isolate` still holds `ENV` for this test.
+        unsafe {
+            std::env::set_var("EVERYAIOS_VAULT_KEYFILE", dir.join(KEYFILE_NAME));
+        }
+        let generated = resolve_vault_key(&dir).unwrap();
+        assert_eq!(generated.origin, VaultKeyOrigin::Generated);
+        // SAFETY: `isolate` still holds `ENV` for this test.
+        unsafe {
+            std::env::remove_var("EVERYAIOS_ALLOW_GENERATED_KEY");
+        }
         let wrapped = setup_vault_passphrase(&dir, "correct-horse").unwrap();
-        assert_eq!(wrapped.key, gen.key);
-        std::env::remove_var("EVERYAIOS_VAULT_PASSPHRASE");
+        assert_eq!(wrapped.key, generated.key);
+        // SAFETY: `isolate` still holds `ENV` for this test.
+        unsafe {
+            std::env::remove_var("EVERYAIOS_VAULT_PASSPHRASE");
+        }
         let unlocked = unlock_vault_passphrase(&dir, "correct-horse").unwrap();
-        assert_eq!(unlocked.key, gen.key);
-        std::env::remove_var("EVERYAIOS_VAULT_PASSPHRASE");
-        std::env::remove_var("EVERYAIOS_VAULT_KEYFILE");
+        assert_eq!(unlocked.key, generated.key);
+        // SAFETY: `isolate` still holds `ENV` for this test.
+        unsafe {
+            std::env::remove_var("EVERYAIOS_VAULT_PASSPHRASE");
+            std::env::remove_var("EVERYAIOS_VAULT_KEYFILE");
+        }
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -408,28 +445,45 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("vault-gate-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
-        std::env::set_var("EVERYAIOS_VAULT_KEYFILE", dir.join(KEYFILE_NAME));
+        // SAFETY: `isolate` holds `ENV` for this test, so this environment
+        // mutation is serialized with the other vault-key tests.
+        unsafe {
+            std::env::set_var("EVERYAIOS_VAULT_KEYFILE", dir.join(KEYFILE_NAME));
+        }
         assert!(matches!(
             resolve_vault_key(&dir),
             Err(VaultKeyError::NeedsSetup)
         ));
         assert!(needs_passphrase_gate(&dir));
-        std::env::remove_var("EVERYAIOS_VAULT_KEYFILE");
+        // SAFETY: `isolate` still holds `ENV` for this test.
+        unsafe {
+            std::env::remove_var("EVERYAIOS_VAULT_KEYFILE");
+        }
         let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn generated_key_only_when_explicitly_allowed() {
         let _g = isolate();
-        std::env::set_var("EVERYAIOS_ALLOW_GENERATED_KEY", "1");
+        // SAFETY: `isolate` holds `ENV` for this test, so this environment
+        // mutation is serialized with the other vault-key tests.
+        unsafe {
+            std::env::set_var("EVERYAIOS_ALLOW_GENERATED_KEY", "1");
+        }
         let dir = std::env::temp_dir().join(format!("vault-gen-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
-        std::env::set_var("EVERYAIOS_VAULT_KEYFILE", dir.join(KEYFILE_NAME));
+        // SAFETY: `isolate` still holds `ENV` for this test.
+        unsafe {
+            std::env::set_var("EVERYAIOS_VAULT_KEYFILE", dir.join(KEYFILE_NAME));
+        }
         let r = resolve_vault_key(&dir).unwrap();
         assert_eq!(r.origin, VaultKeyOrigin::Generated);
         assert_ne!(r.key, "everyaios-core-dev-key-do-not-use");
-        std::env::remove_var("EVERYAIOS_ALLOW_GENERATED_KEY");
-        std::env::remove_var("EVERYAIOS_VAULT_KEYFILE");
+        // SAFETY: `isolate` still holds `ENV` for this test.
+        unsafe {
+            std::env::remove_var("EVERYAIOS_ALLOW_GENERATED_KEY");
+            std::env::remove_var("EVERYAIOS_VAULT_KEYFILE");
+        }
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

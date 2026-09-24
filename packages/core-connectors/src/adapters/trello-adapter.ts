@@ -1,24 +1,9 @@
 /**
- * Trello connector — Atlassian Trello free OAuth.
+ * Trello connector — host-mediated Atlassian Trello authentication.
  *
- * Free tier: 300 requests / 10 seconds per token, 100 requests / 10 seconds
- * per API key (https://developer.atlassian.com/cloud/trello).
- * Provides board/list/card search that ChatGPT/Copilot mobile users rely on
- * for "summarise my boards" tasks.
- *
- * Auth: OAuth 1.0a (Trello-specific — requires HMAC-SHA1 signing of
- * requests). For this adapter we follow Trello's modern OAuth 1.0a client-
- * side flow with `token` (per-user) and `key` (app) instead of bearer.
- * We treat `filter.token` as the user token and `filter.apiKey` as the
- * developer API key. To keep the Worker OAuth proxy simple, Trello tokens
- * are NOT routed through OAuth_PROVIDERS — user enters a personal API
- * token from https://trello.com/app-key. This is the approach Trello
- * itself recommends for mobile/native integrations.
- *
- * NOTE: full OAuth-1.0a three-legged bridge requires request signing; the
- * Cloudflare Worker will implement that flow in a follow-up. Today the
- * adapter accepts a user token directly, matching Trello's documented
- * personal-use pattern.
+ * Trello requires both a user credential and an app key. The Rust host owns
+ * both values, performs the authenticated request, and returns only provider
+ * data. This adapter never accepts or constructs either secret.
  */
 import type {
   ConnectorAdapter,
@@ -28,17 +13,17 @@ import type {
   MemoryFact,
   UserQuery,
 } from '@everyaios/core-domain';
+import { requestConnector } from '../connection-manager.js';
 
 const TRELLO_API = 'https://api.trello.com/1';
 const CONNECTOR_NAME = 'trello' as const;
 
 export class TrelloAdapter implements ConnectorAdapter {
   readonly name = CONNECTOR_NAME;
+  readonly credentialMode = 'host-mediated' as const;
   readonly metadataSchema = {
     fields: [
       { name: 'query', type: 'string' as const, description: 'Text to search across boards/cards' },
-      { name: 'token', type: 'string' as const, description: 'Trello user token (https://trello.com/app-key)' },
-      { name: 'apiKey', type: 'string' as const, description: 'Trello developer API key' },
       { name: 'boardId', type: 'string' as const, description: 'Optional board filter' },
     ],
   };
@@ -62,19 +47,12 @@ export class TrelloAdapter implements ConnectorAdapter {
   async fetch(ctx: ConnectorContext): Promise<ConnectorResult> {
     const f = ctx.filter as {
       query?: string;
-      token?: string;
-      apiKey?: string;
       boardId?: string;
       limit?: number;
     };
-    const apiKey = f.apiKey || '';
-    if (!f.token || !apiKey) {
-      return { items: [], totalCount: 0, source: CONNECTOR_NAME };
-    }
-
     const limit = Math.min(f.limit ?? 20, 50);
     const q = (f.query || '').trim();
-    const params = new URLSearchParams({ key: apiKey, token: f.token, limit: String(limit) });
+    const params = new URLSearchParams({ limit: String(limit) });
     if (f.boardId) params.set('idBoards', f.boardId);
 
     try {
@@ -91,14 +69,20 @@ export class TrelloAdapter implements ConnectorAdapter {
         params.set('fields', 'name,desc,due,dueComplete,idList,idBoard,shortUrl,labels,url');
       }
 
-      const res = await fetch(`${endpoint}?${params.toString()}`);
+      const res = await requestConnector({
+        connector: CONNECTOR_NAME,
+        userId: ctx.userId,
+        request: { url: `${endpoint}?${params.toString()}`, method: 'GET' },
+        ...(ctx.signal ? { signal: ctx.signal } : {}),
+      });
+      if (!res) return { items: [], totalCount: 0, source: CONNECTOR_NAME };
       if (!res.ok) {
         return {
           items: [
             {
               id: `err:${res.status}`,
               title: 'Trello request failed',
-              snippet: `HTTP ${res.status}. Verify your Trello token and key.`,
+              snippet: `HTTP ${res.status}. Reconnect Trello and try again.`,
               metadata: { status: res.status },
             },
           ],
@@ -161,9 +145,4 @@ export class TrelloAdapter implements ConnectorAdapter {
     }
   }
 
-  /** 
-   * Token refresh is handled by the Cloudflare Worker OAuth proxy.
-   * This adapter assumes a valid token is injected via filter.token.
-   * @see packages/cloudflare-server/src/index.ts OAuth refresh routes
-   */
 }

@@ -241,7 +241,7 @@ jobs:
         run: |
           set -euo pipefail
           # The coordinator's @everyaios/* direct deps (mirrors package.json).
-          need=(core-ai core-connectors core-engine core-providers core-search)
+          need=(core-ai core-connectors core-providers core-search)
           err=0
           for p in "${need[@]}"; do
             pkg="packages/$p"

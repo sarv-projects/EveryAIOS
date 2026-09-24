@@ -22,6 +22,13 @@
 //   RUST-DUP Rust declares each canonical primitive once (P69.B2)
 //   LAYER-3  the TS search cascade is not wired into the turn loop (P69.D9)
 //   LAYER-4  the coordinator orchestrates only — no privileged IO (P69.D22)
+//   E3-CONNECTOR  Graph writes pass the read-first, single-use approval seam
+//   E3-MCP        MCP transport auth + host ticketed tool/remote-call seams
+//   E3-ACP        ACP permission decisions stay on the host Guard gate
+//   E3-UI         Work commands reach the WorkGateway through the Tauri layer
+//   E4-JOURNAL    one durable Work journal; no second events.jsonl owner
+//   E4-SPAWN      scheduler/blueprint ownership cannot spawn execution
+//   E4-WORK-CREATION  Work creation/delegation only enters through WorkGateway
 //   PURITY-1 `everyaios-ipc` is transport only (D26)
 //   PURITY-3 `everyaios-catalog` is metadata only — no vault/guard (D28)
 //   PURITY-4 CDP is a backend under BrowserService, not a kernel dependency (D31)
@@ -88,6 +95,210 @@ function matchesInCode(src, pattern) {
     if (pattern.test(code)) hits.push({ line: i + 1, text: line.trim() });
   }
   return hits;
+}
+
+/**
+ * Remove comments while preserving line structure.  The E3/E4 gates are
+ * deliberately structural: a prose mention of `events.jsonl`, `spawn`, or a
+ * command name must not count as code, while a URL inside a string must not
+ * be mistaken for a line comment.  This small lexer handles the Rust/TS
+ * string forms used by the checked production surfaces without adding a
+ * parser dependency.
+ */
+function stripComments(src) {
+  const out = [];
+  let state = "code";
+  let quote = "";
+  let blockDepth = 0;
+
+  for (let i = 0; i < src.length; i += 1) {
+    const c = src[i];
+    const next = src[i + 1] ?? "";
+
+    if (state === "line") {
+      out.push(c === "\n" ? "\n" : " ");
+      if (c === "\n") state = "code";
+      continue;
+    }
+
+    if (state === "block") {
+      if (c === "/" && next === "*") {
+        out.push(" ", " ");
+        blockDepth += 1;
+        i += 1;
+      } else if (c === "*" && next === "/") {
+        out.push(" ", " ");
+        blockDepth -= 1;
+        i += 1;
+        if (blockDepth === 0) state = "code";
+      } else {
+        out.push(c === "\n" ? "\n" : " ");
+      }
+      continue;
+    }
+
+    if (state === "string") {
+      out.push(c);
+      if (c === "\\" && i + 1 < src.length) {
+        out.push(src[i + 1]);
+        i += 1;
+      } else if (c === quote) {
+        state = "code";
+      }
+      continue;
+    }
+
+    // Rust raw strings (r"..." / r#"..."#) are copied verbatim so comment-like
+    // bytes inside them cannot alter the source map used for diagnostics.
+    if (c === "r") {
+      const raw = /^r(#*)"/.exec(src.slice(i, i + 32));
+      if (raw) {
+        const terminator = `"${raw[1]}`;
+        const end = src.indexOf(terminator, i + raw[0].length);
+        const stop = end === -1 ? src.length : end + terminator.length;
+        for (let j = i; j < stop; j += 1) out.push(src[j]);
+        i = stop - 1;
+        continue;
+      }
+    }
+
+    if (c === "/" && next === "/") {
+      out.push(" ", " ");
+      i += 1;
+      state = "line";
+      continue;
+    }
+    if (c === "/" && next === "*") {
+      out.push(" ", " ");
+      blockDepth = 1;
+      i += 1;
+      state = "block";
+      continue;
+    }
+
+    if (c === '"' || c === "'" || c === "`") {
+      // Rust lifetimes (`'a`) are code, not the start of a character literal.
+      if (c === "'" && /[A-Za-z_]/.test(next) && src[i + 2] !== "'") {
+        out.push(c);
+        continue;
+      }
+      quote = c;
+      state = "string";
+      out.push(c);
+      continue;
+    }
+
+    out.push(c);
+  }
+
+  return out.join("");
+}
+
+/** Production Rust/TS source with comments and in-file test modules removed. */
+function productionCode(src) {
+  const code = stripComments(src);
+  const testModule = /^\s*#\[cfg\(test\)\]/m.exec(code);
+  return testModule ? code.slice(0, testModule.index) : code;
+}
+
+function lineAt(src, index) {
+  return src.slice(0, Math.max(0, index)).split("\n").length;
+}
+
+function firstMatch(src, pattern) {
+  const re = pattern instanceof RegExp ? pattern : new RegExp(pattern);
+  re.lastIndex = 0;
+  const m = re.exec(src);
+  return m ? { index: m.index, text: m[0] } : null;
+}
+
+function requirePattern(id, file, code, pattern, detail) {
+  const hit = firstMatch(code, pattern);
+  if (!hit) {
+    fail(id, file, `${detail} at line 1 (production source; expected structure not found)`);
+    return null;
+  }
+  return hit;
+}
+
+/** Return the matching closing delimiter while ignoring quoted strings. */
+function closingDelimiter(src, openIndex, open, close) {
+  let depth = 0;
+  let quote = "";
+  for (let i = openIndex; i < src.length; i += 1) {
+    const c = src[i];
+    if (quote) {
+      if (c === "\\") {
+        i += 1;
+      } else if (c === quote) {
+        quote = "";
+      }
+      continue;
+    }
+    if (c === '"' || c === "'" || c === "`") {
+      // As in stripComments, do not treat a Rust lifetime as a quote.
+      if (c === "'" && /[A-Za-z_]/.test(src[i + 1] ?? "") && src[i + 2] !== "'") continue;
+      quote = c;
+      continue;
+    }
+    if (c === open) depth += 1;
+    else if (c === close && --depth === 0) return i;
+  }
+  return -1;
+}
+
+/** Find one Rust function and its balanced body in comment-stripped code. */
+function findRustFn(src, name, fromIndex = 0) {
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const re = new RegExp(`\\bfn\\s+${escaped}\\s*(?:<[^>{}]*>\\s*)?\\(`, "g");
+  re.lastIndex = fromIndex;
+  const match = re.exec(src);
+  if (!match) return null;
+  const paren = src.indexOf("(", match.index);
+  const parenEnd = closingDelimiter(src, paren, "(", ")");
+  if (parenEnd === -1) return null;
+  const brace = src.indexOf("{", parenEnd);
+  if (brace === -1) return null;
+  const braceEnd = closingDelimiter(src, brace, "{", "}");
+  if (braceEnd === -1) return null;
+  return {
+    start: match.index,
+    bodyStart: brace + 1,
+    bodyEnd: braceEnd,
+    text: src.slice(brace + 1, braceEnd),
+  };
+}
+
+function findRustFnContaining(src, name, needle, fromIndex = 0) {
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const re = new RegExp(`\\bfn\\s+${escaped}\\s*(?:<[^>{}]*>\\s*)?\\(`, "g");
+  re.lastIndex = fromIndex;
+  let match;
+  while ((match = re.exec(src)) !== null) {
+    const fn = findRustFn(src, name, match.index);
+    if (fn && fn.text.includes(needle)) return fn;
+  }
+  return null;
+}
+
+function productionRustFiles(roots) {
+  const files = [];
+  for (const root of roots) {
+    for (const file of walk(join(ROOT, root), new Set([".rs"]))) {
+      const name = rel(file);
+      if (
+        name.includes("/tests/") ||
+        name.includes("/test/") ||
+        name.includes("/fixtures/") ||
+        /(?:^|[._\/-])(?:mock|fixture|acceptance|test)[^/]*\.rs$/i.test(name) ||
+        /(?:\.test|_tests?)\.rs$/.test(name)
+      ) {
+        continue;
+      }
+      files.push(file);
+    }
+  }
+  return files;
 }
 
 // --- CRED-1 / CRED-2: TS credential custody -------------------------------
@@ -487,6 +698,417 @@ function productionDeps(crateName) {
   }
 }
 
+// --- P69.E3: every effect passes the owning Guard seam ---------------------
+// These are bounded structural checks, not claims that a regex can prove a
+// runtime policy.  Each one follows the existing production owner named by the
+// TODO marker and checks the ordering that makes the seam meaningful.
+
+{
+  // E3-CONNECTOR — the Graph write methods must approve the exact action
+  // before the transport POST.  The shared read-first module owns the ticket
+  // binding and single-use replay refusal.
+  const graphPath = "crates/everyaios-core/src/connectors/graph.rs";
+  const readFirstPath = "crates/everyaios-core/src/connectors/read_first.rs";
+  const graph = productionCode(read(graphPath));
+  const readFirst = productionCode(read(readFirstPath));
+
+  for (const [pattern, detail] of [
+    [/\bReadFirstPolicy\b/, "GraphConnector must use the read-first approval policy"],
+    [/\bSendApproval\b/, "Graph writes must carry the Guard-2-shaped SendApproval"],
+    [/\bapprove_before_send\s*\(/, "Graph writes must call ReadFirstPolicy::approve_before_send"],
+  ]) {
+    requirePattern("E3-CONNECTOR", graphPath, graph, pattern, detail);
+  }
+  for (const [pattern, detail] of [
+    [/\bpub\s+struct\s+SendApproval\b/, "the shared SendApproval record is missing"],
+    [/\bticket_id\s*:/, "the approval ticket id binding is missing"],
+    [/\bbound_args_hash\b/, "the approval/payload hash binding is missing"],
+    [/\ba\s*\.\s*bound_args_hash\s*!=\s*action\s*\.\s*args_hash\b/, "the approval hash is not compared with the exact action payload"],
+    [/\bused_tickets\s*\.\s*insert\s*\(\s*a\s*\.\s*ticket_id\s*\.\s*clone\s*\(\s*\)\s*\)/, "ticket consumption is not recorded in the single-use ledger"],
+    [/\bAlreadyUsed\b/, "ticket replay must have an explicit refusal"],
+  ]) {
+    requirePattern("E3-CONNECTOR", readFirstPath, readFirst, pattern, detail);
+  }
+
+  for (const method of ["send_mail", "create_calendar_event"]) {
+    const fn = findRustFn(graph, method);
+    if (!fn) {
+      fail("E3-CONNECTOR", graphPath, `required write method ${method} is missing from production source`);
+      continue;
+    }
+    const approval = firstMatch(fn.text, /\bpolicy\s*\.\s*approve_before_send\s*\(/);
+    const transport = firstMatch(fn.text, /\bpost_json_with_refresh\s*\(/);
+    if (!approval) {
+      fail(
+        "E3-CONNECTOR",
+        graphPath,
+        `${method} has no ReadFirstPolicy approval gate before its write (method starts at line ${lineAt(graph, fn.start)})`,
+      );
+    }
+    if (!transport) {
+      fail(
+        "E3-CONNECTOR",
+        graphPath,
+        `${method} no longer has the expected transport write call (method starts at line ${lineAt(graph, fn.start)})`,
+      );
+    }
+    if (approval && transport && approval.index > transport.index) {
+      fail(
+        "E3-CONNECTOR",
+        graphPath,
+        `${method} posts at line ${lineAt(graph, fn.bodyStart + transport.index)} after its approval gate`,
+      );
+    }
+  }
+
+  // The managed gws adapter is the other concrete connector write surface in
+  // this module.  It uses a boolean approval seam rather than SendApproval,
+  // but it must still refuse an unapproved write before constructing Command.
+  const gwsPath = "crates/everyaios-core/src/connectors/gws.rs";
+  const gws = productionCode(read(gwsPath));
+  const gwsCommand = findRustFn(gws, "command");
+  if (!gwsCommand) {
+    fail("E3-CONNECTOR", gwsPath, "managed connector command gate is missing at line 1");
+  } else {
+    const writeGate = firstMatch(gwsCommand.text, /GwsAction\s*::\s*Write\s*&&\s*!\s*approved/);
+    const command = firstMatch(gwsCommand.text, /std::process\s*::\s*Command\s*::\s*new/);
+    if (!writeGate) {
+      fail("E3-CONNECTOR", gwsPath, "gws writes no longer refuse an absent approval before command construction");
+    }
+    if (command && writeGate && writeGate.index > command.index) {
+      fail("E3-CONNECTOR", gwsPath, "gws command construction precedes its write approval gate");
+    }
+  }
+}
+
+{
+  // E3-MCP — protocol transport authenticates first and delegates tool calls
+  // to the host seam; the shell's remote/attached executors consume a ticket
+  // before a process or network effect.
+  const serverPath = "crates/everyaios-mcp/src/server.rs";
+  const server = productionCode(read(serverPath));
+  const handle = findRustFn(server, "handle_json");
+  const serve = findRustFn(server, "serve_http_connection");
+  const auth = findRustFn(server, "is_authorized");
+  if (!handle) {
+    fail("E3-MCP", serverPath, "McpServer::handle_json is missing from production source (line 1)");
+  } else if (!firstMatch(handle.text, /\bself\s*\.\s*handler\s*\.\s*call\s*\(/)) {
+    fail("E3-MCP", serverPath, "tools/call must dispatch through the host ToolCallHandler seam");
+  }
+  if (!serve) {
+    fail("E3-MCP", serverPath, "McpServer::serve_http_connection is missing (line 1)");
+  } else {
+    const authorized = firstMatch(serve.text, /\bself\s*\.\s*is_authorized\s*\(/);
+    const origin = firstMatch(serve.text, /\breq\s*\.\s*origin_ok\b/);
+    const dispatch = firstMatch(serve.text, /\bself\s*\.\s*handle_json\s*\(/);
+    if (!authorized || !origin || !dispatch) {
+      fail("E3-MCP", serverPath, "HTTP MCP dispatch must check bearer authorization, loopback origin, then dispatch");
+    } else if (authorized.index > origin.index || origin.index > dispatch.index) {
+      fail("E3-MCP", serverPath, "MCP authorization/origin gates do not precede handle_json dispatch");
+    }
+  }
+  if (!auth) {
+    fail("E3-MCP", serverPath, "MCP bearer authorization seam is_authorized is missing");
+  } else {
+    requirePattern("E3-MCP", serverPath, auth.text, /\bbearer_token\b/, "MCP bearer token state is missing");
+    requirePattern("E3-MCP", serverPath, auth.text, /\bauthorization\b/, "MCP Authorization header handling is missing");
+  }
+  requirePattern("E3-MCP", serverPath, server, /origin_ok\s*=\s*origin_is_local\s*\(/, "MCP HTTP origin must be checked with origin_is_local before dispatch");
+  for (const pattern of [/\bstd::process\s*::/, /\bCommand\s*::\s*new\s*\(/, /\bspawn\s*\(/]) {
+    const hit = firstMatch(server, pattern);
+    if (hit) {
+      fail("E3-MCP", serverPath, `MCP protocol transport must not spawn/execute effects directly (line ${lineAt(server, hit.index)})`);
+    }
+  }
+
+  const mcpCmdsPath = "src-tauri/src/mcp_cmds.rs";
+  const mcpCmds = productionCode(read(mcpCmdsPath));
+  const loopCall = findRustFnContaining(mcpCmds, "call", "server.call_tool(");
+  if (!loopCall || !/ExternalToolBackend/.test(mcpCmds)) {
+    fail("E3-MCP", mcpCmdsPath, "attached MCP tools must implement the kernel ExternalToolBackend seam");
+  }
+  requirePattern("E3-MCP", mcpCmdsPath, mcpCmds, /\battach_external_server\s*\(/, "attached MCP tools are no longer reconciled into the kernel ToolService registry");
+  const remoteRequest = findRustFn(mcpCmds, "mcp_remote_call");
+  const remoteCommit = findRustFn(mcpCmds, "mcp_remote_call_commit");
+  const attachCommit = findRustFn(mcpCmds, "mcp_attach_commit");
+  if (!remoteRequest) {
+    fail("E3-MCP", mcpCmdsPath, "remote MCP request half is missing (line 1)");
+  } else {
+    const mutationBranch = firstMatch(remoteRequest.text, /method\s*!=\s*["']tools\/call["']/);
+    const evaluate = firstMatch(remoteRequest.text, /\bguard\s*\.\s*evaluate\s*\(/);
+    const stash = firstMatch(remoteRequest.text, /\bmcp_pending_calls\b/);
+    if (!mutationBranch || !evaluate || !stash) {
+      fail("E3-MCP", mcpCmdsPath, "remote tools/call must evaluate Guard and stash the exact pending call");
+    } else if (mutationBranch.index > evaluate.index) {
+      fail("E3-MCP", mcpCmdsPath, "remote tools/call Guard evaluation occurs before the mutation-only branch");
+    }
+  }
+  if (!remoteCommit) {
+    fail("E3-MCP", mcpCmdsPath, "remote MCP commit/executor half is missing (line 1)");
+  } else {
+    const useTicket = firstMatch(remoteCommit.text, /\buse_ticket\s*\(/);
+    const network = firstMatch(remoteCommit.text, /\brpc\s*\(/);
+    if (!useTicket || !network) {
+      fail("E3-MCP", mcpCmdsPath, "remote MCP commit must consume a ticket and then execute the call");
+    } else if (useTicket.index > network.index) {
+      fail("E3-MCP", mcpCmdsPath, "remote MCP network execution precedes ticket consumption");
+    }
+  }
+  if (!attachCommit) {
+    fail("E3-MCP", mcpCmdsPath, "MCP attach commit/executor half is missing (line 1)");
+  } else {
+    const useTicket = firstMatch(attachCommit.text, /\buse_ticket\s*\(/);
+    const spawn = firstMatch(attachCommit.text, /\bspawn_named_stdio\s*\(/);
+    if (!useTicket || !spawn) {
+      fail("E3-MCP", mcpCmdsPath, "MCP attach commit must consume a ticket before spawning the child");
+    } else if (useTicket.index > spawn.index) {
+      fail("E3-MCP", mcpCmdsPath, "MCP child spawn precedes ticket consumption");
+    }
+  }
+}
+
+{
+  // E3-ACP — the library keeps the fail-closed host gate, and the shell maps
+  // the ACP tool kind into a Guard decision before any permission reply.
+  const acpLibPath = "crates/everyaios-acp/src/chief.rs";
+  const acpLib = productionCode(read(acpLibPath));
+  const acpImpl = acpLib.indexOf("impl ChiefAdapter for AcpChief");
+  const acpRequest = acpImpl === -1
+    ? null
+    : findRustFnContaining(acpLib, "request_permission", "self.gate.decide", acpImpl);
+  for (const [pattern, detail] of [
+    [/\bpub\s+trait\s+PermissionGate\b/, "ACP host PermissionGate trait is missing"],
+    [/\bstruct\s+DenyAllGate\b/, "ACP fail-closed DenyAllGate is missing"],
+    [/\bgate\s*:\s*Arc\s*<\s*dyn\s+PermissionGate\s*>/, "AcpChief no longer owns the host gate"],
+  ]) {
+    requirePattern("E3-ACP", acpLibPath, acpLib, pattern, detail);
+  }
+  if (!acpRequest) {
+    fail("E3-ACP", acpLibPath, "AcpChief::request_permission does not call the host PermissionGate (line 1)");
+  }
+
+  const acpShellPath = "src-tauri/src/acp_cmds.rs";
+  const acpShell = productionCode(read(acpShellPath));
+  const mapTool = findRustFn(acpShell, "map_tool_call");
+  const prompt = findRustFn(acpShell, "acp_prompt");
+  if (!mapTool) {
+    fail("E3-ACP", acpShellPath, "ACP tool-to-Guard risk mapper is missing (line 1)");
+  } else {
+    for (const [pattern, detail] of [
+      [/\bToolKind::Delete\b/, "delete tool kind is not mapped"],
+      [/\bToolKind::Execute\b/, "execute tool kind is not mapped"],
+      [/\bRiskLevel::High\b/, "ACP high-risk tool mapping is missing"],
+      [/\bOperation::GenericWrite\b/, "ACP write operation mapping is missing"],
+    ]) {
+      requirePattern("E3-ACP", acpShellPath, mapTool.text, pattern, detail);
+    }
+  }
+  if (!prompt) {
+    fail("E3-ACP", acpShellPath, "acp_prompt host permission closure is missing (line 1)");
+  } else {
+    const hostGuard = firstMatch(prompt.text, /\bstate\s*\.\s*guard_service\b/);
+    const map = firstMatch(prompt.text, /\bmap_tool_call\s*\(/);
+    const decision = firstMatch(prompt.text, /\bDecisionPackage\s*::\s*new\s*\(/);
+    const evaluate = firstMatch(prompt.text, /\bg\s*\.\s*evaluate\s*\(/);
+    const consume = firstMatch(prompt.text, /\bg\s*\.\s*use_ticket\s*\(/);
+    const ask = firstMatch(prompt.text, /\bg\s*\.\s*watch_ticket\s*\(/);
+    const allow = firstMatch(prompt.text, /\bPermissionDecision\s*::\s*allow\s*\(/);
+    if (!hostGuard || !map || !decision || !evaluate || !consume || !ask) {
+      fail("E3-ACP", acpShellPath, "ACP permission path must map the tool, build DecisionPackage, evaluate Guard, wait for Ask, and consume the ticket");
+    } else if (!(map.index < decision.index && decision.index < evaluate.index && evaluate.index < consume.index)) {
+      fail("E3-ACP", acpShellPath, "ACP permission path does not preserve map → DecisionPackage → evaluate → use_ticket order");
+    } else if (allow && allow.index < consume.index) {
+      fail("E3-ACP", acpShellPath, "ACP permission path returns allow before consuming the Guard ticket");
+    }
+  }
+}
+
+{
+  // E3-UI — every command in work_cmds.rs must acquire the one gateway and
+  // call a gateway method.  Direct filesystem/store mutation in this module
+  // would create a second writer beside WorkGateway::append.
+  const workPath = "src-tauri/src/work_cmds.rs";
+  const work = productionCode(read(workPath));
+  const gatewayFn = findRustFn(work, "gateway");
+  if (!gatewayFn) {
+    fail("E3-UI", workPath, "work_cmds gateway accessor is missing");
+  } else {
+    requirePattern("E3-UI", workPath, work, /\bWorkGateway\b/, "work command accessor no longer names WorkGateway");
+    requirePattern("E3-UI", workPath, gatewayFn.text, /\.\s*work_gateway\s*\(\s*\)/, "work command accessor no longer obtains relay.work_gateway()");
+  }
+
+  const commandRe = /#\[tauri::command\][\s\S]*?\bpub\s+fn\s+(\w+)\s*\(/g;
+  for (const match of work.matchAll(commandRe)) {
+    const name = match[1];
+    const fn = findRustFn(work, name, match.index);
+    if (!fn) {
+      fail("E3-UI", workPath, `cannot parse production body for Tauri command ${name} near line ${lineAt(work, match.index)}`);
+      continue;
+    }
+    if (!/\bgateway\s*\(\s*&\s*state\s*\)/.test(fn.text)) {
+      fail("E3-UI", workPath, `${name} does not acquire the shared WorkGateway (command starts at line ${lineAt(work, fn.start)})`);
+    }
+    if (!/\b(?:g|gateway)\s*\.\s*[A-Za-z_][A-Za-z0-9_]*\s*\(/.test(fn.text)) {
+      fail("E3-UI", workPath, `${name} does not call a WorkGateway method (command starts at line ${lineAt(work, fn.start)})`);
+    }
+    const directWrite = firstMatch(
+      fn.text,
+      /\b(?:std::fs::write|fs::write|File::create|OpenOptions::new)\s*\(/,
+    );
+    if (directWrite) {
+      fail("E3-UI", workPath, `${name} writes a store/file directly at line ${lineAt(work, fn.bodyStart + directWrite.index)}; route through WorkGateway`);
+    }
+  }
+  for (const [command, method] of [
+    ["work_create", "create_work"],
+    ["work_agent_spawn", "spawn_subagent"],
+    ["work_review_resolve", "resolve_review_with"],
+    ["work_steer", "queue_steering"],
+  ]) {
+    const fn = findRustFn(work, command);
+    if (!fn || !new RegExp(`\\b(?:g|gateway)\\s*\\.\\s*${method}\\s*\\(`).test(fn.text)) {
+      fail("E3-UI", workPath, `${command} must route its mutation through WorkGateway::${method}`);
+    }
+  }
+}
+
+// --- P69.E4: one journal, no owner-owned execution, one Work creation API ----
+{
+  const ownerPath = "crates/everyaios-core/src/work_gateway.rs";
+  const schemaPath = "crates/everyaios-core/src/store_schema.rs";
+  const owner = productionCode(read(ownerPath));
+  const schema = productionCode(read(schemaPath));
+
+  requirePattern("E4-JOURNAL", ownerPath, owner, /default_data_dir\s*\(\s*\)\s*\.join\s*\(\s*["']work["']\s*\)\s*\.join\s*\(\s*["']events\.jsonl["']\s*\)/, "WorkGateway::open_default no longer names work/events.jsonl");
+  requirePattern(
+    "E4-JOURNAL",
+    schemaPath,
+    schema,
+    /name\s*:\s*["']work_journal["'][\s\S]{0,260}?path\s*:\s*["']work\/events\.jsonl["'][\s\S]{0,180}?policy\s*:\s*StorePolicy::Manifest/,
+    "the durable store registry no longer registers work_journal at work/events.jsonl",
+  );
+
+  const journalOwners = new Set([ownerPath, schemaPath]);
+  for (const file of productionRustFiles(["crates", "src-tauri/src"])) {
+    const name = rel(file);
+    const code = productionCode(readFileSync(file, "utf8"));
+    for (const match of code.matchAll(/events\.jsonl/g)) {
+      if (!journalOwners.has(name)) {
+        fail("E4-JOURNAL", name, `second events.jsonl path at line ${lineAt(code, match.index)}; WorkGateway/store_schema are the only owners`);
+      }
+    }
+  }
+
+  const append = findRustFn(owner, "append");
+  if (!append) {
+    fail("E4-JOURNAL", ownerPath, "WorkGateway::append is missing (line 1)");
+  } else {
+    const write = firstMatch(append.text, /\bwriteln!\s*\(/);
+    const flush = firstMatch(append.text, /\bfile\s*\.\s*flush\s*\(/);
+    const publish = firstMatch(append.text, /\bsubscribers[\s\S]*?\.send\s*\(/);
+    if (!write || !flush || !publish) {
+      fail("E4-JOURNAL", ownerPath, "WorkGateway::append must flush the journal before publishing to subscribers");
+    } else if (write.index > flush.index || flush.index > publish.index) {
+      fail("E4-JOURNAL", ownerPath, "WorkGateway::append publishes an event before durable journal flush");
+    }
+  }
+  const open = findRustFn(owner, "open");
+  if (!open || !firstMatch(open.text, /\bapply_replayed_event\s*\(/)) {
+    fail("E4-JOURNAL", ownerPath, "WorkGateway::open must rebuild state through apply_replayed_event");
+  }
+  requirePattern("E4-JOURNAL", ownerPath, owner, /\bAgentBindingCreated\b/, "journal replay no longer carries durable agent-binding events");
+}
+
+{
+  const schedulerPath = "crates/everyaios-core/src/scheduler_service.rs";
+  const scheduler = productionCode(read(schedulerPath));
+  const processPatterns = [
+    [/\bstd::process\s*::/, "std::process reference"],
+    [/\bCommand\s*::\s*new\s*\(/, "Command::new process spawn"],
+    [/\b(?:std::thread|tokio)\s*::\s*(?:spawn|Builder::new)\s*\(/, "thread/task spawn"],
+    [/\bspawn\s*\(/, "direct spawn call"],
+  ];
+  for (const [pattern, label] of processPatterns) {
+    const hit = firstMatch(scheduler, pattern);
+    if (hit) fail("E4-SPAWN", schedulerPath, `${label} in scheduler trigger plane at line ${lineAt(scheduler, hit.index)}`);
+  }
+
+  // These are the declarative/runtime-shaped blueprint owners named by the
+  // existing D12 contract.  Worktree/verification process code is deliberately
+  // outside this scope: it is an evidence/tool backend, not subagent runtime
+  // ownership.
+  const runtimeFiles = [
+    "crates/everyaios-blueprint/src/subagent.rs",
+    "crates/everyaios-blueprint/src/jobs.rs",
+    "crates/everyaios-blueprint/src/kanban.rs",
+    "crates/everyaios-blueprint/src/swarm.rs",
+    "crates/everyaios-blueprint/src/workflow.rs",
+    "crates/everyaios-blueprint/src/loop_pattern.rs",
+    "crates/everyaios-blueprint/src/marketplace.rs",
+  ];
+  for (const file of runtimeFiles) {
+    const code = productionCode(read(file));
+    for (const [pattern, label] of processPatterns) {
+      const hit = firstMatch(code, pattern);
+      if (hit) fail("E4-SPAWN", file, `${label} in declarative blueprint owner at line ${lineAt(code, hit.index)}`);
+    }
+    const runtimeDecl = firstMatch(code, /\b(?:SubAgentRuntime|SwarmSession|JobRuntime|WorkflowRuntime|MultiRunRuntime)\b/);
+    if (runtimeDecl) {
+      fail("E4-SPAWN", file, `runtime owner declaration ${runtimeDecl.text} at line ${lineAt(code, runtimeDecl.index)}; WorkGateway/ExecutionKernel own runtime state`);
+    }
+  }
+}
+
+{
+  const ownerPath = "crates/everyaios-core/src/work_gateway.rs";
+  const owner = productionCode(read(ownerPath));
+  const allowedCreators = new Set([
+    ownerPath,
+    "crates/everyaios-core/src/chat.rs",
+    "src-tauri/src/scheduler_fire.rs",
+    "src-tauri/src/work_cmds.rs",
+  ]);
+  const creationPattern = /\.\s*(create_work(?:_in_session)?|create_child_work|delegate_child_work)\s*\(/g;
+  for (const file of productionRustFiles(["crates", "src-tauri/src"])) {
+    const name = rel(file);
+    const code = productionCode(readFileSync(file, "utf8"));
+    creationPattern.lastIndex = 0;
+    for (const match of code.matchAll(creationPattern)) {
+      if (!allowedCreators.has(name)) {
+        fail(
+          "E4-WORK-CREATION",
+          name,
+          `${match[1]} at line ${lineAt(code, match.index)} creates Work outside the WorkGateway owner/callers`,
+        );
+      }
+    }
+    if (name !== ownerPath) {
+      const addressCtor = /\bWorkAddress\s*::\s*new\s*\(/g;
+      for (const match of code.matchAll(addressCtor)) {
+        fail("E4-WORK-CREATION", name, `direct WorkAddress::new at line ${lineAt(code, match.index)}; use a WorkGateway creation API`);
+      }
+      const createdEvent = /\b(?:DomainEvent\s*::\s*WorkCreated|WorkEvent\s*::\s*Domain\s*\(\s*DomainEvent\s*::\s*WorkCreated)/g;
+      for (const match of code.matchAll(createdEvent)) {
+        fail("E4-WORK-CREATION", name, `direct WorkCreated event at line ${lineAt(code, match.index)}; append it only through WorkGateway`);
+      }
+    }
+  }
+  const delegate = findRustFn(owner, "delegate_child_work");
+  if (!delegate || !/\.\s*create_child_work\s*\(/.test(delegate.text)) {
+    fail("E4-WORK-CREATION", ownerPath, "WorkGateway::delegate_child_work must enter through create_child_work");
+  }
+  for (const [file, pattern, detail] of [
+    [ownerPath, /pub\s+fn\s+create_work\s*\(/, "WorkGateway::create_work API is missing"],
+    [ownerPath, /pub\s+fn\s+create_work_in_session\s*\(/, "WorkGateway::create_work_in_session API is missing"],
+    [ownerPath, /pub\s+fn\s+create_child_work\s*\(/, "WorkGateway::create_child_work API is missing"],
+    ["crates/everyaios-core/src/chat.rs", /\.\s*delegate_child_work\s*\(/, "chat delegation no longer enters through WorkGateway"],
+    ["src-tauri/src/scheduler_fire.rs", /\.\s*create_work_in_session\s*\(/, "scheduler firing no longer creates Work through WorkGateway"],
+    ["src-tauri/src/work_cmds.rs", /\.\s*create_work\s*\(/, "the Tauri Work command no longer creates Work through WorkGateway"],
+  ]) {
+    requirePattern("E4-WORK-CREATION", file, productionCode(read(file)), pattern, detail);
+  }
+}
+
 // --- report ---------------------------------------------------------------
 if (failures.length) {
   console.error(`architecture-invariant gate: ${failures.length} violation(s)\n`);
@@ -499,5 +1121,5 @@ if (failures.length) {
 }
 
 console.log(
-  "architecture-invariant gate: OK (CRED-1/2/3, AUTH-1/2/3, SCHEMA-1, DECIDE-1/2, LAYER-1/2/3/4, PURITY-1/3/4, TS-DUP, RUST-DUP)",
+  "architecture-invariant gate: OK (CRED-1/2/3, AUTH-1/2/3, SCHEMA-1, DECIDE-1/2, LAYER-1/2/3/4, E3-CONNECTOR/MCP/ACP/UI, E4-JOURNAL/SPAWN/WORK-CREATION, PURITY-1/3/4, TS-DUP, RUST-DUP)",
 );

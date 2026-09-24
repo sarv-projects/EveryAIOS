@@ -12,8 +12,8 @@ import type {
 /**
  * StackExchange adapter — search across all StackExchange sites (default: StackOverflow).
  *
- * Free without an API key; 300 requests/day per IP. Set STACKEXCHANGE_KEY
- * env to bump to 10,000/day quota.
+ * Free without an API key; 300 requests/day per IP. Credential-bearing quota
+ * elevation belongs to the Rust host and is not accepted by this adapter.
  *
  * Endpoints:
  *   GET https://api.stackexchange.com/2.3/search/advanced?order=desc&sort=relevance&q={q}
@@ -57,9 +57,7 @@ export class StackExchangeAdapter implements ConnectorAdapter {
   }
 
   async fetch(ctx: ConnectorContext): Promise<ConnectorResult> {
-    const f = (ctx.filter || {}) as { query?: string; site?: string; tagged?: string; limit?: number; api_key?: string };
-    const envKey = (f as { api_key?: string }).api_key ||
-      ((ctx as unknown as { env?: { STACKEXCHANGE_KEY?: string } }).env?.STACKEXCHANGE_KEY);
+    const f = (ctx.filter || {}) as { query?: string; site?: string; tagged?: string; limit?: number };
     const q = (f.query || '').trim();
     if (!q && !f.tagged) return { items: [], totalCount: 0, source: this.name };
     const site = f.site || 'stackoverflow';
@@ -73,7 +71,6 @@ export class StackExchangeAdapter implements ConnectorAdapter {
     });
     if (q) params.set('q', q);
     if (f.tagged) params.set('tagged', f.tagged);
-    if (envKey) params.set('key', envKey);
 
     try {
       const res = await fetch(`${SE_API}/search/advanced?${params.toString()}`, {
@@ -115,9 +112,4 @@ export class StackExchangeAdapter implements ConnectorAdapter {
     }
   }
 
-  /** 
-   * Token refresh is handled by the Cloudflare Worker OAuth proxy.
-   * This adapter assumes a valid token is injected via filter.token.
-   * @see packages/cloudflare-server/src/index.ts OAuth refresh routes
-   */
 }

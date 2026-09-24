@@ -8,12 +8,14 @@ import type {
   UserQuery,
   MemoryFact,
 } from '@everyaios/core-domain';
+import { requestConnector } from '../connection-manager.js';
 
 /**
  * Spotify adapter — search tracks, artists, albums, playlists.
  *
  * Free OAuth (app registration is free, no quota charges for personal-use rate).
- * Bearer token sent in Authorization header. Token refresh handled by Worker.
+ * The Rust host resolves and refreshes the vault credential, then performs the
+ * authenticated request. This adapter handles only non-secret response mapping.
  *
  * Endpoints:
  *   GET https://api.spotify.com/v1/search?q={q}&type={type}&limit={n}
@@ -31,19 +33,21 @@ const metadataSchema: ConnectorMetadataSchema = {
 const SPOTIFY_API = 'https://api.spotify.com/v1';
 
 async function spotifySearch(
+  connector: ConnectorName,
+  userId: string,
   query: string,
   type: string,
   limit: number,
-  token: string,
   signal: AbortSignal | undefined,
 ): Promise<{ items: ConnectorResult['items']; totalCount: number }> {
-  if (!token) return { items: [], totalCount: 0 };
   const url = `${SPOTIFY_API}/search?q=${encodeURIComponent(query)}&type=${encodeURIComponent(type)}&limit=${limit}`;
-  const res = await fetch(url, {
-    headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+  const res = await requestConnector({
+    connector,
+    userId,
+    request: { url, method: 'GET', headers: { Accept: 'application/json' } },
     ...(signal ? { signal } : {}),
   });
-  if (!res.ok) return { items: [], totalCount: 0 };
+  if (!res?.ok) return { items: [], totalCount: 0 };
   const raw = (await res.json()) as {
     tracks?: { items: Array<SpotifyTrack> };
     artists?: { items: Array<SpotifyArtist> };
@@ -114,11 +118,11 @@ type SpotifyPlaylist = { id: string; name: string; owner?: { display_name?: stri
 
 export class SpotifyAdapter implements ConnectorAdapter {
   readonly name: ConnectorName = 'spotify';
+  readonly credentialMode = 'host-mediated' as const;
   readonly metadataSchema = metadataSchema;
 
   async isAuthorized(_userId: string): Promise<boolean> {
-    // OAuth-gated; actual token presence is enforced per call below
-    return true;
+    return true; // Credential resolution is host-owned
   }
 
   scoreRelevance(query: UserQuery, _memory: MemoryFact[]): number {
@@ -139,23 +143,15 @@ export class SpotifyAdapter implements ConnectorAdapter {
 
   async fetch(ctx: ConnectorContext): Promise<ConnectorResult> {
     const f = (ctx.filter || {}) as { query?: string; type?: string; limit?: number };
-    const token = (f as { token?: string }).token || '';
-    if (!token) return { items: [], totalCount: 0, source: this.name };
     const q = (f.query || '').trim();
     if (!q) return { items: [], totalCount: 0, source: this.name };
     const limit = Math.min(Math.max(Number(f.limit) || 5, 1), 10);
     const type = f.type || 'track';
     try {
-      const { items, totalCount } = await spotifySearch(q, type, limit, token, ctx.signal);
+      const { items, totalCount } = await spotifySearch(this.name, ctx.userId, q, type, limit, ctx.signal);
       return { items, totalCount, source: this.name };
     } catch {
       return { items: [], totalCount: 0, source: this.name };
     }
   }
-
-  /** 
-   * Token refresh is handled by the Cloudflare Worker OAuth proxy.
-   * This adapter assumes a valid token is injected via filter.token.
-   * @see packages/cloudflare-server/src/index.ts OAuth refresh routes
-   */
 }

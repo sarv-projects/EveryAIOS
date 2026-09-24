@@ -5,9 +5,9 @@
  * OAuth: Required for user-specific file access.
  * Flow:
  *   1. User taps "Connect Dropbox"
- *   2. OAuth redirect → dropbox.com/oauth/authorize → redirect back
- *   3. Token saved in SecureStore (key: `connector:dropbox:token`)
- *   4. fetch() includes token from context filter.token
+ *   2. OAuth runs through the host Auth Bridge
+ *   3. The credential remains vault-owned
+ *   4. fetch() sends credential-free intent through the Rust host
  */
 import type {
   ConnectorAdapter,
@@ -17,12 +17,14 @@ import type {
   MemoryFact,
   UserQuery,
 } from '@everyaios/core-domain';
+import { requestConnector } from '../connection-manager.js';
 
 const DROPBOX_API = 'https://api.dropboxapi.com/2';
 const CONNECTOR_NAME = 'dropbox' as const;
 
 export class DropboxAdapter implements ConnectorAdapter {
   readonly name = CONNECTOR_NAME;
+  readonly credentialMode = 'host-mediated' as const;
   readonly metadataSchema = {
     fields: [
       { name: 'query', type: 'string' as const, description: 'Search query for files' },
@@ -45,35 +47,29 @@ export class DropboxAdapter implements ConnectorAdapter {
   }
 
   async fetch(ctx: ConnectorContext): Promise<ConnectorResult> {
-    const filter = ctx.filter as { query?: string; path?: string; token?: string };
-    const token = filter.token || '';
-
-    if (!token) {
-      return { items: [], totalCount: 0, source: CONNECTOR_NAME };
-    }
-
+    const filter = ctx.filter as { query?: string; path?: string };
     const results: ConnectorResult['items'] = [];
-    const headers: Record<string, string> = {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    };
 
     try {
-      // If search query provided, use search endpoint
-      if (filter.query) {
-        const res = await fetch(`${DROPBOX_API}/files/search_v2`, {
+      const isSearch = Boolean(filter.query);
+      const res = await requestConnector({
+        connector: CONNECTOR_NAME,
+        userId: ctx.userId,
+        request: {
+          url: isSearch ? `${DROPBOX_API}/files/search_v2` : `${DROPBOX_API}/files/list_folder`,
           method: 'POST',
-          headers,
-          body: JSON.stringify({
-            query: filter.query,
-            max_results: 20,
-          }),
-        });
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(
+            isSearch
+              ? { query: filter.query, max_results: 20 }
+              : { path: filter.path || '', recursive: false, limit: 20 },
+          ),
+        },
+        ...(ctx.signal ? { signal: ctx.signal } : {}),
+      });
+      if (!res?.ok) return { items: [], totalCount: 0, source: CONNECTOR_NAME };
 
-        if (!res.ok) {
-          return { items: [], totalCount: 0, source: CONNECTOR_NAME };
-        }
-
+      if (isSearch) {
         const data = (await res.json()) as {
           matches?: Array<{
             metadata: {
@@ -88,7 +84,6 @@ export class DropboxAdapter implements ConnectorAdapter {
             };
           }>;
         };
-
         for (const match of data.matches ?? []) {
           const meta = match.metadata.metadata;
           if (meta['.tag'] === 'file') {
@@ -103,40 +98,25 @@ export class DropboxAdapter implements ConnectorAdapter {
           }
         }
       } else {
-        // List folder contents
-        const path = filter.path || '';
-        const res = await fetch(`${DROPBOX_API}/files/list_folder`, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({
-            path,
-            recursive: false,
-            limit: 20,
-          }),
-        });
-
-        if (res.ok) {
-          const data = (await res.json()) as {
-            entries?: Array<{
-              '.tag': string;
-              name: string;
-              path_lower: string;
-              id: string;
-              client_modified?: string;
-              size?: number;
-            }>;
-          };
-
-          for (const entry of data.entries ?? []) {
-            results.push({
-              id: entry.id,
-              title: entry.name,
-              snippet: `${entry.name} (${entry['.tag'] === 'folder' ? 'folder' : formatSize(entry.size ?? 0)})`,
-              url: `https://www.dropbox.com/home${entry.path_lower}`,
-              ...(entry.client_modified ? { date: entry.client_modified } : {}),
-              metadata: { tag: entry['.tag'], size: entry.size, path: entry.path_lower },
-            });
-          }
+        const data = (await res.json()) as {
+          entries?: Array<{
+            '.tag': string;
+            name: string;
+            path_lower: string;
+            id: string;
+            client_modified?: string;
+            size?: number;
+          }>;
+        };
+        for (const entry of data.entries ?? []) {
+          results.push({
+            id: entry.id,
+            title: entry.name,
+            snippet: `${entry.name} (${entry['.tag'] === 'folder' ? 'folder' : formatSize(entry.size ?? 0)})`,
+            url: `https://www.dropbox.com/home${entry.path_lower}`,
+            ...(entry.client_modified ? { date: entry.client_modified } : {}),
+            metadata: { tag: entry['.tag'], size: entry.size, path: entry.path_lower },
+          });
         }
       }
     } catch {
@@ -145,12 +125,6 @@ export class DropboxAdapter implements ConnectorAdapter {
 
     return { items: results, totalCount: results.length, source: CONNECTOR_NAME };
   }
-
-  /** 
-   * Token refresh is handled by the Cloudflare Worker OAuth proxy.
-   * This adapter assumes a valid token is injected via filter.token.
-   * @see packages/cloudflare-server/src/index.ts OAuth refresh routes
-   */
 }
 
 function formatSize(bytes: number): string {

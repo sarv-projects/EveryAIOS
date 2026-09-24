@@ -376,10 +376,7 @@ mod tests {
             vec!["minion-code", "acp"]
         );
         // Uvx plain: `uvx aider-chat`.
-        assert_eq!(
-            reg.launch_plan("aider").unwrap().args,
-            vec!["aider-chat"]
-        );
+        assert_eq!(reg.launch_plan("aider").unwrap().args, vec!["aider-chat"]);
 
         assert!(reg.launch_plan("nope").is_none());
     }

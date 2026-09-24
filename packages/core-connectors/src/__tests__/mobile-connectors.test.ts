@@ -5,6 +5,11 @@
  * All tests mock fetch() so they don't hit any live APIs.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import {
+  setConnectorHostTransport,
+  type ConnectorHostRequest,
+  type ConnectorHostResponse,
+} from '../connection-manager.js';
 import { SpotifyAdapter } from '../adapters/spotify-adapter.js';
 import { RedditAdapter } from '../adapters/reddit-adapter.js';
 import { TodoistAdapter } from '../adapters/todoist-adapter.js';
@@ -13,117 +18,152 @@ import { CoingeckoAdapter } from '../adapters/coingecko-adapter.js';
 import { StackExchangeAdapter } from '../adapters/stackexchange-adapter.js';
 import { OpenLibraryAdapter } from '../adapters/openlibrary-adapter.js';
 
-const BASE_CTX = (filter: Record<string, unknown> = {}, env?: Record<string, string>) => ({
+const BASE_CTX = (filter: Record<string, unknown> = {}) => ({
   userId: 'u',
   query: { text: '' },
   filter,
-  env,
 });
 
-describe('SpotifyAdapter', () => {
-  afterEach(() => vi.unstubAllGlobals());
+function installHost(payload: unknown): ConnectorHostRequest[] {
+  const requests: ConnectorHostRequest[] = [];
+  setConnectorHostTransport({
+    resolveCredential: async (_connector, _userId) => ({
+      handle: 'vault:oauth:mobile-test:user-1',
+      provider: 'mobile-test',
+    }),
+    request: async (req): Promise<ConnectorHostResponse> => {
+      requests.push(req);
+      return {
+        ok: true,
+        status: 200,
+        json: async () => payload,
+        text: async () => JSON.stringify(payload),
+      };
+    },
+  });
+  return requests;
+}
 
-  it('returns empty when no OAuth token is provided', async () => {
+describe('SpotifyAdapter', () => {
+  afterEach(() => {
+    setConnectorHostTransport(null);
+    vi.unstubAllGlobals();
+  });
+
+  it('returns empty when the Rust connector host is unavailable', async () => {
     const a = new SpotifyAdapter();
     const out = await a.fetch(BASE_CTX({ query: 'lofi', type: 'track' }));
     expect(out.items).toEqual([]);
   });
 
-  it('parses Spotify search response', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        tracks: { items: [{ id: '1', name: 'Lofi Study', artists: [{ name: 'A' }], album: { name: 'Vol 1' }, duration_ms: 180000, popularity: 60, external_urls: { spotify: 'https://open.spotify.com/track/1' } }] },
-        artists: { items: [] },
-        albums: { items: [] },
-        playlists: { items: [] },
-      }),
-    } as Response));
+  it('parses a host response using an opaque handle and no token payload', async () => {
+    const requests = installHost({
+      tracks: { items: [{ id: '1', name: 'Lofi Study', artists: [{ name: 'A' }], album: { name: 'Vol 1' }, duration_ms: 180000, popularity: 60, external_urls: { spotify: 'https://open.spotify.com/track/1' } }] },
+      artists: { items: [] },
+      albums: { items: [] },
+      playlists: { items: [] },
+    });
     const a = new SpotifyAdapter();
-    const out = await a.fetch(BASE_CTX({ query: 'lofi', type: 'track', token: 'tk' }));
+    const secret = 'raw-oauth-value';
+    const out = await a.fetch(BASE_CTX({ query: 'lofi', type: 'track', token: secret }));
     expect(out.items[0]?.title).toBe('Lofi Study');
     expect(out.items[0]?.metadata?.artist).toBe('A');
+    expect(requests[0]?.credential.handle).toBe('vault:oauth:mobile-test:user-1');
+    expect(JSON.stringify(requests[0])).not.toContain(secret);
   });
 });
 
 describe('RedditAdapter', () => {
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => {
+    setConnectorHostTransport(null);
+    vi.unstubAllGlobals();
+  });
 
-  it('returns empty when no OAuth token is provided', async () => {
+  it('returns empty when the Rust connector host is unavailable', async () => {
     const a = new RedditAdapter();
     const out = await a.fetch(BASE_CTX({ query: 'iphone' }));
     expect(out.items).toEqual([]);
   });
 
-  it('maps Reddit search response into ConnectorItems', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        data: {
-          children: [
-            { data: { id: 'a1', title: 'Best budget phone?', subreddit: 'r/Android', score: 412, num_comments: 88, permalink: '/r/Android/comments/a1', url: '', author: 'alice' } },
-          ],
-        },
-      }),
-    } as Response));
+  it('maps a host response without forwarding a raw token', async () => {
+    const requests = installHost({
+      data: {
+        children: [
+          { data: { id: 'a1', title: 'Best budget phone?', subreddit: 'r/Android', score: 412, num_comments: 88, permalink: '/r/Android/comments/a1', url: '', author: 'alice' } },
+        ],
+      },
+    });
     const a = new RedditAdapter();
-    const out = await a.fetch(BASE_CTX({ query: 'best phone', token: 'tk' }));
+    const secret = 'raw-oauth-value';
+    const out = await a.fetch(BASE_CTX({ query: 'best phone', token: secret }));
     expect(out.items[0]?.title).toBe('Best budget phone?');
     expect(out.items[0]?.metadata?.subreddit).toBe('r/Android');
+    expect(requests[0]?.credential.handle).toBe('vault:oauth:mobile-test:user-1');
+    expect(JSON.stringify(requests[0])).not.toContain(secret);
   });
 });
 
 describe('TodoistAdapter', () => {
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => {
+    setConnectorHostTransport(null);
+    vi.unstubAllGlobals();
+  });
 
-  it('parses Todoist tasks response with due + priority', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce({
-      ok: true,
-      json: async () => [
-        { id: 't1', content: 'Buy milk', due: { string: 'Today' }, priority: 1, project_id: 'p1' },
-        { id: 't2', content: 'Pay rent', due: { string: 'Tomorrow' } },
-      ],
-    } as Response));
+  it('parses a host response with an opaque handle and no token payload', async () => {
+    const requests = installHost([
+      { id: 't1', content: 'Buy milk', due: { string: 'Today' }, priority: 1, project_id: 'p1' },
+      { id: 't2', content: 'Pay rent', due: { string: 'Tomorrow' } },
+    ]);
     const a = new TodoistAdapter();
-    const out = await a.fetch(BASE_CTX({ filter: 'today', token: 'tk' }));
+    const secret = 'raw-oauth-value';
+    const out = await a.fetch(BASE_CTX({ query: 'today', token: secret }));
     expect(out.items).toHaveLength(2);
     expect(out.items[0]?.title).toBe('Buy milk');
     expect(out.items[0]?.metadata?.priority).toBe(1);
+    expect(requests[0]?.credential.handle).toBe('vault:oauth:mobile-test:user-1');
+    expect(JSON.stringify(requests[0])).not.toContain(secret);
   });
 });
 
 describe('GooglePlacesAdapter', () => {
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => {
+    setConnectorHostTransport(null);
+    vi.unstubAllGlobals();
+  });
 
-  it('returns empty when no API key is provided', async () => {
+  it('returns empty when the Rust connector host is unavailable', async () => {
     const a = new GooglePlacesAdapter();
     const out = await a.fetch(BASE_CTX({ query: 'coffee near me' }));
     expect(out.items).toEqual([]);
   });
 
-  it('maps Places text-search response when api_key is provided', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        places: [{
-          id: 'p1',
-          displayName: { text: 'Blue Bottle Coffee' },
-          formattedAddress: '123 Hayes St, SF',
-          rating: 4.6,
-          currentOpeningHours: { openNow: true },
-          types: ['cafe'],
-        }],
-      }),
-    } as Response));
+  it('maps a host response without forwarding an API key', async () => {
+    const requests = installHost({
+      places: [{
+        id: 'p1',
+        displayName: { text: 'Blue Bottle Coffee' },
+        formattedAddress: '123 Hayes St, SF',
+        rating: 4.6,
+        currentOpeningHours: { openNow: true },
+        types: ['cafe'],
+      }],
+    });
     const a = new GooglePlacesAdapter();
-    const out = await a.fetch(BASE_CTX({ query: 'coffee sf', api_key: 'k' }));
+    const secret = 'raw-api-value';
+    const out = await a.fetch(BASE_CTX({ query: 'coffee sf', api_key: secret }));
     expect(out.items[0]?.title).toBe('Blue Bottle Coffee');
     expect(out.items[0]?.metadata?.open).toBe(true);
+    expect(requests[0]?.credential.handle).toBe('vault:oauth:mobile-test:user-1');
+    expect(requests[0]?.request.headers).not.toHaveProperty('X-Goog-Api-Key');
+    expect(JSON.stringify(requests[0])).not.toContain(secret);
   });
 });
 
 describe('CoingeckoAdapter', () => {
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => {
+    setConnectorHostTransport(null);
+    vi.unstubAllGlobals();
+  });
 
   it('maps CoinGecko markets response into ConnectorItems', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce({
@@ -160,7 +200,10 @@ describe('CoingeckoAdapter', () => {
 });
 
 describe('StackExchangeAdapter', () => {
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => {
+    setConnectorHostTransport(null);
+    vi.unstubAllGlobals();
+  });
 
   it('parses StackOverflow search response without API key', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce({
@@ -202,7 +245,10 @@ describe('StackExchangeAdapter', () => {
 });
 
 describe('OpenLibraryAdapter', () => {
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => {
+    setConnectorHostTransport(null);
+    vi.unstubAllGlobals();
+  });
 
   it('handles ISBN lookup', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce({

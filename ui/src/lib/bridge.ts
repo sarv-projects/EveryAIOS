@@ -13,8 +13,11 @@ import {
   acpLaunch,
   acpPrompt,
   agentDirectoryList,
-  isRetiredBinding,
+  currentBinding,
+  isAgentReady,
+  readinessLabel,
   type AgentDirectoryEntry,
+  type AgentReadiness,
   type HarnessManifest,
   type InstallState,
 } from "./acp";
@@ -86,6 +89,7 @@ function mergeAgentCatalog(
     const existing = merged.find((a) => a.id === catalogId);
     if (existing) {
       existing.status = status;
+      existing.readiness = state?.readiness;
       existing.discovered = state?.discovered ?? existing.discovered;
       existing.launchable = state?.launchable ?? existing.launchable;
       existing.version =
@@ -96,6 +100,7 @@ function mergeAgentCatalog(
     } else if (!seen.has(catalogId)) {
       const row = synthesizeAgent(m);
       row.status = status;
+      row.readiness = state?.readiness;
       row.discovered = state?.discovered;
       row.launchable = state?.launchable;
       row.version = state?.version;
@@ -819,12 +824,13 @@ async function startBridge(): Promise<BridgeDisposer> {
   };
 }
 
-// Single source of truth for catalog→registry id translation lives in
-// `./acp` (`acpIdFor`), and the retired-binding predicate lives there too
-// (`isRetiredBinding`, P71.2c); do not re-introduce either map here.
+// Single source of truth for catalog→registry id translation and live binding
+// resolution lives in `./acp` (`acpIdFor` / `currentBinding`); do not
+// re-introduce either map here.
 
 /**
- * Send a user turn: live chat_stream when in the shell, demo toast otherwise.
+ * Send a user turn through the bound external agent when the desktop shell is
+ * live. Preview and blocked readiness paths never submit a synthetic turn.
  * `context` (P4.7 chat-overlay) injects an open document's text below the
  * cache boundary as a J6 `<user_document>`.
  */
@@ -833,7 +839,7 @@ export async function sendUserMessage(
   context?: { title: string; content: string },
   opts?: { bypassQueue?: boolean },
 ): Promise<void> {
-  const st = useAppStore.getState();
+  let st = useAppStore.getState();
   const trimmed = text.trim();
   if (!trimmed) return;
 
@@ -844,7 +850,76 @@ export async function sendUserMessage(
   let sessionId = st.activeSessionId;
   if (!st.sessions.some((s) => s.id === sessionId)) {
     st.newSession();
-    sessionId = useAppStore.getState().activeSessionId;
+    st = useAppStore.getState();
+    sessionId = st.activeSessionId;
+  }
+
+  // P71.2c — there is no built-in engine to fall back to (ADR-0005 §1/§2), so
+  // a turn runs under the session's **bound agent**: the session pin → the user
+  // default → the selected agent. Resolve the same first candidate the composer
+  // and setup gate show; an explicit non-runnable pin does not silently fall
+  // through to a different agent.
+  const boundAgent =
+    currentBinding(st.sessionChiefs[sessionId]) ??
+    currentBinding(st.userDefaultChief) ??
+    currentBinding(st.selectedAgentId);
+  const boundAcpId = boundAgent ? acpIdFor(boundAgent) : undefined;
+  const runtime = boundAcpId
+    ? st.liveAgents.find((agent) => acpIdFor(agent.id) === boundAcpId)
+    : undefined;
+  const readiness = runtime?.readiness;
+
+  // The transcript and running state are the expensive, user-visible lifecycle
+  // boundary. Refuse before either changes when there is no proven runnable
+  // binding, and before a busy turn is allowed to grow the queue.
+  if (!boundAgent || !isAgentReady(readiness as AgentReadiness)) {
+    const agentLabel = runtime?.name ?? boundAgent;
+    const blocker = !boundAgent
+      ? {
+          sessionId,
+          code: 'unbound' as const,
+          title: 'No runnable agent bound',
+          detail:
+            'Choose an installed, ready agent before sending. EveryAIOS ships no built-in engine in v1.',
+        }
+      : !runtime
+        ? {
+            sessionId,
+            code: 'readiness-unknown' as const,
+            title: `${agentLabel} is not verified as runnable`,
+            detail:
+              'The agent is bound, but the desktop has no readiness result for it. Rescan and finish setup before sending.',
+            agentId: boundAgent,
+          }
+        : {
+            sessionId,
+            code: 'not-ready' as const,
+            title: `${agentLabel} is not ready`,
+            detail: `The agent is bound, but it is ${readinessLabel(readiness)}. Finish that setup before sending.`,
+            agentId: boundAgent,
+          };
+    st.setAgentSendBlocker(blocker);
+    if (!st.composerValue.trim()) st.setComposerValue(trimmed);
+    st.openSetup();
+    st.notify(blocker.detail, 'error');
+    return;
+  }
+  st.setAgentSendBlocker(undefined);
+
+  // Browser preview has fixtures, never a runnable external agent. Keep the
+  // composer draft and the session idle here as well; a preview must not forge
+  // a submitted turn that can never start.
+  if (!inTauri()) {
+    st.setAgentSendBlocker({
+      sessionId,
+      code: 'preview',
+      title: 'Preview cannot run an agent',
+      detail: 'Open the desktop app and bind a ready agent before sending this message.',
+      ...(boundAgent ? { agentId: boundAgent } : {}),
+    });
+    if (!st.composerValue.trim()) st.setComposerValue(trimmed);
+    st.notify('Preview mode — open the desktop app to run an external agent.', 'error');
+    return;
   }
 
   // P51.5 — queue-while-generating: while this session's agent is busy, a
@@ -863,23 +938,6 @@ export async function sendUserMessage(
     return;
   }
 
-  // P71.2c — there is no built-in engine to fall back to (ADR-0005 §1/§2), so
-  // a turn runs under the session's **bound agent**: the session pin → the user
-  // default → the selected agent. The retired built-in spellings resolve to
-  // nothing rather than to a substitute engine, so an unbound session refuses
-  // instead of silently running a second owner of model selection.
-  const catalogId = st.selectedAgentId;
-  const isAgentBinding = (id?: string): id is string =>
-    typeof id === "string" && id.trim() !== "" && !isRetiredBinding(id.trim());
-  const pin = st.sessionChiefs[sessionId];
-  const userDefault = useAppStore.getState().userDefaultChief;
-  const boundAgent = isAgentBinding(pin)
-    ? pin
-    : isAgentBinding(userDefault)
-      ? userDefault
-      : isAgentBinding(catalogId)
-        ? catalogId
-        : undefined;
   // P33 scoped-PDF fix — when the study-mode chip is set (chat scoped to an
   // open document) and no explicit context was passed, attach the open
   // document's extracted text so answers are grounded in it.
@@ -887,28 +945,12 @@ export async function sendUserMessage(
   if (!effectiveContext && st.scopedView === 'office-pdf' && st.scopedDoc) {
     effectiveContext = { title: st.scopedDoc.title, content: st.scopedDoc.content };
   }
+
   st.pushUserMessage(trimmed);
   // P44.6 — freeze the autonomy scope (level + mode + workspace + agent) into
   // the task's config_hash at start. Live chatbar changes never mutate an
   // in-flight Work; the snapshot + any temporary elevation clear at turn end.
   st.freezeTaskSnapshot();
-
-  if (!inTauri()) {
-    st.notify("Preview mode — run inside the Tauri shell for the live agent loop");
-    return;
-  }
-
-  // P71.2c / P71.6a — no agent bound: lead with discovery and binding instead
-  // of dispatching a turn that dies with a generic "agent error". EveryAIOS has
-  // no built-in engine to substitute, and substituting one would be the second
-  // owner of model selection that ADR-0005 removes.
-  if (!boundAgent) {
-    st.setCenterScreen("agents");
-    st.notify(
-      "No agent bound — install or pick an agent; EveryAIOS ships no built-in engine in v1.",
-    );
-    return;
-  }
 
   try {
     if (st.composerMode === "plan") {

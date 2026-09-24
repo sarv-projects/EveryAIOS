@@ -21,16 +21,17 @@ import type {
   MemoryFact,
   UserQuery,
 } from '@everyaios/core-domain';
+import { requestConnector } from '../connection-manager.js';
 
 const SOUNDCLOUD_API = 'https://api.soundcloud.com';
 const CONNECTOR_NAME = 'soundcloud' as const;
 
 export class SoundcloudAdapter implements ConnectorAdapter {
   readonly name = CONNECTOR_NAME;
+  readonly credentialMode = 'host-mediated' as const;
   readonly metadataSchema = {
     fields: [
       { name: 'query', type: 'string' as const, description: 'Track or artist search keyword' },
-      { name: 'token', type: 'string' as const, description: 'OAuth bearer token' },
       { name: 'limit', type: 'number' as const, description: 'Max tracks to return' },
     ],
   };
@@ -51,15 +52,9 @@ export class SoundcloudAdapter implements ConnectorAdapter {
   }
 
   async fetch(ctx: ConnectorContext): Promise<ConnectorResult> {
-    const f = ctx.filter as { query?: string; token?: string; limit?: number };
-    const token = f.token || '';
+    const f = ctx.filter as { query?: string; limit?: number };
     const q = (f.query || '').trim();
     const limit = Math.min(f.limit ?? 10, 30);
-    if (!token) {
-      // Token missing — the orchestrator already gates on authorization; if
-      // we got here the user has not connected SoundCloud yet.
-      return { items: [], totalCount: 0, source: CONNECTOR_NAME };
-    }
     if (!q) {
       // No query → return empty so callers can ask the AI "list my recent
       // tracks" via a follow-up. SoundCloud returns 400 on empty /tracks.
@@ -68,9 +63,17 @@ export class SoundcloudAdapter implements ConnectorAdapter {
 
     const params = new URLSearchParams({ q, limit: String(limit) });
     try {
-      const res = await fetch(`${SOUNDCLOUD_API}/tracks?${params.toString()}`, {
-        headers: { Authorization: `OAuth ${token}`, Accept: 'application/json' },
+      const res = await requestConnector({
+        connector: CONNECTOR_NAME,
+        userId: ctx.userId,
+        request: {
+          url: `${SOUNDCLOUD_API}/tracks?${params.toString()}`,
+          method: 'GET',
+          headers: { Accept: 'application/json' },
+        },
+        ...(ctx.signal ? { signal: ctx.signal } : {}),
       });
+      if (!res) return { items: [], totalCount: 0, source: CONNECTOR_NAME };
       if (!res.ok) {
         return {
           items: [
@@ -126,11 +129,6 @@ export class SoundcloudAdapter implements ConnectorAdapter {
     }
   }
 
-  /** 
-   * Token refresh is handled by the Cloudflare Worker OAuth proxy.
-   * This adapter assumes a valid token is injected via filter.token.
-   * @see packages/cloudflare-server/src/index.ts OAuth refresh routes
-   */
 }
 
 function formatDuration(ms: number): string {

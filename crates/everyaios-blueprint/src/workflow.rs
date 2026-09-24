@@ -379,7 +379,7 @@ impl Workflow {
         }
         let mut queue: Vec<String> = indeg
             .iter()
-            .filter(|(_, &d)| d == 0)
+            .filter(|(_, d)| **d == 0)
             .map(|(k, _)| k.clone())
             .collect();
         let mut order = Vec::new();

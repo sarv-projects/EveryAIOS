@@ -79,8 +79,13 @@ function e2_suites() {
     ['cargo test --workspace --all-features', 'crates'],
     ['cargo clippy --workspace --all-targets --all-features -- -D warnings', 'crates'],
     ['cargo fmt --all -- --check', 'crates'],
-    ['pnpm test', '.'],
-    ['pnpm --filter ui tsc --noEmit', '.'],
+    ['npm run type-check', 'ui'],
+    ['bun test', 'ui'],
+    ["pnpm --filter './packages/core-*' run build", '.'],
+    ["pnpm --filter './packages/core-*' run test", '.'],
+    ['bun run type-check', 'packages/coordinator'],
+    ['pnpm --filter @everyaios/coordinator test', '.'],
+    ['pnpm --filter @everyaios/coordinator build', '.'],
   ];
   if (!EXECUTE) {
     record('P70.E2', 'all suites green', 'RUNNABLE',

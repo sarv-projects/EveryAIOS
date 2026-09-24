@@ -17,9 +17,9 @@
  *
  * Flow:
  *   1. User taps "Connect Google Drive"
- *   2. OAuth redirect → accounts.google.com/o/oauth2/auth → redirect back
- *   3. Token saved in SecureStore (key: `connector:google-drive:token`)
- *   4. fetch() includes token from context filter.token
+ *   2. OAuth runs through the host Auth Bridge
+ *   3. The credential remains vault-owned
+ *   4. fetch() sends credential-free intent through the Rust host
  */
 import type {
   ConnectorAdapter,
@@ -29,12 +29,14 @@ import type {
   MemoryFact,
   UserQuery,
 } from '@everyaios/core-domain';
+import { requestConnector } from '../connection-manager.js';
 
 const DRIVE_API = 'https://www.googleapis.com/drive/v3';
 const CONNECTOR_NAME = 'google-drive' as const;
 
 export class GoogleDriveOAuthAdapter implements ConnectorAdapter {
   readonly name = CONNECTOR_NAME;
+  readonly credentialMode = 'host-mediated' as const;
   readonly metadataSchema = {
     fields: [
       { name: 'query', type: 'string' as const, description: 'Search query (files)' },
@@ -57,13 +59,8 @@ export class GoogleDriveOAuthAdapter implements ConnectorAdapter {
   }
 
   async fetch(ctx: ConnectorContext): Promise<ConnectorResult> {
-    const filter = ctx.filter as { query?: string; token?: string; mimeType?: string };
-    const token = filter.token || '';
+    const filter = ctx.filter as { query?: string; mimeType?: string };
     const searchQuery = filter.query || '';
-
-    if (!token) {
-      return { items: [], totalCount: 0, source: CONNECTOR_NAME };
-    }
 
     try {
       const url = new URL(`${DRIVE_API}/files`);
@@ -85,11 +82,14 @@ export class GoogleDriveOAuthAdapter implements ConnectorAdapter {
         url.searchParams.set('q', 'trashed = false');
       }
 
-      const res = await fetch(url.toString(), {
-        headers: { Authorization: `Bearer ${token}` },
+      const res = await requestConnector({
+        connector: CONNECTOR_NAME,
+        userId: ctx.userId,
+        request: { url: url.toString(), method: 'GET' },
+        ...(ctx.signal ? { signal: ctx.signal } : {}),
       });
 
-      if (!res.ok) {
+      if (!res?.ok) {
         return { items: [], totalCount: 0, source: CONNECTOR_NAME };
       }
 
@@ -125,11 +125,6 @@ export class GoogleDriveOAuthAdapter implements ConnectorAdapter {
     }
   }
 
-  /** 
-   * Token refresh is handled by the Cloudflare Worker OAuth proxy.
-   * This adapter assumes a valid token is injected via filter.token.
-   * @see packages/cloudflare-server/src/index.ts OAuth refresh routes
-   */
 }
 
 function formatSize(bytes: number): string {

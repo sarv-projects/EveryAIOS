@@ -667,6 +667,19 @@ export interface LiveNotification {
   source?: string
 }
 
+/**
+ * Why the current agent cannot accept a turn yet. This is deliberately
+ * session-scoped: a blocked message in one chat must not make another chat look
+ * busy or imply that its binding is broken.
+ */
+export interface AgentSendBlocker {
+  sessionId: string
+  code: 'unbound' | 'readiness-unknown' | 'not-ready' | 'preview'
+  title: string
+  detail: string
+  agentId?: string
+}
+
 // The assistant message currently being streamed **(keyed by sessionId, not a
 // global)**. Streaming is routed to the session the turn started on, so a chat
 // switch mid-stream never lands tokens on the wrong transcript (chat-events
@@ -1035,6 +1048,9 @@ interface AppState {
   setupOpen: boolean
   openSetup: () => void
   closeSetup: () => void
+  /** Last session-scoped reason a send was refused before transcript mutation. */
+  agentSendBlocker?: AgentSendBlocker
+  setAgentSendBlocker: (blocker?: AgentSendBlocker) => void
 
   /** P38 — per-session Chief pins: sessionId → Chief id. An empty/absent pin
    * means the user default applies; a pin outranks it for that session's
@@ -1387,6 +1403,8 @@ streamTestReset = () => {
     queuePaused: {},
     closedSessions: [],
     liveStreamId: {},
+    agentSendBlocker: undefined,
+    setupOpen: false,
   })
 }
 
@@ -1724,6 +1742,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   setupOpen: false,
   openSetup: () => set({ setupOpen: true }),
   closeSetup: () => set({ setupOpen: false }),
+  agentSendBlocker: undefined,
+  setAgentSendBlocker: (blocker) => set({ agentSendBlocker: blocker }),
 
   // P38 — starts empty: no session is pinned until the user pins one. The
   // pin is ALSO written onto the Session object so the vault persist
@@ -1756,7 +1776,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
     }),
   userDefaultChief: undefined,
-  setUserDefaultChief: (chiefId) => set({ userDefaultChief: chiefId }),
+  setUserDefaultChief: (chiefId) => set({ userDefaultChief: chiefId, agentSendBlocker: undefined }),
   openInBrowser: (url) => {
     set((s) => ({
       browserUrl: url,
@@ -1923,7 +1943,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     // P60/P71.2d — model ownership. An external ACP agent owns its model, auth
     // and routing; since *every* runtime is external now, selection never snaps
     // a desktop-side model pin onto an agent and never resets one on the way out.
-    set({ selectedAgentId: id })
+    set({ selectedAgentId: id, agentSendBlocker: undefined })
   },
   // P71.2d — no desktop-side model pin exists to default: any model a turn uses
   // belongs to the agent. Kept as an empty string so the composer can say "the

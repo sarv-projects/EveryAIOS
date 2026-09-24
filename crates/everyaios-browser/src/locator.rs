@@ -285,12 +285,12 @@ impl RefRegistry {
     /// older generation are re-stamped as current (the re-observe is what
     /// makes them fresh again).
     pub fn observe(&mut self, root: &A11yNode) {
-        fn walk(node: &A11yNode, gen: u64, reg: &mut RefRegistry) {
+        fn walk(node: &A11yNode, generation: u64, reg: &mut RefRegistry) {
             if let Some(r) = &node.ref_id {
-                reg.observed.insert(r.clone(), gen);
+                reg.observed.insert(r.clone(), generation);
             }
             for c in &node.children {
-                walk(c, gen, reg);
+                walk(c, generation, reg);
             }
         }
         walk(root, self.generation, self);

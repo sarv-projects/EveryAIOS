@@ -6,11 +6,15 @@
 //! tkinter (for the fixture app), `Xvfb` + `xdpyinfo`. Spawns a small Xvfb
 //! on a free display if none is running.
 
-use everyaios_computeruse::ocr::{locate_phrase, OcrEngine, TesseractCli, VisionHit};
+use everyaios_computeruse::ocr::{OcrEngine, TesseractCli, VisionHit, locate_phrase};
 use everyaios_computeruse::platform::linux::X11Backend;
 use everyaios_computeruse::policy::InteractionMode;
 use everyaios_computeruse::types::{ActKind, Region, WindowInfo};
 use everyaios_computeruse::verify::{Locator, Verifier};
+use std::sync::Mutex;
+
+/// Serializes process-environment mutations in this live-test binary.
+static ENV_LOCK: Mutex<()> = Mutex::new(());
 
 /// Find a free display number by probing /tmp/.X11-unix.
 fn free_display() -> String {
@@ -50,7 +54,11 @@ fn ensure_xvfb() -> Option<std::process::Child> {
         return None;
     }
     let display = free_display();
-    std::env::set_var("DISPLAY", &display);
+    // SAFETY: Each live test holds `ENV_LOCK` for its full execution, so this
+    // process-global DISPLAY mutation is serialized with the other live tests.
+    unsafe {
+        std::env::set_var("DISPLAY", &display);
+    }
     let mut child = std::process::Command::new("Xvfb")
         .args([&display, "-screen", "0", "1280x800x24", "-nolisten", "tcp"])
         .stdout(std::process::Stdio::null())
@@ -71,6 +79,9 @@ fn ensure_xvfb() -> Option<std::process::Child> {
 #[test]
 #[ignore = "live E2E — needs EVERYAIOS_LIVE_TEST=1 + an X server + python3/tkinter"]
 fn live_x11_list_capture_ocr_act_verify() {
+    let _env = ENV_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     if std::env::var("EVERYAIOS_LIVE_TEST").as_deref() != Ok("1") {
         eprintln!("skipping: set EVERYAIOS_LIVE_TEST=1");
         return;
@@ -218,6 +229,9 @@ fn live_x11_list_capture_ocr_act_verify() {
 #[test]
 #[ignore = "live E2E — needs EVERYAIOS_LIVE_TEST=1 + an X server + python3/tkinter"]
 fn live_background_click_leaves_the_pointer_alone() {
+    let _env = ENV_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     if std::env::var("EVERYAIOS_LIVE_TEST").as_deref() != Ok("1") {
         eprintln!("skipping: set EVERYAIOS_LIVE_TEST=1");
         return;
@@ -311,6 +325,9 @@ fn live_background_click_leaves_the_pointer_alone() {
 #[test]
 #[ignore = "live — spawns a real program through the X11 backend"]
 fn live_path_launch_executes_the_file_without_a_shell_or_secrets() {
+    let _env = ENV_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     if std::env::var("EVERYAIOS_LIVE_TEST").as_deref() != Ok("1") {
         eprintln!("skipping: set EVERYAIOS_LIVE_TEST=1");
         return;
@@ -342,9 +359,13 @@ fn live_path_launch_executes_the_file_without_a_shell_or_secrets() {
 
     // A secret in this process the child must not see, and the hand-off paths
     // it must see (neither matches the scrub's credential patterns).
-    std::env::set_var("EVERYAIOS_LAUNCH_TEST_API_KEY", "must-not-leak");
-    std::env::set_var("E9_LAUNCH_ARGV", &argv_out);
-    std::env::set_var("E9_LAUNCH_ENV", &env_out);
+    // SAFETY: `ENV_LOCK` is held for the full test, serializing these
+    // process-global environment mutations with the other live tests.
+    unsafe {
+        std::env::set_var("EVERYAIOS_LAUNCH_TEST_API_KEY", "must-not-leak");
+        std::env::set_var("E9_LAUNCH_ARGV", &argv_out);
+        std::env::set_var("E9_LAUNCH_ENV", &env_out);
+    }
 
     let window = WindowInfo {
         id: 0,
@@ -386,8 +407,12 @@ fn live_path_launch_executes_the_file_without_a_shell_or_secrets() {
     // name-filtered, not a blanket clear.
     assert!(child_env.contains("E9_LAUNCH_ARGV="));
 
-    std::env::remove_var("EVERYAIOS_LAUNCH_TEST_API_KEY");
-    std::env::remove_var("E9_LAUNCH_ARGV");
-    std::env::remove_var("E9_LAUNCH_ENV");
+    // SAFETY: `ENV_LOCK` is still held for the full test, so cleanup cannot
+    // race another live test's environment access.
+    unsafe {
+        std::env::remove_var("EVERYAIOS_LAUNCH_TEST_API_KEY");
+        std::env::remove_var("E9_LAUNCH_ARGV");
+        std::env::remove_var("E9_LAUNCH_ENV");
+    }
     let _ = std::fs::remove_dir_all(&dir);
 }

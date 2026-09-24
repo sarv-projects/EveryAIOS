@@ -3,6 +3,12 @@
 > **Status:** Subsystem contract, derived from [`CORE.md`](CORE.md). Owns how an external agent reaches
 > EveryAIOS. The binding/adapter model is in [AGENT.md](AGENT.md); capability packs in
 > [CAPABILITIES.md](CAPABILITIES.md). Invariants it must not weaken: **I12, I14, I15, I26, I27**.
+>
+> **v1 scope clarification (2026-09-24):** [`ADR/0007`](ADR/0007-windows-first-v1-qualification.md)
+> makes ACP identity, per-Session handles/cancellation, reconnect/resume, and a real Channel B binding
+> v1 qualification obligations. It does not turn an absent protocol method or an empty MCP-server list
+> into a capability. ACP v2 is narrowly unsupported in this release until explicitly implemented and
+> qualified; voice/STT/TTS/wake-word/audio remain post-v1.
 
 ---
 
@@ -166,6 +172,11 @@ Consequences that must be stated plainly:
    time, so `fs_mediation` / `terminal_mediation` are negotiated per connection (§7) and a v2 connection that
    reports them absent must degrade to Channel B or self-contained — never throw and never claim coverage it
    does not have.
+5. **v1 release policy: narrow unsupported v2.** ACP v1 is the only baseline this release qualifies. A v2
+   negotiation is refused explicitly until an adapter and conformance evidence support it; the host never
+   silently downgrades a v2 connection, translates unknown v2 methods, or claims the removed v2 client
+   filesystem/terminal surface. A future v2 implementation must be an explicit capability decision, not an
+   inference from the v1 adapter.
 
 ---
 
@@ -207,13 +218,21 @@ new_session() · load_session()  (ACP v1) · resume_session()  (ACP v2) · close
 - Version differences (`load` vs `resume`) live inside the adapter.
 - A capability the agent negotiates as absent must degrade, never throw.
 
-> **GAP (D2, recorded 2026-09-22).** The lifecycle above is contract-not-code on the wire: the
-> production ACP client (`crates/everyaios-acp/src/client.rs`) implements `initialize` · `authenticate` ·
-> `session/new` · `session/prompt` · `session/cancel` · `session/request_permission` ·
-> `session/set_config_option` · `update` — but has **no `session/load` and no `session/resume`**. The
-> only `session/load` in the tree is the test fixture `crates/everyaios-acp/src/bin/mock-agent.rs`.
-> Resume promises in this section are therefore currently unexecutable; implementation is queued in
-> TODO as the **H4 vehicle (session-resume wire)**.
+> **GAP (D2, recorded 2026-09-22; rechecked for ADR-0007 on 2026-09-24).** The lifecycle above is
+> contract-not-code on the wire: the production ACP client (`crates/everyaios-acp/src/client.rs`) implements
+> `initialize` · `authenticate` · `session/new` · `session/prompt` · `session/cancel` ·
+> `session/request_permission` · `session/set_config_option` · `update` — but has **no `session/load` and no
+> `session/resume`**. The only `session/load` in the tree is the test fixture
+> `crates/everyaios-acp/src/bin/mock-agent.rs`. Resume promises in this section are therefore currently
+> unexecutable; implementation is queued in TODO as the **H4 vehicle (session-resume wire)**.
+>
+> **v1 qualification consequences ([`ADR/0007`](ADR/0007-windows-first-v1-qualification.md)).** The
+> production path must also bind a real MCP server in `session/new`, scope its host handle and cancellation
+> to the owning Session/binding, and prove reconnect by replaying Work events and re-attaching the same
+> binding. A fresh provider session is an explicitly labelled degraded continuation, not native resume.
+> The current shell calls `session.session_new(&cwd, vec![])` at
+> `src-tauri/src/acp_cmds.rs:1548` (and the authentication retry at `:1643`), so Channel B is **not yet
+> qualified**; the MCP server and the governance tests do not erase that live-path gap.
 
 ---
 
@@ -253,7 +272,7 @@ External Agent (Subprocess)
   ▼
 ACP Host Seam (`src-tauri/src/acp_cmds.rs`)
   │  2. Start Local In-Process MCP Loopback Server (`everyaios-mcp`)
-  │  3. `session/new` carrying `mcpServers: [{ name: "everyaios", url: "http://127.0.0.1:<port>" }]`
+  │  3. `session/new` carrying the Work-scoped `mcpServers: [{ name: "everyaios", url: "http://127.0.0.1:<port>" }]`
   ▼
 Agent discovers `SHARED_FACADES` via MCP `tools/list`
   │  4. Agent calls tool `office.calculate` or `browser.operate` via MCP `tools/call`
@@ -383,6 +402,9 @@ This forces the model's reasoning loop to gracefully pivot and invoke the shared
 described as the primary path. **Status 2026-09-21:** V1–V3 are repaired in code (C1–C3 — implemented,
 not verified); the descriptions still may not claim guarded/primary mediation until verification runs.
 - The bridge requires the binding record first ([AGENT.md](AGENT.md) §3) — order is binding → bridge → scope.
+- The v1 qualification rule in [`ADR/0007`](ADR/0007-windows-first-v1-qualification.md) keeps ACP, MCP,
+  and the Work Gateway as three protocol/ownership jobs; a second protocol server, binding registry, or
+  execution loop is not an acceptable way to fill a missing lifecycle method.
 - Multi-platform confinement honesty is unchanged: a confined launch fails closed, and a non-Linux posture
   reports what it actually achieved rather than claiming confinement.
 

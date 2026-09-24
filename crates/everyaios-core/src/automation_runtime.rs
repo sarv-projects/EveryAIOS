@@ -260,7 +260,10 @@ mod tests {
             .collect();
         assert_eq!(ids, vec!["net.search", "script.eval"]);
         assert_eq!(spec.capability_requests[0].step_index, 0);
-        assert_eq!(spec.capability_requests[0].reason, "web search cascade for automation step");
+        assert_eq!(
+            spec.capability_requests[0].reason,
+            "web search cascade for automation step"
+        );
     }
 
     #[test]
@@ -297,7 +300,11 @@ mod tests {
     #[test]
     fn empty_definition_refuses() {
         assert_eq!(
-            compile_work(&Automation::new("a4", "Empty", Trigger::Manual), "1:rev", "occ-4"),
+            compile_work(
+                &Automation::new("a4", "Empty", Trigger::Manual),
+                "1:rev",
+                "occ-4"
+            ),
             Err(AutomationError::Empty)
         );
     }

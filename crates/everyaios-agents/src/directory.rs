@@ -138,7 +138,11 @@ impl AgentDirectory {
     }
 
     /// Insert a definition with default facts for its source.
-    pub fn insert(&mut self, definition: AgentDefinition, source: AgentSource) -> Option<AgentDirectoryEntry> {
+    pub fn insert(
+        &mut self,
+        definition: AgentDefinition,
+        source: AgentSource,
+    ) -> Option<AgentDirectoryEntry> {
         self.upsert(AgentDirectoryEntry::new(definition, source))
     }
 
@@ -232,7 +236,11 @@ mod tests {
                 .with_readiness(AgentReadiness::Ready),
         );
 
-        let ids: Vec<&str> = dir.list().iter().map(|e| e.definition.id.as_str()).collect();
+        let ids: Vec<&str> = dir
+            .list()
+            .iter()
+            .map(|e| e.definition.id.as_str())
+            .collect();
         assert_eq!(ids, vec!["alpha", "beta", "zeta"]);
         // Only `beta` is ready — nothing is assumed to be the default.
         assert_eq!(dir.default_entry().unwrap().definition.id.as_str(), "beta");

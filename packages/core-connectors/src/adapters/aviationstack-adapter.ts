@@ -10,8 +10,8 @@
  * through the Worker via `/v1/connectors/proxy/aviationstack`. The Worker
  * fetches the proxy target without the mobile needing to deal with TLS.
  *
- * Auth: API key. Set AVIATIONSTACK_API_KEY worker secret; users without
- * their own key see the Worker-managed tier (still 100 req/month).
+ * Auth is injected by the configured server-side provider proxy. User key
+ * material is never accepted into this adapter.
  */
 import type {
   ConnectorAdapter,
@@ -30,7 +30,6 @@ export class AviationstackAdapter implements ConnectorAdapter {
   readonly metadataSchema = {
     fields: [
       { name: 'query', type: 'string' as const, description: 'Flight IATA code (e.g. "UA123") or airline route' },
-      { name: 'apiKey', type: 'string' as const, description: '(optional) user-provided AviationStack API key' },
       { name: 'limit', type: 'number' as const, description: 'Max results (1-10)' },
     ],
   };
@@ -52,7 +51,7 @@ export class AviationstackAdapter implements ConnectorAdapter {
   }
 
   async fetch(ctx: ConnectorContext): Promise<ConnectorResult> {
-    const f = ctx.filter as { query?: string; apiKey?: string; limit?: number };
+    const f = ctx.filter as { query?: string; limit?: number };
     const q = (f.query || '').trim();
     const limit = Math.min(f.limit ?? 5, 10);
     if (!q) return { items: [], totalCount: 0, source: CONNECTOR_NAME };
@@ -68,7 +67,6 @@ export class AviationstackAdapter implements ConnectorAdapter {
       params.set('airline_name', q);
     }
     params.set('limit', String(limit));
-    if (f.apiKey) params.set('access_key', f.apiKey);
 
     // Use Worker proxy. Worker's addUserHeaders will inject the per-user API
     // key from KV if present; without the proxy the mobile can't reach
@@ -143,9 +141,4 @@ export class AviationstackAdapter implements ConnectorAdapter {
     }
   }
 
-  /** 
-   * Token refresh is handled by the Cloudflare Worker OAuth proxy.
-   * This adapter assumes a valid token is injected via filter.token.
-   * @see packages/cloudflare-server/src/index.ts OAuth refresh routes
-   */
 }

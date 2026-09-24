@@ -326,6 +326,10 @@ pub enum ChatRelayError {
     Link(#[from] crate::sidecar_link::LinkError),
     #[error("vault error: {0}")]
     Vault(#[from] everyaios_vault::VaultError),
+    /// The durable Work journal is the relay's startup dependency. There is no
+    /// safe in-memory substitute for it.
+    #[error("work gateway startup failed: {0}")]
+    WorkGateway(String),
     /// J11 pre-flight refusal — the message carries the UI surface string.
     #[error("session '{session}' stopped: ${limit:.2} limit (spent ${spent:.2})")]
     BudgetExceeded {
@@ -565,10 +569,7 @@ fn subagent_rpc(
             // built-in engine to default to: an absent harness stays empty and
             // `bind_runtime` refuses it ("harness required") instead of naming
             // an engine that no longer exists.
-            let harness = params
-                .get("harness")
-                .and_then(|v| v.as_str())
-                .unwrap_or("");
+            let harness = params.get("harness").and_then(|v| v.as_str()).unwrap_or("");
             let model = params.get("model").and_then(|v| v.as_str()).unwrap_or("");
             let binding = if !model.is_empty() {
                 Some(crate::bind_runtime(
@@ -650,16 +651,18 @@ fn subagent_rpc(
                         .and_then(|v| v.as_str())
                         .unwrap_or(harness);
                     let mut gw = gateway.lock().unwrap_or_else(|e| e.into_inner());
-                    Some(gw.delegate_child_work(
-                        parent_work_id,
-                        &task_id,
-                        &goal,
-                        agent_id,
-                        params
-                            .get("worktreeId")
-                            .and_then(|v| v.as_str())
-                            .map(str::to_string),
-                    )?)
+                    Some(
+                        gw.delegate_child_work(
+                            parent_work_id,
+                            &task_id,
+                            &goal,
+                            agent_id,
+                            params
+                                .get("worktreeId")
+                                .and_then(|v| v.as_str())
+                                .map(str::to_string),
+                        )?,
+                    )
                 }
                 None => None,
             };
@@ -791,10 +794,7 @@ fn member_readiness(
 
 impl crate::tools::DelegationToolBackend for DelegationBridge {
     fn spawn(&self, params: &serde_json::Value) -> Result<serde_json::Value, String> {
-        let work_id = params
-            .get("workId")
-            .and_then(|v| v.as_str())
-            .unwrap_or("");
+        let work_id = params.get("workId").and_then(|v| v.as_str()).unwrap_or("");
         if work_id.is_empty() {
             // The delegating Work is required: delegation without a parent Work
             // would mint an unlinked run outside the Work graph (I4). Identity
@@ -835,14 +835,8 @@ impl crate::tools::DelegationToolBackend for DelegationBridge {
         {
             Some(id) => id.to_string(),
             None => {
-                let parent = params
-                    .get("workId")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("");
-                let task = params
-                    .get("taskId")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("");
+                let parent = params.get("workId").and_then(|v| v.as_str()).unwrap_or("");
+                let task = params.get("taskId").and_then(|v| v.as_str()).unwrap_or("");
                 if parent.is_empty() || task.is_empty() {
                     return Err("delegate.status requires childWorkId, or workId + taskId".into());
                 }
@@ -1063,12 +1057,27 @@ fn codeintel_rpc(
 }
 
 impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
+    /// Construct a relay, refusing startup if the durable Work journal cannot
+    /// be opened. This compatibility constructor keeps the historical
+    /// infallible API; use [`Self::try_new`] when the caller can handle the
+    /// typed startup error.
     pub fn new(
         link: SidecarLink<W, R>,
         vault: Arc<Mutex<Vault>>,
         on_event: impl Fn(ChatWireEvent) + Send + 'static,
     ) -> Self {
-        Self::new_with_guard(
+        Self::try_new(link, vault, on_event)
+            .unwrap_or_else(|error| panic!("chat relay startup refused: {error}"))
+    }
+
+    /// Fallible relay constructor. A Work journal failure is a startup error,
+    /// never permission to run with an ephemeral gateway.
+    pub fn try_new(
+        link: SidecarLink<W, R>,
+        vault: Arc<Mutex<Vault>>,
+        on_event: impl Fn(ChatWireEvent) + Send + 'static,
+    ) -> Result<Self, ChatRelayError> {
+        Self::try_new_with_guard(
             link,
             vault,
             Arc::new(Mutex::new(GuardService::new())),
@@ -1078,13 +1087,27 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
 
     /// Construct with a **shared** [`GuardService`] (the Tauri shell owns it,
     /// so approval cards and the coordinator's `guard/*` dispatch read/write
-    /// one ticket store — single source of truth).
+    /// one ticket store — single source of truth). The infallible compatibility
+    /// wrapper explicitly refuses startup; new callers should use
+    /// [`Self::try_new_with_guard`] to receive the typed error.
     pub fn new_with_guard(
         link: SidecarLink<W, R>,
         vault: Arc<Mutex<Vault>>,
         guard: Arc<Mutex<GuardService>>,
         on_event: impl Fn(ChatWireEvent) + Send + 'static,
     ) -> Self {
+        Self::try_new_with_guard(link, vault, guard, on_event)
+            .unwrap_or_else(|error| panic!("chat relay startup refused: {error}"))
+    }
+
+    /// Fallible constructor for hosts that can report a startup refusal to the
+    /// user instead of terminating the relay thread.
+    pub fn try_new_with_guard(
+        link: SidecarLink<W, R>,
+        vault: Arc<Mutex<Vault>>,
+        guard: Arc<Mutex<GuardService>>,
+        on_event: impl Fn(ChatWireEvent) + Send + 'static,
+    ) -> Result<Self, ChatRelayError> {
         let egress = Arc::new(Mutex::new(everyaios_guard::EgressEngine::new(
             everyaios_guard::ConnectivityMode::ThirdParty,
         )));
@@ -1103,20 +1126,19 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
         );
         let work_gateway = Arc::new(Mutex::new(
             crate::work_gateway::WorkGateway::open_default()
-                .unwrap_or_else(|_| crate::work_gateway::WorkGateway::new()),
+                .map_err(ChatRelayError::WorkGateway)?,
         ));
         // P71.3f — one readiness handle shared by the delegation seam and the
         // relay's own gates. The shell mounts the facts (`mount_readiness`);
         // until then every read is `Unknown` and nothing is admitted.
-        let readiness: crate::tools::SharedAgentReadiness =
-            Arc::new(Mutex::new(None));
+        let readiness: crate::tools::SharedAgentReadiness = Arc::new(Mutex::new(None));
         tool_service.attach_delegation(Arc::new(DelegationBridge {
             policy: delegation,
             gateway: Arc::clone(&work_gateway),
             readiness: Arc::clone(&readiness),
         }));
         let tools = Arc::new(Mutex::new(tool_service));
-        Self {
+        Ok(Self {
             link,
             vault,
             sessions: Arc::new(Mutex::new(HashMap::new())),
@@ -1143,7 +1165,7 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
             )))),
             on_event: Arc::new(Mutex::new(Box::new(on_event))),
             agui: crate::agui::AguiRelay::new(),
-        }
+        })
     }
 
     /// Unified execution kernel (chat / plan / scheduler / ACP).
@@ -1166,15 +1188,18 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
         request: everyaios_guard::CapabilityRequest,
         grant_id: &str,
     ) -> Result<(), String> {
+        // Durable-before-effect: the Work journal must acknowledge the attempt
+        // before the broker is allowed to invoke the capability.
+        self.work_gateway
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .record_effect_with_grant(work_id, effect_id, "attempted", "", Some(grant_id))?;
         self.capabilities
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .invoke(grant_id, &request)
             .map_err(|e| e.to_string())?;
-        self.work_gateway
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .record_effect_with_grant(work_id, effect_id, "attempted", "", Some(grant_id))
+        Ok(())
     }
 
     /// The memory service handle (tests + the Tauri `usage_snapshot` command
@@ -1597,7 +1622,7 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
                         let grant_id = params.get("capabilityGrantId").and_then(|v| v.as_str());
                         if method == "tool/commit" && !effect_id.is_empty() {
                             if let Some(work_id) = work_id {
-                                let _ = work_gateway
+                                if let Err(error) = work_gateway
                                     .lock()
                                     .unwrap_or_else(|e| e.into_inner())
                                     .record_effect_with_grant(
@@ -1606,15 +1631,20 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
                                         "attempted",
                                         "",
                                         grant_id,
-                                    );
+                                    )
+                                {
+                                    let _ = writer.reply_error(id, &error);
+                                    continue;
+                                }
                             }
                         }
                         let result = svc.handle(method, &params);
+                        let mut event_error = None;
                         if method == "tool/commit" && !effect_id.is_empty() {
                             if let Some(work_id) = work_id {
                                 let mut gateway =
                                     work_gateway.lock().unwrap_or_else(|e| e.into_inner());
-                                match &result {
+                                let record = match &result {
                                     Ok(out) => {
                                         let ok = out
                                             .get("ok")
@@ -1624,25 +1654,46 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
                                             .get("state")
                                             .and_then(|v| v.as_str())
                                             .unwrap_or(if ok { "ok" } else { "failed" });
-                                        let _ = gateway.record_effect(
-                                            work_id, &effect_id, "observed", outcome,
-                                        );
-                                        let _ = gateway.record_effect(
+                                        gateway
+                                            .record_effect(
+                                                work_id,
+                                                &effect_id,
+                                                "observed",
+                                                outcome,
+                                            )
+                                            .and_then(|_| {
+                                                gateway.record_effect(
+                                                    work_id,
+                                                    &effect_id,
+                                                    "verified",
+                                                    if ok { "true" } else { "false" },
+                                                )
+                                            })
+                                    }
+                                    Err(error) => gateway
+                                        .record_effect(
                                             work_id,
                                             &effect_id,
-                                            "verified",
-                                            if ok { "true" } else { "false" },
-                                        );
-                                    }
-                                    Err(error) => {
-                                        let _ = gateway
-                                            .record_effect(work_id, &effect_id, "observed", error);
-                                        let _ = gateway.record_effect(
-                                            work_id, &effect_id, "verified", "false",
-                                        );
-                                    }
+                                            "observed",
+                                            error.as_str(),
+                                        )
+                                        .and_then(|_| {
+                                            gateway.record_effect(
+                                                work_id,
+                                                &effect_id,
+                                                "verified",
+                                                "false",
+                                            )
+                                        }),
+                                };
+                                if let Err(error) = record {
+                                    event_error = Some(error);
                                 }
                             }
+                        }
+                        if let Some(error) = event_error {
+                            let _ = writer.reply_error(id, &error);
+                            continue;
                         }
                         match result {
                             Ok(out) => {
@@ -1656,17 +1707,6 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
                     method if method.starts_with("eval/") => {
                         let mut svc = evals.lock().unwrap_or_else(|e| e.into_inner());
                         match svc.handle(method, &params) {
-                            Ok(out) => {
-                                let _ = writer.reply(id, out);
-                            }
-                            Err(e) => {
-                                let _ = writer.reply_error(id, &e);
-                            }
-                        }
-                    }
-                    method if method.starts_with("work/") => {
-                        let mut gateway = work_gateway.lock().unwrap_or_else(|e| e.into_inner());
-                        match handle_work_gateway(&mut gateway, method, &params) {
                             Ok(out) => {
                                 let _ = writer.reply(id, out);
                             }
@@ -1692,6 +1732,7 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
                         };
                         let mut svc = executions.lock().unwrap_or_else(|e| e.into_inner());
                         let result = svc.handle(method, rooted.as_ref().unwrap_or(&params));
+                        let mut event_error: Option<String> = None;
                         if let Ok(out) = &result {
                             if method == "execution/record_approval" {
                                 if let (Some(work_id), Some(ticket_id), Some(approved)) = (
@@ -1699,35 +1740,44 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
                                     params.get("ticketId").and_then(|v| v.as_str()),
                                     params.get("approved").and_then(|v| v.as_bool()),
                                 ) {
-                                    let _ = work_gateway
+                                    if let Err(error) = work_gateway
                                         .lock()
                                         .unwrap_or_else(|e| e.into_inner())
-                                        .record_approval(work_id, ticket_id, approved);
+                                        .record_approval(work_id, ticket_id, approved)
+                                    {
+                                        event_error = Some(error);
+                                    }
                                 }
                             }
-                            if method == "execution/attach_receipt" {
+                            if event_error.is_none() && method == "execution/attach_receipt" {
                                 if let (Some(work_id), Some(receipt_id)) = (
                                     params.get("workId").and_then(|v| v.as_str()),
                                     params.get("receiptId").and_then(|v| v.as_str()),
                                 ) {
-                                    let _ = work_gateway
+                                    if let Err(error) = work_gateway
                                         .lock()
                                         .unwrap_or_else(|e| e.into_inner())
-                                        .record_artifact(work_id, receipt_id, true);
+                                        .record_artifact(work_id, receipt_id, true)
+                                    {
+                                        event_error = Some(error);
+                                    }
                                 }
                             }
-                            if method == "execution/begin" {
+                            if event_error.is_none() && method == "execution/begin" {
                                 if let (Some(work_id), Some(execution_id)) = (
                                     params.get("workId").and_then(|v| v.as_str()),
                                     out.get("id").and_then(|v| v.as_str()),
                                 ) {
-                                    let _ = work_gateway
+                                    if let Err(error) = work_gateway
                                         .lock()
                                         .unwrap_or_else(|e| e.into_inner())
-                                        .bind_execution(work_id, execution_id);
+                                        .bind_execution(work_id, execution_id)
+                                    {
+                                        event_error = Some(error);
+                                    }
                                 }
                             }
-                            if method == "execution/transition" {
+                            if event_error.is_none() && method == "execution/transition" {
                                 // P71.3g — the wire state is the canonical
                                 // `WorkState` spelling; an unknown spelling is
                                 // refused (never silently coerced into a made-up
@@ -1747,8 +1797,10 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
                                                 .get("wait")
                                                 .filter(|v| !v.is_null())
                                                 .and_then(|v| {
-                                                    serde_json::from_value::<everyaios_types::WaitCondition>(
-                                                        v.clone(),
+                                                    serde_json::from_value::<
+                                                        everyaios_types::WaitCondition,
+                                                    >(
+                                                        v.clone()
                                                     )
                                                     .ok()
                                                 });
@@ -1764,22 +1816,23 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
                                                     parsed,
                                                 ),
                                             };
-                                            if let Err(e) = outcome {
-                                                let _ = writer.reply_error(id.clone(), &e);
+                                            if let Err(error) = outcome {
+                                                event_error = Some(error);
                                             }
                                         }
                                         None => {
-                                            let _ = writer.reply_error(
-                                                id.clone(),
-                                                &format!(
-                                                    "execution/transition: unknown state {state:?} \
-                                                     (expected a canonical WorkState spelling)"
-                                                ),
-                                            );
+                                            event_error = Some(format!(
+                                                "execution/transition: unknown state {state:?} \
+                                                 (expected a canonical WorkState spelling)"
+                                            ));
                                         }
                                     }
                                 }
                             }
+                        }
+                        if let Some(error) = event_error {
+                            let _ = writer.reply_error(id, &error);
+                            continue;
                         }
                         match result {
                             Ok(out) => {
@@ -1904,7 +1957,10 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
                     // P49.10–12: session-runtime lifecycle. The agent loop
                     // drives PtySession / WorktreeBinding / AgentSession as
                     // first-class tools; the gateway owns the durable state +
-                    // WorkEvent fan-out (survives client disconnect).
+                    // WorkEvent fan-out (survives client disconnect). This is
+                    // the sole `work/*` arm: WorkGateway::handle_rpc also owns
+                    // the legacy method vocabulary, so newer methods cannot
+                    // be shadowed by a partial helper.
                     method if method.starts_with("work/") => {
                         let mut gw = work_gateway.lock().unwrap_or_else(|e| e.into_inner());
                         match gw.handle_rpc(method, &params) {
@@ -2432,10 +2488,7 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
     /// P71.3f — mount the one readiness source (the shell owns the runtime
     /// facts). Until this is called, every read is `AgentReadiness::Unknown`
     /// and the delegation/turn gates refuse external agents by name.
-    pub fn mount_readiness(
-        &self,
-        source: Arc<dyn crate::tools::AgentReadinessSource>,
-    ) -> &Self {
+    pub fn mount_readiness(&self, source: Arc<dyn crate::tools::AgentReadinessSource>) -> &Self {
         *self.readiness.lock().unwrap_or_else(|e| e.into_inner()) = Some(source);
         self
     }
@@ -2470,221 +2523,6 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
         }
         Ok(())
     }
-}
-
-fn handle_work_gateway(
-    gateway: &mut crate::work_gateway::WorkGateway,
-    method: &str,
-    params: &serde_json::Value,
-) -> Result<serde_json::Value, String> {
-    use crate::work_gateway::{ClientSession, ExecutionNode, ReviewItem, SteeringInstruction};
-    match method {
-        "work/create" => {
-            let id = params
-                .get("workId")
-                .and_then(|v| v.as_str())
-                .ok_or("work/create requires workId")?;
-            // P71.8a — the session kind comes from the wire (the sidecar knows
-            // which trigger is creating this Work); it is a record property,
-            // never inferred. Unstated ⇒ interactive (existing rows).
-            let session_kind = params
-                .get("sessionKind")
-                .and_then(|v| v.as_str())
-                .map(everyaios_types::SessionKind::parse)
-                .unwrap_or(everyaios_types::SessionKind::Interactive);
-            let address = gateway
-                .create_work_in_session(
-                    id,
-                    params
-                        .get("projectId")
-                        .and_then(|v| v.as_str())
-                        .map(str::to_owned),
-                    params
-                        .get("sessionId")
-                        .and_then(|v| v.as_str())
-                        .map(str::to_owned),
-                    session_kind,
-                    params
-                        .get("objective")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or(""),
-                )
-                .map_err(|e| e.to_string())?;
-            serde_json::to_value(address).map_err(|e| e.to_string())
-        }
-        "work/get" => {
-            let id = params
-                .get("workId")
-                .and_then(|v| v.as_str())
-                .ok_or("work/get requires workId")?;
-            serde_json::to_value(gateway.get_work(id)).map_err(|e| e.to_string())
-        }
-        "work/list" => serde_json::to_value(gateway.list_work()).map_err(|e| e.to_string()),
-        "work/snapshot" => {
-            let id = params
-                .get("workId")
-                .and_then(|v| v.as_str())
-                .ok_or("work/snapshot requires workId")?;
-            serde_json::to_value(gateway.snapshot(id)).map_err(|e| e.to_string())
-        }
-        "work/events" => {
-            let id = params
-                .get("workId")
-                .and_then(|v| v.as_str())
-                .ok_or("work/events requires workId")?;
-            let from = params
-                .get("fromSequence")
-                .and_then(|v| v.as_u64())
-                .unwrap_or(0);
-            serde_json::to_value(gateway.replay_from(id, from)).map_err(|e| e.to_string())
-        }
-        "work/client_attach" => {
-            let client: ClientSession = serde_json::from_value(
-                params
-                    .get("client")
-                    .cloned()
-                    .ok_or("work/client_attach requires client")?,
-            )
-            .map_err(|e| e.to_string())?;
-            gateway.attach_client(client)?;
-            Ok(serde_json::json!({"attached":true}))
-        }
-        "work/client_detach" => {
-            let id = params
-                .get("clientId")
-                .and_then(|v| v.as_str())
-                .ok_or("work/client_detach requires clientId")?;
-            Ok(serde_json::json!({"detached":gateway.detach_client(id)}))
-        }
-        "work/node_register" => {
-            let node: ExecutionNode = serde_json::from_value(
-                params
-                    .get("node")
-                    .cloned()
-                    .ok_or("work/node_register requires node")?,
-            )
-            .map_err(|e| e.to_string())?;
-            gateway.register_node(node)?;
-            Ok(serde_json::json!({"registered":true}))
-        }
-        "work/node_heartbeat" => {
-            let id = params
-                .get("nodeId")
-                .and_then(|v| v.as_str())
-                .ok_or("work/node_heartbeat requires nodeId")?;
-            let at = params
-                .get("atMs")
-                .and_then(|v| v.as_u64())
-                .unwrap_or_else(now_ms);
-            Ok(serde_json::json!({"healthy":gateway.heartbeat_node(id,at)}))
-        }
-        "work/lease_acquire" => {
-            let run = params
-                .get("runId")
-                .and_then(|v| v.as_str())
-                .ok_or("work/lease_acquire requires runId")?;
-            let node = params
-                .get("nodeId")
-                .and_then(|v| v.as_str())
-                .ok_or("work/lease_acquire requires nodeId")?;
-            let ttl = params
-                .get("ttlMs")
-                .and_then(|v| v.as_u64())
-                .unwrap_or(30_000);
-            serde_json::to_value(gateway.acquire_run_authority(run, node, ttl)?)
-                .map_err(|e| e.to_string())
-        }
-        "work/lease_validate" => {
-            let run = params
-                .get("runId")
-                .and_then(|v| v.as_str())
-                .ok_or("work/lease_validate requires runId")?;
-            let node = params
-                .get("nodeId")
-                .and_then(|v| v.as_str())
-                .ok_or("work/lease_validate requires nodeId")?;
-            let token = params
-                .get("fencingToken")
-                .and_then(|v| v.as_u64())
-                .ok_or("work/lease_validate requires fencingToken")?;
-            Ok(serde_json::json!({"valid":gateway.validate_fencing_token(run,node,token)}))
-        }
-        "work/lease_release" => {
-            let run = params
-                .get("runId")
-                .and_then(|v| v.as_str())
-                .ok_or("work/lease_release requires runId")?;
-            let node = params
-                .get("nodeId")
-                .and_then(|v| v.as_str())
-                .ok_or("work/lease_release requires nodeId")?;
-            let token = params
-                .get("fencingToken")
-                .and_then(|v| v.as_u64())
-                .ok_or("work/lease_release requires fencingToken")?;
-            Ok(serde_json::json!({"released":gateway.release_authority(run,node,token)}))
-        }
-        "work/review_add" => {
-            let item: ReviewItem = serde_json::from_value(
-                params
-                    .get("review")
-                    .cloned()
-                    .ok_or("work/review_add requires review")?,
-            )
-            .map_err(|e| e.to_string())?;
-            gateway.request_review(item)?;
-            Ok(serde_json::json!({"queued":true}))
-        }
-        "work/review_resolve" => {
-            let id = params
-                .get("reviewId")
-                .and_then(|v| v.as_str())
-                .ok_or("work/review_resolve requires reviewId")?;
-            Ok(serde_json::json!({"resolved":gateway.resolve_review(id)}))
-        }
-        "work/steer" => {
-            let instruction: SteeringInstruction = serde_json::from_value(
-                params
-                    .get("instruction")
-                    .cloned()
-                    .ok_or("work/steer requires instruction")?,
-            )
-            .map_err(|e| e.to_string())?;
-            gateway.steer(instruction)?;
-            Ok(serde_json::json!({"queued":true}))
-        }
-        "work/presence" => {
-            let id = params
-                .get("workId")
-                .and_then(|v| v.as_str())
-                .ok_or("work/presence requires workId")?;
-            serde_json::to_value(gateway.presence(id)).map_err(|e| e.to_string())
-        }
-        // P51.14 — live agent-thought summary from the coordinator's engine
-        // loop (the headline shown on the agent card while a run is in
-        // flight). Best-effort surface: an unknown work id is a hard error so
-        // callers notice, but the coordinator never blocks the stream on it.
-        "work/thought" => {
-            let id = params
-                .get("workId")
-                .and_then(|v| v.as_str())
-                .ok_or("work/thought requires workId")?;
-            let text = params
-                .get("text")
-                .and_then(|v| v.as_str())
-                .ok_or("work/thought requires text")?;
-            gateway.record_thought(id, text)?;
-            Ok(serde_json::json!({"recorded": true}))
-        }
-        _ => Err(format!("method not found: {method}")),
-    }
-}
-
-fn now_ms() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis() as u64)
-        .unwrap_or(0)
 }
 
 fn emit(on_event: &Arc<Mutex<EventSink>>, ev: ChatWireEvent) {
@@ -2880,7 +2718,11 @@ mod tests {
         assert_eq!(out["depth"], 1);
         // The accounting is the graph, not a counter: one delegated child.
         assert_eq!(
-            gw.lock().unwrap().delegation_gauge("w-parent").unwrap().total,
+            gw.lock()
+                .unwrap()
+                .delegation_gauge("w-parent")
+                .unwrap()
+                .total,
             1
         );
         // P69.D14 — the spawn is a child Work with a parent link (plus its own
@@ -3041,7 +2883,9 @@ mod tests {
             .collect();
         assert!(granted.contains(&"file_ops.read"));
         assert!(granted.contains(&"search.query"));
-        assert!(!granted.iter().any(|t| *t == "file_ops.write" || *t == "desktop.act"));
+        assert!(!granted
+            .iter()
+            .any(|t| *t == "file_ops.write" || *t == "desktop.act"));
         assert_eq!(out["planes"], 5);
         assert_eq!(out["harness"], "claude-code");
         assert_eq!(out["binding"]["model"], "m");
@@ -3852,5 +3696,59 @@ mod tests {
         );
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The old broad `work/*` arm answered from a helper that knew only the
+    /// legacy methods. A newer WorkGateway method must still cross the real
+    /// relay boundary, not disappear behind that shadow.
+    #[cfg(unix)]
+    #[test]
+    fn relay_routes_newer_work_gateway_methods() {
+        let (a, b) = pair();
+        let side = std::thread::spawn(move || {
+            let mut s = b;
+            let request = serde_json::json!({
+                "jsonrpc": "2.0",
+                "id": "agent-1",
+                "method": "work/agent_spawn",
+                "params": {
+                    "workId": "relay-work",
+                    "runId": "relay-run",
+                    "agentSessionId": "relay-session",
+                    "agentId": "agent-a",
+                    "lifetime": "ephemeral_child"
+                }
+            });
+            frame::write_frame(&mut s, &serde_json::to_vec(&request).unwrap()).unwrap();
+            loop {
+                match frame::decode(&mut s) {
+                    Ok(Some(payload)) => {
+                        if let Ok(value) = serde_json::from_slice::<serde_json::Value>(&payload) {
+                            if value.get("id").and_then(Value::as_str) == Some("agent-1") {
+                                return value;
+                            }
+                        }
+                    }
+                    _ => panic!("relay closed before acknowledging work/agent_spawn"),
+                }
+            }
+        });
+
+        let (dir, vault) = temp_vault("work-relay-routing");
+        let vault = Arc::new(Mutex::new(vault));
+        let relay = ChatRelay::new(link_from(a), vault, |_| {});
+        relay
+            .work_gateway()
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .create_work("relay-work", None, None, "route newer methods");
+        relay.spawn();
+
+        let response = side.join().unwrap();
+        assert!(response.get("error").is_none(), "work/agent_spawn: {response}");
+        assert_eq!(response["result"]["workId"], serde_json::json!("relay-work"));
+        assert!(response["result"]["sequence"].as_u64().is_some());
+
+        let _ = std::fs::remove_dir_all(dir);
     }
 }

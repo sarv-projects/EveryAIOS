@@ -20,7 +20,10 @@ use everyaios_core::store_schema::{
 /// agreement; this list is what the Windows-host driver must seal and verify
 /// (`docs/updating.md` §7).
 fn preserved_stores() -> Vec<&'static StoreSpec> {
-    STORES.iter().filter(|s| s.policy != StorePolicy::Derived).collect()
+    STORES
+        .iter()
+        .filter(|s| s.policy != StorePolicy::Derived)
+        .collect()
 }
 
 /// A corrupt manifest is reported, never overwritten: the recorded versions
@@ -31,10 +34,16 @@ fn corrupt_manifest_is_reported_not_overwritten() {
     let manifest = dir.path().join(store_schema::STORE_SCHEMA_FILE);
     std::fs::write(&manifest, b"{ not json").unwrap();
     let reported = store_schema::load_manifest(dir.path());
-    assert!(reported.is_err(), "a corrupt manifest must be reported, not adopted");
+    assert!(
+        reported.is_err(),
+        "a corrupt manifest must be reported, not adopted"
+    );
     match reported.unwrap_err() {
         StoreSchemaError::ManifestCorrupt { path, .. } => {
-            assert!(path.ends_with("store-schema.json"), "names the file: {path}");
+            assert!(
+                path.ends_with("store-schema.json"),
+                "names the file: {path}"
+            );
         }
         other => panic!("expected ManifestCorrupt, got: {other:?}"),
     }
@@ -66,7 +75,11 @@ fn newer_stamped_store_is_refused_with_names() {
     store_schema::save_manifest(dir.path(), &manifest).expect("save");
     let err = store_schema::ensure_all(dir.path()).expect_err("newer version must be refused");
     match err {
-        StoreSchemaError::NewerThanApp { store, found, supported } => {
+        StoreSchemaError::NewerThanApp {
+            store,
+            found,
+            supported,
+        } => {
             assert_eq!(store, "memory");
             assert_eq!(found, spec.version + 98);
             assert_eq!(supported, spec.version);
@@ -87,8 +100,14 @@ fn pre_stamp_data_is_adopted_and_flagged() {
     std::fs::write(dir.path().join("memory.json"), b"{}").unwrap();
     let manifest = store_schema::ensure_all(dir.path()).expect("adopt and stamp");
     let stamp = &manifest.stores["memory"];
-    assert_eq!(stamp.version, store_schema::store("memory").unwrap().version);
-    assert!(stamp.adopted, "pre-stamp data is adopted, not claimed migrated");
+    assert_eq!(
+        stamp.version,
+        store_schema::store("memory").unwrap().version
+    );
+    assert!(
+        stamp.adopted,
+        "pre-stamp data is adopted, not claimed migrated"
+    );
 }
 
 /// Evidence completeness: every non-derived store is in the driver's list,
@@ -96,14 +115,25 @@ fn pre_stamp_data_is_adopted_and_flagged() {
 #[test]
 fn evidence_list_matches_the_boot_registry() {
     let preserved = preserved_stores();
-    assert!(preserved.len() >= 8, "the preserved set is explicit: {}", preserved.len());
+    assert!(
+        preserved.len() >= 8,
+        "the preserved set is explicit: {}",
+        preserved.len()
+    );
     for spec in &preserved {
         assert!(spec.version >= 1, "store '{}' carries a version", spec.name);
-        assert!(spec.note.len() > 20, "store '{}' states what an upgrade preserves", spec.name);
+        assert!(
+            spec.note.len() > 20,
+            "store '{}' states what an upgrade preserves",
+            spec.name
+        );
     }
     // Derived caches are deliberately excluded — stamping them would
     // misstate what an upgrade must preserve.
-    assert!(store_schema::store("plan_cache").is_some(), "plan_cache exists");
+    assert!(
+        store_schema::store("plan_cache").is_some(),
+        "plan_cache exists"
+    );
     assert_eq!(
         store_schema::store("plan_cache").unwrap().policy,
         StorePolicy::Derived

@@ -216,8 +216,8 @@ pub fn verify_with_policy(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::manifest::{Budgets, EvidenceRequirement, HashAlgorithm};
+    use super::*;
     use std::fs;
     use std::io::Write;
     use std::sync::atomic::{AtomicU32, Ordering};

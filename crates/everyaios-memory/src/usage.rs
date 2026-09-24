@@ -311,7 +311,12 @@ impl UsageLedger {
     /// the caller renders "not attributed" instead of a share (**I15**).
     pub fn primary_worker_split(&self) -> Option<(u64, u64)> {
         let primary = self.primary_agent.as_ref()?;
-        let primary_tokens = self.by_agent.get(primary).copied().unwrap_or_default().total_tokens();
+        let primary_tokens = self
+            .by_agent
+            .get(primary)
+            .copied()
+            .unwrap_or_default()
+            .total_tokens();
         let all: u64 = self
             .by_agent
             .values()
@@ -445,7 +450,15 @@ mod tests {
     fn cost_uses_configured_prices() {
         let mut l = UsageLedger::new();
         l.set_active("s1", "deepseek");
-        l.record_observed(UsageSource::AgentReport, 1_000_000, 1_000_000, false, 0, 0, 0.0); // 1M in + 1M out
+        l.record_observed(
+            UsageSource::AgentReport,
+            1_000_000,
+            1_000_000,
+            false,
+            0,
+            0,
+            0.0,
+        ); // 1M in + 1M out
         l.clear_active();
         assert_eq!(l.key_cost_usd("deepseek"), None); // no price set
         l.set_price("deepseek", 0.27, 1.10);
@@ -458,7 +471,15 @@ mod tests {
         let mut l = UsageLedger::new();
         l.set_price("k", 3.0, 15.0);
         l.set_active("s1", "k");
-        l.record_observed(UsageSource::AgentReport, 1_000_000, 100_000, true, 800_000, 0, 0.0); // 800k cached
+        l.record_observed(
+            UsageSource::AgentReport,
+            1_000_000,
+            100_000,
+            true,
+            800_000,
+            0,
+            0.0,
+        ); // 800k cached
         l.clear_active();
         let cost = l.key_cost_usd("k").unwrap();
         // Only 200k uncached input tokens billed.

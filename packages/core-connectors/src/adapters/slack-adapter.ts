@@ -3,15 +3,16 @@
  *
  * Free tier: Tier 3 scope — 50+ requests/min for `conversations.history`
  * and `search.messages` (https://api.slack.com/docs/rate-limits).
- * Powers "summarise my unread DMs" use case on Claude and Copilot mobile.
+ * Powers "summarise my unread DMs" use cases.
  *
  * Auth: OAuth 2.0 (server-side flow through OAUTH_PROVIDERS['slack']).
  * Scope: `channels:history,groups:history,im:history,mpim:history,
  *         channels:read,groups:read,im:read,mpim:read,users:read,search:read`
  * — read-only, no write or admin privileges.
  *
- * Token flows in via `ctx.filter.token` after the Worker exchanges the
- * auth code. Adapter never sees raw API keys.
+ * The Rust host owns the OAuth exchange, vault credential, refresh, and
+ * authenticated request. This adapter handles only query intent and response
+ * normalization.
  */
 import type {
   ConnectorAdapter,
@@ -21,16 +22,17 @@ import type {
   MemoryFact,
   UserQuery,
 } from '@everyaios/core-domain';
+import { requestConnector } from '../connection-manager.js';
 
 const SLACK_API = 'https://slack.com/api';
 const CONNECTOR_NAME = 'slack' as const;
 
 export class SlackAdapter implements ConnectorAdapter {
   readonly name = CONNECTOR_NAME;
+  readonly credentialMode = 'host-mediated' as const;
   readonly metadataSchema = {
     fields: [
       { name: 'query', type: 'string' as const, description: 'Free-text search (slack /search) or channel filter (#channel)' },
-      { name: 'token', type: 'string' as const, description: 'OAuth bearer token (injected by adapter)' },
       { name: 'limit', type: 'number' as const, description: 'Maximum messages to return (default 20)' },
     ],
   };
@@ -52,15 +54,17 @@ export class SlackAdapter implements ConnectorAdapter {
   }
 
   async fetch(ctx: ConnectorContext): Promise<ConnectorResult> {
-    const f = ctx.filter as { query?: string; token?: string; limit?: number };
-    const token = f.token || '';
+    const f = ctx.filter as { query?: string; limit?: number };
     const q = (f.query || '').trim();
     const limit = Math.min(f.limit ?? 20, 50);
-    if (!token) {
-      return { items: [], totalCount: 0, source: CONNECTOR_NAME };
-    }
-
-    const authHeaders = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json; charset=utf-8' };
+    const headers = { 'Content-Type': 'application/json; charset=utf-8' };
+    const hostRequest = async (url: string) =>
+      requestConnector({
+        connector: CONNECTOR_NAME,
+        userId: ctx.userId,
+        request: { url, method: 'GET', headers },
+        ...(ctx.signal ? { signal: ctx.signal } : {}),
+      });
 
     try {
       // Detect a #channel filter and route to conversations.history; otherwise
@@ -69,10 +73,10 @@ export class SlackAdapter implements ConnectorAdapter {
 
       if (channelMatch) {
         // Resolve channel name → ID via conversations.list
-        const listRes = await fetch(`${SLACK_API}/conversations.list?types=public_channel,private_channel,im,mpim&limit=200`, {
-          headers: authHeaders,
-        });
-        if (!listRes.ok) return { items: [], totalCount: 0, source: CONNECTOR_NAME };
+        const listRes = await hostRequest(
+          `${SLACK_API}/conversations.list?types=public_channel,private_channel,im,mpim&limit=200`,
+        );
+        if (!listRes?.ok) return { items: [], totalCount: 0, source: CONNECTOR_NAME };
         const listData = (await listRes.json()) as {
           ok: boolean;
           channels?: Array<{ id: string; name?: string }>;
@@ -98,16 +102,17 @@ export class SlackAdapter implements ConnectorAdapter {
               {
                 id: `unknown:${channelMatch[1]}`,
                 title: `Channel #${channelMatch[1]}`,
-                snippet: 'Channel not visible to this token (private or not joined)',
+                snippet: 'Channel not visible to this credential (private or not joined)',
               },
             ],
             totalCount: 1,
             source: CONNECTOR_NAME,
           };
         }
-        const histRes = await fetch(`${SLACK_API}/conversations.history?channel=${encodeURIComponent(ch.id)}&limit=${limit}`, {
-          headers: authHeaders,
-        });
+        const histRes = await hostRequest(
+          `${SLACK_API}/conversations.history?channel=${encodeURIComponent(ch.id)}&limit=${limit}`,
+        );
+        if (!histRes?.ok) return { items: [], totalCount: 0, source: CONNECTOR_NAME };
         const histData = (await histRes.json()) as {
           ok: boolean;
           messages?: Array<{ ts: string; text?: string; user?: string; thread_ts?: string }>;
@@ -129,9 +134,10 @@ export class SlackAdapter implements ConnectorAdapter {
         // Empty query → fetch unread inbox via conversations.list + history 0
         // Sort unread by recent activity and pull last-limit messages across
         // the first 5 DMs/channels to keep under rate limits.
-        const listRes = await fetch(`${SLACK_API}/conversations.list?types=public_channel,private_channel,im,mpim&limit=10`, {
-          headers: authHeaders,
-        });
+        const listRes = await hostRequest(
+          `${SLACK_API}/conversations.list?types=public_channel,private_channel,im,mpim&limit=10`,
+        );
+        if (!listRes?.ok) return { items: [], totalCount: 0, source: CONNECTOR_NAME };
         const listData = (await listRes.json()) as {
           ok: boolean;
           channels?: Array<{ id: string; name?: string }>;
@@ -139,9 +145,10 @@ export class SlackAdapter implements ConnectorAdapter {
         if (!listData.ok) return { items: [], totalCount: 0, source: CONNECTOR_NAME };
         const items: ConnectorResult['items'] = [];
         for (const ch of listData.channels ?? []) {
-          const histRes = await fetch(`${SLACK_API}/conversations.history?channel=${encodeURIComponent(ch.id)}&limit=3`, {
-            headers: authHeaders,
-          });
+          const histRes = await hostRequest(
+            `${SLACK_API}/conversations.history?channel=${encodeURIComponent(ch.id)}&limit=3`,
+          );
+          if (!histRes?.ok) return { items: [], totalCount: 0, source: CONNECTOR_NAME };
           const histData = (await histRes.json()) as { ok: boolean; messages?: Array<{ ts: string; text?: string }> };
           if (!histData.ok) continue;
           for (const m of histData.messages ?? []) {
@@ -160,9 +167,10 @@ export class SlackAdapter implements ConnectorAdapter {
       }
 
       // Search by free-text query.
-      const searchRes = await fetch(`${SLACK_API}/search.messages?query=${encodeURIComponent(q)}&count=${limit}`, {
-        headers: authHeaders,
-      });
+      const searchRes = await hostRequest(
+        `${SLACK_API}/search.messages?query=${encodeURIComponent(q)}&count=${limit}`,
+      );
+      if (!searchRes?.ok) return { items: [], totalCount: 0, source: CONNECTOR_NAME };
       const searchData = (await searchRes.json()) as {
         ok: boolean;
         messages?: { matches?: Array<{ ts: string; text?: string; channel?: { name?: string; id?: string }; user?: string }> };
@@ -194,9 +202,4 @@ export class SlackAdapter implements ConnectorAdapter {
     }
   }
 
-  /** 
-   * Token refresh is handled by the Cloudflare Worker OAuth proxy.
-   * This adapter assumes a valid token is injected via filter.token.
-   * @see packages/cloudflare-server/src/index.ts OAuth refresh routes
-   */
 }

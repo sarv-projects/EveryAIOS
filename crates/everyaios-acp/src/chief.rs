@@ -830,7 +830,11 @@ mod tests {
             Some(COWORK_AFFINITY_STEERING),
             Some("- Codex: review passes"),
         );
-        let pos = |needle: &str| prompt.find(needle).unwrap_or_else(|| panic!("missing {needle}"));
+        let pos = |needle: &str| {
+            prompt
+                .find(needle)
+                .unwrap_or_else(|| panic!("missing {needle}"))
+        };
         assert!(pos("<memory_passport>") < pos("## Governance"));
         assert!(pos("## Governance") < pos("## Shared Cowork Capabilities"));
         assert!(pos("## Shared Cowork Capabilities") < pos("## Installed subagent delegation mix"));
@@ -844,7 +848,10 @@ mod tests {
         assert!(prompt.contains("delegate.spawn"));
         // Regression: the block was once injected with literal `\\n` escapes,
         // which arrived in the model's context as backslash-n, not newlines.
-        assert!(!prompt.contains("\\n"), "literal backslash-n leaked into the prompt");
+        assert!(
+            !prompt.contains("\\n"),
+            "literal backslash-n leaked into the prompt"
+        );
     }
 
     #[test]
@@ -1027,8 +1034,7 @@ mod tests {
         };
         // P69.C1 — the host's Guard seam must be attached to approve; the
         // fail-closed default (DenyAllGate) denies without one.
-        let mut chief = AcpChief::spawn(t, client_info())
-            .with_permission_gate(Arc::new(AllowGate));
+        let mut chief = AcpChief::spawn(t, client_info()).with_permission_gate(Arc::new(AllowGate));
         chief.initialize(&"s1".into()).unwrap();
         let h = chief
             .start_session(SessionOptions {

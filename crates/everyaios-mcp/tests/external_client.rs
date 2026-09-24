@@ -85,10 +85,7 @@ fn inspector_cli_lists_catalog_over_stdio() {
         .map(|t| t["name"].as_str().unwrap_or_default())
         .collect();
     assert!(names.contains(&"browser.extract"), "browser façade present");
-    assert!(
-        names.contains(&"office.edit"),
-        "office façade present"
-    );
+    assert!(names.contains(&"office.edit"), "office façade present");
     assert!(
         !names.contains(&"snapshot"),
         "internal primitive not advertised"

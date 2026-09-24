@@ -3,6 +3,10 @@
 > **Status:** Subsystem contract, derived from [`CORE.md`](CORE.md). Owns the agent-side primitives; the
 external protocol surfaces live in [EXTERNAL-AGENTS.md](EXTERNAL-AGENTS.md) and context handoff in
 [CONTEXT.md](CONTEXT.md). Invariants it must not weaken: **I23, I24, I25, I27**.
+>
+> **v1 scope clarification (2026-09-24):** [`ADR/0007`](ADR/0007-windows-first-v1-qualification.md)
+> requires the binding contract to qualify on real Windows, live external agents, and Channel B. A source
+> seam or a provider handshake is not a qualified binding; voice/STT/TTS/wake-word/audio remain post-v1.
 
 ---
 
@@ -92,6 +96,32 @@ first) — `Degraded` serves turns but is not delegable. The state is a runtime 
 and install activity (updating) are UI projections layered on top, never readiness values. EveryAIOS may
 **facilitate** an agent's authentication but never reads or copies its credential store
 ([`ROUTING.md`](ROUTING.md) §4, **I10**).
+
+### 3.2 v1 identity, handle, and lifecycle qualification
+
+The v1 binding contract is one chain, not a collection of adapter-local session ids:
+
+```text
+canonical Session → Work → Run → AgentBinding → provider_session_id
+                                      └─ scoped host handle + cancellation
+```
+
+The application Session id, Work id, Run id, binding id, and provider session id are distinct. A
+provider session is private adapter state; it is never used to identify the canonical Session, and a
+new provider session after restart is not evidence of native resume. A host handle is scoped to its
+Session/binding, and cancellation is addressed to that handle without touching another Session's Work.
+
+`ADR-0007` makes the following release obligations for this chain: reconnect must replay the canonical
+Work event stream and re-attach the same binding; provider resume is attempted only when the negotiated
+ACP capability supports it; otherwise the host continues from a durable checkpoint/ContextPassport and
+labels the provider session as restarted; and Channel B calls must retain the same Work-scoped Guard and
+receipt path. These are qualification requirements, not a new identity type or a second lifecycle owner.
+
+**Current limitation (2026-09-24):** the canonical owner preparation is present in
+`src-tauri/src/acp_cmds.rs` (`prepare_acp_turn`), but the live launch still calls `session/new` with an
+empty MCP-server list, and the production ACP client has no `session/load`/`session/resume` method.
+Cancellation hooks and binding preparation are therefore **implemented — unverified**, not a qualified
+v1 lifecycle. The exact evidence and acceptance condition live in [`ADR/0007`](ADR/0007-windows-first-v1-qualification.md).
 
 ---
 
@@ -308,4 +338,7 @@ tools. Any architecture text implying otherwise is wrong.
   binding is the durable record; `primary_chief` becomes a legacy pointer into it during migration.
 - The binding record is required before `AgentBridge` (`P69.B4`) can be scoped, and before park/resume
   (`P69.B2`) has anywhere to store state.
+- The v1 qualification rule in [`ADR/0007`](ADR/0007-windows-first-v1-qualification.md) keeps this
+  contract attached to the existing Work/Run/Event/Receipt spine; it does not authorize a second
+  binding registry or a provider-owned Session.
 - Schema/durable-store changes follow `P70.C5`.

@@ -26,10 +26,9 @@ use everyaios_blueprint::spec::TaskSpec;
 use everyaios_blueprint::subagent::{
     parent_view, DelegationPolicy, SubAgentError, SubAgentLimits, SubAgentResult, SubAgentSpec,
 };
-use everyaios_core::work_gateway::WorkGateway;
 use everyaios_blueprint::{ScriptLanguage, TaskStatus};
+use everyaios_core::work_gateway::WorkGateway;
 // P71.3f — the delegation gate judges the canonical readiness state.
-use everyaios_types::AgentReadiness;
 use everyaios_core::chat::{ChatRelay, ChatWireEvent};
 use everyaios_core::connector_hub::{ConnectorHub, Engine};
 use everyaios_core::connectors::gmail::GmailConnector;
@@ -42,6 +41,7 @@ use everyaios_core::scheduler_service::{SchedulePolicy, SchedulerService, Trigge
 use everyaios_core::sidecar_link::SidecarLink;
 use everyaios_core::tools::ToolService;
 use everyaios_guard::granter::{CapabilityGranter, GrantRequest, HostGrant, TrustFlags};
+use everyaios_types::AgentReadiness;
 use everyaios_vault::Vault;
 
 // ---------------------------------------------------------------------------
@@ -336,15 +336,33 @@ fn subagent_planner_two_agents_merge_results() {
     ));
 
     // Both children complete: terminal Run events on their own timelines.
-    gw.finish_child_work(&planner.work_id, "child-a", everyaios_types::WorkState::Completed, None)
-        .unwrap();
-    gw.finish_child_work(&planner.work_id, "child-b", everyaios_types::WorkState::Completed, None)
-        .unwrap();
+    gw.finish_child_work(
+        &planner.work_id,
+        "child-a",
+        everyaios_types::WorkState::Completed,
+        None,
+    )
+    .unwrap();
+    gw.finish_child_work(
+        &planner.work_id,
+        "child-b",
+        everyaios_types::WorkState::Completed,
+        None,
+    )
+    .unwrap();
 
     // The planner (parent) sees mergeable summaries — never raw child context.
     let merged: Vec<String> = [
-        (&child_a, "research the storage engine", "storage uses FTS5 + trigram"),
-        (&child_b, "research the guard engine", "guard uses tickets + nonce"),
+        (
+            &child_a,
+            "research the storage engine",
+            "storage uses FTS5 + trigram",
+        ),
+        (
+            &child_b,
+            "research the guard engine",
+            "guard uses tickets + nonce",
+        ),
     ]
     .into_iter()
     .map(|(child, goal, summary)| {
@@ -374,8 +392,14 @@ fn subagent_planner_two_agents_merge_results() {
     // Deterministic child ids: the whole tree is addressable from (parent,
     // task) alone, which is what makes the graph a usable record.
     assert_eq!(planner.work_id, "root-work/subagent/planner");
-    assert_eq!(child_a.work_id, "root-work/subagent/planner/subagent/child-a");
-    assert_eq!(child_b.run_id, "root-work/subagent/planner/subagent/child-b/run");
+    assert_eq!(
+        child_a.work_id,
+        "root-work/subagent/planner/subagent/child-a"
+    );
+    assert_eq!(
+        child_b.run_id,
+        "root-work/subagent/planner/subagent/child-b/run"
+    );
 }
 
 // ---------------------------------------------------------------------------

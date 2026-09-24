@@ -221,7 +221,10 @@ fn scheduler_trigger_registry_survives_crash() {
         Some(1_000),
         "P50.5.6: the occurrence record survives the crash"
     );
-    assert!(!job.paused, "no stuck execution state to reconcile: a trigger plane holds no lease");
+    assert!(
+        !job.paused,
+        "no stuck execution state to reconcile: a trigger plane holds no lease"
+    );
     let _ = std::fs::remove_dir_all(&dir);
     eprintln!("P50.5.6: crashed scheduler trigger registry survived, occurrence recorded");
 }

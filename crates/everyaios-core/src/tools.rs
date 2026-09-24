@@ -171,8 +171,7 @@ pub trait AgentReadinessSource: Send + Sync {
 
 /// The mounted readiness source (P71.3f). `None` ⇒ nothing probed, so every
 /// read is `Unknown` rather than a fabricated state.
-pub type SharedAgentReadiness =
-    Arc<Mutex<Option<Arc<dyn AgentReadinessSource>>>>;
+pub type SharedAgentReadiness = Arc<Mutex<Option<Arc<dyn AgentReadinessSource>>>>;
 
 /// Read one agent's readiness from a shared source (the one accessor both the
 /// relay RPC and the delegation seam use).
@@ -1334,8 +1333,18 @@ impl ToolService {
             }
         }
 
-        if !spec.read_only && ticket_id.is_empty() {
-            return Err("mutating tool requires a consumed ticket".into());
+        // Consumption is always server-owned. In particular, the legacy
+        // caller-supplied `ticketConsumed` flag is not protocol authority and
+        // is deliberately never read. Bind consumption to the canonical tool,
+        // operation, and exact args so another ticket cannot authorize this
+        // dispatch.
+        let operation = operation_of(&spec.operation, &args)?;
+        let context_hash =
+            everyaios_guard::ticket::ticket_context_hash(&spec.id, operation.name(), &hash);
+        {
+            let mut g = self.guard.lock().unwrap_or_else(|e| e.into_inner());
+            g.use_ticket(ticket_id, &context_hash)
+                .map_err(|e| format!("ticket refused: {e}"))?;
         }
 
         if matches!(spec.family, ToolFamily::Connector) {
@@ -1358,16 +1367,6 @@ impl ToolService {
                 .unwrap_or_else(|e| e.into_inner())
                 .invoke(grant_id, &request)
                 .map_err(|e| format!("capability grant refused: {e}"))?;
-        }
-
-        let already = params
-            .get("ticketConsumed")
-            .and_then(Value::as_bool)
-            .unwrap_or(false);
-        if !already {
-            let mut g = self.guard.lock().unwrap_or_else(|e| e.into_inner());
-            g.use_ticket(ticket_id, &hash)
-                .map_err(|e| format!("ticket refused: {e}"))?;
         }
 
         self.reverify_preconditions(ticket_id, &args)?;
@@ -3285,6 +3284,60 @@ mod tests {
         ToolService::new(Arc::new(Mutex::new(GuardService::new())), dir.to_path_buf())
     }
 
+    #[derive(Default)]
+    struct CountingTerminal {
+        calls: std::sync::atomic::AtomicUsize,
+    }
+
+    impl TerminalExecutor for CountingTerminal {
+        fn run(
+            &self,
+            command: &str,
+            label: &str,
+            _origin: crate::terminal::TerminalOrigin,
+        ) -> Result<TerminalRun, String> {
+            self.calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            Ok(TerminalRun {
+                pty_id: "test-pty".into(),
+                profile_id: "test-profile".into(),
+                command: command.to_string(),
+                cwd: ".".into(),
+                exit_code: Some(0),
+                output: label.to_string(),
+                trusted: true,
+            })
+        }
+    }
+
+    fn attach_counting_terminal(service: &mut ToolService, terminal: &Arc<CountingTerminal>) {
+        let backend: Arc<dyn TerminalExecutor> = Arc::clone(terminal);
+        service.attach_terminal(backend);
+    }
+
+    fn approved_preflight(
+        service: &mut ToolService,
+        guard: &Arc<Mutex<GuardService>>,
+        tool_id: &str,
+        args: Value,
+    ) -> Value {
+        let pre = service
+            .handle(
+                "tool/exec",
+                &json!({
+                    "toolId": tool_id,
+                    "sessionId": "s",
+                    "agentId": "a",
+                    "args": args
+                }),
+            )
+            .unwrap();
+        if pre["action"] == "ask" {
+            let ticket_id = pre["ticketId"].as_str().unwrap();
+            assert!(guard.lock().unwrap().approve(ticket_id));
+        }
+        pre
+    }
+
     #[test]
     fn filename_from_url_sanitizes() {
         assert_eq!(
@@ -3721,6 +3774,146 @@ mod tests {
         assert_eq!(first["ok"], true);
         let second = s.handle("tool/commit", &body);
         assert!(second.is_err());
+    }
+
+    #[test]
+    fn forged_ticket_consumed_claim_never_skips_guard() {
+        let dir = tempfile();
+        let terminal = Arc::new(CountingTerminal::default());
+        let mut s = svc(&dir);
+        attach_counting_terminal(&mut s, &terminal);
+        let err = s
+            .handle(
+                "tool/commit",
+                &json!({
+                    "toolId": "script.run",
+                    "ticketId": "forged",
+                    "ticketConsumed": true,
+                    "args": {"code": "printf safe"}
+                }),
+            )
+            .unwrap_err();
+        assert!(err.contains("ticket refused"), "{err}");
+        assert_eq!(terminal.calls.load(std::sync::atomic::Ordering::SeqCst), 0);
+    }
+
+    #[test]
+    fn missing_and_unknown_tickets_never_dispatch() {
+        let dir = tempfile();
+        let terminal = Arc::new(CountingTerminal::default());
+        let mut s = svc(&dir);
+        attach_counting_terminal(&mut s, &terminal);
+        let missing = s
+            .handle(
+                "tool/commit",
+                &json!({"toolId": "script.run", "args": {"code": "printf missing"}}),
+            )
+            .unwrap_err();
+        assert!(missing.contains("ticketId"), "{missing}");
+        let unknown = s
+            .handle(
+                "tool/commit",
+                &json!({
+                    "toolId": "script.run",
+                    "ticketId": "unknown",
+                    "args": {"code": "printf unknown"}
+                }),
+            )
+            .unwrap_err();
+        assert!(unknown.contains("unknown ticket"), "{unknown}");
+        assert_eq!(terminal.calls.load(std::sync::atomic::Ordering::SeqCst), 0);
+    }
+
+    #[test]
+    fn replayed_terminal_ticket_dispatches_only_once() {
+        let dir = tempfile();
+        let guard = Arc::new(Mutex::new(GuardService::new()));
+        let terminal = Arc::new(CountingTerminal::default());
+        let mut s = ToolService::new(Arc::clone(&guard), dir);
+        attach_counting_terminal(&mut s, &terminal);
+        let args = json!({"code": "printf once"});
+        let pre = approved_preflight(&mut s, &guard, "script.run", args.clone());
+        let body = json!({
+            "toolId": "script.run",
+            "ticketId": pre["ticketId"],
+            "argsHash": pre["argsHash"],
+            "args": args
+        });
+        assert_eq!(s.handle("tool/commit", &body).unwrap()["ok"], true);
+        let replay = s.handle("tool/commit", &body).unwrap_err();
+        assert!(replay.contains("already used"), "{replay}");
+        assert_eq!(terminal.calls.load(std::sync::atomic::Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn changed_args_cannot_consume_original_ticket_or_dispatch() {
+        let dir = tempfile();
+        let guard = Arc::new(Mutex::new(GuardService::new()));
+        let terminal = Arc::new(CountingTerminal::default());
+        let mut s = ToolService::new(Arc::clone(&guard), dir);
+        attach_counting_terminal(&mut s, &terminal);
+        let original = json!({"code": "printf original"});
+        let changed = json!({"code": "printf changed"});
+        let pre = approved_preflight(&mut s, &guard, "script.run", original);
+        let err = s
+            .handle(
+                "tool/commit",
+                &json!({
+                    "toolId": "script.run",
+                    "ticketId": pre["ticketId"],
+                    "argsHash": canonical_args_hash(&changed),
+                    "args": changed
+                }),
+            )
+            .unwrap_err();
+        assert!(err.contains("args hash mismatch"), "{err}");
+        assert_eq!(terminal.calls.load(std::sync::atomic::Ordering::SeqCst), 0);
+    }
+
+    #[test]
+    fn ticket_for_another_tool_cannot_dispatch() {
+        #[derive(Default)]
+        struct CountingExternal {
+            calls: std::sync::atomic::AtomicUsize,
+        }
+        impl ExternalToolBackend for CountingExternal {
+            fn call(&self, _tool_id: &str, _args: &Value) -> Result<Value, String> {
+                self.calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                Ok(json!({"called": true}))
+            }
+        }
+
+        let dir = tempfile();
+        let guard = Arc::new(Mutex::new(GuardService::new()));
+        let mut s = ToolService::new(Arc::clone(&guard), dir);
+        let tools = ["custom.write", "custom.other"]
+            .into_iter()
+            .map(|name| ExternalTool {
+                name: name.into(),
+                description: "counted external write".into(),
+                input_schema: json!({"type": "object", "properties": {}}),
+                read_only: false,
+                open_world: true,
+                source: "mcp:test".into(),
+            })
+            .collect::<Vec<_>>();
+        let backend = Arc::new(CountingExternal::default());
+        s.attach_external_server("mcp:test", &tools, Arc::clone(&backend));
+        let args = json!({"value": 1});
+        let pre = approved_preflight(&mut s, &guard, "custom.write", args.clone());
+        let err = s
+            .handle(
+                "tool/commit",
+                &json!({
+                    "toolId": "custom.other",
+                    "ticketId": pre["ticketId"],
+                    "argsHash": pre["argsHash"],
+                    "args": args
+                }),
+            )
+            .unwrap_err();
+        assert!(err.contains("args hash mismatch"), "{err}");
+        assert_eq!(backend.calls.load(std::sync::atomic::Ordering::SeqCst), 0);
     }
 
     #[test]

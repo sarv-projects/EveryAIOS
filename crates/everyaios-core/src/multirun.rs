@@ -265,24 +265,12 @@ mod tests {
 
     #[test]
     fn multirun_rejects_empty_and_mismatched_members() {
-        let empty = MultiRun::new(
-            "run-1",
-            "work-1",
-            vec![],
-            vec![],
-            FuseMode::KeepBest,
-        )
-        .expect_err("no members must fail closed");
+        let empty = MultiRun::new("run-1", "work-1", vec![], vec![], FuseMode::KeepBest)
+            .expect_err("no members must fail closed");
         assert!(empty.contains("at least one"), "got: {empty}");
 
-        let no_work = MultiRun::new(
-            "run-1",
-            "",
-            agents(2),
-            vec![],
-            FuseMode::KeepBest,
-        )
-        .expect_err("the Work is required — Runs belong to it");
+        let no_work = MultiRun::new("run-1", "", agents(2), vec![], FuseMode::KeepBest)
+            .expect_err("the Work is required — Runs belong to it");
         assert!(no_work.contains("requires the Work"), "got: {no_work}");
 
         let mismatched = MultiRun::new(
@@ -293,7 +281,10 @@ mod tests {
             FuseMode::KeepBest,
         )
         .expect_err("one worktree per member is required");
-        assert!(mismatched.contains("one worktree per member"), "got: {mismatched}");
+        assert!(
+            mismatched.contains("one worktree per member"),
+            "got: {mismatched}"
+        );
     }
 
     #[test]
@@ -306,7 +297,10 @@ mod tests {
             FuseMode::Fuse,
         )
         .expect("fan-out of two fits the budget");
-        assert_eq!(run.run_ids, vec!["w/subagent/t/run-0", "w/subagent/t/run-1"]);
+        assert_eq!(
+            run.run_ids,
+            vec!["w/subagent/t/run-0", "w/subagent/t/run-1"]
+        );
         assert_eq!(run.work_id, "w/subagent/t");
     }
 
@@ -326,10 +320,7 @@ mod tests {
 
     #[test]
     fn fuse_attributes_agent_and_run() {
-        let outcomes = vec![
-            run("a", "r-a", "alpha", 0.7),
-            run("b", "r-b", "beta", 0.4),
-        ];
+        let outcomes = vec![run("a", "r-a", "alpha", 0.7), run("b", "r-b", "beta", 0.4)];
         let got = collect(outcomes, FuseMode::Fuse);
         assert!(got.output.contains("## a"), "missing attribution for a");
         assert!(got.output.contains("## b"), "missing attribution for b");

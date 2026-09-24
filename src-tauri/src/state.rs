@@ -57,8 +57,10 @@ pub struct AppState {
     pub guard_service: Arc<Mutex<GuardService>>,
     /// F12/J17 (ACP harness bridge): live ACP agent sessions keyed by handle
     /// id — spawned via `acp_launch`, driven via `acp_prompt`/`acp_cancel`.
-    /// P71.3f — shared with the mounted readiness source, so the live handshake
-    /// state readiness reports is the same map the launch path writes.
+    /// The handle value carries its canonical Session/Work/Binding owner; the
+    /// map is not an agent-id registry. P71.3f — shared with the mounted
+    /// readiness source, so the live handshake state readiness reports is the
+    /// same map the launch path writes.
     pub(crate) acp_sessions: Arc<Mutex<std::collections::HashMap<String, AcpHandle>>>,
     /// H4: Merkle chain of mutations (Excel / ACP-install / undo).
     pub audit: Mutex<everyaios_audit::merkle::MerkleChain>,
@@ -131,4 +133,26 @@ pub struct AppState {
     /// `updater_cmds::PendingUpdateSlot` (different lifetime); this slot only
     /// tracks *that a download is in flight* so a second one can be refused.
     pub pending_update: Mutex<Option<crate::updater_cmds::PendingUpdate>>,
+}
+
+impl AppState {
+    /// Snapshot the handles whose canonical owner belongs to `session_id`.
+    ///
+    /// This is intentionally a projection over the live handle values, not a
+    /// second binding registry. Callers use the returned ids only after the
+    /// map lock is released; provider I/O must never run under this lock.
+    #[allow(dead_code)] // the control-channel writer owns the final call site
+    pub(crate) fn acp_handles_for_session(
+        &self,
+        session_id: &str,
+    ) -> Result<Vec<String>, String> {
+        let sessions = self.acp_sessions.lock().map_err(|e| e.to_string())?;
+        Ok(sessions
+            .iter()
+            .filter_map(|(handle, entry)| {
+                let owner = entry.owner.as_ref()?;
+                (owner.session_id == session_id).then(|| handle.clone())
+            })
+            .collect())
+    }
 }

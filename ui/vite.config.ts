@@ -1,5 +1,8 @@
-import { defineConfig } from "vite";
+import { defineConfig, normalizePath, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
+import { existsSync, readFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import { dirname, join } from "node:path";
 import { fileURLToPath, URL } from "node:url";
 
 // Tauri expects a fixed frontend port for `devUrl` (see src-tauri/tauri.conf.json).
@@ -20,8 +23,120 @@ const host = process.env.TAURI_DEV_HOST;
 // `scripts/check-versions.mjs` fails the build if any consumer drifts.
 import tauriConf from "../src-tauri/tauri.conf.json" with { type: "json" };
 
+const require = createRequire(import.meta.url);
+const monacoDomSanitizePath = require.resolve(
+  "monaco-editor/base/browser/domSanitize.js",
+);
+const monacoVendoredDompurifyPath = require.resolve(
+  "monaco-editor/base/browser/dompurify/dompurify.js",
+);
+const monacoDompurifyImport = "./dompurify/dompurify.js";
+const dompurifyEntryPath = require.resolve("dompurify", {
+  paths: [dirname(monacoDomSanitizePath)],
+});
+const dompurifyDistPath = dirname(dompurifyEntryPath);
+const dompurifyPackagePath = join(dompurifyDistPath, "..", "package.json");
+const dompurifyEsModulePath = join(dompurifyDistPath, "purify.es.mjs");
+const monacoDompurifyReplacementId = "\0everyaios:monaco-dompurify";
+
+function readRequiredFile(path: string, label: string): string {
+  if (!existsSync(path)) {
+    throw new Error(`${label} is missing: ${path}`);
+  }
+  return readFileSync(path, "utf8");
+}
+
+const monacoDomSanitizeSource = readRequiredFile(
+  monacoDomSanitizePath,
+  "Monaco DOMSanitize module",
+);
+const monacoVendoredDompurifySource = readRequiredFile(
+  monacoVendoredDompurifyPath,
+  "Monaco vendored DOMPurify module",
+);
+const monacoDompurifyImportPattern =
+  /\bfrom\s+['"]\.\/dompurify\/dompurify\.js['"]/;
+if (!monacoDompurifyImportPattern.test(monacoDomSanitizeSource)) {
+  throw new Error(
+    "Monaco no longer imports ./dompurify/dompurify.js; the DOMPurify replacement guard must be updated.",
+  );
+}
+if (!/DOMPurify\.version\s*=\s*['"]\d+\.\d+\.\d+['"]/.test(monacoVendoredDompurifySource)) {
+  throw new Error(
+    "Monaco's vendored DOMPurify module is not recognisable; refusing to build without an audited replacement.",
+  );
+}
+
+const dompurifyPackage = JSON.parse(
+  readRequiredFile(dompurifyPackagePath, "DOMPurify package manifest"),
+) as { version?: unknown };
+if (dompurifyPackage.version !== "3.4.16") {
+  throw new Error(
+    `DOMPurify 3.4.16 is required for Monaco replacement; found ${String(dompurifyPackage.version)}.`,
+  );
+}
+
+const monacoDompurifyReplacementSource = readRequiredFile(
+  dompurifyEsModulePath,
+  "isolated DOMPurify replacement",
+);
+if (!/DOMPurify\.version\s*=\s*['"]3\.4\.16['"]/.test(monacoDompurifyReplacementSource)) {
+  throw new Error(
+    "The isolated DOMPurify replacement is not version 3.4.16; refusing to build.",
+  );
+}
+
+function isMonacoDomSanitizeImporter(importer: string | undefined): boolean {
+  if (!importer) return false;
+  const normalizedImporter = normalizePath(importer).split("?", 1)[0];
+  return (
+    normalizedImporter === normalizePath(monacoDomSanitizePath) ||
+    normalizedImporter.endsWith(
+      "/monaco-editor/esm/vs/base/browser/domSanitize.js",
+    )
+  );
+}
+
+function monacoDompurifyReplacement(): Plugin {
+  let expectedImportSeen = false;
+
+  return {
+    name: "everyaios-monaco-dompurify-replacement",
+    enforce: "pre",
+    buildStart() {
+      expectedImportSeen = false;
+    },
+    resolveId(source, importer) {
+      const normalizedSource = source.split("?", 1)[0];
+      if (
+        normalizedSource === monacoDompurifyImport &&
+        isMonacoDomSanitizeImporter(importer)
+      ) {
+        expectedImportSeen = true;
+        // A virtual module keeps Monaco's sanitizer instance separate from
+        // Mermaid's DOMPurify import while still using the audited package.
+        return monacoDompurifyReplacementId;
+      }
+      return null;
+    },
+    load(id) {
+      if (id === monacoDompurifyReplacementId) {
+        return monacoDompurifyReplacementSource;
+      }
+      return null;
+    },
+    buildEnd() {
+      if (!expectedImportSeen) {
+        throw new Error(
+          "Monaco DOMPurify replacement did not run: expected ./dompurify/dompurify.js import was not resolved.",
+        );
+      }
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [react()],
+  plugins: [monacoDompurifyReplacement(), react()],
   // P58.2/P70.A7 — __APP_VERSION__ is compile-time only (see the About section).
   define: {
     __APP_VERSION__: JSON.stringify(tauriConf.version),

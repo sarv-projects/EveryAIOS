@@ -10,12 +10,11 @@ import type {
 } from '@everyaios/core-domain';
 
 /**
- * GitHub connector (personal token or anonymous).
- * Day-0 per spec §12.1. Read-only search + user repos.
+ * GitHub connector (anonymous public read access).
+ * Authenticated GitHub requests are host-mediated and never carry a PAT here.
  */
 const metadataSchema: ConnectorMetadataSchema = {
   fields: [
-    { name: 'token', type: 'string', description: 'GitHub PAT (optional for public)' },
     { name: 'query', type: 'string', description: 'Search term or repo' },
   ],
 };
@@ -24,15 +23,8 @@ export class GitHubAdapter implements ConnectorAdapter {
   readonly name = 'github' as ConnectorName;
   readonly metadataSchema = metadataSchema;
 
-  private token: string | undefined;
-
-  constructor(token?: string) {
-    this.token = token;
-  }
-
   async isAuthorized(_userId: string): Promise<boolean> {
-    // Anonymous works for public data. If token given, assume valid until fetch fails.
-    return true;
+    return true; // Anonymous public access
   }
 
   scoreRelevance(query: UserQuery, _memory: MemoryFact[]): number {
@@ -49,13 +41,11 @@ export class GitHubAdapter implements ConnectorAdapter {
     const filter = (ctx.filter || {}) as Record<string, string | undefined>;
     const qtext = (ctx.query as { text?: string } | undefined)?.text || '';
     const q = (filter.query || qtext || '').trim();
-    const token = filter.token || this.token;
 
     const headers: Record<string, string> = {
       'Accept': 'application/vnd.github+json',
       'User-Agent': 'everyaios-connectors',
     };
-    if (token) headers['Authorization'] = `Bearer ${token}`;
 
     try {
       // Two paths: if looks like "owner/repo" do repo info, else search
@@ -105,12 +95,4 @@ export class GitHubAdapter implements ConnectorAdapter {
     }
   }
 
-  /** 
-   * Token refresh is handled by the Cloudflare Worker OAuth proxy.
-   * This adapter assumes a valid token is injected via filter.token.
-   * @see packages/cloudflare-server/src/index.ts OAuth refresh routes
-   */
-  async refreshToken(_userId: string): Promise<boolean> {
-    return !!this.token;
-  }
 }

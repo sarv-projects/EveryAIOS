@@ -8,9 +8,10 @@ import type {
   UserQuery,
   MemoryFact,
 } from '@everyaios/core-domain';
+import { requestConnector } from '../connection-manager.js';
 
 /**
- * Reddit adapter — OAuth bearer, mobile-friendly community Q&A feed.
+ * Reddit adapter — host-mediated OAuth, mobile-friendly community Q&A feed.
  *
  * Free for personal-use AI tools (Reddit's commercial API rules don't apply
  * to non-commercial end-user rate <100 req/min).
@@ -32,6 +33,7 @@ const REDDIT_API = 'https://oauth.reddit.com';
 
 export class RedditAdapter implements ConnectorAdapter {
   readonly name: ConnectorName = 'reddit';
+  readonly credentialMode = 'host-mediated' as const;
   readonly metadataSchema = metadataSchema;
 
   async isAuthorized(_userId: string): Promise<boolean> {
@@ -57,8 +59,6 @@ export class RedditAdapter implements ConnectorAdapter {
 
   async fetch(ctx: ConnectorContext): Promise<ConnectorResult> {
     const f = (ctx.filter || {}) as { query?: string; subreddit?: string; sort?: string; limit?: number };
-    const token = (f as { token?: string }).token || '';
-    if (!token) return { items: [], totalCount: 0, source: this.name };
     const q = (f.query || '').trim();
     const sort = (f.sort || 'relevance').toLowerCase();
     const limit = Math.min(Math.max(Number(f.limit) || 10, 1), 25);
@@ -71,15 +71,20 @@ export class RedditAdapter implements ConnectorAdapter {
     const url = `${REDDIT_API}${path}?${params.toString()}`;
 
     try {
-      const res = await fetch(url, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'User-Agent': 'PersonalAI/1.0 (https://github.com/sarv-projects/APP)',
-          Accept: 'application/json',
+      const res = await requestConnector({
+        connector: this.name,
+        userId: ctx.userId,
+        request: {
+          url,
+          method: 'GET',
+          headers: {
+            'User-Agent': 'PersonalAI/1.0 (https://github.com/sarv-projects/APP)',
+            Accept: 'application/json',
+          },
         },
-        signal: ctx.signal ?? null,
+        ...(ctx.signal ? { signal: ctx.signal } : {}),
       });
-      if (!res.ok) return { items: [], totalCount: 0, source: this.name };
+      if (!res?.ok) return { items: [], totalCount: 0, source: this.name };
       const raw = (await res.json()) as {
         data?: {
           children?: Array<{
@@ -118,9 +123,4 @@ export class RedditAdapter implements ConnectorAdapter {
     }
   }
 
-  /** 
-   * Token refresh is handled by the Cloudflare Worker OAuth proxy.
-   * This adapter assumes a valid token is injected via filter.token.
-   * @see packages/cloudflare-server/src/index.ts OAuth refresh routes
-   */
 }

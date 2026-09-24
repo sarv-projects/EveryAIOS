@@ -499,7 +499,10 @@ impl DoctorProbe for LiveProbe {
             return Some(if p.is_file() {
                 Ok(p)
             } else {
-                Err(format!("EVERYAIOS_COORDINATOR_BIN points at a missing file: {}", p.display()))
+                Err(format!(
+                    "EVERYAIOS_COORDINATOR_BIN points at a missing file: {}",
+                    p.display()
+                ))
             });
         }
         let exe_suffix = if cfg!(windows) { ".exe" } else { "" };
@@ -520,7 +523,7 @@ impl DoctorProbe for LiveProbe {
             }
         }
         Some(Err(
-            "not in EVERYAIOS_COORDINATOR_BIN or the workspace build output".to_string()
+            "not in EVERYAIOS_COORDINATOR_BIN or the workspace build output".to_string(),
         ))
     }
 }
@@ -628,7 +631,11 @@ mod tests {
             let r = run_doctor("v", &probe);
             let platform = r.checks.iter().find(|c| c.name == "Platform").unwrap();
             assert_eq!(platform.status, Status::Warn, "os={os}");
-            assert!(platform.hint.as_deref().unwrap().contains("SUPPORT-MATRIX.md"));
+            assert!(platform
+                .hint
+                .as_deref()
+                .unwrap()
+                .contains("SUPPORT-MATRIX.md"));
             assert_eq!(r.overall, Status::Warn);
         }
     }

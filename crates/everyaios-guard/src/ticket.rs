@@ -153,14 +153,25 @@ impl AuthorizationTicket {
         true
     }
 
-    /// Does the caller's args hash match the ticket's?
+    /// Does the caller's hash match either the legacy arguments-only binding
+    /// or the server-derived tool/operation/arguments context binding?
     pub fn matches_args(&self, args_hash: &str) -> bool {
-        self.args_hash == args_hash
+        self.args_hash == args_hash || self.matches_context(args_hash)
+    }
+
+    /// Does the caller's hash bind to this ticket's canonical tool, operation,
+    /// and arguments?
+    pub fn matches_context(&self, context_hash: &str) -> bool {
+        ticket_context_hash(&self.tool_id, &self.operation, &self.args_hash) == context_hash
     }
 
     /// Consume the ticket (single-use). Returns false if already used/invalid.
     pub fn consume(&mut self, args_hash: &str) -> bool {
         if !self.is_valid() || !self.matches_args(args_hash) {
+            return false;
+        }
+        if self.matches_context(args_hash) && !self.single_use {
+            self.state = TicketState::Rejected;
             return false;
         }
         if self.single_use {
@@ -237,18 +248,24 @@ impl TicketStore {
             t.state = TicketState::Expired;
             return Err(TicketError::Expired);
         }
-        if t.state == TicketState::Used {
-            return Err(TicketError::AlreadyUsed);
-        }
-        if t.state == TicketState::Revoked {
-            return Err(TicketError::Revoked);
-        }
-        if t.state == TicketState::Pending {
-            return Err(TicketError::NotApproved);
+        match t.state {
+            TicketState::Approved => {}
+            TicketState::Used => return Err(TicketError::AlreadyUsed),
+            TicketState::Revoked => return Err(TicketError::Revoked),
+            TicketState::Pending => return Err(TicketError::NotApproved),
+            TicketState::Rejected => return Err(TicketError::Rejected),
+            TicketState::Expired => return Err(TicketError::Expired),
         }
         if !t.matches_args(args_hash) {
             t.state = TicketState::Rejected;
             return Err(TicketError::ArgsMismatch);
+        }
+        // Context-bound executor consumption is always single-use. Legacy
+        // callers that present only `args_hash` retain their historical
+        // `single_use` behavior.
+        if t.matches_context(args_hash) && !t.single_use {
+            t.state = TicketState::Rejected;
+            return Err(TicketError::NotSingleUse);
         }
         if t.single_use {
             t.state = TicketState::Used;
@@ -396,6 +413,10 @@ pub enum TicketError {
     NotApproved,
     #[error("args hash mismatch")]
     ArgsMismatch,
+    #[error("ticket was already rejected")]
+    Rejected,
+    #[error("context-bound tool consumption requires a single-use ticket")]
+    NotSingleUse,
     #[error("mint refused by profile gate (blocked)")]
     Blocked,
 }
@@ -485,6 +506,12 @@ pub fn hash_args(parts: &[&str]) -> String {
     }
     let out = h.finalize();
     out.iter().map(|b| format!("{b:02x}")).collect()
+}
+
+/// Derive the server-side consumption hash that binds a ticket to the exact
+/// tool, canonical operation, and argument hash it was minted for.
+pub fn ticket_context_hash(tool_id: &str, operation: &str, args_hash: &str) -> String {
+    hash_args(&["ticket-context-v1", tool_id, operation, args_hash])
 }
 
 /// Convenience: build a ticket for a path-scoped operation.
@@ -649,6 +676,68 @@ mod tests {
     fn unknown_rejected() {
         let mut store = TicketStore::new();
         assert_eq!(store.use_ticket("nope", "h"), Err(TicketError::Unknown));
+    }
+
+    #[test]
+    fn expired_ticket_cannot_be_consumed() {
+        let mut expired = approved("expired");
+        expired.expires_at_ms = 1;
+        let context = ticket_context_hash(&expired.tool_id, &expired.operation, &expired.args_hash);
+        let mut store = TicketStore::new();
+        let id = store.mint(expired);
+        assert_eq!(store.use_ticket(&id, &context), Err(TicketError::Expired));
+        assert_eq!(store.get(&id).unwrap().state, TicketState::Expired);
+    }
+
+    #[test]
+    fn context_consumption_binds_tool_operation_and_args() {
+        let valid = approved("valid-context");
+        let context = ticket_context_hash(&valid.tool_id, &valid.operation, &valid.args_hash);
+        let mut store = TicketStore::new();
+        let id = store.mint(valid);
+        assert!(store.use_ticket(&id, &context).is_ok());
+        assert_eq!(store.get(&id).unwrap().state, TicketState::Used);
+
+        for (case, presented) in [
+            (
+                "wrong-tool",
+                ticket_context_hash("fs.write", "delete", "h1"),
+            ),
+            (
+                "wrong-operation",
+                ticket_context_hash("fs.delete", "write", "h1"),
+            ),
+            (
+                "wrong-args",
+                ticket_context_hash("fs.delete", "delete", "h2"),
+            ),
+        ] {
+            let mut store = TicketStore::new();
+            let id = store.mint(approved(case));
+            assert_eq!(
+                store.use_ticket(&id, &presented),
+                Err(TicketError::ArgsMismatch)
+            );
+            assert_eq!(store.get(&id).unwrap().state, TicketState::Rejected);
+            // A rejected ticket cannot later be revived through the legacy raw
+            // argument hash.
+            assert_eq!(store.use_ticket(&id, "h1"), Err(TicketError::Rejected));
+        }
+    }
+
+    #[test]
+    fn context_consumption_requires_single_use() {
+        let mut reusable = approved("reusable");
+        reusable.single_use = false;
+        let context =
+            ticket_context_hash(&reusable.tool_id, &reusable.operation, &reusable.args_hash);
+        let mut store = TicketStore::new();
+        let id = store.mint(reusable);
+        assert_eq!(
+            store.use_ticket(&id, &context),
+            Err(TicketError::NotSingleUse)
+        );
+        assert_eq!(store.get(&id).unwrap().state, TicketState::Rejected);
     }
 
     #[test]

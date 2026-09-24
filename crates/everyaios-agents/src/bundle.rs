@@ -226,10 +226,7 @@ mod tests {
         // An ACP binding projects as an ACP agent.
         let mut bound = b.clone();
         bound.engine = Some(EngineBinding::Acp("claude-code".into()));
-        assert_eq!(
-            bound.definition().unwrap().protocol,
-            AgentProtocol::Acp
-        );
+        assert_eq!(bound.definition().unwrap().protocol, AgentProtocol::Acp);
         // Model-only is not ACP and must never claim to be.
         let mut mo = b;
         mo.engine = Some(EngineBinding::ModelOnly);

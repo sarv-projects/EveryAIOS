@@ -27,7 +27,6 @@ pub mod blueprint;
 // P69.D32 — the runtime verification contract (task manifest, completion
 // status, verifier SDK, surface checks) lives here, upstream of the eval
 // harness: runtime crates link this, never `everyaios-eval`.
-pub mod verify;
 pub mod change_set;
 pub mod checkpoint;
 pub mod crystallize;
@@ -35,6 +34,7 @@ pub mod frontmatter;
 pub mod helpers;
 pub mod inbuilt;
 pub mod iteration;
+pub mod verify;
 // P69.D12 — `jobs`, `kanban`, `swarm`, `workflow` and `loop_pattern` are
 // **declarative patterns over Work/Run/Step**, not runtimes: they carry state
 // machines, merge/reduction policy and validation, but no scheduler, no

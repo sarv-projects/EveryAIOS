@@ -11,10 +11,9 @@
  * OAuth needed only for user-specific actions (likes, playlists, subscriptions).
  *
  * Flow:
- *   1. User taps "Connect YouTube"
- *   2. Enters API key (or pre-configured in app)
- *   3. YT_API_KEY env var set on Cloudflare worker
- *   4. fetch() includes key from context filter.apiKey
+ *   1. User connects YouTube through the host
+ *   2. The API key remains vault-owned
+ *   3. fetch() sends only query intent through the Rust host
  */
 import type {
   ConnectorAdapter,
@@ -24,12 +23,14 @@ import type {
   MemoryFact,
   UserQuery,
 } from '@everyaios/core-domain';
+import { requestConnector } from '../connection-manager.js';
 
 const YT_API = 'https://www.googleapis.com/youtube/v3';
 const CONNECTOR_NAME = 'youtube' as const;
 
 export class YouTubeAdapter implements ConnectorAdapter {
   readonly name = CONNECTOR_NAME;
+  readonly credentialMode = 'host-mediated' as const;
   readonly metadataSchema = {
     fields: [
       { name: 'query', type: 'string' as const, description: 'Search query' },
@@ -52,12 +53,11 @@ export class YouTubeAdapter implements ConnectorAdapter {
   }
 
   async fetch(ctx: ConnectorContext): Promise<ConnectorResult> {
-    const filter = ctx.filter as { query?: string; apiKey?: string; maxResults?: number };
-    const apiKey = filter.apiKey || '';
+    const filter = ctx.filter as { query?: string; maxResults?: number };
     const searchQuery = filter.query || '';
     const maxResults = Math.min(filter.maxResults ?? 10, 50);
 
-    if (!apiKey || !searchQuery) {
+    if (!searchQuery) {
       return { items: [], totalCount: 0, source: CONNECTOR_NAME };
     }
 
@@ -67,10 +67,14 @@ export class YouTubeAdapter implements ConnectorAdapter {
       url.searchParams.set('q', searchQuery);
       url.searchParams.set('maxResults', String(maxResults));
       url.searchParams.set('type', 'video');
-      url.searchParams.set('key', apiKey);
 
-      const res = await fetch(url.toString());
-      if (!res.ok) {
+      const res = await requestConnector({
+        connector: CONNECTOR_NAME,
+        userId: ctx.userId,
+        request: { url: url.toString(), method: 'GET' },
+        ...(ctx.signal ? { signal: ctx.signal } : {}),
+      });
+      if (!res?.ok) {
         // Quota exceeded or error
         return { items: [], totalCount: 0, source: CONNECTOR_NAME };
       }
@@ -107,9 +111,4 @@ export class YouTubeAdapter implements ConnectorAdapter {
     }
   }
 
-  /** 
-   * Token refresh is handled by the Cloudflare Worker OAuth proxy.
-   * This adapter assumes a valid token is injected via filter.token.
-   * @see packages/cloudflare-server/src/index.ts OAuth refresh routes
-   */
 }

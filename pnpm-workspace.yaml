@@ -15,9 +15,13 @@ allowBuilds:
   onnxruntime-node: true
   workerd: true
 
+minimumReleaseAgeExclude:
+  - dompurify@3.4.16
+
 # Force one React types version across the workspace so the ui program sees a
 # single React type identity (mixing @types/react@18 and @19 breaks tsc in the
 # shadcn components).
 overrides:
   "@types/react": "^19.0.0"
   "@types/react-dom": "^19.0.0"
+  dompurify: "3.4.16"

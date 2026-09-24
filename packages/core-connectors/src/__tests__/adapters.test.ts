@@ -4,6 +4,11 @@
  * hit the live APIs.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  setConnectorHostTransport,
+  type ConnectorHostRequest,
+  type ConnectorHostResponse,
+} from '../connection-manager.js';
 import { WikipediaAdapter } from '../adapters/wikipedia-adapter.js';
 import { HackerNewsAdapter } from '../adapters/hacker-news-adapter.js';
 import { PublicHolidaysAdapter } from '../adapters/public-holidays-adapter.js';
@@ -373,7 +378,10 @@ describe('RestCountriesAdapter', () => {
 });
 
 describe('MicrosoftGraphAdapter', () => {
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => {
+    setConnectorHostTransport(null);
+    vi.unstubAllGlobals();
+  });
 
   it('constructs 3 instances with distinct names but shares the subService internals', () => {
     const m = new MicrosoftGraphAdapter('microsoft-mail', 'mail');
@@ -382,88 +390,61 @@ describe('MicrosoftGraphAdapter', () => {
     expect([m.name, c.name, o.name].sort()).toEqual(
       ['microsoft-calendar', 'microsoft-mail', 'microsoft-onedrive'].sort(),
     );
+    expect([m.credentialMode, c.credentialMode, o.credentialMode]).toEqual([
+      'host-mediated',
+      'host-mediated',
+      'host-mediated',
+    ]);
   });
 
-  it('mail subService strips HTML tags and decodes entities in bodyPreview', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        value: [
-          {
-            id: 'msg-1',
-            subject: 'Hello',
-            from: { emailAddress: { name: 'Alice Bob', address: 'alice@example.com' } },
-            receivedDateTime: '2026-07-23T10:00:00Z',
-            bodyPreview: '<p>Hi &amp; welcome to &lt;club&gt;! &quot;hi&quot; &#x1F44B;</p>',
-            webLink: 'https://outlook.example/m1',
-          },
-        ],
+  it('maps a host response using an opaque handle and no token payload', async () => {
+    let hostRequest: ConnectorHostRequest | undefined;
+    setConnectorHostTransport({
+      resolveCredential: async () => ({
+        handle: 'vault:oauth:microsoft-graph:user-1',
+        provider: 'microsoft-graph',
       }),
-    } as Response));
+      request: async (req): Promise<ConnectorHostResponse> => {
+        hostRequest = req;
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            value: [{
+              id: 'msg-1',
+              subject: 'Hello',
+              from: { emailAddress: { name: 'Alice Bob', address: 'alice@example.com' } },
+              receivedDateTime: '2026-07-23T10:00:00Z',
+              bodyPreview: '<p>Hi &amp; welcome to &lt;club&gt;! &quot;hi&quot; &#x1F44B;</p>',
+              webLink: 'https://outlook.example/m1',
+            }],
+          }),
+          text: async () => '{}',
+        };
+      },
+    });
 
-    const a = new MicrosoftGraphAdapter('microsoft-mail', 'mail');
-    const out = await a.fetch({ userId: 'u', query: { text: '' }, filter: { token: 'tok' } });
-    expect(out.items[0]?.title).toBe('Hello');
+    const secret = 'raw-oauth-value';
+    const adapter = new MicrosoftGraphAdapter('microsoft-mail', 'mail');
+    const out = await adapter.fetch({ userId: 'u', query: { text: '' }, filter: { token: secret } });
     const snippet = out.items[0]?.snippet ?? '';
+
+    expect(out.items[0]?.title).toBe('Hello');
     expect(snippet).not.toContain('<p>');
     expect(snippet).toContain('Alice Bob');
     expect(snippet).toContain('& welcome to');
     expect(snippet).toContain('<club>');
     expect(snippet).toContain('"hi"');
+    expect(hostRequest?.credential.handle).toBe('vault:oauth:microsoft-graph:user-1');
+    expect(hostRequest?.request.headers).not.toHaveProperty('Authorization');
+    expect(JSON.stringify(hostRequest)).not.toContain(secret);
   });
 
-  it('calendar subService fetches /me/events and maps fields', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        value: [
-          {
-            id: 'evt-1',
-            subject: 'Standup',
-            start: { dateTime: '2026-07-23T09:00:00Z' },
-            end: { dateTime: '2026-07-23T09:30:00Z' },
-            location: { displayName: 'Room 1' },
-            organizer: undefined,
-            webLink: 'https://outlook.example/e1',
-          },
-        ],
-      }),
-    } as Response));
-
-    const a = new MicrosoftGraphAdapter('microsoft-calendar', 'calendar');
-    const out = await a.fetch({ userId: 'u', query: { text: '' }, filter: { token: 'tok' } });
-    expect(out.items[0]?.metadata?.start).toBe('2026-07-23T09:00:00Z');
-    expect(out.items[0]?.metadata?.location).toBe('Room 1');
-  });
-
-  it('onedrive subService formats file sizes in snippet', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        value: [
-          {
-            id: 'f-1',
-            name: 'report.pdf',
-            size: 2_500_000,
-            lastModifiedDateTime: '2026-07-23T10:00:00Z',
-            webUrl: 'https://onedrive.example/r',
-            file: { mimeType: 'application/pdf' },
-            folder: undefined,
-          },
-        ],
-      }),
-    } as Response));
-
-    const a = new MicrosoftGraphAdapter('microsoft-onedrive', 'onedrive');
-    const out = await a.fetch({ userId: 'u', query: { text: '' }, filter: { token: 'tok' } });
-    expect(out.items[0]?.title).toBe('report.pdf');
-    expect(out.items[0]?.snippet).toContain('File');
-    expect(out.items[0]?.snippet).toContain('2.4 MB');
-  });
-
-  it('returns empty when token is missing', async () => {
-    const a = new MicrosoftGraphAdapter('microsoft-mail', 'mail');
-    const out = await a.fetch({ userId: 'u', query: { text: '' }, filter: {} });
+  it('returns empty rather than accepting a raw token without a host', async () => {
+    const secret = 'raw-oauth-value';
+    const adapter = new MicrosoftGraphAdapter('microsoft-mail', 'mail');
+    const out = await adapter.fetch({ userId: 'u', query: { text: '' }, filter: { token: secret } });
     expect(out.items).toEqual([]);
+    expect(JSON.stringify(out)).not.toContain(secret);
   });
 });

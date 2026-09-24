@@ -61,15 +61,27 @@ jobs:
       - name: Rust workspace tests
         run: cargo test --workspace
         working-directory: crates
-      - name: UI tests
+      - name: Install JS workspace dependencies
         run: |
           npm install -g pnpm bun
           pnpm install
-          (cd ui && npx bun test)
-      - name: Coordinator tests
-        run: (cd packages/coordinator && npx bun test)
+      - name: UI tests
+        run: (cd ui && bun test)
+      - name: Vendored core-* + coordinator tests
+        run: |
+          pnpm --filter './packages/core-*' run build
+          pnpm --filter './packages/core-*' run test
+          pnpm --filter @everyaios/coordinator test
       - name: Security release gate (P50.5.7)
         run: node scripts/e2e/security-gate.mjs
+      # P70.E12 is a publication gate, not a report. `--record` makes any
+      # RUNNABLE or BLOCKED item fail this job; it must not be replaced with a
+      # report-only invocation that exits zero.
+      - name: Release qualification sign-off (P70.E12; fail closed)
+        run: |
+          VERSION="$(node -p "require('./src-tauri/tauri.conf.json').version")"
+          echo "P70.E12: requiring every release-qualification item to be PASS for $VERSION"
+          node scripts/release-qualify.mjs --record "$VERSION"
 
   build:
     name: windows ${{ matrix.target }} (NSIS + MSI)
@@ -80,9 +92,13 @@ jobs:
         include:
           - os: windows-latest
             target: x86_64-pc-windows-msvc
+            vcpkg_triplet: x64-windows-static-md
+            openssl_dir: C:\vcpkg\installed\x64-windows-static-md
             name: windows x64
           - os: windows-latest
             target: aarch64-pc-windows-msvc
+            vcpkg_triplet: arm64-windows-static-md
+            openssl_dir: C:\vcpkg\installed\arm64-windows-static-md
             name: windows arm64
     runs-on: ${{ matrix.os }}
     # N.B. the repo is checked out to `desktop_app/` and every `run:` step
@@ -108,21 +124,63 @@ jobs:
           # (`desktop_app/` = the repo root), so they are repo-relative.
           workspaces: crates, src-tauri
 
+      - name: Verify Rust target toolchain (${{ matrix.target }})
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $target = "${{ matrix.target }}"
+          $installed = @(rustup target list --installed)
+          if ($installed -notcontains $target) {
+            throw "Rust target '$target' is not installed; refusing to build this release leg."
+          }
+          $probeSource = Join-Path $env:RUNNER_TEMP "everyaios-target-probe.rs"
+          $probeBinary = Join-Path $env:RUNNER_TEMP "everyaios-target-probe.exe"
+          Set-Content -LiteralPath $probeSource -Value "fn main() {}"
+          & rustc --target $target $probeSource -o $probeBinary
+          if ($LASTEXITCODE -ne 0) {
+            throw "The Windows runner cannot link Rust target '$target'; refusing to publish this release leg."
+          }
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: desktop_app/ui/package-lock.json
 
-      - name: Install OpenSSL (windows)
+      - name: Install OpenSSL (${{ matrix.vcpkg_triplet }})
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          vcpkg install openssl:x64-windows-static-md
-          echo "OPENSSL_DIR=C:\vcpkg\installed\x64-windows-static-md" >> $env:GITHUB_ENV
-          echo "OPENSSL_STATIC=1" >> $env:GITHUB_ENV
+          $ErrorActionPreference = "Stop"
+          $target = "${{ matrix.target }}"
+          $triplet = "${{ matrix.vcpkg_triplet }}"
+          $opensslDir = "${{ matrix.openssl_dir }}"
+          $expectedTriplet = switch ($target) {
+            "x86_64-pc-windows-msvc" { "x64-windows-static-md" }
+            "aarch64-pc-windows-msvc" { "arm64-windows-static-md" }
+            default { throw "Unsupported Windows target '$target'; refusing to select an OpenSSL triplet." }
+          }
+          if ($triplet -ne $expectedTriplet) {
+            throw "Target '$target' requires vcpkg triplet '$expectedTriplet', not '$triplet'."
+          }
+          if ((Split-Path -Leaf $opensslDir) -ne $expectedTriplet) {
+            throw "OPENSSL_DIR '$opensslDir' does not match the target triplet '$expectedTriplet'."
+          }
+          if (-not (Get-Command vcpkg -ErrorAction SilentlyContinue)) {
+            throw "vcpkg is required to install OpenSSL for '$target'."
+          }
+          & vcpkg install "openssl:$triplet"
+          if ($LASTEXITCODE -ne 0) {
+            throw "vcpkg could not install openssl:$triplet for '$target'."
+          }
+          if (-not (Test-Path -LiteralPath $opensslDir)) {
+            throw "OpenSSL for '$target' was not installed at '$opensslDir'."
+          }
+          "VCPKG_TARGET_TRIPLET=$triplet" >> $env:GITHUB_ENV
+          "OPENSSL_DIR=$opensslDir" >> $env:GITHUB_ENV
+          "OPENSSL_STATIC=1" >> $env:GITHUB_ENV
           $libs = "-Clink-arg=advapi32.lib -Clink-arg=user32.lib -Clink-arg=crypt32.lib -Clink-arg=gdi32.lib"
-          echo "RUSTFLAGS=$libs" >> $env:GITHUB_ENV
+          "RUSTFLAGS=$libs" >> $env:GITHUB_ENV
 
       - name: Setup bun + pnpm
         uses: oven-sh/setup-bun@v2
@@ -173,6 +231,9 @@ jobs:
         run: |
           pnpm install
           (cd ui && npm ci)
+
+      - name: Build vendored core-* packages
+        run: pnpm --filter './packages/core-*' run build
 
       - name: Build coordinator sidecar (bun --compile)
         run: pnpm --filter @everyaios/coordinator build

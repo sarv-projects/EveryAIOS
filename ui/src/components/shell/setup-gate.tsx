@@ -45,7 +45,6 @@ export function SetupGate() {
   const closeSetup = useAppStore((s) => s.closeSetup)
   const setCenterScreen = useAppStore((s) => s.setCenterScreen)
   const setSettingsSection = useAppStore((s) => s.setSettingsSection)
-  const setComposerValue = useAppStore((s) => s.setComposerValue)
   const notify = useAppStore((s) => s.notify)
 
   const [rows, setRows] = useState<AgentRuntime[]>([])
@@ -179,9 +178,10 @@ export function SetupGate() {
   }
 
   const startChatting = () => {
+    // A blocked send intentionally leaves the user's draft in the composer.
+    // Finishing setup should recover that draft, not erase it.
     closeSetup()
     setCenterScreen('chat')
-    setComposerValue('')
   }
 
   const openSettings = (section: SettingsSectionId) => {
@@ -238,6 +238,13 @@ export function SetupGate() {
                 holds its own model and credentials, while EveryAIOS keeps the workspace, the memory
                 and the permission gate. Install or pick one to send your first message.
               </p>
+
+              {!inShell && (
+                <div className="rounded-lg border border-dashed border-border/60 bg-card/40 px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">
+                  Preview inventory only — no row here is proven runnable. Open the desktop app to
+                  discover, install, sign in, and bind an agent.
+                </div>
+              )}
 
               {discovering && (
                 <div className="flex items-center gap-1.5 px-1 font-mono text-[10px] text-muted-foreground">
@@ -296,7 +303,7 @@ export function SetupGate() {
                             <Button
                               size="sm"
                               className="h-6 bg-brand px-2 text-[10px] text-black hover:bg-brand"
-                              disabled={busy}
+                              disabled={!inShell || busy}
                               onClick={() => void bind(row)}
                             >
                               {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
@@ -307,7 +314,7 @@ export function SetupGate() {
                               size="sm"
                               variant="outline"
                               className="h-6 px-2 text-[10px]"
-                              disabled={busy}
+                              disabled={!inShell || busy}
                               onClick={() => void signIn(row)}
                             >
                               {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Lock className="h-3 w-3" />}
@@ -318,7 +325,7 @@ export function SetupGate() {
                               size="sm"
                               variant="outline"
                               className="h-6 px-2 text-[10px]"
-                              disabled={busy}
+                              disabled={!inShell || busy}
                               onClick={() => void install(row)}
                             >
                               {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <ArrowRight className="h-3 w-3" />}

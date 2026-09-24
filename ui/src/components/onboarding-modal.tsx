@@ -42,6 +42,55 @@ import {
 import { AGENTS } from '@/lib/agents'
 import { cn } from '@/lib/utils'
 
+type VaultSetupReceipt = { ok?: boolean; needsSetup?: boolean }
+type VaultInvoker = <T>(command: string, args?: Record<string, unknown>) => Promise<T>
+
+export type OnboardingVaultPath =
+  | { kind: 'passphrase'; passphrase: string }
+  | { kind: 'device-key' }
+
+export interface VaultSetupDependencies {
+  inTauri: () => boolean
+  invoke: VaultInvoker
+}
+
+/**
+ * Run the selected vault path, then mark onboarding complete. Keeping completion
+ * behind this awaited boundary makes a native rejection unable to persist a
+ * false "finished" state. The device-key path verifies an existing usable key;
+ * it does not pretend that an absent OS keyring was provisioned.
+ */
+export async function completeOnboardingAfterVault(
+  path: OnboardingVaultPath,
+  finish: () => void,
+  dependencies: VaultSetupDependencies = { inTauri, invoke },
+): Promise<'passphrase' | 'device-key' | 'preview'> {
+  if (!dependencies.inTauri()) {
+    finish()
+    return 'preview'
+  }
+
+  if (path.kind === 'device-key') {
+    const status = await dependencies.invoke<VaultSetupReceipt>('vault_key_status')
+    if (status.ok !== true || status.needsSetup !== false) {
+      throw new Error(
+        'The device-managed vault key is not available. Enter a master passphrase to create the vault, or restore the device key and retry.',
+      )
+    }
+    finish()
+    return 'device-key'
+  }
+
+  const result = await dependencies.invoke<VaultSetupReceipt>('vault_setup', {
+    passphrase: path.passphrase,
+  })
+  if (result.ok !== true || result.needsSetup !== false) {
+    throw new Error('The desktop did not confirm that vault setup completed.')
+  }
+  finish()
+  return 'passphrase'
+}
+
 const BRAND_WORDS = [
   'EveryAIOS',
   'EveryAgent',
@@ -126,6 +175,7 @@ export function OnboardingModal() {
   const [passphrase, setPassphrase] = useState('')
   const [confirmPassphrase, setConfirmPassphrase] = useState('')
   const [passError, setPassError] = useState<string | null>(null)
+  const [vaultError, setVaultError] = useState<string | null>(null)
   const [vaultBusy, setVaultBusy] = useState(false)
 
   // Cycle brand title animation on Step 0
@@ -236,6 +286,7 @@ export function OnboardingModal() {
 
   const handleSetPassphrase = async (skip = false) => {
     setPassError(null)
+    setVaultError(null)
     if (!skip) {
       if (passphrase.length > 0 && passphrase.length < 8) {
         setPassError('Passphrase must be at least 8 characters')
@@ -249,15 +300,25 @@ export function OnboardingModal() {
 
     setVaultBusy(true)
     try {
-      if (inTauri() && !skip && passphrase.length >= 8) {
-        await invoke('vault_setup', { passphrase })
+      const outcome = await completeOnboardingAfterVault(
+        skip ? { kind: 'device-key' } : { kind: 'passphrase', passphrase },
+        finish,
+      )
+      if (outcome === 'device-key') {
+        notify('Device-managed vault key verified.')
+      } else if (outcome === 'passphrase') {
         notify('Master passphrase set. Vault encrypted.')
       } else {
-        notify('Using transparent OS keychain encryption.')
+        // Browser preview has no vault to create or keychain to exercise. This
+        // completes only the preview walkthrough; it is not native evidence.
+        notify('Preview mode — no desktop vault was changed.')
       }
-      finish()
-    } catch {
-      finish()
+    } catch (error) {
+      const detail = error instanceof Error && error.message
+        ? error.message
+        : 'The desktop shell rejected vault setup.'
+      setVaultError(`Vault setup failed: ${detail}`)
+      notify(`Vault setup failed: ${detail}`, 'error')
     } finally {
       setVaultBusy(false)
     }
@@ -577,7 +638,7 @@ export function OnboardingModal() {
                     <div>
                       <div className="text-xs font-semibold text-foreground">Choose Your Protection Level</div>
                       <p className="text-[11px] text-muted-foreground">
-                        Casual users can skip setting a manual password to use seamless transparent OS Keychain encryption. Power users can lock the vault with a custom master passphrase.
+                        Casual users can leave this blank to use an existing device-managed key. The desktop verifies that key before setup can finish; if none is available, choose a custom master passphrase.
                       </p>
                     </div>
                   </div>
@@ -589,9 +650,12 @@ export function OnboardingModal() {
                       </label>
                       <Input
                         type="password"
-                        placeholder="Leave blank to use seamless OS Keychain"
+                        placeholder="Leave blank to use an existing device key"
                         value={passphrase}
-                        onChange={(e) => setPassphrase(e.target.value)}
+                        onChange={(e) => {
+                          setPassphrase(e.target.value)
+                          setVaultError(null)
+                        }}
                         className="h-8 font-mono text-xs"
                       />
                     </div>
@@ -605,13 +669,29 @@ export function OnboardingModal() {
                           type="password"
                           placeholder="Re-enter passphrase"
                           value={confirmPassphrase}
-                          onChange={(e) => setConfirmPassphrase(e.target.value)}
+                          onChange={(e) => {
+                            setConfirmPassphrase(e.target.value)
+                            setVaultError(null)
+                          }}
                           className="h-8 font-mono text-xs"
                         />
                       </div>
                     )}
 
                     {passError && <p className="text-[10px] text-red-400 font-mono">{passError}</p>}
+                    {vaultError && (
+                      <div
+                        role="alert"
+                        aria-live="assertive"
+                        className="rounded-lg border border-red-500/30 bg-red-500/5 px-3 py-2 text-[10px] leading-relaxed text-red-300"
+                      >
+                        <p className="font-mono">{vaultError}</p>
+                        <p className="mt-1 text-muted-foreground">
+                          Onboarding was not completed. Retry setup; if a custom passphrase still
+                          fails, check the vault folder permissions and available disk space.
+                        </p>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -653,7 +733,13 @@ export function OnboardingModal() {
                   className="bg-brand text-black hover:bg-brand/90 font-semibold"
                 >
                   <Check className="mr-1.5 h-3.5 w-3.5" />
-                  {passphrase.length === 0 ? 'Start (Use OS Keychain)' : 'Set Passphrase & Start'}
+                  {vaultBusy
+                    ? 'Setting up…'
+                    : vaultError
+                      ? 'Retry Setup'
+                      : passphrase.length === 0
+                        ? 'Start (Use Device Key)'
+                        : 'Set Passphrase & Start'}
                 </Button>
               )}
             </div>

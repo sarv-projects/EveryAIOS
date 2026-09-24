@@ -47,7 +47,13 @@ import {
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { useAppStore, streamElapsedMs, sessionTranscriptMarkdown, type ProgressStep, type Session } from '@/lib/store'
 import { inTauri } from '@/lib/tauri'
-import { currentBinding } from '@/lib/acp'
+import {
+  acpIdFor,
+  currentBinding,
+  isAgentReady,
+  readinessLabel,
+  type AgentReadiness,
+} from '@/lib/acp'
 import { AGENT_MAP, MODEL_MAP } from '@/lib/agents'
 import {
   schedulerNudges,
@@ -581,6 +587,8 @@ export default function ChatPanel() {
           sessions above the chat. Hidden while only one session exists. */}
       <SessionTabs />
 
+      {(!isEmpty || store.agentSendBlocker?.code === 'preview') && <AgentSendBlockerBanner />}
+
       {/* P52.17 (UI slice) — Review-changes banner: surfaces this session's
           real pending file mutations (fs_undo_list) with a one-click jump to
           the diff view. Per-hunk Keep/Reject + checkpoint restore remain
@@ -869,8 +877,37 @@ export default function ChatPanel() {
   )
 }
 
+function AgentSendBlockerBanner() {
+  const blocker = useAppStore((s) => s.agentSendBlocker)
+  const activeSessionId = useAppStore((s) => s.activeSessionId)
+  const openSetup = useAppStore((s) => s.openSetup)
+  if (!blocker || blocker.sessionId !== activeSessionId) return null
+
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="flex shrink-0 items-center gap-3 border-b border-warning/30 bg-warning/5 px-3 py-2"
+    >
+      <KeyRound className="h-4 w-4 shrink-0 text-warning" />
+      <div className="min-w-0 flex-1">
+        <div className="text-[11px] font-semibold text-foreground">{blocker.title}</div>
+        <p className="mt-0.5 text-[10px] leading-relaxed text-muted-foreground">{blocker.detail}</p>
+      </div>
+      <Button
+        size="sm"
+        variant="outline"
+        className="h-7 shrink-0 px-2 text-[10px]"
+        onClick={openSetup}
+      >
+        {blocker.code === 'preview' ? 'Preview agents' : 'Fix agent setup'}
+      </Button>
+    </div>
+  )
+}
+
 /**
- * P71.6a / P71.9b — the **unbound** empty state.
+ * P71.6a / P71.9b — the **unbound or not-ready** empty state.
  *
  * The old card here was the zero-install path's blocker: "no provider key
  * configured". That is no longer what stops a turn. In v1 EveryAIOS makes no
@@ -887,30 +924,43 @@ function NoAgentCard() {
   const sessionChiefs = useAppStore((s) => s.sessionChiefs)
   const activeSessionId = useAppStore((s) => s.activeSessionId)
   const userDefaultChief = useAppStore((s) => s.userDefaultChief)
+  const liveAgents = useAppStore((s) => s.liveAgents)
   const openSetup = useAppStore((s) => s.openSetup)
   const setSettingsSection = useAppStore((s) => s.setSettingsSection)
   const setCenterScreen = useAppStore((s) => s.setCenterScreen)
 
-  if (!inTauri()) return null
   // Retired built-in spellings resolve to nothing (`currentBinding`), so a stale
-  // `primary_chief` cannot make this card claim an agent is bound.
+  // `primary_chief` cannot make this card claim an agent is bound. A catalog id
+  // and its registry spelling are the same agent for readiness lookup.
   const bound =
     currentBinding(sessionChiefs[activeSessionId]) ??
     currentBinding(userDefaultChief) ??
     currentBinding(selectedAgentId)
-  if (bound) return null
+  const boundAcpId = bound ? acpIdFor(bound) : undefined
+  const runtime = boundAcpId
+    ? liveAgents.find((agent) => acpIdFor(agent.id) === boundAcpId)
+    : undefined
+  const readiness = runtime?.readiness
+  if (isAgentReady(readiness as AgentReadiness)) return null
+
+  const title = !bound
+    ? 'No runnable agent bound'
+    : !runtime
+      ? `${bound} is not verified as runnable`
+      : `${runtime.name} is not ready`
+  const detail = !bound
+    ? 'Nothing can answer yet: v1 runs your messages through an agent you install or pick, and EveryAIOS ships no built-in engine. The agent does the reasoning and holds its own model and credentials; EveryAIOS keeps the workspace, the memory and the permission gate.'
+    : !runtime
+      ? 'The binding exists, but the desktop has no verified readiness result for it. Rescan agent discovery and finish setup before sending.'
+      : `The binding is ${readinessLabel(readiness)}. Finish that setup before sending; the chat stays idle until the agent is runnable.`
 
   return (
     <div className="fade-up mx-auto w-full max-w-md rounded-xl border border-warning/30 bg-warning/5 px-4 py-3">
       <div className="flex items-center gap-2">
         <KeyRound className="h-4 w-4 text-warning" />
-        <div className="text-[12px] font-semibold text-foreground">No agent bound</div>
+        <div className="text-[12px] font-semibold text-foreground">{title}</div>
       </div>
-      <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
-        Nothing can answer yet: v1 runs your messages through an agent you install or pick, and
-        EveryAIOS ships no built-in engine. The agent does the reasoning and holds its own model and
-        credentials; EveryAIOS keeps the workspace, the memory and the permission gate.
-      </p>
+      <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">{detail}</p>
       <div className="mt-2 flex flex-wrap items-center gap-1.5">
         <Button
           size="sm"

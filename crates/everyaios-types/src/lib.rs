@@ -769,7 +769,11 @@ impl AgentReadiness {
     pub fn is_negotiated(self) -> bool {
         matches!(
             self,
-            Self::ProtocolCompatible | Self::AuthRequired | Self::Authenticating | Self::Ready | Self::Degraded
+            Self::ProtocolCompatible
+                | Self::AuthRequired
+                | Self::Authenticating
+                | Self::Ready
+                | Self::Degraded
         )
     }
 
@@ -1288,7 +1292,10 @@ mod tests {
             last_event_seq: 3,
             private_state_ref: None,
         };
-        assert_ne!(binding.session_id.as_str(), binding.provider_session_id.clone().unwrap());
+        assert_ne!(
+            binding.session_id.as_str(),
+            binding.provider_session_id.clone().unwrap()
+        );
         let _ = serde_json::to_string(&binding).unwrap();
     }
 
@@ -1311,10 +1318,16 @@ mod tests {
             assert_eq!(AgentReadiness::parse(state.as_str()), state);
             let wire = serde_json::to_string(&state).unwrap();
             assert_eq!(wire, format!("\"{}\"", state.as_str()));
-            assert_eq!(serde_json::from_str::<AgentReadiness>(&wire).unwrap(), state);
+            assert_eq!(
+                serde_json::from_str::<AgentReadiness>(&wire).unwrap(),
+                state
+            );
         }
         // A spelling we do not understand is unknown — never ready.
-        assert_eq!(AgentReadiness::parse("probably_fine"), AgentReadiness::Unknown);
+        assert_eq!(
+            AgentReadiness::parse("probably_fine"),
+            AgentReadiness::Unknown
+        );
     }
 
     #[test]
@@ -1379,7 +1392,10 @@ mod tests {
             Some(WorkRunPhase::WaitingUser)
         );
         assert_eq!(WorkState::Verifying.run_phase(), None);
-        assert_eq!(WorkRunPhase::WaitingTool.work_state(), WorkState::WaitingTool);
+        assert_eq!(
+            WorkRunPhase::WaitingTool.work_state(),
+            WorkState::WaitingTool
+        );
 
         // The distinction the contract exists to keep.
         assert!(WorkState::Completed.is_terminal());
@@ -1392,7 +1408,10 @@ mod tests {
 
     #[test]
     fn wait_conditions_name_their_state_and_survive_the_wire() {
-        assert_eq!(WaitReason::Approval.work_state(), WorkState::WaitingApproval);
+        assert_eq!(
+            WaitReason::Approval.work_state(),
+            WorkState::WaitingApproval
+        );
         assert_eq!(WaitReason::UserInput.work_state(), WorkState::WaitingUser);
         // The reasons with no dedicated `Waiting*` state park as Paused.
         for reason in [
@@ -1429,7 +1448,11 @@ mod tests {
     #[test]
     fn session_kind_is_a_record_property_not_a_chat_inference() {
         // Wire round-trip + the default for existing rows.
-        for kind in [SessionKind::Interactive, SessionKind::Automation, SessionKind::Delegated] {
+        for kind in [
+            SessionKind::Interactive,
+            SessionKind::Automation,
+            SessionKind::Delegated,
+        ] {
             let wire = serde_json::to_string(&kind).unwrap();
             assert_eq!(wire, format!("\"{}\"", kind.as_str()));
             assert_eq!(serde_json::from_str::<SessionKind>(&wire).unwrap(), kind);

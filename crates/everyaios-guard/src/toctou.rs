@@ -12,8 +12,9 @@
 //! Holding a live parent-dir file descriptor is the executor's job
 //! (`ToolService`); this module is the serializable snapshot.
 
-use crate::pathfloor::{canonicalize_no_follow, enforce_floor, FloorVerdict};
-use crate::urlfloor::{check_url, UrlVerdict};
+use crate::netfloor::{self, NetPolicy};
+use crate::pathfloor::{FloorVerdict, canonicalize_no_follow, enforce_floor};
+use crate::urlfloor::{UrlVerdict, check_url_with_policy};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::net::{IpAddr, ToSocketAddrs};
@@ -67,6 +68,8 @@ pub enum ToctouError {
     BlockedIp(String),
     #[error("DNS rebinding (host {host} resolved to blocked {ip})")]
     Rebind { host: String, ip: String },
+    #[error("DNS resolution failed for {host}: {message}")]
+    Dns { host: String, message: String },
     #[error("executable digest mismatch")]
     DigestMismatch,
 }
@@ -125,37 +128,62 @@ pub fn reverify_path(binding: &FileBinding, roots: &[&str]) -> Result<(), Toctou
     Ok(())
 }
 
-/// Bind a URL: scheme floor + host + resolved IPs + destination policy.
+/// Bind a URL: canonical scheme floor + host + resolved IPs + destination policy.
 pub fn bind_url(url: &str, roots: &[&str]) -> Result<NetBinding, ToctouError> {
-    match check_url(url, roots) {
+    bind_url_with_policy(url, roots, NetPolicy::default())
+}
+
+/// Bind a URL under an explicit network-destination policy.
+///
+/// Resolution is deliberately fail-closed: an error or an empty DNS answer is
+/// a binding failure, never an empty `resolved_ips` success. The returned IPs
+/// are a verification snapshot; the HTTP/CDP owner must resolve again at its
+/// actual request boundary.
+pub fn bind_url_with_policy(
+    url: &str,
+    roots: &[&str],
+    policy: NetPolicy,
+) -> Result<NetBinding, ToctouError> {
+    match check_url_with_policy(url, roots, policy) {
         UrlVerdict::Allowed => {}
         other => return Err(ToctouError::Url(format!("{other:?}"))),
     }
     let parsed = url::Url::parse(url).map_err(|e| ToctouError::Url(e.to_string()))?;
+    let canonical_url = parsed.to_string();
     let host = parsed.host_str().unwrap_or("").to_string();
-    let mut resolved_ips = Vec::new();
-    if !host.is_empty() {
+    let resolved_ips = if host.is_empty() {
+        Vec::new()
+    } else {
         let port = parsed.port_or_known_default().unwrap_or(80);
-        if let Ok(addrs) = (host.as_str(), port).to_socket_addrs() {
-            for a in addrs {
-                let ip = a.ip();
-                if is_blocked_ip(ip) {
-                    return Err(ToctouError::BlockedIp(ip.to_string()));
-                }
-                resolved_ips.push(ip.to_string());
+        let mut ips = Vec::new();
+        for ip in resolve_ips(&host, port)? {
+            if !policy.allows(netfloor::classify_ip(ip)) {
+                return Err(ToctouError::BlockedIp(ip.to_string()));
             }
+            ips.push(ip.to_string());
         }
-    }
+        ips
+    };
     Ok(NetBinding {
-        url: url.to_string(),
+        url: canonical_url,
         host,
         resolved_ips,
     })
 }
 
-/// Re-resolve and refuse DNS rebinding onto a blocked address.
+/// Re-resolve under the desktop-default policy and refuse a blocked rebound.
 pub fn reverify_url(binding: &NetBinding, roots: &[&str]) -> Result<(), ToctouError> {
-    match check_url(&binding.url, roots) {
+    reverify_url_with_policy(binding, roots, NetPolicy::default())
+}
+
+/// Re-resolve under `policy` and fail closed on DNS errors or a destination
+/// that the canonical netfloor policy refuses.
+pub fn reverify_url_with_policy(
+    binding: &NetBinding,
+    roots: &[&str],
+    policy: NetPolicy,
+) -> Result<(), ToctouError> {
+    match check_url_with_policy(&binding.url, roots, policy) {
         UrlVerdict::Allowed => {}
         other => return Err(ToctouError::Url(format!("{other:?}"))),
     }
@@ -166,18 +194,38 @@ pub fn reverify_url(binding: &NetBinding, roots: &[&str]) -> Result<(), ToctouEr
         .ok()
         .and_then(|u| u.port_or_known_default())
         .unwrap_or(80);
-    if let Ok(addrs) = (binding.host.as_str(), port).to_socket_addrs() {
-        for a in addrs {
-            let ip = a.ip();
-            if is_blocked_ip(ip) {
-                return Err(ToctouError::Rebind {
-                    host: binding.host.clone(),
-                    ip: ip.to_string(),
-                });
-            }
+    for ip in resolve_ips(&binding.host, port)? {
+        if !policy.allows(netfloor::classify_ip(ip)) {
+            return Err(ToctouError::Rebind {
+                host: binding.host.clone(),
+                ip: ip.to_string(),
+            });
         }
     }
     Ok(())
+}
+
+fn resolve_ips(host: &str, port: u16) -> Result<Vec<IpAddr>, ToctouError> {
+    let addrs = (host, port)
+        .to_socket_addrs()
+        .map_err(|e| ToctouError::Dns {
+            host: host.to_string(),
+            message: e.to_string(),
+        })?;
+    let mut resolved = Vec::new();
+    for addr in addrs {
+        let ip = addr.ip();
+        if !resolved.contains(&ip) {
+            resolved.push(ip);
+        }
+    }
+    if resolved.is_empty() {
+        return Err(ToctouError::Dns {
+            host: host.to_string(),
+            message: "resolver returned no addresses".to_string(),
+        });
+    }
+    Ok(resolved)
 }
 
 /// SHA-256 of executable / script source.
@@ -334,6 +382,37 @@ mod tests {
     fn javascript_url_refused() {
         let err = bind_url("javascript:alert(1)", &["/workspace"]).unwrap_err();
         assert!(matches!(err, ToctouError::Url(_)));
+    }
+
+    #[test]
+    fn strict_network_bind_covers_loopback_private_link_local_and_encoding_aliases() {
+        for url in [
+            "http://127.0.0.1/",
+            "http://10.0.0.1/",
+            "http://169.254.169.254/latest/meta-data/",
+            "http://[::1]/",
+            "http://[fe80::1]/",
+            "http://[::ffff:127.0.0.1]/",
+            // Alternate IPv4 and IPv6 encodings normalized by the URL parser.
+            "http://2130706433/",
+            "http://0x7f000001/",
+            "http://0177.0.0.1/",
+            "http://[::ffff:7f00:1]/",
+        ] {
+            assert!(
+                matches!(
+                    bind_url_with_policy(url, &[], NetPolicy::strict()),
+                    Err(ToctouError::Url(_)) | Err(ToctouError::BlockedIp(_))
+                ),
+                "{url} must fail the strict network binding"
+            );
+        }
+    }
+
+    #[test]
+    fn dns_resolution_failure_is_not_an_empty_success() {
+        let err = resolve_ips("not a hostname", 443).unwrap_err();
+        assert!(matches!(err, ToctouError::Dns { .. }), "{err:?}");
     }
 
     #[test]

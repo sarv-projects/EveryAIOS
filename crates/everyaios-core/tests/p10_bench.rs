@@ -440,7 +440,10 @@ fn stress_hundred_scheduled_tasks() {
     eprintln!("[bench] 100 scheduled tasks fired: {elapsed:?}");
     assert_eq!(sched.list().len(), 100, "no jobs lost");
     assert!(
-        sched.list().iter().all(|j| j.last_fired_at == Some(1_700_000_060)),
+        sched
+            .list()
+            .iter()
+            .all(|j| j.last_fired_at == Some(1_700_000_060)),
         "every firing recorded"
     );
     // Heap stays bounded after the burst.

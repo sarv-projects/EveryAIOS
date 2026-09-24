@@ -208,9 +208,7 @@ pub fn store(name: &str) -> Option<&'static StoreSpec> {
 
 /// The stores whose versions are recorded in the manifest.
 pub fn manifest_stores() -> impl Iterator<Item = &'static StoreSpec> {
-    STORES
-        .iter()
-        .filter(|s| s.policy != StorePolicy::Derived)
+    STORES.iter().filter(|s| s.policy != StorePolicy::Derived)
 }
 
 /// One recorded store version.
@@ -432,7 +430,8 @@ mod tests {
     use super::*;
 
     fn tmpdir(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("ea-store-schema-{}-{}", name, std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("ea-store-schema-{}-{}", name, std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         dir
@@ -460,7 +459,11 @@ mod tests {
         for spec in manifest_stores() {
             let stamp = manifest.stores.get(spec.name).expect("recorded");
             assert_eq!(stamp.version, spec.version);
-            assert!(!stamp.adopted, "{} had no data, so it is not adopted", spec.name);
+            assert!(
+                !stamp.adopted,
+                "{} had no data, so it is not adopted",
+                spec.name
+            );
         }
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -472,7 +475,10 @@ mod tests {
         let manifest = ensure_all(&dir).unwrap();
         let stamp = manifest.stores.get("audit").unwrap();
         assert_eq!(stamp.version, storerow("audit").version);
-        assert!(stamp.adopted, "data that predates stamps must be marked adopted");
+        assert!(
+            stamp.adopted,
+            "data that predates stamps must be marked adopted"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -485,7 +491,11 @@ mod tests {
         let before = std::fs::read_to_string(dir.join(STORE_SCHEMA_FILE)).unwrap();
         let err = ensure_all(&dir).unwrap_err();
         match err {
-            StoreSchemaError::NewerThanApp { store, found, supported } => {
+            StoreSchemaError::NewerThanApp {
+                store,
+                found,
+                supported,
+            } => {
                 assert_eq!(store, "memory");
                 assert_eq!(found, 99);
                 assert_eq!(supported, storerow("memory").version);
@@ -493,7 +503,10 @@ mod tests {
             other => panic!("expected NewerThanApp, got {other:?}"),
         }
         let after = std::fs::read_to_string(dir.join(STORE_SCHEMA_FILE)).unwrap();
-        assert_eq!(before, after, "a refused open must not rewrite the manifest");
+        assert_eq!(
+            before, after,
+            "a refused open must not rewrite the manifest"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 

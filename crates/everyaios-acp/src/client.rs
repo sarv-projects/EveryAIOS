@@ -14,6 +14,7 @@ use serde_json::{json, Value};
 use std::collections::VecDeque;
 use std::io::{self, BufReader, Read, Write};
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
+use std::sync::{Arc, Mutex};
 
 #[cfg(target_os = "linux")]
 use everyaios_guard::sandbox::LinuxBwrapBackend;
@@ -38,10 +39,91 @@ pub enum AcpError {
     /// [`AcpSession::authenticate`] with one of the advertised methods.
     #[error("agent requires authentication (auth_required)")]
     AuthRequired,
+    /// The host requested cancellation for the active turn.
+    #[error("ACP turn cancelled")]
+    Cancelled,
 }
 
 /// ACP protocol-specific error codes (official schema).
 const ERROR_AUTH_REQUIRED: i64 = -32000;
+
+/// Transport callback used to write a framed `session/cancel` notification.
+pub type AcpCancelSender = Arc<dyn Fn(&str) -> io::Result<()> + Send + Sync>;
+
+/// A process-independent cancellation hook for an ACP session.
+///
+/// The hook is deliberately separate from [`AcpSession`]: the shell can keep
+/// the session in a per-handle mutex while a prompt is blocked in provider I/O,
+/// then request cancellation without taking that mutex or the global handle-map
+/// lock. Process transports install a writer for the `session/cancel`
+/// notification; scripted transports may omit the writer and still observe the
+/// local cancellation flag.
+#[derive(Clone)]
+pub struct AcpCancelHandle {
+    requested: Arc<std::sync::atomic::AtomicBool>,
+    gate: Arc<Mutex<()>>,
+    sender: Option<AcpCancelSender>,
+}
+
+impl AcpCancelHandle {
+    /// Build a cancellation hook for a custom transport. `sender` receives the
+    /// raw JSON-RPC notification and should write it using the transport's
+    /// framing rules.
+    pub fn new(
+        requested: Arc<std::sync::atomic::AtomicBool>,
+        sender: Option<AcpCancelSender>,
+    ) -> Self {
+        Self {
+            requested,
+            gate: Arc::new(Mutex::new(())),
+            sender,
+        }
+    }
+
+    fn mark_requested(&self) -> io::Result<()> {
+        let _gate = self
+            .gate
+            .lock()
+            .map_err(|_| io::Error::other("ACP cancellation gate poisoned"))?;
+        self.requested
+            .store(true, std::sync::atomic::Ordering::Release);
+        Ok(())
+    }
+
+    /// Request cancellation of `session_id` and return the transport writer's
+    /// result. A missing writer is still a successful local cancellation.
+    pub fn request(&self, session_id: &str) -> io::Result<()> {
+        let _gate = self
+            .gate
+            .lock()
+            .map_err(|_| io::Error::other("ACP cancellation gate poisoned"))?;
+        self.requested
+            .store(true, std::sync::atomic::Ordering::Release);
+        let Some(sender) = &self.sender else {
+            return Ok(());
+        };
+        let message = json!({
+            "jsonrpc": "2.0",
+            "method": "session/cancel",
+            "params": { "sessionId": session_id }
+        });
+        sender(&message.to_string())
+    }
+
+    /// Whether a cancellation has been requested for the current turn.
+    pub fn is_requested(&self) -> bool {
+        self.requested
+            .load(std::sync::atomic::Ordering::Acquire)
+    }
+
+    /// Clear the flag before starting a new turn on the same provider session.
+    pub fn reset(&self) {
+        if let Ok(_gate) = self.gate.lock() {
+            self.requested
+                .store(false, std::sync::atomic::Ordering::Release);
+        }
+    }
+}
 
 /// A bidirectional newline-delimited JSON-RPC transport to an agent.
 pub trait AcpTransport {
@@ -49,6 +131,11 @@ pub trait AcpTransport {
     fn recv(&mut self) -> io::Result<Option<String>>;
     fn is_alive(&mut self) -> bool;
     fn shutdown(&mut self);
+    /// Return a cancellation writer that can be used without borrowing the
+    /// transport. Transports without a concurrent writer may omit it.
+    fn cancellation_handle(&self) -> Option<AcpCancelHandle> {
+        None
+    }
 }
 
 impl<T: AcpTransport + ?Sized> AcpTransport for &mut T {
@@ -64,6 +151,9 @@ impl<T: AcpTransport + ?Sized> AcpTransport for &mut T {
     fn shutdown(&mut self) {
         (**self).shutdown();
     }
+    fn cancellation_handle(&self) -> Option<AcpCancelHandle> {
+        (**self).cancellation_handle()
+    }
 }
 
 /// stdio transport over a spawned agent process (the ACP wire transport).
@@ -71,7 +161,9 @@ pub struct ProcessTransport {
     child: Option<Child>,
     #[cfg(target_os = "linux")]
     monitor: Option<everyaios_guard::sandbox::SandboxProcess>,
-    stdin: ChildStdin,
+    stdin: Arc<Mutex<ChildStdin>>,
+    cancel_sender: Option<AcpCancelSender>,
+    cancel_requested: Arc<std::sync::atomic::AtomicBool>,
     reader: BufReader<ChildStdout>,
     buf: Vec<u8>,
     /// Decoded messages not yet returned to the caller. `decode_messages` can
@@ -96,6 +188,16 @@ impl ProcessTransport {
         let stdin = child.stdin.take().ok_or_else(|| {
             io::Error::new(io::ErrorKind::BrokenPipe, "no stdin on spawned agent")
         })?;
+        let stdin = Arc::new(Mutex::new(stdin));
+        let cancel_stdin = Arc::clone(&stdin);
+        let cancel_sender = Arc::new(move |message: &str| {
+            let mut stdin = cancel_stdin
+                .lock()
+                .map_err(|_| io::Error::other("ACP stdin lock poisoned"))?;
+            stdin.write_all(encode_message(message).as_bytes())?;
+            stdin.flush()
+        });
+        let cancel_requested = Arc::new(std::sync::atomic::AtomicBool::new(false));
         let stdout = child.stdout.take().ok_or_else(|| {
             io::Error::new(io::ErrorKind::BrokenPipe, "no stdout on spawned agent")
         })?;
@@ -104,6 +206,8 @@ impl ProcessTransport {
             #[cfg(target_os = "linux")]
             monitor: None,
             stdin,
+            cancel_sender: Some(cancel_sender),
+            cancel_requested,
             reader: BufReader::new(stdout),
             buf: Vec::new(),
             pending: VecDeque::new(),
@@ -123,10 +227,22 @@ impl ProcessTransport {
         let sandboxed = LinuxBwrapBackend
             .spawn_stdio(spec, command)
             .map_err(|e| io::Error::other(e.to_string()))?;
+        let stdin = Arc::new(Mutex::new(sandboxed.stdin));
+        let cancel_stdin = Arc::clone(&stdin);
+        let cancel_sender = Arc::new(move |message: &str| {
+            let mut stdin = cancel_stdin
+                .lock()
+                .map_err(|_| io::Error::other("ACP stdin lock poisoned"))?;
+            stdin.write_all(encode_message(message).as_bytes())?;
+            stdin.flush()
+        });
+        let cancel_requested = Arc::new(std::sync::atomic::AtomicBool::new(false));
         Ok(Self {
             child: None,
             monitor: Some(sandboxed.monitor),
-            stdin: sandboxed.stdin,
+            stdin,
+            cancel_sender: Some(cancel_sender),
+            cancel_requested,
             reader: BufReader::new(sandboxed.stdout),
             buf: Vec::new(),
             pending: VecDeque::new(),
@@ -136,8 +252,19 @@ impl ProcessTransport {
 
 impl AcpTransport for ProcessTransport {
     fn send(&mut self, json: &str) -> io::Result<()> {
-        self.stdin.write_all(encode_message(json).as_bytes())?;
-        self.stdin.flush()
+        let mut stdin = self
+            .stdin
+            .lock()
+            .map_err(|_| io::Error::other("ACP stdin lock poisoned"))?;
+        stdin.write_all(encode_message(json).as_bytes())?;
+        stdin.flush()
+    }
+
+    fn cancellation_handle(&self) -> Option<AcpCancelHandle> {
+        Some(AcpCancelHandle::new(
+            Arc::clone(&self.cancel_requested),
+            self.cancel_sender.clone(),
+        ))
     }
 
     fn recv(&mut self) -> io::Result<Option<String>> {
@@ -293,10 +420,17 @@ pub struct AcpSession<T: AcpTransport> {
     /// a real agent. Non-matching frames are parked here and drained by
     /// [`AcpSession::prompt_with_content`].
     pending: std::collections::VecDeque<Value>,
+    /// A lock-free cancellation hook owned by the transport, when available.
+    /// It is independent of the mutable session borrow so a host can cancel a
+    /// blocked prompt without taking the global handle-map lock.
+    cancel_handle: AcpCancelHandle,
 }
 
 impl<T: AcpTransport> AcpSession<T> {
     pub fn new(transport: T) -> Self {
+        let cancel_handle = transport
+            .cancellation_handle()
+            .unwrap_or_else(|| AcpCancelHandle::new(Arc::new(std::sync::atomic::AtomicBool::new(false)), None));
         Self {
             transport,
             next_id: 1,
@@ -309,7 +443,20 @@ impl<T: AcpTransport> AcpSession<T> {
             authenticated: false,
             mediator: None,
             pending: std::collections::VecDeque::new(),
+            cancel_handle,
         }
+    }
+
+    /// Clone the cancellation hook for a host that cannot borrow the session
+    /// while a prompt is blocked.
+    pub fn cancellation_handle(&self) -> AcpCancelHandle {
+        self.cancel_handle.clone()
+    }
+
+    /// Clear a previous cancellation request before starting the next turn on
+    /// this provider session.
+    pub fn reset_cancellation(&self) {
+        self.cancel_handle.reset();
     }
 
     /// Attach the host's mediation seam (P69.C2). Attach it **before**
@@ -551,6 +698,9 @@ impl<T: AcpTransport> AcpSession<T> {
         mut on_permission: impl FnMut(&PermissionRequestParams) -> PermissionDecision,
     ) -> Result<PromptOutcome, AcpError> {
         self.ensure_ready()?;
+        if self.cancel_handle.is_requested() {
+            return Err(AcpError::Cancelled);
+        }
         let session_id = self.session_id.clone().ok_or(AcpError::NotReady)?;
         let id = self.next_id;
         self.next_id += 1;
@@ -566,7 +716,11 @@ impl<T: AcpTransport> AcpSession<T> {
         self.transport.send(&req.to_string())?;
 
         let mut outcome = PromptOutcome::default();
+        let mut cancelled = false;
         loop {
+            if self.cancel_handle.is_requested() {
+                cancelled = true;
+            }
             // Anything parked while waiting on a handshake response is handled
             // first, in arrival order — a notification that arrives before a
             // reply must not be lost.
@@ -583,6 +737,9 @@ impl<T: AcpTransport> AcpSession<T> {
             if v.get("id").and_then(Value::as_u64) == Some(id)
                 && (v.get("result").is_some() || v.get("error").is_some())
             {
+                if cancelled || self.cancel_handle.is_requested() {
+                    return Err(AcpError::Cancelled);
+                }
                 if let Some(err) = v.get("error") {
                     return Err(map_error(err));
                 }
@@ -687,13 +844,29 @@ impl<T: AcpTransport> AcpSession<T> {
     pub fn cancel(&mut self) -> Result<(), AcpError> {
         self.ensure_ready()?;
         let session_id = self.session_id.clone().ok_or(AcpError::NotReady)?;
-        let msg = json!({
-            "jsonrpc": "2.0",
-            "method": "session/cancel",
-            "params": { "sessionId": session_id }
-        });
-        self.transport.send(&msg.to_string())?;
+        if self.cancel_handle.sender.is_some() {
+            self.cancel_handle.request(&session_id)?;
+        } else {
+            self.cancel_handle.mark_requested()?;
+            let msg = json!({
+                "jsonrpc": "2.0",
+                "method": "session/cancel",
+                "params": { "sessionId": session_id }
+            });
+            self.transport.send(&msg.to_string())?;
+        }
         Ok(())
+    }
+
+    /// Request cancellation without mutably borrowing the session. This is the
+    /// path used by a host-side stop command while a prompt owns the session
+    /// mutex.
+    pub fn request_cancel(&self) -> Result<(), AcpError> {
+        self.ensure_ready()?;
+        let session_id = self.session_id.as_deref().ok_or(AcpError::NotReady)?;
+        self.cancel_handle
+            .request(session_id)
+            .map_err(AcpError::Io)
     }
 
     /// Is the underlying agent process still alive?
@@ -1380,6 +1553,29 @@ mod tests {
         let last: Value = serde_json::from_str(&t.sent[t.sent.len() - 1]).unwrap();
         assert_eq!(last["method"], "session/cancel");
         assert_eq!(last["params"]["sessionId"], "s1");
+    }
+
+    #[test]
+    fn host_cancellation_is_scoped_and_resettable_per_provider_session() {
+        let mut t = MockTransport::new(vec![
+            &result_response(1, init_result()),
+            &result_response(2, json!({ "sessionId": "provider-1" })),
+            &result_response(3, json!({ "stopReason": "end_turn" })),
+        ]);
+        let mut s = AcpSession::new(&mut t);
+        s.initialize(client_info()).unwrap();
+        s.session_new("/w", vec![]).unwrap();
+        let cancel = s.cancellation_handle();
+        cancel.request("provider-1").unwrap();
+        assert!(cancel.is_requested());
+        assert!(matches!(
+            s.prompt("blocked", |_| PermissionDecision::allow()),
+            Err(AcpError::Cancelled)
+        ));
+
+        s.reset_cancellation();
+        assert!(s.prompt("next", |_| PermissionDecision::allow()).is_ok());
+        assert!(!cancel.is_requested());
     }
 
     /// Real process smoke test: spawn `cat` (echoes stdin) over the newline
