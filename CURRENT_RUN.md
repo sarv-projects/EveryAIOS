@@ -1,5 +1,58 @@
 # CURRENT RUN STATE — Task Handover & Checkpoint
 
+## Staleness Sweep — 2026-09-25 (nothing stale left)
+
+### Reconciliation note (READ FIRST — the board is wrong here)
+The job board may show `exp-8`, `des-5`, `des-6`, `fix-14`, `exp-9` as "unreconciled / evidence
+unreadable". **All five DID return terminal results in-conversation and their work is reviewed, verified,
+and committed.** `task_result`/`task_status` cannot confirm termination (the underlying
+`client.session.status` is not a function). This is a status-API limitation, **not missing work**. Verified
+commit map:
+- `exp-8` (v1 completeness audit) → `da0a103`, `09017a3`, `b9c4402`, `d5b5a63`
+- `des-6` (chat bar + web search) → `fa380c4`
+- `des-5` (right rail run surface) → `638ac78`
+- `fix-14` (`session_load` consumer) → `5d47fb1`
+- `exp-9` (ARCH staleness audit) → applied across `5040712`, `0a77baa`, `2cf93a5`, `e042644`, `c71cb52`
+
+### What the staleness sweep found and fixed
+A line-by-line audit of every live architecture document against the current tree found **phantom feature
+claims** — mechanisms written in the present tense that no code implements. Verified directly, not taken on
+report.
+
+**Fixed (committed):**
+- `15-CONNECT-STORE.md` — retracted the stale "empty `mcpServers`" claim (the retraction existed in two other
+  documents; this one was missed). The real residual is "no live guarded tool call recorded", not "empty list".
+- Design tokens in `UI.md` §10 were **fabricated**: `accent-primary`/`accent-muted` do not exist, the hex
+  values did not exist, and the 5 named accents are actually 7 presets. The real token is `--accent` as HSL
+  triples, and the only spring in the codebase is `{stiffness: 420, damping: 38}` in `cockpit-slideover.tsx`.
+- `UI.md` §2/§3 — there is **no `UIEventEnvelope`** anywhere, and the ACP child discards stderr entirely
+  (`.stderr(Stdio::null())`). The normalization that exists is renderer-side and display-only. Marked
+  specified — not implemented, and the stderr visibility gap is now stated.
+- Content-addressed blob spooling (`~/.everyaios/spool/`, `retrieve_original`) is described as live in six
+  documents and **does not exist**; only a renderer card does. (fix-15 owns the remaining copies.)
+- `12-UI-SPEC.md` — removed the "EveryAIOS Native" model-catalog row and the built-in-runtime slash
+  intercept, both deleted on 2026-09-23 (`P72`).
+- `02-MODULE-LAYOUT.md` — the entire frontend column pointed at `ui/src/screens/*`, a tree deleted in the v2
+  cockpit migration. Repointed at the real `components/{shell,panels,chat}` tree and the real center screens.
+- Mechanical counts, all verified against source: viewports 19 → **22**; Tauri command modules 40/41 → **42**;
+  MCP native tools 52 → **51**; shell version v3.78 → **v4.06**; `chief.ts` → `primary-agent.ts`.
+- `be768b2` — **fixed a real build break**: `src-tauri/src/lib.rs` declared `mod channel_b;` and that file had
+  **never been committed**, so `main` could not compile. Same for `agent-card.ts` and `display-number.ts`,
+  which committed UI files import. This is the clearest example of drift: the docs described P63.11 as landed
+  while the code implementing it was not in the repository.
+
+**Lanes still in flight:** `exp-10` (public/delivery documents) and `fix-15` (phantom claims in
+`05-TOKEN-ECONOMY`, `DESKTOP`, `RECOVERY`, `MEMORY`, `DIAGRAMS`, `04-OFFICE-ENGINE`, `06-SECURITY-GUARDRAILS`).
+
+### Next Exact Steps
+1. Reconcile `fix-15` and `exp-10`; apply their findings; re-run `check-doc-refs` + `check-doc-sync`.
+2. Add a CI gate so these classes cannot recur: a check that every `ARCH/*.md` claim of an implemented
+   mechanism resolves to a real symbol/path, and that viewport/command-module/tool counts are machine-read
+   rather than hand-written in prose.
+3. Then the buildable v1 rows: P64.13, P64.14, P52-R2 (managed-Ollama spawner), P71.10 wiring.
+
+---
+
 ## v1 Push, Session 3 — 2026-09-25 (chat bar, right rail, v1 audit, CI remediation)
 
 ### Reconciliation note (read this first)
