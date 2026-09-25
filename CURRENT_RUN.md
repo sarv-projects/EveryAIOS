@@ -1,5 +1,22 @@
 # CURRENT RUN STATE — Task Handover & Checkpoint
 
+## A28/A30 Docs Handover — 2026-09-25
+
+### Active Goal
+- Land P69.A28 spec deltas + P69.A30 rename-manifest freeze, docs-only, no code.
+
+### Where We Stopped
+- `DESKTOP-APP-SPEC.md`: full legacy manifest frozen (banner + §4.2.5a note), dispatcher/governance prose shrunk to CORE pointers, J17 trait prose → pointer, new behavior deltas for capability-pack UX (§4.2.5a item), AgentBinding/passport (item 4), memory disclosure (§4.2.6), File Workbench (views contract).
+- `ARCH/AGENT.md` §2 + `TEST-CASES.md` Module 1: legacy notes frozen to same manifest.
+- `check-doc-refs` PASS. `check-doc-sync` FAILS only on TODO header drift (header 1649=1353+296, file 1650=1353+297) — drift is from still-running lanes editing TODO.md, NOT this lane. Header fix deferred until fix-1/fix-2 land to avoid write conflict on TODO.md.
+
+### Next Exact Steps
+1. Commit SPEC/AGENT/TEST-CASES + handover now (done below); TODO.md untouched.
+2. After fix-1/fix-2 land: recount, fix TODO header, re-run doc-sync to green.
+3. Then: A30 code rename per recon order, P71.10 UI projection after oracle review, F1-F9.
+
+---
+
 ## Right-Rail Spooled Viewer Handover — 2026-09-25
 
 ### Active Goal

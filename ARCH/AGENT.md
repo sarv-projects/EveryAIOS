@@ -42,10 +42,12 @@ effect governance, because its tools cross the capability plane and an external 
 (**I14**), and (b) zero-install first run. It is not an attempt to out-model frontier agents. On return it
 must obey **I23**/**I24** exactly as an external agent does: one binding, switchable, non-owning.
 
-**Legacy identifiers** (migrated under `P69.A30`, documented here so no reader hunts for a concept that no
-longer exists): `primary_chief`, `AcpChief`, `ChiefAdapter`, the chief module path, the composer's "Chief"
-label, and UI copy naming a "Chief". Until renamed, they are **legacy names for a binding**, and new
-architecture text must not use the word as a concept.
+**Legacy identifiers** (rename manifest frozen under `TODO.md` **P69.A30**, documented here so no reader hunts for a concept that no
+longer exists): `primary_chief`, `AcpChief`, `ChiefAdapter`, `ChiefError`, `ChiefEvent`, `KNOWN_CHIEFS`,
+`chief.ts`, `chief-handoff.ts` / `chief-pin.ts` (and their tests), `userDefaultChief`, the `chief` field of
+`RuntimeManifest`, `chief:*` wire strings (stage prefixes, `chief/*` IPC method names), the chief module path,
+the composer's "Chief" label, and UI copy naming a "Chief". Until renamed, they are **legacy-only names for a
+binding**, and new architecture text must not use the word as a concept.
 
 ---
 
@@ -122,11 +124,18 @@ ACP capability supports it; otherwise the host continues from a durable checkpoi
 labels the provider session as restarted; and Channel B calls must retain the same Work-scoped Guard and
 receipt path. These are qualification requirements, not a new identity type or a second lifecycle owner.
 
-**Current limitation (2026-09-24):** the canonical owner preparation is present in
-`src-tauri/src/acp_cmds.rs` (`prepare_acp_turn`), but the live launch still calls `session/new` with an
-empty MCP-server list, and the production ACP client has no `session/load`/`session/resume` method.
-Cancellation hooks and binding preparation are therefore **implemented — unverified**, not a qualified
-v1 lifecycle. The exact evidence and acceptance condition live in [`ADR/0007`](ADR/0007-windows-first-v1-qualification.md).
+**Current limitation (corrected 2026-09-24 against source):** the canonical owner preparation is present
+in `src-tauri/src/acp_cmds.rs` (`prepare_acp_turn`), and **one half of the earlier limitation has since
+closed**: the production ACP client *does* implement provider resume — `AcpSession::session_load`
+(`crates/everyaios-acp/src/client.rs:1568`, with the `load_session` alias and
+`session_load_with_updates`), gated on the agent having negotiated `agentCapabilities.loadSession`, and
+exercised by `crates/everyaios-acp/tests/acceptance_acp_handshake.rs:123`. `session/resume` is absent by
+policy — it is the ACP v2 method, and v1 is *narrow unsupported v2*
+([`ADR/0007`](ADR/0007-windows-first-v1-qualification.md) §4).
+
+Launch passes the shared-plane server from `channel_b_servers` into `session_new` (`src-tauri/src/acp_cmds.rs`). An empty tool list is no longer the production call. Channel B is still **implemented — unverified** until a live Windows agent completes a guarded tool call on that server. The exact evidence and acceptance condition
+live in [`ADR/0007`](ADR/0007-windows-first-v1-qualification.md); the reusable host-side machinery for the
+fix already exists and is named in [`EXTERNAL-AGENTS.md`](EXTERNAL-AGENTS.md) §10.
 
 ### 3.3 Binding-private state and Work/Run-owned leases
 
@@ -155,7 +164,7 @@ contention rules, and edge-case matrix are in ADR-0008 §§2, 3, and 6.
 |---|---|
 | Session identity, Space, Project associations | `provider_session_id` |
 | Workspace references, current objective, Work | provider transcript |
-| Plan, completed steps, findings, artifacts | native prompt state, native subagents |
+| Plan, completed steps, findings, artifacts | native prompt state, and the agent's own helpers (for example Claude's task tool). Those helpers are not `delegate.spawn`. `delegate.spawn` is a child Work under EveryAIOS |
 | Memory and context snapshot / passport | agent-specific config and internal summaries |
 | Approvals, capability grants, budget | provider-side context cache |
 | Event history, verification results, receipts, usage | native tool bookkeeping, agent-private memory |
@@ -308,30 +317,30 @@ In **Settings → Agents & Models**, each discovered or configured external agen
 │ Roles:           [✓] Allow as Primary      [✓] Enable as Subagent      │
 │ Domain Tags:     [✓] Coding   [✓] Architecture  [ ] Scraping  [ ] Office│
 │ Max Concurrency: [ 2 ] parallel instances                              │
-│ Per-Turn Budget: [ $0.50 max / 50k tokens ]                           │
+│ Per-Turn Budget: [ 50 cents max / 50k tokens ]                        │
 │ Sandbox Scope:   [ Worktree Isolated (Ephemeral) ▾ ]                   │
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
 1. **Dual Role Eligibility (`allow_as_primary` & `enable_as_subagent`):**
-   - **Primary Role:** The agent can be chosen in the top-bar agent selector as the chief conversational and reasoning engine for the active Session.
+   - **Primary Role:** The agent can be chosen as the active AgentBinding for the Session. "Chief" is not a role.
    - **Subagent Role:** The agent can be dynamically hired by the primary agent (via `delegate.spawn` over ACP / loopback MCP Channel B) as a subordinate specialist to execute discrete, bounded tasks.
    - An external agent can be configured for both roles, primary-only, subagent-only, or disabled completely.
 
 2. **Specialist Domain Routing:**
    - External agents register or are configured with domain strengths: `coding` (deep implementation, refactoring), `architecture` (spec audits, structural design), `research` (web search, docs synthesis), `scraping` (browser automation, data extraction), and `office` (spreadsheet modeling, document drafting).
-   - When the primary agent initiates delegation without specifying an explicit agent handle, the router selects the highest-scoring available agent enabled for that domain tag.
+   - When the primary agent omits a target, EveryAIOS admits the one Ready agent that has that domain and `enable_as_subagent`. If none or more than one match, the call is denied with a reason. EveryAIOS does not silently pick a different agent.
 
 3. **Concurrency & Resource Throttling:**
    - Each agent configuration specifies `max_concurrent_instances` (default: 2, range: 1–8).
-   - The scheduler enforces this ceiling to prevent runaway subprocess fan-out, API rate-limit exhaustion, and CPU starvation. Excess delegation requests queue in the Work subsystem or return backpressure to the primary agent.
+   - The delegation policy on the Work gateway enforces this ceiling. The scheduler only starts work. It does not run agents. Excess requests queue on the child Work or return backpressure.
 
 4. **Budget & Token Bounds:**
-   - Hard limits on cost (`max_dollars_per_turn`) and token volume (`max_tokens_per_turn`) protect against infinite agent retry loops.
+   - Hard limits on cost (`max_cents_per_turn`) and token volume (`max_tokens_per_turn`) protect against infinite agent retry loops. The stored unit is cents.
    - When a subagent hits a budget threshold, execution is paused and an approval request is surfaced through Guard-2 to the human cockpit.
 
 5. **Sandbox & Worktree Isolation:**
-   - Delegated coding subagents execute inside isolated Git worktrees (`everyaios-core::worktree`) created off the current branch. Subagents cannot mutate the primary workspace branch directly without an explicit merge step and user review.
+   - Delegated coding subagents execute inside isolated Git worktrees (`everyaios-core` module `worktrees`) created off the current branch. Subagents cannot mutate the primary workspace branch directly without an explicit merge step and user review.
 
 ---
 

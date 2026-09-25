@@ -47,7 +47,7 @@ Testing is organized into **8 orthogonal dimensions**:
 ## 1. Module-by-Module Testing Framework (Modules 1 – 8)
 
 ### Module 1: Universal Agent Hosting & Multi-Agent Swarm Harness
-*Backend: `crates/everyaios-acp`, `packages/coordinator/src/chat.ts` (turn coordination), `packages/coordinator/src/chief.ts` (**legacy filename** for the session agent-binding registry — the *name* is migrated under `TODO.md` P71.5b; the module is the delegation/spawn policy owner) | Frontend: Cockpit Agent Picker & Two-Pane Runtime Configuration*
+*Backend: `crates/everyaios-acp`, `packages/coordinator/src/chat.ts` (turn coordination), `packages/coordinator/src/chief.ts` (**legacy filename** for the session agent-binding registry — part of the frozen legacy-identifier manifest `primary_chief` · `AcpChief` · `ChiefAdapter` · `ChiefError` · `ChiefEvent` · `KNOWN_CHIEFS` · `chief.ts` · `chief-handoff.ts`/`chief-pin.ts` · `userDefaultChief` · the `chief` field of `RuntimeManifest` · `chief:*` wire strings, migrated under `TODO.md` P69.A30; every surviving occurrence is a legacy-only name for the binding — the module is the delegation/spawn policy owner) | Frontend: Cockpit Agent Picker & Two-Pane Runtime Configuration*
 
 | Test ID | Level & Type | Objective | Preconditions | Execution Steps & Verification | Expected Outcome |
 | :--- | :--- | :--- | :--- | :--- | :--- |
