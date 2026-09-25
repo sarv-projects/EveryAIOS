@@ -51,10 +51,26 @@ The primary chat interface renders agent turns as a strictly ordered, clean chro
 
 2. **CLI Terminal Stream Normalization:**
    - External CLI agents communicate over stdio emitting ANSI escapes, terminal clearing sequences, spinners, and raw stderr dumps.
-   - The ACP adapter layer (`everyaios-acp`) normalizes raw stdout/stderr into typed `UIEventEnvelope` structures. Raw terminal output is strictly quarantined inside the collapsible tool execution drawer; the chat surface remains clean, semantic markdown.
+   - **Corrected 2026-09-25 against source.** There is no `UIEventEnvelope` type in the tree, and
+     `everyaios-acp` does **not** normalize raw stdout/stderr — the ACP child is spawned with
+     `.stderr(Stdio::null())` (`crates/everyaios-acp/src/client.rs`), so stderr is discarded at the process
+     boundary. The normalization that *does* exist is **renderer-side** and display-only:
+     `ui/src/components/chat/tool-chip.tsx` exports `stripAnsi` / `normalizeCliStream` (ANSI CSI/OSC
+     stripping, `\r` spinner-frame collapsing, blank-run trimming) and quarantines the result inside the
+     collapsible tool execution drawer. The chat surface stays clean, semantic markdown. A typed ACP-side
+     envelope remains **specified — not implemented**.
+   - Corollary: because the ACP child discards stderr, any CLI diagnostic an agent emits on stderr is
+     **not** observable in the cockpit today. That is a real visibility gap, not a normalization detail.
 
 3. **Large Payload Spooling & Zero CLS Bounding:**
-   - Tool outputs exceeding 2,000 tokens are spooled to content-addressed disk storage (`retrieve_original(hash)`). A compact **Spooled Blob Card** renders in the drawer with summary statistics and an `[Inspect in Right Rail ↗]` action to open Monaco diff or data viewers.
+   - **Spooling is specified — not implemented (2026-09-25).** There is no content-addressed spool, no
+     `~/.everyaios/spool/`, and no `retrieve_original(hash)` anywhere in the tree. What ships is the
+     **renderer-only** path: a tool result over `SPOOL_TOKEN_BUDGET` (2,000 estimated tokens,
+     `ui/src/components/chat/tool-chip.tsx`) renders a **Spooled Blob Card** with statistics, a bounded
+     preview, an `Inspect in Right Rail ↗` action into the `tool-output` viewport, and copy-full-output.
+     The large payload is held in renderer state, never written to disk.
+   - Pre-allocated min-height bounding boxes and skeleton loaders prevent layout shift during high-frequency
+     token streaming (maintaining CLS = 0).
    - Pre-allocated min-height bounding boxes and skeleton loaders prevent layout shift during high-frequency token streaming (maintaining CLS = 0).
 
 4. **Context Passport & Specialist Attribution:**
