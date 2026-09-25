@@ -1,5 +1,13 @@
 # CURRENT RUN STATE — Task Handover & Checkpoint
 
+## P64.4-6 Handover — 2026-09-25 (implemented, test-blocked)
+
+- fix-2 done: P64.4 spec-only spawn context + worktree provision (chat.rs), P64.5 ladder rung in audit payload (tools.rs), P64.6 risk derivation + shadow preflight (tools.rs/execution.rs). Scope clean: 3 files, +594/-32, no UI/session writes.
+- BLOCKED on test verification by fix-1's untracked uncompiling workbench.rs files (6 errors). fix-1 notified to prioritize compiling. No commit.
+- CI analysis delivered: main red from accumulated breakage + our commits' dangling refs; fix-4 (UI HEAD-green) running; TODO/scorer/Rust-test remediation deferred until fix-1/fix-2 land.
+
+---
+
 ## A28/A30 Docs Handover — 2026-09-25
 
 ### Active Goal
