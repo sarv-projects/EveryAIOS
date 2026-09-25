@@ -334,8 +334,8 @@ The chat conversation represents the primary chronological narrative of an agent
 | 🎙 Microphone | Voice-to-text recording — **post-v1**, disabled/honest until qualified |
 | 🔊 Speaker | Read-aloud toggle (H28 — **post-v1**, disabled/honest until qualified; offline sherpa-onnx TTS remains deferred) |
 | ▶ Send | Submit message (Enter also works) |
-| Slash commands | **Agent-dependent (H32).** Built-in runtime bound: EveryAIOS `/help` `/mode` `/model` `/undo` `/compact` `/clear` `/export` (local intercept). ACP agent: live `available_commands_update` list; submit `/name args` as `session/prompt` text — do **not** intercept EveryAIOS slash. No per-harness hardcoded tables. |
-| `!macro` | Knowledge macro expansion (e.g., `!deploy-checklist`) — inbuilt composer only |
+| Slash commands | **Agent-dependent (H32), and v1 has no inbuilt half.** The built-in runtime and its local `/help` `/mode` `/model` `/undo` `/compact` `/clear` `/export` intercept were **deleted 2026-09-23** (`P72` / `P71.2c` — `everyaios-engine` removed, `packages/core-engine` archived), so there is no EveryAIOS-owned slash surface to describe. What ships is the **ACP agent's own** live `available_commands_update` list, submitted as `/name args` in `session/prompt` text, with no local interception and no per-harness hardcoded tables. |
+| `!macro` | Knowledge macro expansion (e.g., `!deploy-checklist`) — **inbuilt composer only, and the inbuilt composer is gone**; this control is not part of the v1 cockpit and is retained here only as post-v1 history. |
 | `@mention` | Workspace file refs (path / ACP resource block when `embeddedContext`); not a per-CLI `@agent` table |
 
 ### 3.4 Chat Modes
@@ -458,14 +458,20 @@ Selecting an agent opens a wide/two-pane view, not another dense card grid:
 ```
 ┌──────────────────────────────┬─────────────────────────────────────────┐
 │ Installed / discovered       │ Claude Code                             │
-│ ● EveryAIOS Native           │ Native capabilities · auth · readiness  │
-│ ● OpenCode · PATH            │ [agent-owned model selector]             │
-│ ● Cline · WSL Ubuntu         │ EveryAIOS shared capabilities            │
-│ ○ Codex · not found          │ [Use vault provider at launch] [Health] │
+│ ● OpenCode · PATH            │ [that agent's own model control, or      │
+│ ● Cline · WSL Ubuntu         │  "managed by this agent"]                │
+│ ○ Codex · not found          │ Sign in / Set up — only the methods      │
+│                              │ that agent advertised                   │
 └──────────────────────────────┴─────────────────────────────────────────┘
 ```
 
-The selected agent's model selector is the only model selector in this view. Native uses EveryAIOS's provider/model catalog; external agents use ACP/config options or their own native account. The vault button is a launch-time binding and displays env-variable names only. The view must expose `path`, `source`, `distro`, `version`, `verified_at`, and `last_error` without exposing secrets.
+The selected agent's model control is the only model control in this view. **There is no "EveryAIOS
+Native" row and no EveryAIOS provider/model catalog here** — the built-in engine was deleted on 2026-09-23
+(`P72`), and [`ADR/0005`](ADR/0005-external-agents-are-the-v1-engines.md) makes the external agent the
+authority for its own provider, model, and sign-in. EveryAIOS offers shared capabilities (Office, browser,
+search, connectors) *to* the agent, never a competing model list. Keys EveryAIOS itself holds are for
+EveryAIOS tools and connectors and are never a model picker for the agent. The view must expose `path`,
+`source`, `distro`, `version`, `verified_at`, and `last_error` without exposing secrets.
 
 ### 4.1a.2 Session capability pane
 
