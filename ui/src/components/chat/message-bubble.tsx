@@ -929,15 +929,19 @@ const MessageBubble = memo(function MessageBubble({ message, streaming }: Props)
             {message.citations.map((c) => (
               <li key={c.index} id={citationAnchorId(c.index)} className="flex gap-1.5">
                 <span className="font-mono text-muted-foreground">[^{c.index}]</span>
-                <a
-                  href={c.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="min-w-0 truncate text-brand underline-offset-2 hover:underline"
+                {/* A citation opens in the rail's Browse surface, not a bare
+                    webview navigation: `openInBrowser` routes through
+                    `browser_navigate`, which is a Guard/netfloor-mediated
+                    command, and it uses the app profile rather than handing the
+                    URL to the user's default browser. */}
+                <button
+                  type="button"
+                  onClick={() => useAppStore.getState().openInBrowser(c.url)}
+                  className="min-w-0 truncate text-left text-brand underline-offset-2 hover:underline"
                   title={c.snippet ?? c.url}
                 >
                   {c.title}
-                </a>
+                </button>
               </li>
             ))}
           </ol>
