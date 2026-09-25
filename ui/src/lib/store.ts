@@ -50,6 +50,11 @@ export type ViewId =
   | 'artifact'
   | 'desktop'
   | 'tool-output'
+  /** The one run surface: identity, context/usage, ordered trace steps,
+   * artifacts, workspace files, and MCP servers for the current run. An
+   * aggregation **projection** — progress / trajectory / diff / artifact /
+   * tool-output stay reachable as drill-down lenses from it. */
+  | 'run'
 
 /** v3.57 Work Mode (WHAT) — Code/browser/Office/terminal live *inside* Build. */
 export type ChatMode = 'auto' | 'plan' | 'build' | 'research'

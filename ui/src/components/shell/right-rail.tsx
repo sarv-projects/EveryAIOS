@@ -30,6 +30,7 @@ import {
   RotateCw,
   Trash2,
   Wrench,
+  SquareActivity,
 } from 'lucide-react'
 import {
   Tooltip,
@@ -81,6 +82,10 @@ const XlsxView = React.lazy(() => import('@/components/views/office-xlsx-view'))
 const PdfView = React.lazy(() => import('@/components/views/office-pdf-view'))
 const GenerativeView = React.lazy(() => import('@/components/views/generative-view'))
 const ArtifactView = React.lazy(() => import('@/components/views/artifact-view'))
+// The one run surface: identity, context/usage, ordered trace steps, produced
+// files, working folder, and MCP servers for the current run. It aggregates;
+// progress / trajectory / diff / artifact / tool-output stay as drill-downs.
+const RunView = React.lazy(() => import('@/components/views/run-view'))
 const DesktopView = React.lazy(() => import('@/components/views/desktop-view'))
 
 interface RailItem {
@@ -116,7 +121,7 @@ export type NarrowRightTab = (typeof NARROW_RIGHT_TABS)[number]['id']
 
 export function narrowTabForView(view: ViewId): NarrowRightTab {
   if (view === 'folder') return 'files'
-  if (view === 'progress' || view === 'trajectory' || view === 'diff' || view === 'audit' || view === 'storage' || view === 'timeline' || view === 'kanban' || view === 'blueprint' || view === 'local-server' || view === 'tool-output') return 'tools'
+  if (view === 'progress' || view === 'trajectory' || view === 'diff' || view === 'audit' || view === 'storage' || view === 'timeline' || view === 'kanban' || view === 'blueprint' || view === 'local-server' || view === 'tool-output' || view === 'run') return 'tools'
   return 'preview'
 }
 
@@ -234,6 +239,7 @@ const VIEW_META: Record<ViewId, { label: string; icon: React.ElementType }> = {
   artifact: { label: 'Artifact', icon: MonitorSmartphone },
   desktop: { label: 'Computer use', icon: MonitorSmartphone },
   'tool-output': { label: 'Tool output', icon: FileText },
+  run: { label: 'Run', icon: SquareActivity },
 }
 
 function ViewportContent({ view }: { view: ViewId }) {
@@ -273,6 +279,7 @@ function renderView(view: ViewId) {
     case 'artifact': return <ArtifactView />
     case 'desktop': return <DesktopView />
     case 'tool-output': return <ToolOutputView />
+    case 'run': return <RunView />
     default:
       return (
         <div className="grid h-full w-full place-items-center p-6 text-center">
@@ -695,6 +702,10 @@ export function RightViewport({ narrow = false }: { narrow?: boolean } = {}) {
         label: 'Export log',
         action: exportWorkLog,
       },
+      // The run surface aggregates this timeline, so it is reachable from here.
+      // No new rail icon: a view opens when it is used (ARCH/12 §4.0), and the
+      // "+ Add view" menu is the sanctioned slot.
+      { icon: SquareActivity, label: 'Run summary', action: () => addView('run') },
     ],
     timeline: [
       { icon: Activity, label: 'Progress', action: () => setActiveView('progress') },
