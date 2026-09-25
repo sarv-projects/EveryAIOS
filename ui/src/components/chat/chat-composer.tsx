@@ -1,11 +1,12 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { classifyAttachment, validateImage } from '@/lib/attachments'
 import {
   ArrowUp,
-  CircleDollarSign,
   FileText,
+  Info,
+  KeyRound,
   Mic,
   Plus,
   TerminalSquare,
@@ -14,18 +15,30 @@ import {
 import type { PermissionMode } from '@/lib/ui-prefs'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
-import { useAppStore, sessionTranscriptMarkdown, type ChatMode } from '@/lib/store'
+import { useAppStore, type AgentSendBlocker, type ChatMode } from '@/lib/store'
 import { cn } from '@/lib/utils'
 import { fuzzyRank } from '@/lib/fuzzy'
 import { splitAtRefs } from '@/lib/at-refs'
 import AgentModelPicker from './agent-model-picker'
 import PendingQueueChips from './pending-queue-chips'
+import ComposerTelemetry from './composer-telemetry'
+import WebSearchControl from './web-search-control'
 import { sendUserMessage } from '@/lib/bridge'
-import { currentBinding } from '@/lib/acp'
-import { getModelsForAgent } from '@/lib/agents'
+import {
+  acpIdFor,
+  currentBinding,
+  isAgentReady,
+  readinessLabel,
+  type AgentReadiness,
+} from '@/lib/acp'
 import { PLAIN_AUTONOMY_ORDER, toPlainAutonomy } from '@/lib/plain-language'
 import { inTauri } from '@/lib/tauri'
 import { captureUtterance, voiceProcessUtterance } from '@/lib/voice'
+import {
+  WEB_SEARCH_DEFAULT,
+  webSearchDirective,
+  type WebSearchStatus,
+} from '@/lib/search-controls'
 
 /** v3.57 Work Mode — WHAT. Code/browser/Office/terminal are capabilities inside Build. */
 const WORK_MODES: { id: ChatMode; emoji: string; label: string; hint: string }[] = [
@@ -50,6 +63,105 @@ const MENTIONS: { cmd: string; desc: string; icon: LucideIcon }[] = [
 export { splitAtRefs } from '@/lib/at-refs'
 // (Re-exported for the P53.8 test path — the composer imports it from the lib.)
 
+// ---------------------------------------------------------------------------
+// The send gate — one table, one wording
+// ---------------------------------------------------------------------------
+
+export type SendGateCode =
+  | 'empty'
+  | 'unbound'
+  | 'readiness-unknown'
+  | 'not-ready'
+  | 'preview'
+
+export interface SendGate {
+  /** True only when a turn can actually start. */
+  ok: boolean
+  code: SendGateCode
+  /** One line for the status row. */
+  title: string
+  /** The sentence that says why, in plain words. */
+  detail: string
+  agentId?: string
+  /** Whether the row offers the "choose an agent" action. */
+  actionable: boolean
+}
+
+const GATE_OK: SendGate = {
+  ok: true,
+  code: 'empty',
+  title: '',
+  detail: '',
+  actionable: false,
+}
+
+export interface SendGateInput {
+  hasContent: boolean
+  /** The bound agent, or `null` when the chat resolves to nothing. */
+  boundAgentId: string | null
+  /** The agent's display name when the live catalog knows it. */
+  agentName?: string
+  /** The canonical readiness from the live catalog (P71.3f). */
+  readiness?: AgentReadiness
+  /** A Tauri shell is attached (the turn cannot run in a browser preview). */
+  live: boolean
+}
+
+/**
+ * Can this composer start a turn right now?
+ *
+ * The chat bar is the most trusted surface in the product, so it may not look
+ * sendable and then quietly refuse (or worse, queue a turn nothing will ever
+ * run). The same four questions the turn path asks (`bridge.sendUserMessage` /
+ * P71.2c, ADR-0005 §1) are answered here, in one table, so the bar can state
+ * the reason *before* the user presses send.
+ */
+export function composerSendState(input: SendGateInput): SendGate {
+  if (!input.hasContent) return { ...GATE_OK, code: 'empty' }
+  if (!input.boundAgentId) {
+    return {
+      ok: false,
+      code: 'unbound',
+      title: 'No agent is bound to this chat',
+      detail:
+        'Pick an installed, ready agent first — v1 runs your message through the agent you choose, and the desktop has no built-in engine to fall back to.',
+      actionable: true,
+    }
+  }
+  if (!input.live) {
+    return {
+      ok: false,
+      code: 'preview',
+      title: 'Preview cannot run an agent',
+      detail: 'This is a browser preview. Open the desktop app to send this to your agent.',
+      agentId: input.boundAgentId,
+      actionable: false,
+    }
+  }
+  if (input.readiness === undefined) {
+    return {
+      ok: false,
+      code: 'readiness-unknown',
+      title: `${input.agentName ?? input.boundAgentId} is not verified as runnable`,
+      detail:
+        'The agent is bound, but the desktop has no readiness result for it yet. Rescan agent discovery and finish setup before sending.',
+      agentId: input.boundAgentId,
+      actionable: true,
+    }
+  }
+  if (!isAgentReady(input.readiness)) {
+    return {
+      ok: false,
+      code: 'not-ready',
+      title: `${input.agentName ?? input.boundAgentId} is not ready`,
+      detail: `The binding is ${readinessLabel(input.readiness)}. Finish that setup before sending — the chat stays idle until the agent can run.`,
+      agentId: input.boundAgentId,
+      actionable: true,
+    }
+  }
+  return GATE_OK
+}
+
 function HintPopover({ title, children }: { title: string; children: ReactNode }) {
   return (
     <div className="absolute bottom-full left-2 z-30 mb-1.5 w-64 overflow-hidden rounded-md border border-border bg-popover shadow-lg">
@@ -71,7 +183,7 @@ function HintRow({ item, onSelect }: { item: HintItem; onSelect: (command: strin
       onClick={() => onSelect(item.cmd)}
       className="flex w-full items-center gap-2 px-2 py-1 text-left hover:bg-accent/60"
     >
-      {Icon && <Icon className="h-3 w-3 text-muted-foreground" />}
+      {Icon && <Icon className="h-3 w-3 text-muted-foreground" aria-hidden="true" />}
       <span className={cn('font-mono text-[11px]', item.color ?? 'text-brand')}>{item.cmd}</span>
       <span className="ml-auto truncate text-[10px] text-muted-foreground">{item.desc}</span>
     </button>
@@ -207,14 +319,97 @@ function IconBtn({ icon: Icon, label, onClick, hidden, active, disabled, title }
       onClick={disabled ? undefined : onClick}
       disabled={disabled}
       title={title ?? label}
+      // Every icon-only control names itself: the title is a tooltip, the
+      // accessible name is what a screen reader reads out.
+      aria-label={label}
       aria-disabled={disabled}
     >
-      <Icon className="h-3.5 w-3.5" />
+      <Icon className="h-3.5 w-3.5" aria-hidden="true" />
     </Button>
   )
 }
 
+/**
+ * The composer's status row.
+ *
+ * One fixed height, always present, so a state change never moves the bar
+ * (CLS = 0). Its content is the single most important truth about the bar:
+ * why a message cannot be sent, what a running turn is doing with the queue,
+ * and — when a turn is in flight — which autonomy level is actually frozen
+ * into it (P44.6: a live bar change never mutates a running Work).
+ */
+function StatusRow({
+  gate,
+  agentBusy,
+  queuedCount,
+  frozenAutonomy,
+  liveAutonomy,
+  onFix,
+}: {
+  gate: SendGate
+  agentBusy: boolean
+  queuedCount: number
+  frozenAutonomy?: PermissionMode
+  liveAutonomy: PermissionMode
+  onFix: () => void
+}) {
+  const frozenDiffers = frozenAutonomy !== undefined && frozenAutonomy !== liveAutonomy
+  return (
+    <div
+      id="composer-status"
+      role="status"
+      aria-live="polite"
+      className="flex h-6 items-center gap-1.5 overflow-hidden border-t border-border/70 px-2 font-mono text-[9px] text-muted-foreground"
+    >
+      {!gate.ok ? (
+        <>
+          <Info className="h-3 w-3 shrink-0 text-warning" aria-hidden="true" />
+          <span className="shrink-0 font-medium text-warning">{gate.title}</span>
+          <span className="hidden min-w-0 truncate sm:inline">· {gate.detail}</span>
+          {gate.actionable && (
+            <button
+              type="button"
+              onClick={onFix}
+              className="ml-auto flex shrink-0 items-center gap-1 rounded px-1 py-0.5 text-[9px] text-muted-foreground hover:bg-accent hover:text-foreground"
+            >
+              <KeyRound className="h-2.5 w-2.5" aria-hidden="true" />
+              Choose an agent
+            </button>
+          )}
+        </>
+      ) : agentBusy ? (
+        <>
+          <Info className="h-3 w-3 shrink-0 text-brand" aria-hidden="true" />
+          <span className="min-w-0 truncate">
+            Working — sends are queued and start when this turn finishes
+            {queuedCount > 0 ? ` (${queuedCount} waiting)` : ''}
+            {frozenDiffers
+              ? ` · this turn runs at “${toPlainAutonomy(frozenAutonomy!).label}”`
+              : ''}
+          </span>
+        </>
+      ) : (
+        <>
+          <span className="hidden sm:inline">Enter send · Shift+Enter newline · Esc clear</span>
+          <span className="hidden sm:inline">·</span>
+          <span className="hidden min-w-0 truncate sm:inline">
+            Tab completes · @ mention · / command · ! macro
+          </span>
+        </>
+      )}
+    </div>
+  )
+}
+
 interface Props {
+  /**
+   * The shell's live usage figures. Only `tokens` is painted, and only as a
+   * measurement: `spent` and `cap` arrive without provenance (the bridge seeds
+   * `cap` with a constant, and `spent` is our own arithmetic over configured
+   * prices), so the bar reads the cost through `spend.costReadout` instead —
+   * which separates *reported* from *estimated* from *unknown*. A `$0.00` here
+   * used to mean "no report", not "no spend".
+   */
   budget?: { spent: number; cap: number; tokens: number }
   /** Center-lift the composer on the empty/new-chat state; bottom-pin once chat starts */
   centered?: boolean
@@ -239,25 +434,72 @@ export default function ChatComposer({ budget, centered }: Props) {
   // WP1 — casual mode collapses the three-control contract to one plain dial.
   // Power mode keeps Agent · Work Mode · Autonomy exactly as they were.
   const powerMode = useAppStore((s) => s.powerMode)
+  // P44.6 — the autonomy actually frozen into the running Work. A live change
+  // in the bar applies to the next message, never to the turn in flight.
+  const frozenAutonomy = useAppStore((s) =>
+    agentBusy ? s.taskSnapshot?.autonomyLevel : undefined,
+  )
+  const liveAutonomy = useAppStore((s) => s.permissionMode)
+  const openSetup = useAppStore((s) => s.openSetup)
+  const setCenterScreen = useAppStore((s) => s.setCenterScreen)
+  const setSettingsSection = useAppStore((s) => s.setSettingsSection)
 
-  const spent = budget?.spent ?? activeSession?.spent ?? 0
-  const cap = budget?.cap ?? 5
-  const tokens = budget?.tokens ?? activeSession?.tokens ?? 0
+  // The one bound agent. `selectedAgentId` is what the picker sets; a chat pin
+  // and the user default are how that choice is carried, and `currentBinding`
+  // is the single predicate that refuses the retired built-in spellings — the
+  // same resolution the turn path uses, so the bar and the turn can never
+  // disagree about who is answering.
+  const boundAgentId = useAppStore((s) => {
+    const sid = s.activeSessionId
+    return (
+      currentBinding(s.sessionChiefs[sid]) ??
+      currentBinding(s.userDefaultChief) ??
+      currentBinding(s.selectedAgentId)
+    )
+  })
+  const boundAgentName = useAppStore((s) => {
+    const id = boundAgentId
+    if (!id) return undefined
+    const acpId = acpIdFor(id)
+    return s.liveAgents.find((a) => acpIdFor(a.id) === acpId)?.name ?? id
+  })
+  const boundReadiness = useAppStore((s) => {
+    const id = boundAgentId
+    if (!id) return undefined
+    const acpId = acpIdFor(id)
+    return s.liveAgents.find((a) => acpIdFor(a.id) === acpId)?.readiness
+  })
 
-  // Context-window gauge (P1.6 parity): % of the current model's window used.
-  // Amber ≥75% (start planning compaction), loud red ≥90% (loop risk).
-  const selectedAgentId = useAppStore((s) => s.selectedAgentId)
-  const selectedModelId = useAppStore((s) => s.selectedModelId)
-  const ctxWindow =
-    getModelsForAgent(selectedAgentId).find((m) => m.id === selectedModelId)
-      ?.context ?? 128_000
-  const ctxPct = Math.min(100, Math.round((tokens / ctxWindow) * 100))
-  const ctxTone =
-    ctxPct >= 90
-      ? 'border-red-500/40 bg-red-500/10 text-red-400'
-      : ctxPct >= 75
-        ? 'border-warning/40 bg-warning/10 text-warning'
-        : 'border-border bg-background/40 text-muted-foreground'
+  const [attachment, setAttachment] = useState<{ title: string; content: string } | null>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
+
+  // Web search is OFF by default and is a directive to the bound agent, not a
+  // desktop-side search (the agent owns that tool — ADR-0005).
+  const [webSearch, setWebSearch] = useState<boolean>(WEB_SEARCH_DEFAULT)
+  const [webPanel, setWebPanel] = useState(false)
+  const [webStatus, setWebStatus] = useState<WebSearchStatus | null>(null)
+
+  /** Turning the switch on reveals the cascade it will use; turning it off
+   *  closes the panel. The footer's reserved chip can reopen it either way. */
+  const toggleWebSearch = useCallback((next: boolean) => {
+    setWebSearch(next)
+    setWebPanel(next)
+  }, [])
+
+  const hasContent = composerValue.trim().length > 0 || attachment !== null
+  const gate = composerSendState({
+    hasContent,
+    boundAgentId,
+    agentName: boundAgentName ?? undefined,
+    readiness: boundReadiness as AgentReadiness | undefined,
+    live: inTauri(),
+  })
+  const canSend = hasContent && gate.ok
+
+  // Keep the footer's search slot truthful without polling: the control owns
+  // the read, and reports the status back for the one-line footer. The callback
+  // is stable so the control can publish on change without re-rendering the bar.
+  const onWebStatus = useCallback((next: WebSearchStatus | null) => setWebStatus(next), [])
 
   const hint = useMemo(() => {
     const v = composerValue.trimStart()
@@ -270,22 +512,15 @@ export default function ChatComposer({ budget, centered }: Props) {
 
   // P52.11 — fuzzy subsequence match (typo-tolerant) instead of strict
   // substring: '/mdoe' still surfaces '/mode', '@fl' finds '@files'.
-  // P53.1/53.2 — while an external Chief is pinned, the local EveryAIOS
-  // slash table is hidden: the agent's live vocabulary (from the most
-  // recent `available_commands_update`) is the only `/` source, and its
-  // items submit as `session/prompt` text (never a local intercept).
-  const externalChief = useAppStore((s) => {
-    const sid = s.activeSessionId
-    // P71.2c — there is no built-in engine, so an unbound session names no
-    // agent at all. The retired built-in spellings are not bindings
-    // (`currentBinding` is the single predicate, shared with the turn path).
-    return currentBinding(s.sessionChiefs[sid] ?? s.userDefaultChief)
-  })
+  // P53.1/53.2 — while an agent is bound, the local EveryAIOS slash table is
+  // hidden: the agent's live vocabulary (from the most recent
+  // `available_commands_update`) is the only `/` source, and its items submit
+  // as `session/prompt` text (never a local intercept).
   const [liveSlash, setLiveSlash] = useState<{ name: string; description: string }[]>([])
   useEffect(() => {
     // P71.9c — only the bound agent's own command vocabulary is fetched; there
     // is no local table to fall back to (every binding is an external agent).
-    if (!externalChief) {
+    if (!boundAgentId) {
       setLiveSlash([])
       return
     }
@@ -293,8 +528,7 @@ export default function ChatComposer({ budget, centered }: Props) {
     void (async () => {
       try {
         const st = useAppStore.getState()
-        const catalogId = st.selectedAgentId
-        const handle = st.acpHandles[catalogId] ?? st.acpHandles[externalChief]
+        const handle = st.acpHandles[st.selectedAgentId] ?? st.acpHandles[boundAgentId]
         if (!handle) return
         const { acpSessionCommands } = await import('@/lib/acp')
         const rows = await acpSessionCommands(handle)
@@ -306,17 +540,17 @@ export default function ChatComposer({ budget, centered }: Props) {
     return () => {
       alive = false
     }
-  }, [externalChief, composerValue === '' ? 'empty' : 'typing'])
+  }, [boundAgentId, composerValue === '' ? 'empty' : 'typing'])
   const hintList: { title: string; items: HintItem[] } | null = (() => {
     if (!hint) return null
     const q = hint.q
     if (hint.kind === 'slash') {
-      if (externalChief) {
+      if (boundAgentId) {
         // P53.2 — no local intercept: show only the agent's live commands.
         const live = liveSlash.map((c) => ({ cmd: `/${c.name}`, desc: c.description }))
         if (live.length === 0) return null
         return {
-          title: `/${externalChief} commands (live)`,
+          title: boundAgentName ? `/${boundAgentName} commands (live)` : 'Agent commands (live)',
           items: fuzzyRank(q, live, (c) => c.cmd).map((c) => ({ ...c, color: 'text-emerald-300' })),
         }
       }
@@ -333,12 +567,6 @@ export default function ChatComposer({ budget, centered }: Props) {
       items: fuzzyRank(q, MENTIONS, (c) => c.cmd).map((c) => ({ ...c, color: 'text-sky-300' })),
     }
   })()
-
-  // Attached file context (sent with the next turn as a user document).
-  const [attachment, setAttachment] = useState<{ title: string; content: string } | null>(null)
-  const fileRef = useRef<HTMLInputElement>(null)
-
-  const canSend = composerValue.trim().length > 0 || attachment !== null
 
   const pickFile = () => fileRef.current?.click()
 
@@ -380,10 +608,41 @@ export default function ChatComposer({ budget, centered }: Props) {
     reader.readAsText(file)
   }
 
+  const withDirective = (text: string) => {
+    const directive = webSearchDirective(webSearch)
+    if (!directive) return text
+    return `${text.trimEnd()}\n\n${directive}`
+  }
 
   const send = () => {
-    if (!canSend) return
+    if (!hasContent) return
     const st = useAppStore.getState()
+    // The bar refuses *before* anything moves: no transcript row, no queue
+    // entry, no cleared draft. The reason is already on screen; the toast is
+    // only there for the Enter-key user who never looked.
+    if (!gate.ok) {
+      // The same four reasons the turn path records, written once. The bar
+      // refuses before anything moves, so `bridge` is never asked to dispatch a
+      // turn that cannot start.
+      const code: AgentSendBlocker['code'] =
+        gate.code === 'unbound'
+          ? 'unbound'
+          : gate.code === 'not-ready'
+            ? 'not-ready'
+            : gate.code === 'preview'
+              ? 'preview'
+              : 'readiness-unknown'
+      st.setAgentSendBlocker({
+        sessionId: st.activeSessionId,
+        code,
+        title: gate.title,
+        detail: gate.detail,
+        ...(gate.agentId ? { agentId: gate.agentId } : {}),
+      })
+      if (gate.actionable) st.openSetup()
+      notify(gate.detail, 'error')
+      return
+    }
     if (st.centerScreen === 'home') {
       const cur = st.sessions.find((x) => x.id === st.activeSessionId)
       if (cur && cur.messages.length > 0) st.newSession()
@@ -399,7 +658,7 @@ export default function ChatComposer({ budget, centered }: Props) {
     if (busy) {
       const text = composerValue.trim()
       if (text) {
-        st.queueTurn(st.activeSessionId, text, attachment ?? undefined)
+        st.queueTurn(st.activeSessionId, withDirective(text), attachment ?? undefined)
         setComposerValue('')
         setAttachment(null)
         notify('Queued — starts when the current turn finishes')
@@ -439,7 +698,7 @@ export default function ChatComposer({ budget, centered }: Props) {
           const rest = text.replace(/^@terminal/, '').trim()
           setComposerValue('')
           setAttachment(null)
-          await sendUserMessage(rest || 'Explain this terminal result', {
+          await sendUserMessage(withDirective(rest || 'Explain this terminal result'), {
             title: `terminal · ${target.profileId}`,
             content: block,
           })
@@ -451,11 +710,16 @@ export default function ChatComposer({ budget, centered }: Props) {
     }
     const { clean, refs } = splitAtRefs(text)
     const refSuffix = refs.length > 0 ? `\n\n[refs: ${refs.map((r) => `@${r}`).join(' ')}]` : ''
-    const sendText = (clean.trim() ? clean : text) + refSuffix
+    const sendText = withDirective((clean.trim() ? clean : text) + refSuffix)
     const ctx = attachment
     setComposerValue('')
     setAttachment(null)
     void sendUserMessage(sendText, ctx ? { title: ctx.title, content: ctx.content } : undefined)
+  }
+
+  const openSearchSettings = () => {
+    setSettingsSection('search')
+    setCenterScreen('settings')
   }
 
   return (
@@ -486,21 +750,25 @@ export default function ChatComposer({ budget, centered }: Props) {
         </HintPopover>
       )}
 
-      {/* P51.5 — pending asks above the composer while the agent is busy. */}
-      {(agentBusy || queuedCount > 0) && <PendingQueueChips />}
+      {/* P51.5 — pending asks above the composer while the agent is busy.
+          Mounted only when there is something to show: the chip list renders
+          nothing for an empty queue, and leaving it mounted would subscribe to
+          a store selector that builds a fresh array per read. */}
+      {queuedCount > 0 && <PendingQueueChips />}
 
       {/* The chat bar is the field. Controls live in a one-line footer, not a stack above. */}
       {attachment && (
         <div className="mx-2 mt-2 flex items-center gap-1.5 rounded-md border border-brand/30 bg-brand/5 px-2 py-1 font-mono text-[10px] text-brand">
-          <FileText className="h-3 w-3 shrink-0" />
+          <FileText className="h-3 w-3 shrink-0" aria-hidden="true" />
           <span className="min-w-0 flex-1 truncate">{attachment.title} · {(attachment.content.length / 1024).toFixed(1)} KB attached</span>
           <button
             type="button"
             onClick={() => setAttachment(null)}
             className="shrink-0 rounded px-1 text-muted-foreground hover:text-foreground"
             title="Remove attachment"
+            aria-label={`Remove attachment ${attachment.title}`}
           >
-            ✕
+            <span aria-hidden="true">✕</span>
           </button>
         </div>
       )}
@@ -516,6 +784,14 @@ export default function ChatComposer({ budget, centered }: Props) {
           }}
         />
         <IconBtn icon={Plus} label="Attach file" onClick={pickFile} />
+        <WebSearchControl
+          enabled={webSearch}
+          open={webPanel}
+          onOpenChange={setWebPanel}
+          onToggle={toggleWebSearch}
+          onOpenSettings={openSearchSettings}
+          onStatus={onWebStatus}
+        />
         {/* WP1 — the agent/model picker is a power-mode control. Casual keeps
             the identity visible in the status bar, which always names the
             runtime and model currently answering. */}
@@ -559,11 +835,13 @@ export default function ChatComposer({ budget, centered }: Props) {
             }
           }}
           placeholder={
-            agentBusy
-              ? queuedCount > 0
-                ? `Next queued ask will follow… (${queuedCount} pending)`
-                : 'Still working — type to queue your next ask…'
-              : 'Tell EveryAIOS what you need…'
+            !gate.ok && hasContent
+              ? 'Bind a ready agent to send this…'
+              : agentBusy
+                ? queuedCount > 0
+                  ? `Next queued ask will follow… (${queuedCount} pending)`
+                  : 'Still working — type to queue your next ask…'
+                : 'Tell EveryAIOS what you need…'
           }
           className="max-h-28 min-h-[36px] min-w-0 flex-1 resize-none border-0 bg-transparent px-1 py-1.5 text-[13px] leading-relaxed shadow-none focus-visible:ring-0"
           rows={1}
@@ -610,16 +888,28 @@ export default function ChatComposer({ budget, centered }: Props) {
             size="icon"
             className={cn(
               'h-8 w-8 shrink-0 rounded-md text-white transition-colors',
-              agentBusy
-                ? 'bg-emerald-500 hover:bg-emerald-600'
-                : 'bg-brand hover:bg-brand-hover',
+              agentBusy ? 'bg-emerald-500 hover:bg-emerald-600' : 'bg-brand hover:bg-brand-hover',
               'disabled:opacity-40',
             )}
             disabled={!canSend}
             onClick={send}
-            title={agentBusy ? 'Queue this ask (runs after the current turn)' : 'Send'}
+            aria-label={
+              !gate.ok && hasContent
+                ? `Cannot send — ${gate.title}`
+                : agentBusy
+                  ? 'Queue this ask (it runs after the current turn)'
+                  : 'Send'
+            }
+            aria-describedby={!gate.ok && hasContent ? 'composer-status' : undefined}
+            title={
+              !gate.ok && hasContent
+                ? gate.detail
+                : agentBusy
+                  ? 'Queue this ask (runs after the current turn)'
+                  : 'Send'
+            }
           >
-            <ArrowUp className="h-4 w-4" />
+            <ArrowUp className="h-4 w-4" aria-hidden="true" />
           </Button>
         </div>
       </div>
@@ -633,28 +923,57 @@ export default function ChatComposer({ budget, centered }: Props) {
         ) : (
           <SimpleAutonomyDial />
         )}
-        <span
-          className="ml-auto flex shrink-0 items-center gap-1 font-mono text-[10px] text-muted-foreground"
-          title={`$${spent.toFixed(2)} of $${cap.toFixed(2)} · ${ctxPct}% context`}
+        {/* Reserved slot — always laid out, so turning web search on or off
+            never moves the readouts (CLS = 0). It is also the way back into
+            the details once the switch is on. */}
+        <button
+          type="button"
+          aria-haspopup="dialog"
+          aria-expanded={webPanel}
+          aria-label={
+            webStatus
+              ? `Web search is on — ${webStatus.head}. Show the backends.`
+              : 'Turn on web search and show its backends'
+          }
+          onClick={() => (webSearch ? setWebPanel((v) => !v) : toggleWebSearch(true))}
+          data-telemetry="web-search"
+          className="hidden h-6 w-[6.5rem] shrink-0 items-center justify-end gap-1 truncate rounded px-0.5 font-mono text-[10px] text-muted-foreground hover:bg-accent/60 hover:text-foreground md:flex"
+          title={
+            webStatus
+              ? `${webStatus.head} — ${webStatus.detail}`
+              : 'Web search is off. The agent searches with its own tool when you ask it to.'
+          }
         >
-          <CircleDollarSign className="h-3 w-3 text-emerald-400" />
-          <span className="text-foreground">${spent.toFixed(2)}</span>
-          {ctxPct >= 75 && (
-            <span className={cn('ml-1', ctxTone.includes('red') ? 'text-red-400' : 'text-warning')}>
-              {ctxPct}% ctx
-            </span>
-          )}
-        </span>
+          <span
+            className={cn(
+              'h-1.5 w-1.5 shrink-0 rounded-full',
+              !webSearch
+                ? 'bg-muted-foreground/40'
+                : webStatus?.tone === 'ok'
+                  ? 'bg-emerald-400'
+                  : webStatus?.tone === 'warn'
+                    ? 'bg-warning'
+                    : 'bg-muted-foreground',
+            )}
+            aria-hidden="true"
+          />
+          <span className="truncate">
+            {webStatus
+              ? `web ${webStatus.inCascade > 0 ? `${webStatus.inCascade} backend${webStatus.inCascade === 1 ? '' : 's'}` : 'not configured'}`
+              : 'web off'}
+          </span>
+        </button>
+        <ComposerTelemetry tokens={budget?.tokens ?? null} />
       </div>
 
-      <div className="hidden items-center gap-2 px-2 pb-1 font-mono text-[9px] text-muted-foreground/70 sm:flex">
-        <span>Enter send</span>
-        <span>·</span>
-        <span>Shift+Enter newline</span>
-        <span>·</span>
-        <span>Esc clear</span>
-        <span className="ml-auto">Tab completes · @ mention · / command · ! macro</span>
-      </div>
+      <StatusRow
+        gate={gate}
+        agentBusy={agentBusy}
+        queuedCount={queuedCount}
+        frozenAutonomy={frozenAutonomy}
+        liveAutonomy={liveAutonomy}
+        onFix={() => openSetup()}
+      />
     </div>
   )
 }
