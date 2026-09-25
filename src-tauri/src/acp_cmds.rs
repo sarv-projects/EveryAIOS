@@ -1198,16 +1198,21 @@ pub fn acp_install_commit(
     drop(guard);
 
     let outcome = installer().install(&spec).map_err(|e| e.to_string())?;
-    let audit_seq = crate::control::record_mutation(
+    let audit_seq = crate::control::record_turn(
         &state,
         crate::control::AuthKind::AgentTicket,
-        "acp.install",
-        serde_json::json!({
-            "agentId": outcome.agent_id,
-            "version": outcome.version,
-            "ticketId": ticket_id,
-        }),
-    );
+        &[(
+            "acp.install",
+            serde_json::json!({
+                "agentId": outcome.agent_id,
+                "version": outcome.version,
+                "ticketId": ticket_id,
+            }),
+        )],
+    )
+    .first()
+    .copied()
+    .unwrap_or(0);
     Ok(serde_json::json!({
         "agentId": outcome.agent_id,
         "version": outcome.version,
@@ -1416,6 +1421,23 @@ pub fn acp_agent_verify(agent_id: String) -> Result<serde_json::Value, String> {
     }))
 }
 
+/// P63.11 — the shared-plane servers for this launch. A bind failure leaves
+/// the list empty and is logged; the launch itself still proceeds.
+fn channel_b_servers(state: &AppState) -> Vec<everyaios_acp::McpServer> {
+    if let Ok(relay) = state.chat_relay.lock() {
+        if let Some(relay) = relay.as_ref() {
+            crate::channel_b::publish_tools(&state.channel_b_tools, relay.tools());
+        }
+    }
+    match crate::channel_b::ensure_servers(&state.channel_b, &state.channel_b_tools) {
+        Ok(servers) => servers,
+        Err(err) => {
+            eprintln!("everyaios: channel B lease unavailable: {err}");
+            Vec::new()
+        }
+    }
+}
+
 /// Launch an agent by id: resolve its spawn plan, spawn the process, run the
 /// ACP handshake (`initialize` → `session/new`), and keep the session alive.
 ///
@@ -1523,7 +1545,8 @@ pub fn acp_launch(
     // Try to create the session. `auth_required` is not a failure — it is a
     // signal to surface the sign-in surface (the handle stays alive so
     // `acp_authenticate` can retry after login).
-    let (session_id, auth_required) = match session.session_new(&cwd, vec![]) {
+    let mcp_servers = channel_b_servers(&state);
+    let (session_id, auth_required) = match session.session_new(&cwd, mcp_servers) {
         Ok(sid) => (sid, false),
         Err(everyaios_acp::AcpError::AuthRequired) => (String::new(), true),
         Err(e) => return Err(format!("acp session/new failed: {e}")),
@@ -1618,7 +1641,8 @@ pub fn acp_authenticate(
     // retry the session the launch couldn't create.
     let (session_id, config_options) = {
         let mut session = session.lock().map_err(|e| e.to_string())?;
-        let session_id = match session.session_new(&cwd, vec![]) {
+        let mcp_servers = channel_b_servers(&state);
+        let session_id = match session.session_new(&cwd, mcp_servers) {
             Ok(sid) => sid,
             Err(everyaios_acp::AcpError::AuthRequired) => {
                 return Err("still auth_required after authenticate".to_string());
@@ -1880,6 +1904,11 @@ pub fn chief_subagent_set_policy(
     max_concurrency: Option<u32>,
     workspace: Option<String>,
     budget: Option<u64>,
+    allow_as_primary: Option<bool>,
+    enable_as_subagent: Option<bool>,
+    domains: Option<Vec<String>>,
+    max_cents_per_turn: Option<u32>,
+    max_tokens_per_turn: Option<u64>,
 ) -> Result<serde_json::Value, String> {
     if launch_registry().get(&agent_id).is_none() {
         return Err(format!("unknown agent id: {agent_id}"));
@@ -1919,6 +1948,27 @@ pub fn chief_subagent_set_policy(
     }
     if let Some(v) = budget {
         policy.budget = v;
+    }
+    if let Some(v) = allow_as_primary {
+        policy.allow_as_primary = v;
+    }
+    if let Some(v) = enable_as_subagent {
+        policy.enable_as_subagent = v;
+    }
+    if let Some(v) = domains {
+        const ALLOWED: &[&str] = &["coding", "architecture", "research", "scraping", "office"];
+        for tag in &v {
+            if !ALLOWED.contains(&tag.as_str()) {
+                return Err(format!("unknown domain tag {tag:?}"));
+            }
+        }
+        policy.domains = v;
+    }
+    if let Some(v) = max_cents_per_turn {
+        policy.max_cents_per_turn = v;
+    }
+    if let Some(v) = max_tokens_per_turn {
+        policy.max_tokens_per_turn = v;
     }
     let saved = policy.clone();
     cfg.save(&path).map_err(|e| e.to_string())?;
@@ -2096,12 +2146,26 @@ fn prepare_acp_turn(
     }
 
     let work_id = canonical_work_id(application_session_id);
+    // `ADR-0006` §1 — the Session kind is stated by the owner of the record,
+    // never invented by the caller. `canonical_work_id` deliberately reuses the
+    // host automation Work's id, and that Work carries `SessionKind::Automation`;
+    // re-asserting `Interactive` unconditionally made `create_work_in_session`
+    // refuse the very Work this function exists to resolve, so the documented
+    // "reuse the existing Work" path failed closed on the automation seam. An
+    // existing Work therefore re-states its own recorded kind (the owner check
+    // below is unchanged and still fail-closed); only a new Work is stated
+    // `Interactive`.
+    let session_kind = gateway
+        .get_work(&work_id)
+        .map_or(everyaios_types::SessionKind::Interactive, |existing| {
+            existing.session_kind
+        });
     let address = gateway
         .create_work_in_session(
             work_id.clone(),
             None,
             Some(application_session_id.to_string()),
-            everyaios_types::SessionKind::Interactive,
+            session_kind,
             objective,
         )
         .map_err(AcpIdentityError::Work)?;
@@ -2447,6 +2511,7 @@ pub fn acp_prompt(
     session_id: String,
     binding_id: Option<String>,
 ) -> Result<serde_json::Value, String> {
+    crate::ensure_sidecar(&state);
     // The caller's Session id is the canonical EveryAIOS identity. Never
     // replace it with the provider's ACP session id.
     let application_session_id = session_id.trim().to_string();

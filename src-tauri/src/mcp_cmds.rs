@@ -1168,12 +1168,31 @@ fn parse_callback(req: &str) -> (Option<String>, Option<String>) {
 mod tests {
     use super::*;
 
+    /// A command that is **not** an MCP server and exits immediately, closing
+    /// the stdio stream. Platform-specific on purpose: a Windows PATH has no
+    /// extensionless `true`, and `npx::find_on_path` does not apply `PATHEXT`,
+    /// so the spawn itself would fail there before any handshake was attempted.
+    /// A shell escape is not an option either — `resolve_stdio_launch` refuses
+    /// `sh`/`bash`/`cmd`/`powershell`/`pwsh` by design — so Windows uses a
+    /// System32 console binary that is neither a shell launcher nor a server.
+    fn non_mcp_fixture() -> (&'static str, &'static [&'static str]) {
+        // `cfg!` rather than `#[cfg]` so both arms are type-checked on every
+        // host, the same shape the PATH probe in `acp_cmds` already uses.
+        if cfg!(windows) {
+            ("where.exe", &[])
+        } else {
+            ("true", &[])
+        }
+    }
+
     /// P55.11 — a command that is not an MCP server must fail the handshake, so
     /// the commit path tears the child down instead of recording a connected
-    /// row with zero tools. `true` exits immediately, closing the stream.
+    /// row with zero tools. The fixture exits immediately, closing the stream.
     #[test]
     fn handshake_rejects_a_non_mcp_command() {
-        let mut server = everyaios_mcp::attach::AttachedServer::spawn("true", &[]).unwrap();
+        let (command, args) = non_mcp_fixture();
+        let mut server = everyaios_mcp::attach::AttachedServer::spawn(command, args)
+            .unwrap_or_else(|e| panic!("`{command}` must be spawnable on this platform: {e}"));
         let err = handshake_attached(&mut server, "notmcp").unwrap_err();
         assert!(
             err.contains("handshake failed"),
