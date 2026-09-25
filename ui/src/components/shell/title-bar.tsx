@@ -40,6 +40,7 @@ import { cn } from '@/lib/utils'
 import { useRuntimeState } from '@/lib/runtime'
 import { inTauri } from '@/lib/tauri'
 import { ARCH_VERSION } from '@/lib/version'
+import { finiteCount, tokenThousandsLabel } from '@/lib/display-number'
 import { NotificationsPopover } from './notifications-popover'
 
 /** Native window controls (Tauri shell only — static dots in preview). */
@@ -115,9 +116,9 @@ export function TitleBar() {
   const runtime = useRuntimeState()
   const live = runtime.status === 'live'
   const { theme, toggle } = useTheme()
-  const spent = liveBudget?.spent ?? active?.spent ?? 0
-  const cap = liveBudget?.cap ?? 5
-  const tokens = liveBudget?.tokens ?? active?.tokens ?? 0
+  const spent = finiteCount(liveBudget?.spent ?? active?.spent)
+  const cap = finiteCount(liveBudget?.cap, 5)
+  const tokens = finiteCount(liveBudget?.tokens ?? active?.tokens)
 
   return (
     <header className="drag-region h-9 shrink-0 border-b border-border bg-sidebar flex items-center px-2 gap-2 no-select">
@@ -252,7 +253,7 @@ export function TitleBar() {
 
             <div className="no-drag flex items-center gap-1 px-2 h-6 rounded-md border border-border bg-background/40 text-[10.5px] font-mono">
               <Activity className="h-3 w-3 text-blue-400" />
-              <span className="text-muted-foreground">{Math.round(tokens / 1000)}K tok</span>
+              <span className="text-muted-foreground">{tokenThousandsLabel(tokens)}</span>
             </div>
           </>
         )}

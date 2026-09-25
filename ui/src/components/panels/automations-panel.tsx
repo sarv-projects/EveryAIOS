@@ -643,7 +643,7 @@ export default function AutomationsPanel() {
               </div>
             )}
             {!loading && loadError && (
-              <div className="flex items-center justify-between gap-3 rounded-lg border border-red-500/30 bg-red-500/5 px-4 py-4 text-xs text-red-300">
+              <div className="flex items-center justify-between gap-3 rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-4 text-xs text-red-700 dark:text-red-300">
                 <span>Automations unavailable: {loadError}</span>
                 <Button size="sm" variant="outline" className="h-7 shrink-0 text-[10px]" onClick={() => setReload((value) => value + 1)}>
                   Retry

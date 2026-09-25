@@ -23,6 +23,45 @@ const DEFAULT_MAX_HEAP_MB = 512;
 /** Default forced rotation time in minutes. */
 const DEFAULT_ROTATION_MINUTES = 30;
 
+/** P45.8 — idle exit when nobody is chatting. Distinct from the 30-minute rotation. */
+export const SIDECAR_IDLE_EXIT_MS = 60_000;
+
+/** Process status the supervisor treats as an idle stop, not a crash. */
+export const SIDECAR_IDLE_EXIT_CODE = 75;
+
+/**
+ * Exit only when the sidecar has been quiet for the threshold and no turn
+ * is in flight. An in-flight turn always stays.
+ */
+let sidecarInFlight = 0;
+let sidecarLastActivity = Date.now();
+
+/** Bracket one inbound request so an idle exit cannot land mid-turn. */
+export function noteSidecarRequest<T>(body: () => T): T {
+  sidecarInFlight += 1;
+  sidecarLastActivity = Date.now();
+  try {
+    return body();
+  } finally {
+    sidecarInFlight = Math.max(0, sidecarInFlight - 1);
+    sidecarLastActivity = Date.now();
+  }
+}
+
+export function sidecarIdleSnapshot(): { idleMs: number; inFlight: number } {
+  return { idleMs: Date.now() - sidecarLastActivity, inFlight: sidecarInFlight };
+}
+
+export function sidecarIdleDecision(input: {
+  idleMs: number;
+  inFlight: number;
+  thresholdMs?: number;
+}): "stay" | "exit" {
+  if (input.inFlight > 0) return "stay";
+  if (input.idleMs < (input.thresholdMs ?? SIDECAR_IDLE_EXIT_MS)) return "stay";
+  return "exit";
+}
+
 /** Polling interval in milliseconds. */
 const POLL_INTERVAL_MS = 5_000;
 

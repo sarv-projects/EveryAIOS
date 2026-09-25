@@ -125,6 +125,18 @@ export type OperationalEvent = {
 } | {
   kind: 'session_attached' | 'session_detached'
   data: { clientId: string }
+} | {
+  kind: 'file_touched'
+  data: { path: string; writer_id: string }
+} | {
+  kind: 'test_ran'
+  data: { name: string; passed: boolean }
+} | {
+  kind: 'write_conflict'
+  data: { path: string; writers: string[] }
+} | {
+  kind: 'handoff_recorded'
+  data: { artifact_id: string; from_agent: string; to_agent: string; summary: string }
 }
 
 export type PresenceEvent = {
@@ -247,7 +259,7 @@ export interface WorkEventDescription {
   /** Optional secondary detail (tool args, outcome, reason…). */
   detail?: string
   /** Timeline tone drives the icon + accent. */
-  tone: 'step' | 'tool' | 'file' | 'run' | 'approval' | 'thought' | 'session' | 'node' | 'worktree' | 'pty' | 'review'
+  tone: 'step' | 'tool' | 'file' | 'run' | 'approval' | 'thought' | 'session' | 'node' | 'worktree' | 'pty' | 'review' | 'conflict' | 'handoff' | 'test'
   /** done | active | failed — drives the status dot. */
   status: 'done' | 'active' | 'failed'
 }
@@ -321,6 +333,14 @@ export function describeWorkEvent(envelope: WorkEventEnvelope): WorkEventDescrip
         case 'session_attached':
         case 'session_detached':
           return { label: `Client ${shortId(ev.data.clientId)} ${ev.kind === 'session_attached' ? 'attached' : 'detached'}`, tone: 'session', status: 'done' }
+        case 'file_touched':
+          return { label: `File ${ev.data.path}`, detail: ev.data.writer_id, tone: 'file', status: 'done' }
+        case 'test_ran':
+          return { label: `Test ${ev.data.name}`, detail: ev.data.passed ? 'passed' : 'failed', tone: 'test', status: ev.data.passed ? 'done' : 'failed' }
+        case 'write_conflict':
+          return { label: `Conflict on ${ev.data.path}`, detail: ev.data.writers.join(', '), tone: 'conflict', status: 'failed' }
+        case 'handoff_recorded':
+          return { label: `Handoff ${ev.data.from_agent} → ${ev.data.to_agent}`, detail: ev.data.summary, tone: 'handoff', status: 'done' }
       }
       break
     case 'presence':

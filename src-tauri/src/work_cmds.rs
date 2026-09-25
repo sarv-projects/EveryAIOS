@@ -6,6 +6,7 @@ use crate::AppState;
 fn gateway(
     state: &AppState,
 ) -> Result<std::sync::Arc<std::sync::Mutex<everyaios_core::WorkGateway>>, String> {
+    crate::ensure_sidecar(state);
     let relay = state.chat_relay.lock().map_err(|e| e.to_string())?;
     relay
         .as_ref()

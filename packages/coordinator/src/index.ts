@@ -20,7 +20,7 @@
 
 import { FrameDecoder, encodeJson, notify } from "./frame";
 import { dispatchAguiLine } from "./agui";
-import { startHeapMonitor } from "./heap";
+import { noteSidecarRequest, SIDECAR_IDLE_EXIT_CODE, sidecarIdleDecision, sidecarIdleSnapshot, startHeapMonitor } from "./heap";
 import { startOrphanWatch } from "./orphan";
 import {
   ERROR_CODES,
@@ -445,7 +445,7 @@ export function run(reader: NodeJS.ReadableStream = process.stdin): void {
         continue;
       }
 
-      const response = handleRequest(parsed);
+      const response = noteSidecarRequest(() => handleRequest(parsed));
       if (response !== null) {
         process.stdout.write(encodeJson(response));
       }
@@ -477,6 +477,15 @@ export const schedulerWebhooks = startWebhookIngress(sendRequest);
 if (import.meta.main) {
   startOrphanWatch();
   startHeapMonitor();
+  // P45.8 — exit after 60s with no inbound request and no in-flight turn.
+  // The supervisor parks on code 75 and spawns again when the shell sets
+  // the resume flag. Heartbeats are outbound and do not reset this clock.
+  const idleTimer = setInterval(() => {
+    if (sidecarIdleDecision(sidecarIdleSnapshot()) === "exit") {
+      process.exit(SIDECAR_IDLE_EXIT_CODE);
+    }
+  }, 5_000);
+  if (typeof idleTimer === "object" && "unref" in idleTimer) idleTimer.unref();
   // ARCH/05 durable-observation seam: hydrate the RouteDecision ring once
   // from the vault's `token_usage` ledger (provider/model/cost per completed
   // call) so routing survives restarts. Best-effort — a missing vault or

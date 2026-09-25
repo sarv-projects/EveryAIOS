@@ -438,8 +438,9 @@ export default function OfficeXlsxView() {
         </div>
       )}
 
-      {/* Formula bar — click a cell to select; Recalc runs the truth engine */}
-      <div className="flex items-center gap-2 border-b border-border bg-zinc-900/50 px-3 py-1.5">
+      {/* Formula bar — only once a workbook is open. An empty Tauri pane is not a fake grid. */}
+      {!(inTauri() && !payload) && (
+      <div className="flex items-center gap-2 border-b border-border bg-muted/40 px-3 py-1.5">
         <div className="flex items-center gap-1 rounded border border-border bg-zinc-950 px-2 py-0.5 font-mono text-[10px] text-muted-foreground">
           <span className="font-medium text-brand">{selRef}</span>
           <span className="text-muted-foreground/40">│</span>
@@ -520,6 +521,7 @@ export default function OfficeXlsxView() {
           Save
         </Button>
       </div>
+      )}
 
       {/* Guard-2 approval card for an "ask" verdict (same ticket as Cockpit) */}
       {proposal && (
@@ -721,6 +723,11 @@ export default function OfficeXlsxView() {
       )}
 
       <div ref={scrollRef} onScroll={onScroll} className="min-h-0 flex-1 overflow-auto scroll-thin">
+        {inTauri() && !payload ? (
+          <div className="flex h-full items-center justify-center p-8 text-center text-sm text-foreground">
+            Open a workbook to load its rows and enable editing.
+          </div>
+        ) : (
         <table className="border-collapse font-mono text-[11px]">
           <thead>
             <tr>
@@ -784,6 +791,7 @@ export default function OfficeXlsxView() {
             )}
           </tbody>
         </table>
+        )}
       </div>
 
       <div className="flex items-center gap-3 border-t border-border bg-zinc-900/50 px-3 py-1.5">

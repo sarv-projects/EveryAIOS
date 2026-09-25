@@ -838,7 +838,7 @@ export function SubagentsSection() {
   useEffect(load, [])
   return (
     <SectionShell title="Subagents" desc="Installed agent CLIs the primary agent may delegate to (P71.5b: the retired \u2018Chief\u2019 name). Each row carries its when-to-use note.">
-      <Honest>B3 delegation is bounded at depth ≤2 and concurrency ≤6. Only installed/discovered CLIs appear here — EveryAIOS Native is always present as the default candidate, and a registry entry with no binary on this machine is never selectable. Enable a row to include it in the delegation mix; the shipped when-to-use text is editable.</Honest>
+      <Honest>B3 delegation is bounded at depth ≤2 and concurrency ≤6. Only a Ready external agent can be hired. There is no built-in engine in v1. A registry entry with no program on this machine is not Ready and is not selectable.</Honest>
       <div className="flex items-center justify-between">
         <span className="text-xs font-medium">Installed delegation candidates {rows === null ? '…' : `(${rows.length})`}</span>
         <div className="flex gap-2">
@@ -882,6 +882,11 @@ export function SubagentsSection() {
                   maxConcurrency: 6,
                   workspace: 'shared',
                   budget: 0,
+                  allowAsPrimary: true,
+                  enableAsSubagent: true,
+                  domains: [],
+                  maxCentsPerTurn: 0,
+                  maxTokensPerTurn: 0,
                 })
               }}>
                 {policyFor === r.agentId ? 'Hide profile' : 'Delegation profile'}
@@ -931,6 +936,67 @@ export function SubagentsSection() {
                     aria-label="May spawn children"
                   />
                   May spawn children
+                </label>
+                <label className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                  <Switch
+                    checked={policyDraft.allowAsPrimary}
+                    onCheckedChange={(v) => setPolicyDraft({ ...policyDraft, allowAsPrimary: v })}
+                    aria-label="Allow as primary"
+                  />
+                  Allow as primary
+                </label>
+                <label className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                  <Switch
+                    checked={policyDraft.enableAsSubagent}
+                    onCheckedChange={(v) => setPolicyDraft({ ...policyDraft, enableAsSubagent: v })}
+                    aria-label="Enable as subagent"
+                  />
+                  Enable as subagent
+                </label>
+                <label className="col-span-2 text-[10px] text-muted-foreground sm:col-span-3">
+                  Domain tags
+                  <span className="mt-0.5 flex flex-wrap gap-1">
+                    {(['coding', 'architecture', 'research', 'scraping', 'office'] as const).map((tag) => {
+                      const domains = policyDraft.domains ?? []
+                      const on = domains.includes(tag)
+                      return (
+                        <button
+                          key={tag}
+                          type="button"
+                          aria-pressed={on}
+                          className={`rounded border px-1.5 py-0.5 font-mono text-[10px] ${on ? 'border-brand text-foreground' : 'border-border text-muted-foreground'}`}
+                          onClick={() => setPolicyDraft({
+                            ...policyDraft,
+                            domains: on ? domains.filter((item) => item !== tag) : [...domains, tag],
+                          })}
+                        >
+                          {tag}
+                        </button>
+                      )
+                    })}
+                  </span>
+                </label>
+                <label className="text-[10px] text-muted-foreground">
+                  Max cents / turn
+                  <input
+                    type="number"
+                    min={0}
+                    value={policyDraft.maxCentsPerTurn}
+                    aria-label="Max cents per turn"
+                    onChange={(e) => setPolicyDraft({ ...policyDraft, maxCentsPerTurn: Math.max(0, Number(e.target.value) || 0) })}
+                    className="mt-0.5 h-6 w-full rounded border border-border bg-background px-1.5 font-mono text-[10px] text-foreground"
+                  />
+                </label>
+                <label className="text-[10px] text-muted-foreground">
+                  Max tokens / turn
+                  <input
+                    type="number"
+                    min={0}
+                    value={policyDraft.maxTokensPerTurn}
+                    aria-label="Max tokens per turn"
+                    onChange={(e) => setPolicyDraft({ ...policyDraft, maxTokensPerTurn: Math.max(0, Number(e.target.value) || 0) })}
+                    className="mt-0.5 h-6 w-full rounded border border-border bg-background px-1.5 font-mono text-[10px] text-foreground"
+                  />
                 </label>
                 {(['maxChildren', 'maxDepth', 'maxConcurrency', 'budget'] as const).map((k) => (
                   <label key={k} className="text-[10px] text-muted-foreground">

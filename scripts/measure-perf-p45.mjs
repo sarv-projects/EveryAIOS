@@ -3,6 +3,11 @@ import { writeFileSync, readFileSync, unlinkSync, mkdirSync, existsSync } from '
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 
+console.error(
+  'This script does not measure SQLite, DNS, or the sidecar. The numbers it used to print were file reads and an in-memory Map. Run `cargo test -p everyaios-storage --lib synchronous_normal_and_mmap -- --nocapture` for the database timings.',
+)
+process.exit(2)
+
 console.log('=== EveryAIOS P45 Performance Queue Benchmark ===\n');
 
 const results = {

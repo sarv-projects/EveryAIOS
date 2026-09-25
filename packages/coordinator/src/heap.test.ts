@@ -2,7 +2,15 @@
  * Tests for the heap safety monitor (J13).
  */
 import { describe, expect, it, afterEach, mock, spyOn } from "bun:test";
-import { startHeapMonitor, type HeapMonitorHandle } from "./heap";
+import { sidecarIdleDecision, startHeapMonitor, type HeapMonitorHandle } from "./heap";
+
+describe("sidecar idle exit (P45.8)", () => {
+  it("stays while a turn is in flight and exits after 60s of quiet", () => {
+    expect(sidecarIdleDecision({ idleMs: 60_000, inFlight: 1 })).toBe("stay");
+    expect(sidecarIdleDecision({ idleMs: 59_000, inFlight: 0 })).toBe("stay");
+    expect(sidecarIdleDecision({ idleMs: 60_000, inFlight: 0 })).toBe("exit");
+  });
+});
 
 describe("heap monitor", () => {
   let handle: HeapMonitorHandle | null = null;

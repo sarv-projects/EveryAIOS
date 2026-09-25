@@ -58,8 +58,7 @@ export default function FolderView() {
 
   useEffect(() => {
     if (cwd) void load(cwd)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [cwd, load])
 
   const breadcrumbs = useMemo(() => {
     if (!cwd) return []

@@ -727,7 +727,7 @@ export function OnboardingModal() {
               >
                 <div>
                   <h2 className="text-xl font-bold tracking-tight text-foreground">Finish safety setup</h2>
-                  <p className="text-xs text-muted-foreground">The desktop verifies the device key before it lets setup finish. You can also choose a passphrase for a custom vault.</p>
+                  <p className="text-xs text-muted-foreground">The vault passphrase from the first screen is what unlocks this device. This step does not replace it with a silent key.</p>
                 </div>
 
                 <div className="rounded-xl border border-border/70 bg-card/50 p-4 space-y-3">
@@ -738,7 +738,7 @@ export function OnboardingModal() {
                     <div>
                       <div className="text-xs font-semibold text-foreground">Choose Your Protection Level</div>
                       <p className="text-[11px] text-muted-foreground">
-                        Casual users can leave this blank to use an existing device-managed key. The desktop verifies that key before setup can finish; if none is available, choose a custom master passphrase.
+                        Leave this blank if you already created the vault passphrase on the first screen. A second passphrase here only wraps that vault. It does not sign an agent in, and it does not invent a device key.
                       </p>
                     </div>
                   </div>
@@ -750,7 +750,7 @@ export function OnboardingModal() {
                       </label>
                       <Input
                         type="password"
-                        placeholder="Leave blank to use an existing device key"
+                        placeholder="Leave blank — the vault passphrase already set is enough"
                         value={passphrase}
                         onChange={(e) => {
                           setPassphrase(e.target.value)

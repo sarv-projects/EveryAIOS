@@ -2,7 +2,7 @@
 //! `agent/interrupt-response` mutate live AppState (chat cancel / cockpit
 //! undo / plan respond). Tauri commands call the same helpers.
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use std::path::PathBuf;
 use tauri::{AppHandle, Manager};
 
@@ -133,7 +133,7 @@ pub fn undo_session(app: &AppHandle, session_id: &str) -> Result<(), String> {
 /// users open documents under home / mounts — but it closes the
 /// self-documented xlsx/office bypass of `everyaios-guard::pathfloor`.
 pub fn floor_user_file(path: &str) -> Result<PathBuf, String> {
-    use everyaios_guard::pathfloor::{FloorVerdict, enforce_floor};
+    use everyaios_guard::pathfloor::{enforce_floor, FloorVerdict};
     let p = PathBuf::from(path);
     let parent = p
         .parent()
@@ -250,6 +250,52 @@ pub fn record_mutation(
         }
     }
     seq
+}
+
+/// P45.5 — one turn, several audit lines, one open-append-flush.
+pub fn record_turn(
+    state: &AppState,
+    authorization: AuthKind,
+    events: &[(&str, Value)],
+) -> Vec<u64> {
+    let prepared: Vec<(String, Value)> = events
+        .iter()
+        .map(|(kind, payload)| {
+            (
+                (*kind).to_string(),
+                with_authorization(authorization, payload.clone()),
+            )
+        })
+        .collect();
+    {
+        let mut chain = state.audit.lock().unwrap_or_else(|e| e.into_inner());
+        for (kind, payload) in &prepared {
+            let seq = (chain.len() as u64) + 1;
+            chain.push(everyaios_audit::AuditEvent {
+                seq,
+                ts_ms: std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_millis() as u64)
+                    .unwrap_or(0),
+                kind: kind.clone(),
+                payload: payload.clone(),
+                trace_id: String::new(),
+                span_id: String::new(),
+            });
+        }
+    }
+    if let Ok(mut log) = state.audit_log.lock() {
+        if let Some(writer) = log.as_mut() {
+            let refs: Vec<(&str, Value)> = prepared
+                .iter()
+                .map(|(kind, payload)| (kind.as_str(), payload.clone()))
+                .collect();
+            if let Ok(seqs) = writer.write_batch(&refs) {
+                return seqs;
+            }
+        }
+    }
+    Vec::new()
 }
 
 #[cfg(test)]
