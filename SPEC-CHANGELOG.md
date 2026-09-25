@@ -17,6 +17,22 @@ Each entry records the date or release marker, change category, affected section
 - A citation or implementation detail may remain in the spec only when it is itself a current behavioral constraint; its historical or evidentiary explanation belongs here.
 
 ---
+## 2026-09-25 — Agent login, model ownership, and subagent wording
+
+**Change category:** contract correction. No capability id was added or removed.
+
+**Decision:**
+1. The thinking loop, model list, and sign-in belong to the selected agent. Rows A1–A11 are EveryAIOS-held keys for EveryAIOS tools and connectors, not a second brain for an installed agent.
+2. Sign-in UI is `authMethods` from the handshake. An empty list shows no sign-in control. Install stays the registry `distribution` record.
+3. A subagent is another Ready external agent via `delegate.spawn` and child Work. The agent's own helper is private. The delegation policy enforces concurrency. The scheduler does not run agents. An omitted target with zero or several matches is a denial, not a silent pick. Cost is stored as cents. Worktrees live in the `worktrees` module.
+4. Production `session_new` passes `channel_b_servers`. Older empty-list line cites are stale. Channel B is still unverified until a live guarded tool call is recorded.
+5. A scheduler file that still contains a `checkpoint` field loads. That field is dropped. It is not a second runtime.
+
+**Affected documents:** `DESKTOP-APP-SPEC.md` §0 and §4.3, `ARCH/AGENT.md`, `ARCH/EXTERNAL-AGENTS.md`, `ARCH/ROUTING.md`, `ARCH/ADR/0007`, `README.md`, `TODO.md` P63.11 and P63.12.
+
+**Verification:** token-label and auth-label unit tests passed. A scheduler load with a leftover `checkpoint` field passed. The desktop window was walked on 2026-09-25: unlock, fresh-home onboarding, agent list, settings, files, automations, and an empty spreadsheet. Windows acceptance was not run.
+
+---
 ## 2026-09-24 — Chat Presentation Projection & External Subagent Roster Specification (P64.11, P64.12, P63.12)
 
 **Change category:** specification, architecture, and UI/control plane contracts.
@@ -73,6 +89,18 @@ release-artifact verification was performed by this documentation amendment.
 
 ---
 ## v4.06 — 2026-09-23 — P69.E9: the prefix-stability guard (I16 gets enforcement)
+
+**2026-09-25 — P70 truth repair, CI remediation, and local-runtime contract**
+
+**Change category:** delivery truth, CI remediation, and local-runtime scope. No capability, primitive, or invariant was added.
+
+**Decision:** The delivery-status truth repair reopened 49 falsely-checked rows; 16 untracked contract/test surfaces are now tracked, with the TODO census now **1666 = 1304 done + 362 open**. CI remediation made the UI HEAD-relative typecheck green, ran workspace `rustfmt`, addressed the automation-owned ACP work-resolution defect, repaired the cross-platform MCP test fixtures, and restored the router use-policy fallback. The local-runtime decision is a conditional GO: EveryAIOS owns the environment, the external agent owns the engine; macOS/MLX is deferred, P52 is rewritten, P52.6/P52.7 are deferred, P52-R is opened, and the legacy host-side local-inference path is retired.
+
+**Affected documents:** `TODO.md` (P52, P52-R, P69.G-trace) and this changelog; the local-runtime contract owner is `ARCH/16-LOCAL-RUNTIME-INTEROP.md`.
+
+**Verification:** The documentation gates and diff check are assigned to the validation owner for this handoff.
+
+---
 
 **Change category:** invariant enforcement (gate) + turn-path instrumentation.
 
