@@ -1565,6 +1565,16 @@ impl<T: AcpTransport> AcpSession<T> {
     /// permits an empty/options-only result, so the requested id remains the
     /// active identity unless the agent returns a bounded extension id.
     /// Notifications that arrive before the response are retained for replay.
+    ///
+    /// **Consumer status (P71.12, 2026-09-25): no production call site.** The
+    /// only caller is this crate's handshake acceptance suite. The shell seam
+    /// `acp_cmds::acp_session_load` deliberately refuses rather than guessing:
+    /// `ADR-0007` §3 makes transport reconnect the precondition for attempting
+    /// provider resume, and v1 has no reconnect seam, while §4 keeps ACP v2 (and
+    /// therefore its `session/resume` method) out of scope. An added caller must
+    /// re-attach the *same* `(SessionId, WorkId, RunId, AgentBindingId)` and
+    /// must take its provider session id from the canonical binding record —
+    /// never from a handle, a filename, or a fresh `session/new`.
     pub fn session_load(
         &mut self,
         session_id: &str,

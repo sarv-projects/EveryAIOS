@@ -211,6 +211,10 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Syn
         acp_cmds::acp_session_set_config_option,
         acp_cmds::acp_config_options,
         acp_cmds::acp_set_session_config_option,
+        // P71.12 — the `session/load` provider-resume seam. v1 refuses it with a
+        // typed, plain-language reason (ADR-0007 §3/§4) instead of a fabricated
+        // resume; see `acp_cmds::acp_session_load`.
+        acp_cmds::acp_session_load,
         acp_cmds::acp_tool_log,
         // P53.6 — Settings → Subagents rows + when-to-use note edits.
         acp_cmds::chief_subagents,

@@ -146,14 +146,14 @@ UI Chat Presentation: Rendered as Collapsed Tool Sub-box with Attribution Badge 
 
 1. **Invocation Contract (`delegate.spawn`):**
    - Arguments: `task` (prompt string), `domain` (`coding` | `architecture` | `research` | `scraping` | `office`), optional `target_agent` (specific agent ID), `budget` (`max_dollars`, `max_tokens`), and `timeout_ms`.
-   - Resolution: Checks the Settings Roster Configuration Plane ([`ARCH/AGENT.md`](AGENT.md) §5.4). If `target_agent` is specified, verifies `enable_as_subagent: true` and readiness `Ready`. If omitted, dynamically selects the highest-priority ready external agent matching `domain`.
+   - Resolution: Checks the Settings roster ([`ARCH/AGENT.md`](AGENT.md) §5.4). If `target_agent` is specified, verifies `enable_as_subagent: true` and readiness `Ready`. If omitted, admits the one Ready agent with that domain. Zero or several matches are a denial with a reason, not a silent swap.
 
 2. **Durable Identity & Concurrency Fencing:**
    - Spawns a child `WorkId` linked to parent `WorkId` in the canonical Work spine. Assigns a distinct `RunId` and `AgentBindingId`.
    - Enforces `max_concurrent_instances` configured in Settings for that subagent. If at capacity, queues in the Work graph or returns a retryable backpressure status.
 
 3. **Workspace Isolation & Sandboxing:**
-   - Coding specialists run inside an ephemeral git worktree (`everyaios-core::worktree`) branched off the current HEAD. Subagent mutations cannot directly alter the user's primary working branch without human verification and explicit patch application.
+   - Coding specialists run inside an ephemeral git worktree (`everyaios-core` module `worktrees`) branched off the current HEAD. Subagent mutations cannot directly alter the user's primary working branch without human verification and explicit patch application.
 
 4. **Supervised Execution & Loopback Capabilities:**
    - The subagent process communicates over supervised ACP stdio. If the subagent makes tool calls (e.g. `office.inspect`, `browser.research`), they route through the same host Guard and ToolService pipeline over Channel B.
@@ -293,21 +293,58 @@ new_session() · load_session()  (ACP v1) · resume_session()  (ACP v2) · close
 - Version differences (`load` vs `resume`) live inside the adapter.
 - A capability the agent negotiates as absent must degrade, never throw.
 
-> **GAP (D2, recorded 2026-09-22; rechecked for ADR-0007 on 2026-09-24).** The lifecycle above is
-> contract-not-code on the wire: the production ACP client (`crates/everyaios-acp/src/client.rs`) implements
-> `initialize` · `authenticate` · `session/new` · `session/prompt` · `session/cancel` ·
-> `session/request_permission` · `session/set_config_option` · `update` — but has **no `session/load` and no
-> `session/resume`**. The only `session/load` in the tree is the test fixture
-> `crates/everyaios-acp/src/bin/mock-agent.rs`. Resume promises in this section are therefore currently
-> unexecutable; implementation is queued in TODO as the **H4 vehicle (session-resume wire)**.
+> **PARTIALLY CLOSED — `session/load` landed; `session/resume` absent by design (D2, recorded
+> 2026-09-22; corrected 2026-09-24 against source).** The production ACP client
+> (`crates/everyaios-acp/src/client.rs`) implements `initialize` · `authenticate` · `session/new` ·
+> `session/prompt` · `session/cancel` · `session/request_permission` · `session/set_config_option` ·
+> `update` **and `session/load`**: `AcpSession::session_load` (`client.rs:1568`), with the
+> `load_session` alias and `session_load_with_updates`, documented in-file as *"a real provider resume
+> operation, not a `session/new` fallback"*. It requires the agent to have negotiated
+> `agentCapabilities.loadSession` during `initialize` — **omission is refusal** — and retains
+> notifications that arrive before the response for replay. It is exercised by the non-mock acceptance
+> suite `crates/everyaios-acp/tests/acceptance_acp_handshake.rs` (`session_load` at `:123`).
+>
+> `session/resume` remains absent, which is **correct for this release** rather than a gap: it is the
+> ACP **v2** method, and §5.1 rule 5 plus [`ADR/0007`](ADR/0007-windows-first-v1-qualification.md) §4
+> set the v1 policy to *narrow unsupported v2*. The earlier note that "the only `session/load` in the
+> tree is the test fixture" is no longer true and is superseded by the above.
 >
 > **v1 qualification consequences ([`ADR/0007`](ADR/0007-windows-first-v1-qualification.md)).** The
 > production path must also bind a real MCP server in `session/new`, scope its host handle and cancellation
 > to the owning Session/binding, and prove reconnect by replaying Work events and re-attaching the same
 > binding. A fresh provider session is an explicitly labelled degraded continuation, not native resume.
-> The current shell calls `session.session_new(&cwd, vec![])` at
-> `src-tauri/src/acp_cmds.rs:1548` (and the authentication retry at `:1643`), so Channel B is **not yet
-> qualified**; the MCP server and the governance tests do not erase that live-path gap.
+> **Channel B wiring (corrected 2026-09-25):** both production `session_new` calls take
+> `channel_b_servers(&state)`, not an empty server list. The earlier cites (`:1526`/`:1621`,
+> `:1548`/`:1643`, `:1321`/`:1394`) are stale. Passing the server is not qualification. Channel B
+> stays **implemented — unverified** until a live agent completes a guarded tool call on that server.
+> Windows acceptance for that call has not been run.
+>
+> **Provider resume is out of v1 by decision (P71.12, 2026-09-25).** `session/load` has **no production
+> call site**: the only caller is this crate's handshake acceptance suite, and
+> `crates/everyaios-acp/src/client.rs` now records that in the `session_load` doc comment. This is a
+> recorded exclusion, not an unfinished seam:
+>
+> 1. §3 of ADR-0007 makes **transport reconnect** (replay the Work event stream from the last
+>    acknowledged sequence, re-attach the existing binding) the *precondition* for attempting provider
+>    resume. The ACP layer has no reconnect; `acp_launch` is the only producer of a live
+>    `AcpSession` and it unconditionally runs `session/new`, so a `session_load` caller placed after
+>    it would orphan a just-created provider session.
+> 2. A provider session lives in a provider process, and the agent is a child of the app. Whether a
+>    new process can re-open a session created by a dead one is the agent's own persistence
+>    property, and no real-agent acceptance record exists. A green mock `session/load` handshake is
+>    not that evidence.
+> 3. §4 keeps ACP v2 — and therefore its `session/resume` method — out of scope, so v2 is not an
+>    available substitute.
+>
+> The shell therefore exposes the seam honestly rather than omitting it:
+> `acp_cmds::acp_session_load` (`acp_session_load` on the wire) reads the negotiated
+> `agentCapabilities.loadSession` value and the provider session id recorded on the canonical
+> `AgentBinding`, then returns a typed `AcpSessionLoadRefusal` (`CapabilityNotNegotiated` ·
+> `NoRecordedProviderSession` · `ProviderResumeOutOfScope`) as plain-language text on its error
+> channel. It never fabricates a provider session id, never treats one as a Session/Work id, does no
+> provider I/O, mutates no Work/Run/Binding state, and so needs no Guard ticket or receipt. A real
+> caller added later must build the reconnect first and take the provider session id from the binding
+> record — never from a handle or from a fresh `session/new`.
 
 ---
 

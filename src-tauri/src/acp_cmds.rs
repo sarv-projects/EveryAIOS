@@ -2301,6 +2301,199 @@ pub fn acp_session_set_config_option(
     Ok(options)
 }
 
+/// Why the `session/load` provider-resume seam refuses, as a typed reason.
+///
+/// **v1 ships without provider resume, and that is a recorded decision, not an
+/// omission.** [`ARCH/ADR/0007`](ARCH/ADR/0007-windows-first-v1-qualification.md)
+/// §4 sets this release's ACP policy to *narrow unsupported v2*, which puts the
+/// ACP **v2** `session/resume` method out of scope, and §3 makes **transport
+/// reconnect** — replay the Work event stream from the last acknowledged
+/// sequence and re-attach the existing binding — the precondition for
+/// attempting provider resume at all. v1 has no such reconnect seam, so
+/// [`AcpSession::session_load`](everyaios_acp::AcpSession::session_load) stays
+/// adapter-internal and its only call site is the crate's own handshake
+/// acceptance suite. A shell caller gets one of these reasons instead of a
+/// fabricated resume.
+///
+/// The continuation a user actually gets is a **new** provider session driven
+/// from the durable checkpoint/`ContextPassport`, which
+/// [`ARCH/AGENT.md`](ARCH/AGENT.md) §3.2 and ADR-0007 §3 require be labelled
+/// *provider session restarted* — never presented as native resume. Nothing here
+/// ever reads or writes a provider session id as a canonical Session/Work id.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AcpSessionLoadRefusal {
+    /// The agent never advertised `agentCapabilities.loadSession` during
+    /// `initialize`. ACP v1 forbids inferring a capability from omission
+    /// (ADR-0007 §4), so this is refusal rather than a probe.
+    CapabilityNotNegotiated,
+    /// The canonical `Session → Work → Run → AgentBinding` chain records no
+    /// provider session id for this agent. EveryAIOS never fabricates one, and
+    /// an unavailable Work Gateway is treated exactly like a missing record
+    /// (fail-closed).
+    NoRecordedProviderSession,
+    /// Both preconditions hold, but v1 has not qualified provider resume.
+    ProviderResumeOutOfScope,
+}
+
+impl AcpSessionLoadRefusal {
+    /// Classify a resume attempt from the only two facts it may legitimately
+    /// rest on: the capability the agent actually negotiated, and the provider
+    /// session id the canonical chain actually recorded.
+    fn decide(load_session_negotiated: bool, recorded_provider_session_id: Option<&str>) -> Self {
+        if !load_session_negotiated {
+            return Self::CapabilityNotNegotiated;
+        }
+        if recorded_provider_session_id
+            .map(str::trim)
+            .filter(|id| !id.is_empty())
+            .is_none()
+        {
+            return Self::NoRecordedProviderSession;
+        }
+        Self::ProviderResumeOutOfScope
+    }
+}
+
+impl std::fmt::Display for AcpSessionLoadRefusal {
+    /// Plain language, because this text is what reaches the user: Tauri
+    /// commands report through `Err(String)`, and the shell's `nativeCall`
+    /// wrapper surfaces the message verbatim. Never a debug-formatted enum.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::CapabilityNotNegotiated => write!(
+                f,
+                "This agent never advertised the ACP \"loadSession\" capability, so it cannot \
+                 re-open an existing provider conversation, and EveryAIOS does not guess from \
+                 silence. The conversation continues in a new provider session instead."
+            ),
+            Self::NoRecordedProviderSession => write!(
+                f,
+                "This conversation has no provider session id recorded on its agent binding, so \
+                 there is nothing to re-open. EveryAIOS never invents a provider session id, and a \
+                 provider session id is never a Session id."
+            ),
+            Self::ProviderResumeOutOfScope => write!(
+                f,
+                "Resuming an external agent's own provider conversation is not available in this \
+                 release. ACP v2 — which owns the \"session/resume\" method — is deliberately \
+                 unsupported (ARCH/ADR/0007 section 4), and attempting provider resume first \
+                 requires a transport reconnect that re-attaches the existing binding, which v1 \
+                 has not qualified. The conversation continues from the durable checkpoint and \
+                 context passport in a new provider session, labelled \"provider session \
+                 restarted\" — a restart, not a native resume."
+            ),
+        }
+    }
+}
+
+/// Read the provider session id the canonical chain recorded for one binding.
+///
+/// The lookup is keyed by the **application** Session (whose id is this path's
+/// Work id) plus the agent id, so a provider transcript id can never be used as
+/// a Session/Work key. A missing Work, a missing or foreign binding, and a
+/// binding with no recorded provider session all yield `None`: EveryAIOS never
+/// fabricates a provider session id, and a restarted provider session is not
+/// evidence of a resume.
+fn recorded_binding_provider_session_id(
+    gateway: &everyaios_core::WorkGateway,
+    application_session_id: &str,
+    agent_id: &str,
+) -> Option<String> {
+    let work_id = canonical_work_id(application_session_id);
+    gateway
+        .bindings_for(&work_id)
+        .into_iter()
+        .find(|binding| {
+            binding.session_id.as_str() == application_session_id
+                && binding.agent_id.as_str() == agent_id
+        })
+        .and_then(|binding| binding.provider_session_id.clone())
+        .map(|id| id.trim().to_string())
+        .filter(|id| !id.is_empty())
+}
+
+/// Re-attach an existing AgentBinding to a live provider session
+/// (`session/load`), under the Work-gateway identity rules.
+///
+/// **This command refuses, in v1, by policy — the refusal is the contract.**
+/// `session/load` is implemented and capability-gated in the adapter
+/// (`crates/everyaios-acp/src/client.rs`), but ADR-0007 §3 makes transport
+/// reconnect the precondition for attempting provider resume, and v1 has no
+/// reconnect seam; ADR-0007 §4 keeps ACP v2 (and therefore its `session/resume`
+/// method) out of scope. Rather than ship a command that would need a second
+/// lifecycle owner to be honest, this seam reports the precise reason it cannot
+/// re-attach, so the shell never has to guess.
+///
+/// Guarantees this command keeps even while refusing:
+/// - it never fabricates a provider session id, and an unreadable Work Gateway
+///   is treated as "nothing recorded" (fail-closed);
+/// - it never performs provider I/O, never mutates Work/Run/Binding state, and
+///   never touches the Guard/receipt path, because it has no effect to guard;
+/// - the requested identity is the **application** Session, and a handle already
+///   claimed by another Session is refused with the existing owner-mismatch
+///   error before the binding is read.
+///
+/// The refusal is returned as plain-language text on the command's error
+/// channel, which is the surface the shell's `nativeCall` already renders.
+#[tauri::command]
+pub fn acp_session_load(
+    state: State<'_, AppState>,
+    handle: String,
+    session_id: String,
+) -> Result<(), String> {
+    let application_session_id = session_id.trim().to_string();
+    if application_session_id.is_empty() {
+        return Err(AcpIdentityError::MissingApplicationSession.to_string());
+    }
+    // Copy the per-handle slot out of the registry first: the global map lock is
+    // never held while the provider session mutex is taken (the prompt path
+    // takes them in the opposite order).
+    let (agent_id, slot, owner) = {
+        let sessions = state.acp_sessions.lock().map_err(|e| e.to_string())?;
+        let entry = sessions
+            .get(&handle)
+            .ok_or_else(|| format!("unknown ACP handle: {handle}"))?;
+        (
+            entry.agent_id.clone(),
+            entry.session.clone(),
+            entry.owner.clone(),
+        )
+    };
+    if let Some(owner) = owner.as_ref() {
+        if owner.session_id != application_session_id {
+            return Err(AcpIdentityError::OwnerMismatch {
+                handle: handle.clone(),
+                expected_session: application_session_id,
+                actual_session: owner.session_id.clone(),
+            }
+            .to_string());
+        }
+    }
+    // The negotiated capability set is a cached field from `initialize`; reading
+    // it is not provider I/O.
+    let load_session_negotiated = {
+        let session = slot.lock().map_err(|e| e.to_string())?;
+        session
+            .agent_capabilities()
+            .is_some_and(|capabilities| capabilities.load_session)
+    };
+    // Fail closed when the Work Gateway cannot be read: "unknown" is never
+    // promoted to "there is a recorded provider session".
+    let recorded = match relay_planes(&state) {
+        Ok((gateway, _)) => match gateway.lock() {
+            Ok(gateway) => {
+                recorded_binding_provider_session_id(&gateway, &application_session_id, &agent_id)
+            }
+            Err(_) => None,
+        },
+        Err(_) => None,
+    };
+    let refusal = AcpSessionLoadRefusal::decide(load_session_negotiated, recorded.as_deref());
+    Err(format!(
+        "{refusal} (agent {agent_id}, Session {application_session_id})"
+    ))
+}
+
 /// P53.5 — read the per-session tool observability file (newest last).
 /// Empty until the first ACP turn lands for that application Session. A
 /// missing file is honest emptiness, not an error. The application Session id
@@ -3530,6 +3723,110 @@ fn url_host(url: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// P71.12 — an agent that never negotiated `loadSession` is refused on the
+    /// capability itself, before any binding record is consulted.
+    #[test]
+    fn session_load_refuses_an_agent_that_did_not_negotiate_load_session() {
+        assert_eq!(
+            AcpSessionLoadRefusal::decide(false, Some("provider-1")),
+            AcpSessionLoadRefusal::CapabilityNotNegotiated
+        );
+        // Omission is refusal even when a provider session id *is* recorded:
+        // capability is checked first, so no recorded id can imply consent.
+        let message = AcpSessionLoadRefusal::CapabilityNotNegotiated.to_string();
+        assert!(message.contains("loadSession"));
+        assert!(message.contains("does not guess from silence"));
+        assert!(!message.contains('{'), "no debug enum text: {message}");
+    }
+
+    /// A blank/absent recorded provider session id is refused, never invented.
+    #[test]
+    fn session_load_refuses_rather_than_inventing_a_provider_session_id() {
+        for recorded in [None, Some(""), Some("   ")] {
+            assert_eq!(
+                AcpSessionLoadRefusal::decide(true, recorded),
+                AcpSessionLoadRefusal::NoRecordedProviderSession
+            );
+        }
+        let message = AcpSessionLoadRefusal::NoRecordedProviderSession.to_string();
+        assert!(message.contains("never invents a provider session id"));
+    }
+
+    /// With both preconditions satisfied the refusal is still the v1 policy,
+    /// and it names that policy in words a user can act on.
+    #[test]
+    fn session_load_refusal_names_the_adr_0007_v1_policy() {
+        assert_eq!(
+            AcpSessionLoadRefusal::decide(true, Some("provider-1")),
+            AcpSessionLoadRefusal::ProviderResumeOutOfScope
+        );
+        let message = AcpSessionLoadRefusal::ProviderResumeOutOfScope.to_string();
+        assert!(message.contains("ARCH/ADR/0007 section 4"));
+        assert!(message.contains("session/resume"));
+        assert!(message.contains("not available in this release"));
+        assert!(message.contains("provider session restarted"));
+        assert!(message.contains("not a native resume"));
+    }
+
+    /// Every refusal reaches the user as prose, never as a raw enum/path.
+    #[test]
+    fn every_session_load_refusal_is_plain_language() {
+        for refusal in [
+            AcpSessionLoadRefusal::CapabilityNotNegotiated,
+            AcpSessionLoadRefusal::NoRecordedProviderSession,
+            AcpSessionLoadRefusal::ProviderResumeOutOfScope,
+        ] {
+            let message = refusal.to_string();
+            assert!(
+                !message.contains("AcpSessionLoadRefusal"),
+                "leaked the enum type: {message}"
+            );
+            assert!(!message.contains("::"), "leaked a variant path: {message}");
+            assert!(!message.contains('{') && !message.contains('}'));
+            assert!(message.ends_with('.'), "not a sentence: {message}");
+        }
+    }
+
+    /// The recorded provider session id is read from the canonical binding, and
+    /// only under the application Session + agent that own it.
+    #[test]
+    fn recorded_provider_session_id_comes_from_the_canonical_binding() {
+        let mut gateway = everyaios_core::WorkGateway::new();
+        let mut kernel = everyaios_core::ExecutionKernel::new();
+        let identity = prepare_acp_turn(
+            &mut gateway,
+            &mut kernel,
+            "application-a",
+            "shared-agent",
+            "provider-a",
+            "objective",
+        )
+        .unwrap();
+
+        assert_eq!(
+            recorded_binding_provider_session_id(&gateway, "application-a", "shared-agent"),
+            Some("provider-a".to_string())
+        );
+        // A different agent on the same Work has no binding of its own, so there
+        // is no provider session to read — and none is fabricated.
+        assert_eq!(
+            recorded_binding_provider_session_id(&gateway, "application-a", "other-agent"),
+            None
+        );
+        // An unknown Session has no Work, so there is no record to read.
+        assert_eq!(
+            recorded_binding_provider_session_id(&gateway, "application-b", "shared-agent"),
+            None
+        );
+        // The provider id is never a Session/Work key: looking it up as one
+        // finds nothing.
+        assert_eq!(
+            recorded_binding_provider_session_id(&gateway, "provider-a", "shared-agent"),
+            None
+        );
+        assert_eq!(identity.owner.work_id, "application-a");
+    }
 
     #[test]
     fn agent_without_advertised_config_options_is_native_only_and_unchanged() {

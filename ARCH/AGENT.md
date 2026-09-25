@@ -126,7 +126,8 @@ ACP capability supports it; otherwise the host continues from a durable checkpoi
 labels the provider session as restarted; and Channel B calls must retain the same Work-scoped Guard and
 receipt path. These are qualification requirements, not a new identity type or a second lifecycle owner.
 
-**Current limitation (corrected 2026-09-24 against source):** the canonical owner preparation is present
+**Current limitation (corrected 2026-09-24 against source, resolved as a recorded
+exclusion on 2026-09-25 — P71.12):** the canonical owner preparation is present
 in `src-tauri/src/acp_cmds.rs` (`prepare_acp_turn`), and **one half of the earlier limitation has since
 closed**: the production ACP client *does* implement provider resume — `AcpSession::session_load`
 (`crates/everyaios-acp/src/client.rs:1568`, with the `load_session` alias and
@@ -134,6 +135,36 @@ closed**: the production ACP client *does* implement provider resume — `AcpSes
 exercised by `crates/everyaios-acp/tests/acceptance_acp_handshake.rs:123`. `session/resume` is absent by
 policy — it is the ACP v2 method, and v1 is *narrow unsupported v2*
 ([`ADR/0007`](ADR/0007-windows-first-v1-qualification.md) §4).
+
+**v1 ships without provider resume, and that is the decision, not a gap.** The other half — a live
+consumer for `session_load` — is deliberately not built, because the only honest implementation of it
+would require exactly what this chain forbids:
+
+- **`session/load` needs a reconnect, and v1 has no reconnect.** `ADR/0007` §3 makes transport
+  reconnect (replay the Work event stream from the last acknowledged sequence, re-attach the existing
+  binding) the **precondition** for attempting provider resume. The ACP layer has no such seam: the
+  only producer of a live `AcpSession` is `acp_launch`, which unconditionally runs `session/new`
+  (`src-tauri/src/acp_cmds.rs`) and stamps that fresh id onto the handle. A `session_load` command
+  placed after it would orphan a provider session seconds after creating it.
+- **A provider session belongs to a provider process.** The agent is a child of the app, so the
+  session dies with it. Whether a *new* process can re-open a session created by a dead one is a
+  property of the agent's own persistence, and the repository holds **no acceptance record** for it
+  on any real agent. A green mock handshake is evidence about the tree, not proof that the product
+  resumes.
+- **A wired command with no caller is the same defect one layer out.** Without a renderer entry point
+  the command would be an IPC ghost, which is exactly what this row was opened to eliminate.
+
+So the shell seam exists and is honest instead of absent: **`acp_cmds::acp_session_load`**
+(`acp_session_load` on the wire) classifies a resume attempt from the only two facts it may rest on —
+the `agentCapabilities.loadSession` value the agent actually negotiated, and the provider session id
+the canonical `AgentBinding` actually recorded — and returns a typed `AcpSessionLoadRefusal`
+(`CapabilityNotNegotiated` · `NoRecordedProviderSession` · `ProviderResumeOutOfScope`) as plain-language
+text on the command's error channel. It never fabricates a provider session id, never reads one as a
+Session/Work key, performs no provider I/O, mutates no Work/Run/Binding state, and therefore needs no
+Guard ticket or receipt — it has no effect to guard. The continuation a user actually receives is a
+**new** provider session continued from the durable checkpoint/`ContextPassport`, which this section
+and `ADR/0007` §3 require be labelled *provider session restarted*, never native resume. The same
+statement is recorded in [`EXTERNAL-AGENTS.md`](EXTERNAL-AGENTS.md) §7.
 
 Launch passes the shared-plane server from `channel_b_servers` into `session_new` (`src-tauri/src/acp_cmds.rs`). An empty tool list is no longer the production call. Channel B is still **implemented — unverified** until a live Windows agent completes a guarded tool call on that server. The exact evidence and acceptance condition
 live in [`ADR/0007`](ADR/0007-windows-first-v1-qualification.md); the reusable host-side machinery for the
