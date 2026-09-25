@@ -201,14 +201,14 @@ export function selectModelForTask(opts: RouterOptions): ModelSelection {
     });
 
   if (pass.length === 0) {
-    // P50.3.6 — the credential gate holds in the fallback too (mirrors the
-    // Rust feed): prefer an explicit lock that passed the gate, else the
-    // first gate-passing provider, else the "nvidia" default with the honest
-    // no-credential reason. Never name an excluded provider.
-    const fallbackProvider =
-      credentialed !== null
-        ? (opts.provider && gatePassed.includes(opts.provider) ? opts.provider : (gatePassed[0] ?? "nvidia"))
-        : (opts.provider ?? "nvidia");
+    // P50.3.6 / P51.3 — both provider gates hold in the fallback too: prefer
+    // an explicit lock that passed the gates, else the first gate-passing
+    // provider, else the "nvidia" default. This keeps a keyless local runtime
+    // from being stranded by a use-policy when it has no catalog candidate.
+    const providerGateActive = credentialed !== null || useAllowed !== null;
+    const fallbackProvider = providerGateActive
+      ? (opts.provider && gatePassed.includes(opts.provider) ? opts.provider : (gatePassed[0] ?? "nvidia"))
+      : (opts.provider ?? "nvidia");
     const provider = fallbackProvider;
     const gateNote =
       credentialed !== null
