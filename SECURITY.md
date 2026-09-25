@@ -8,7 +8,7 @@ problem, and which floors are *enforced in code* rather than promised.
 
 Open a private security advisory on the repository
 (`Security → Report a vulnerability`) rather than a public issue. Please
-include: the version (`About` shows it, or `everyaios --version`), the platform,
+include: the version (`About` shows it, or `everyaios-core --version`), the platform,
 the exact steps, and — if a guard floor was bypassed — the audit event ids from
 `~/.everyaios/audit.ndjson`. Do not include live credentials; the audit ledger
 never contains them by design, and neither should your report.

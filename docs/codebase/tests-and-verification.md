@@ -7,14 +7,25 @@
 
 ## Commands
 
+The Rust workspace manifest is `crates/Cargo.toml` — there is **no** root
+`Cargo.toml`, so every `cargo` command runs with `crates/` as the working
+directory, which is what CI does (`working-directory: crates`):
+
 ```bash
-cargo test                                    # all Rust unit + integration tests
-cargo test -p everyaios-core                  # single crate
-pnpm test                                     # all Vitest suites
-pnpm --filter ui tsc --noEmit                 # UI typecheck
-cargo clippy                                  # Rust lint
-node scripts/e2e/security-gate.mjs            # security gate
+(cd crates && cargo test)                      # all Rust unit + integration tests
+(cd crates && cargo test -p everyaios-core)    # single crate
+(cd crates && cargo clippy)                    # Rust lint
+pnpm install                                  # JS workspace
+pnpm --filter @everyaios/coordinator test     # sidecar (bun test)
+pnpm --filter @everyaios/ui type-check         # cockpit typecheck (tsc --noEmit)
+(cd ui && bun test)                            # cockpit unit tests (bun test)
+node scripts/e2e/security-gate.mjs             # security gate
 ```
+
+There is no root `pnpm test` script (the root `package.json` has no `test`
+entry), and `@everyaios/ui` has no `test` script either — cockpit tests are run
+with `bun test` from `ui/`, as CI does. Vitest is a devDependency only under
+`packages/core-*`.
 
 Live integration tests are gated: `EVERYAIOS_LIVE_TEST=1` (`AGENTS.md` §14).
 
@@ -22,12 +33,12 @@ Live integration tests are gated: `EVERYAIOS_LIVE_TEST=1` (`AGENTS.md` §14).
 
 | Area | Files | Location pattern |
 |---|---|---|
-| Rust integration | 28 | `crates/*/tests/*.rs` — `acceptance_*` prefix per convention; `live_*` env-gated |
-| Rust unit mods | 382 files with `#[cfg(test)]` | `crates/*/src/**/*.rs` |
-| Sidecar (coordinator) | 59 | `packages/coordinator/**/*.test.ts` |
-| Cockpit UI | 54 | `ui/src/**/*.test.ts(x)` — DOM testing library |
+| Rust integration | 32 | `crates/*/tests/*.rs` — `acceptance_*` prefix per convention; `live_*` env-gated |
+| Rust unit mods | 385 files with `#[cfg(test)]` | `crates/*/src/**/*.rs` |
+| Sidecar (coordinator) | 45 | `packages/coordinator/**/*.test.ts` |
+| Cockpit UI | 68 | `ui/src/**/*.test.ts(x)` — `bun test` + DOM testing library |
 | core-ai | 13 | `packages/core-ai` |
-| core-memory / core-search / core-providers / core-connectors / core-engine | 8 / 7 / 6 / 5 / 4 | `packages/core-*` |
+| core-memory / core-search / core-connectors / core-providers / core-security / core-agents / core-domain / core-tools | 8 / 7 / 5 / 4 / 2 / 1 / 1 / 1 | `packages/core-*` (9 packages; `core-engine` is archived at `ARCH/archive/core-engine/`) |
 
 Example integration tests: `crates/everyaios-acp/tests/acceptance_acp_handshake.rs`,
 `crates/everyaios-blueprint/tests/acceptance_skill_distillation.rs`,
@@ -39,7 +50,7 @@ Example integration tests: `crates/everyaios-acp/tests/acceptance_acp_handshake.
 |---|---|
 | `rust` | kernel build + tests |
 | `office-oracle` | office crate conformance |
-| `ui` | cockpit typecheck + Vitest |
+| `ui` | cockpit typecheck + `bun test` (the job name still says "vitest" in a comment; the runner is `bun test`) |
 | `sidecar` | coordinator tests |
 | `tauri-check` | shell layer check |
 | `docs-sync` | doc staleness, incl. `node scripts/gen-codebase-map.mjs --check` (CODEBASE-MAP.md must match `git ls-files` exactly) |
@@ -85,8 +96,8 @@ imply they do:
 
 - No file→test coverage mapping exists in the index (no coverage data is
   collected); "related tests" above is by naming/location convention.
-- The 202 detected test files are unevenly distributed: `everyaios-guard`,
+- The detected test files are unevenly distributed: `everyaios-guard`,
   `everyaios-vault`, and `everyaios-audit` carry the system's most safety-
   critical logic but their integration coverage lives mostly in `#[cfg(test)]`
   modules rather than `tests/` files — verify per-change, do not assume parity
-  with `coordinator`'s 59-file suite.
+  with `coordinator`'s 45-file suite.

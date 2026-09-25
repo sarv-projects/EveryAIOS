@@ -23,7 +23,8 @@ coverage claim — see [tests-and-verification.md](tests-and-verification.md)).
   - `ui/src/lib/store.ts` — Zustand store, 48 defs / 4,078 refs (in-degree 94)
   - `ui/src/lib/utils.ts` — shared helpers (in-degree 115)
   - `ui/src/lib/acp.ts`, `ui/src/lib/agents.ts` — ACP agent surface
-- **Tests:** 54 `*.test.ts(x)` under `ui/src` (Vitest + DOM testing library).
+- **Tests:** 68 `*.test.ts(x)` under `ui/src` (run with `bun test`; the `@everyaios/ui` package has no
+  `test` script and no Vitest dependency).
 - **Config:** `ui/tsconfig.json` declares the `@/* → ./src/*` path alias
   (consumed by the codegraph resolver too).
 - **Post-thaw:** the cockpit is a **projection** of canonical state — it owns no durable truth and mutates
@@ -34,10 +35,10 @@ coverage claim — see [tests-and-verification.md](tests-and-verification.md)).
 ## L3 — Tauri shell (`src-tauri/`)
 
 - **Responsibility:** thin command layer. `src-tauri/src/lib.rs` holds the
-  `generate_handler!` registration (350 registered commands per `scripts/ipc-parity.mjs`; P71.3d removed `scheduler_runs` and renamed `scheduler_continuity` → `scheduler_notepad_get`)
+  `generate_handler!` registration (367 registered commands per `scripts/ipc-parity.mjs`; P71.3d removed `scheduler_runs` and renamed `scheduler_continuity` → `scheduler_notepad_get`)
   and is the only file with fan-out
   to both crates and commands (in-degree 35, out-degree 48).
-- **Modules:** 40 `*_cmds.rs` files (acp, agent, agent_backend, artifact, browser,
+- **Modules:** 42 `*_cmds.rs` files (acp, agent, agent_backend, artifact, browser,
   calendar, catalog, cockpit, codeintel, desktop, discovery, doctor, feedback, fs, git, guard, …) plus
   `commands.rs`, `control.rs`.
 - **Rule:** commands validate + delegate; business logic lives in L2 crates.
@@ -73,22 +74,23 @@ Responsibilities are each crate's own module doc (`crates/*/src/lib.rs`):
 | `everyaios-storage` | "storage intelligence (P4.8, D9–D12 + G7)" — `checkpoint.rs`, `content.rs`, dedup, FTS5 |
 | `everyaios-types` | "the shared contract crate (spec §4.0 item 20, P47.3)" |
 
-- **Tests:** 28 integration files under `crates/*/tests/` (`acceptance_*` and
+- **Tests:** 32 integration files under `crates/*/tests/` (`acceptance_*` and
   `live_*` naming; live tests require `EVERYAIOS_LIVE_TEST=1`), plus
-  `#[cfg(test)]` unit modules in 382 source files.
+  `#[cfg(test)]` unit modules in 385 source files.
 
 ## L1 — Sidecar (`packages/`, 10 workspace packages)
 
 - **`coordinator`** — turn coordination (load state, build context, project tools, delegate, observe,
   verify, recover) + IPC handler; spawns per
-  `crates/everyaios-core/src/supervisor.rs`. 59 test files (largest TS suite).
+  `crates/everyaios-core/src/supervisor.rs`. 45 test files (largest TS suite).
   Entry: `packages/coordinator/src/index.ts`. Post-thaw: coordination, **not** reasoning — the loop
-  belongs to the selected agent binding (CORE §7.1).
+  belongs to the selected agent binding (CORE §7.1). The loop that used to live in
+  `src/chat.ts` is archived under `ARCH/archive/coordinator-loop/`.
 - **`core-domain`** — shared domain types; the single most-imported file in the
   graph (`src/index.ts`, in-degree 98, out 0 — a pure type barrel).
 - **`core-ai`** (13 tests), **`core-memory`** (8),
-  **`core-search`** (7), **`core-providers`** (6), **`core-connectors`** (5),
-  **`core-tools`**, **`core-security`**, **`core-agents`**.
+  **`core-search`** (7), **`core-connectors`** (5), **`core-providers`** (4),
+  **`core-security`** (2), **`core-agents`** (1), **`core-tools`** (1).
 - **Post-thaw consolidation (P69.D) — landed in code 2026-09-20/21, implemented-not-verified.**
   Provider-credential custody left `core-providers` for the Rust vault alone (defect V4 → `P69.C4`;
   `vault.ts` is now a handle-only façade); `core-security` is reduced to a crypto/vault-support utility

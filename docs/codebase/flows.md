@@ -27,9 +27,14 @@ coordinator owns turn coordination, not reasoning (CORE §7.1).
 4. `crates/everyaios-core/src/sidecar_link.rs` frames the request to the Bun
    sidecar (`packages/coordinator`) over stdio JSON-RPC 2.0
    (`[u32 LE len][JSON]`) **[D + G: sidecar_link.rs ↔ coordinator/index.ts seam]**.
-5. `packages/coordinator/src/chat.ts` runs turn coordination; provider access is
-   requested through the broker (F3), never with local keys **[S: chat.test.ts,
-   index.ts reference `provider/stream`]**. Post-thaw frame: what the model sees is a derived
+5. **Retired path (historical, not live).** The turn loop that used to live in
+   `packages/coordinator/src/chat.ts` is **archived** under
+   `ARCH/archive/coordinator-loop/`, and the `provider/stream` broker seam was
+   **deleted 2026-09-22** (`P71.2c`, `ARCH/ADR/0005` §2/§6). v1 has no built-in engine, so there is
+   no EveryAIOS-owned inference step here at all: the turn is driven by the bound external agent over
+   its ACP channel, which owns its own provider, model and credentials (see F3). What survives in
+   `packages/coordinator` is turn *coordination* — load state, build context, project tools, emit
+   events, drive recovery (`ARCH/CORE.md` §7.1). Post-thaw frame: what the agent does see is a derived
    `ContextSurface` reduced in the normative 7-step optimization order (cheap deterministic reducers
    with re-measure before any model summarization), with capacity taken from the resolved route
    (`ARCH/CONTEXT.md`, `ARCH/ROUTING.md`; I19, I21).
@@ -64,20 +69,30 @@ user-gesture provenance stamped by Rust call sites only. Every audit row records
    that crate's unit tests) **[S]**, with the authorization provenance (`agent_ticket` /
    `automation_ticket` / `human_gesture`) recorded on the row **[D: spec §4.3]**.
 
-## F3 — Provider key broker (keys never leave the vault)
+## F3 — Provider key broker (keys never leave the vault) — **retired path, described as history**
+
+> **This flow no longer runs.** The `provider/stream` broker seam was **deleted 2026-09-22**
+> (`P71.2c`, `ARCH/ADR/0005` §2/§6) with the built-in engine, and
+> `packages/coordinator/src/chat.ts` — the caller — is archived under
+> `ARCH/archive/coordinator-loop/`. In v1 a live turn runs on the **bound external agent's ACP
+> channel**, and the agent owns its own provider, model, credentials and transport. EveryAIOS holds
+> only its **own** keys in the vault (connector tokens, browser sessions, EveryAIOS-managed API keys)
+> for its own tools. `external-systems.md` §"LLM providers (BYOK)" carries the same statement; the
+> steps below are the historical shape, retained for provenance. Nothing below is on a v1 turn path.
 
 1. Provider API keys are stored only in `crates/everyaios-vault` (SQLCipher
    key-ring) **[S: module doc]**.
-2. The sidecar requests a model stream by name over the stdio contract; the
+2. The sidecar requested a model stream by name over the stdio contract; the
    `provider/stream` seam files — `src-tauri/src/lib.rs`,
    `crates/everyaios-core/src/chat.rs`, `crates/everyaios-core/src/sidecar_link.rs`,
-   `packages/coordinator/src/index.ts` — are where the brokered exchange lives **[G
-   co-occurrence + D: AGENTS §15]**.
-3. Rust resolves the credential from the vault, opens the outbound request
-   through Guard-2 `netfloor` policy, and relays stream frames to the sidecar;
-   key material never enters sidecar memory or IPC payloads **[D: AGENTS §10, §15
+   `packages/coordinator/src/index.ts` — were where the brokered exchange lived **[G
+   co-occurrence + D: AGENTS §15]**. *(Removed 2026-09-22.)*
+3. Rust resolved the credential from the vault, opened the outbound request
+   through Guard-2 `netfloor` policy, and relayed stream frames to the sidecar;
+   key material never entered sidecar memory or IPC payloads **[D: AGENTS §10, §15
    — this step is doc-asserted; the relay implementation detail is not
-   symbol-traced here]**.
+   symbol-traced here]**. *(Removed 2026-09-22; `src-tauri/src/catalog_cmds.rs`
+   now records that `register_endpoint` existed only to feed the now-deleted broker.)*
 4. Catalog/model metadata comes from `crates/everyaios-catalog` (models.dev
    sync) so routing does not require network at call time **[S: module doc]**.
    The former TS-side custody (`packages/core-providers/src/vault.ts` — thaw defect V4) is **repaired in

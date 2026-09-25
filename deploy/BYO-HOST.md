@@ -42,7 +42,10 @@ fly launch --image <your-registry>/everyaios-node:local --copy-config
 fly secrets set EVERYAIOS_VAULT_KEY=<node key>
 fly deploy
 ```
-Pin the image digest; the P8.8 updater handles runtime updates on your terms.
+Pin the image digest and roll updates on your terms. Note the headless node has
+**no updater of its own**: the auto-updater is the Tauri updater plugin inside
+the desktop app (`docs/updating.md`), so on the node you redeploy the image
+yourself.
 
 ### DigitalOcean (Droplet)
 ```bash

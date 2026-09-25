@@ -35,7 +35,9 @@ user only:
 The registry is touched only by the uninstaller's own registration (Add/Remove
 Programs). The app itself registers **no** services, **no** scheduled tasks,
 **no** autostart entries and **no** `PATH` edits — the MRP-registry check in
-`scripts/check-artifact-hygiene.mjs` keeps the manifest honest about that.
+`scripts/check-diagnostics-surface.mjs` keeps this statement honest in the docs.
+(`scripts/check-artifact-hygiene.mjs` is a different gate: it scans *produced*
+bundles for secret leaks at packaging time, not this contract.)
 
 ## 2. Uninstall & data (D4 contract)
 
@@ -59,5 +61,5 @@ The five failure classes, with the recovery a user can actually perform:
 | 4 | **Dead agent runtime** (an ACP agent crashes / hangs mid-turn) | turn ends with the agent's error; agent row shows not-ready | `acp_shutdown` / kill the child; re-launch from the agent tab. Persistent failure: reinstall that agent (`acp_install`) — app data is untouched. |
 | 5 | **Half-applied migration** (boot died between store writes) | next boot refuses: `NewerThanApp` naming the store, or a re-run of `boot()` re-stamps cleanly | A newer-stamped store is refused *before any write* (nothing is half-migrated); follow the refused store's note in Settings → Doctor / `docs/updating.md` §6. If a manifest store was stamped but its writer died, the store is *adopted* (flagged), not claimed migrated. |
 
-The doctor surface (Settings → Doctor, or `everyaios doctor`) is the first
+The doctor surface (Settings → Doctor, or `everyaios-core doctor`) is the first
 stop for all five: it names the broken subsystem and the remedy.

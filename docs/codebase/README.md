@@ -13,8 +13,12 @@ index they were derived from (`.code-intelligence/`) is disposable and gitignore
 ## What this repository is
 
 EveryAIOS is a **local-first, BYO-key desktop harness that hosts coding agents**
-(Claude Code, Codex, OpenCode, MCP servers, plus an optional built-in binding) rather than
-being one itself. The user-facing container is a **Chat**; the technical unit behind it is a
+(Claude Code, Codex, OpenCode, MCP servers) rather than
+being one itself. Under [`ARCH/ADR/0005`](../../ARCH/ADR/0005-external-agents-are-the-v1-engines.md)
+the external agent is the only first-class v1 engine; a built-in binding is deferred to post-v1, and
+the coordinator's own turn loop plus the `provider/stream` broker seam were deleted/archived
+(`P71.2c` — see [flows.md](flows.md) F1.5/F3 and [external-systems.md](external-systems.md)). The
+user-facing container is a **Chat**; the technical unit behind it is a
 **Session** (`ARCH/SESSION.md` — a Chat may be standalone or attached to a Project). Chat, browser, files, documents, code, automations, agents, and
 connected accounts share one durable work context. Every side-effecting operation
 enters the authoritative effect boundary with **authorization provenance** (`ARCH/CORE.md` §5.1):
@@ -30,9 +34,9 @@ Capability identity: [`capabilities.yaml`](../../capabilities.yaml) == `ARCH/09-
 | Layer | Implementation | Talks to next layer via |
 |---|---|---|
 | L4 Cockpit | `ui/` — React 19 + Zustand 5 + Tailwind 4 | Tauri IPC: `nativeCall()` (`ui/src/lib/runtime.ts`) |
-| L3 Tauri shell | `src-tauri/` — 350 registered commands across 40 `*_cmds.rs` modules (machine-checked by `scripts/ipc-parity.mjs`, 2026-09-21) | direct Rust calls into L2 |
+| L3 Tauri shell | `src-tauri/` — 367 registered commands across 42 `*_cmds.rs` modules (machine-checked by `scripts/ipc-parity.mjs`) | direct Rust calls into L2 |
 | L2 Rust kernel | `crates/` — 21-cargo workspace | stdio JSON-RPC 2.0 (`crates/everyaios-ipc`) |
-| L1 Bun sidecar | `packages/coordinator` — LLM turn loop | ACP / MCP / CDP |
+| L1 Bun sidecar | `packages/coordinator` — turn coordination (not reasoning) | ACP / MCP / CDP |
 | L0 External agents | Claude Code, Codex, OpenCode, MCP servers, Chrome | their own protocols |
 
 **The one invariant (`ARCH/CORE.md` I1): Work proposes, the kernel disposes.** The sidecar has no
@@ -48,15 +52,24 @@ selected agent's `AgentBinding` (`ARCH/AGENT.md`); the name survives only in leg
 
 ## Build / test / verify
 
+The Rust workspace manifest is `crates/Cargo.toml` (there is **no** root
+`Cargo.toml`), so every `cargo` command runs with `crates/` as the working
+directory — CI does the same (`working-directory: crates`):
+
 ```bash
-cargo build                                  # Rust kernel
-pnpm install                                 # JS workspace
-pnpm --filter @everyaios/coordinator build   # sidecar
-cargo test                                   # all Rust tests
-pnpm test                                    # all Vitest suites
-pnpm --filter ui tsc --noEmit                # UI typecheck
-cargo clippy                                 # Rust lint
+(cd crates && cargo build)                     # Rust kernel
+(cd crates && cargo test)                      # all Rust unit + integration tests
+(cd crates && cargo clippy)                    # Rust lint
+pnpm install                                  # JS workspace
+pnpm --filter @everyaios/coordinator build    # sidecar
+pnpm --filter @everyaios/coordinator test     # sidecar tests (bun test)
+pnpm --filter @everyaios/ui type-check         # cockpit typecheck (tsc --noEmit)
+(cd ui && bun test)                            # cockpit tests (bun test; the ui package has no test script)
 ```
+
+There is no root `test` script, and `@everyaios/ui` has no `test` script either —
+so `pnpm test` from the repo root does not exist. Vitest is a devDependency only
+under `packages/core-*`.
 
 CI gates (`.github/workflows/ci.yml`): `docs-sync`, `rust`, `office-oracle`,
 `ui`, `sidecar`, `tauri-check`. See

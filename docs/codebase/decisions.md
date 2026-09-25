@@ -41,7 +41,7 @@ docs, code, or Git history, that is stated explicitly.
 
 - **Decision:** `src-tauri/` validates and delegates only; business logic lives
   in crates.
-- **Provenance:** structure itself — 351 registered commands across 40
+- **Provenance:** structure itself — 367 registered commands across 42
   `*_cmds.rs` modules delegating into 21 crates; `AGENTS.md` §10/§12. Git
   history: `docs/ipc-parity` CI checks keep the two sides aligned.
 
@@ -54,6 +54,10 @@ docs, code, or Git history, that is stated explicitly.
 - **Rationale recorded:** `AGENTS.md` §10 (ecosystem velocity of TS AI tooling
   vs kernel trust boundary). The *original* trade-off discussion is not in an
   ADR — this is doc-stated, not ADR-proven.
+- **Status note (2026-09-22, see D10):** the *turn loop* half of this decision is retired — v1
+  ships no built-in engine (`ADR/0005`), `src/chat.ts` is archived, and the `provider/stream`
+  broker seam was deleted. What the sidecar still runs is turn **coordination**. This entry is kept
+  as the historical decision record.
 
 ## D6 — Agent-agnostic agent kit (`.agents/`)
 
@@ -109,8 +113,11 @@ docs, code, or Git history, that is stated explicitly.
 - **D3 (chat-loop port):** superseded as a direction. The loop is owned by the selected agent
   (`AgentBinding`); the coordinator owns turn coordination, not reasoning; the pure policies/helpers
   that `everyaios-engine` once held were **deleted 2026-09-23** (`TODO` P72) along with the crate's
-  last consumers (`ARCH/AGENT.md`, `ARCH/CORE.md` §7.1, TODO P69.A25/P69.D8). That the sidecar
-  still runs the turn loop today is current behavior, not the target.
+  last consumers (`ARCH/AGENT.md`, `ARCH/CORE.md` §7.1, TODO P69.A25/P69.D8). The sidecar does **not**
+  run the turn loop today and has not since 2026-09-22: `packages/coordinator/src/chat.ts` is archived
+  under `ARCH/archive/coordinator-loop/` and the `provider/stream` broker seam was deleted with it
+  (`P71.2c`). v1 ships no built-in engine (`ADR/0005`) — see `flows.md` F1.5/F3 and
+  `external-systems.md` §"LLM providers (BYOK)".
 - **D5 (Bun sidecar):** rationale sharpened — TypeScript keeps ecosystem velocity for orchestration while
   the kernel trust boundary is structural (the sidecar has no effect-execution surface and holds no
   credentials). Nine defects qualify the present state (CORE §11 V1–V9, TODO P69.C): the original four, plus five found later in the ACP-registry adapter path (auth-from-license, discarded env, bare binary launch, schema gaps, split wire contract).

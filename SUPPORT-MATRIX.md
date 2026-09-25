@@ -58,8 +58,18 @@ The platform matrix therefore describes a Windows-first target, not a completed 
   **build-time** tools and are never required on a user's machine (`P70.A3`).
 - **Agents:** any installed ACP agent runs as a normal user process; WSL-hosted agents are launched through
   their distro. Provider credentials live only in the Rust vault — never in a sidecar or a config file.
-- **Sandbox posture:** Windows uses Job Objects and Restricted Tokens. This is a **weaker confinement than the
-  Linux `bwrap` backend**, and the app must say so rather than presenting the two as equivalent (`P70.D7`).
+- **Sandbox posture:** **Ambient** on Windows. The only `SandboxBackend` implementation in the tree is
+  `LinuxBwrapBackend` (`crates/everyaios-guard/src/sandbox.rs`) — there is no Job-Object or
+  restricted-token *sandbox backend*, and the Windows capability strings in
+  `enforced_backend_capabilities()` have no implementation behind them (that function is also never
+  called). *(Windows Job Objects do exist, but only as **orphan prevention** in the supervisor —
+  `everyaios-core/src/orphan.rs`, `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`. That is process-tree cleanup,
+  not confinement: no filesystem namespace, no capability restriction.)*
+  Third-party MCP servers therefore run ticket-gated, audited and net-floored but **unconfined** on
+  Windows — Settings → Diagnostics reports "this platform has no native sandbox backend yet
+  (`P49.5`)" (`src-tauri/src/diagnostics_cmds.rs`). See [`SECURITY.md`](SECURITY.md) §"What is *not*
+  contained" and [`docs/release/post-v1.md`](docs/release/post-v1.md), which record the native
+  sandbox backends as unbuilt (`P70.D7`). The Linux `bwrap` backend is the only confined path today.
 
 ## 3. What is explicitly not claimed
 

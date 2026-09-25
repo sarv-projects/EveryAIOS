@@ -42,7 +42,7 @@ JetBrains Mono (mono). **Spacing** 4px grid. **Motion** 150–300ms
 - **Cockpit** (`App.tsx`): TitleBar → [LeftSidebar | CenterColumn | ActivityRail | RightViewport] → StatusBar. Never 9 peer tabs.
 - **LeftSidebar**: workspace selector, nav (Home/Activity/Projects/Files/Automations), Recent chats (P11.5.1 child forks indent), Settings. Collapsible to 48px.
 - **CenterColumn**: chat (timeline + composer + approve cards) or one panel screen.
-- **ActivityRail + RightViewport** (`right-rail.tsx`): 48px rail (Folder/Shell/Browse/Code + Office flyout + Progress/Trajectory), one open surface, drag-resize 28–70%, per-session persistence (P11.5.3).
+- **ActivityRail + RightViewport** (`right-rail.tsx`): 48px rail (Folder/Shell/Browse/**Computer use**/Code + Office flyout + Progress/Trajectory), one open surface, drag-resize 28–70%, per-session persistence (P11.5.3). The `ViewId` union in `src/lib/store.ts` names all **22** viewports and `VIEW_META` in `right-rail.tsx` labels every one of them: Folder · Terminal · Browser · Code · Spreadsheet · Document · Slides · PDF · Progress · Diff · Audit · Storage · Timeline · Trajectory · Blueprint · Local Server · Kanban · Generative UI · Artifact · Computer use · Tool output · Run.
 - **StatusBar**: live runtime state (● Live / ⏸ Paused / Processing) + privacy reassurance + the current provider/model label when available; dev-mode telemetry strip incl. LCP/TTI (P11.4). Never present a curated seed row as live catalog data.
 
 ## 3. Components (code: `src/components/ui/*` + `src/components/panels|chat|views/*`)
@@ -76,7 +76,16 @@ markdown); LCP/TTI measured in `lib/perf.ts` and surfaced in the status bar.
 
 ## 6. Layouts index (all screens)
 
-Chat · Home launchpad · Automations (+ templates + NL create + Tasks rail) · Guard (v1 webview+nonce) ·
-Connectors · Memory · Analytics · Settings · right rail: Browse (CDP) vs Computer use (real OS see-pane, vision-gated, DAG) ·
-Folder · Shell · Browse · Code · Diff · Audit · Storage · Blueprint ·
-Trajectory · Office honest viewers (Sheets/Word/Slides/PDF + LO fallback + file switcher).
+Center screens — all **12**, the `centerScreen` union in `src/lib/store.ts`:
+Home · Chat · Activity · Projects · Files · Automations · Memory · Guard ·
+Connectors · Analytics · Agents · Settings.
+
+Right rail — all **22** viewports, the `ViewId` union in `src/lib/store.ts`
+labelled by `VIEW_META` in `right-rail.tsx`:
+Folder · Terminal · Browser · Computer use (real OS see-pane, vision-gated, DAG) ·
+Code (IDE workbench) · Spreadsheet · Document · Slides · PDF (honest viewers + LO
+fallback + file switcher) · Progress · Diff · Audit · Storage · Timeline ·
+Trajectory · Blueprint · Local Server · Kanban · **Run** (the one run surface —
+identity, context/usage, ordered trace steps, artifacts, workspace files, MCP
+servers, with progress/trajectory/diff/artifact/tool-output as its drill-down
+lenses) · Generative UI · Artifact · Tool output.

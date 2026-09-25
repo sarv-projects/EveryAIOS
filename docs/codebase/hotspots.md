@@ -73,7 +73,7 @@ disconnected code — worth an occasional look, not an alarm.
 
 No coverage instrumentation exists, so "hub without tests" cannot be computed
 mechanically. Proximity check: all PageRank top-15 files sit in areas with
-colocated test suites (54 UI test files, 59 coordinator test files, crate unit
+colocated test suites (68 UI test files, 45 coordinator test files, crate unit
 mods), but per-file mapping is unproven — see
 [tests-and-verification.md](tests-and-verification.md).
 

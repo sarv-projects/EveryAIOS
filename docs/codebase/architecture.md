@@ -9,9 +9,9 @@
 
 ```mermaid
 flowchart TD
-    UI["L4 Cockpit — ui/ (React 19, Zustand 5, Tailwind 4)"] -->|"nativeCall() — Tauri IPC, protocol v1"| TAURI["L3 Tauri shell — src-tauri/ (351 registered commands, 40 *_cmds.rs)"]
+    UI["L4 Cockpit — ui/ (React 19, Zustand 5, Tailwind 4)"] -->|"nativeCall() — Tauri IPC, protocol v1"| TAURI["L3 Tauri shell — src-tauri/ (367 registered commands, 42 *_cmds.rs)"]
     TAURI -->|"direct Rust calls"| KERNEL["L2 Rust kernel — crates/ (21-crate workspace)"]
-    KERNEL -->|"stdio JSON-RPC 2.0, [u32 LE len][JSON] framing"| SIDECAR["L1 Bun sidecar — packages/coordinator (LLM turn loop)"]
+    KERNEL -->|"stdio JSON-RPC 2.0, [u32 LE len][JSON] framing"| SIDECAR["L1 Bun sidecar — packages/coordinator (turn coordination, not reasoning)"]
     SIDECAR -->|"ACP / MCP / CDP"| L0["L0 External agents — Claude Code, Codex, OpenCode, MCP servers, Chrome"]
 ```
 
@@ -37,7 +37,7 @@ See [invariants.md](invariants.md).
 | Subsystem | Path | Responsibility (from its own module docs) |
 |---|---|---|
 | Cockpit UI | `ui/` | Single-window cockpit: TitleBar, LeftSidebar, CenterColumn, ActivityRail/RightViewport, StatusBar |
-| Tauri shell | `src-tauri/` | Thin command layer; registers **351** commands (`scripts/ipc-parity.mjs`, the parity authority), delegates to crates. The map generator counts **341** for the same list — the two tools count different things, and the parity tool is the one that also tracks UI call sites, so its number is the one to quote. |
+| Tauri shell | `src-tauri/` | Thin command layer; registers **367** commands (`scripts/ipc-parity.mjs`, the parity authority), delegates to crates. The map generator may count a different number for the same list — the two tools count different things, and the parity tool is the one that also tracks UI call sites, so its number is the one to quote. |
 | Orchestrator | `crates/everyaios-core` | "the EveryAIOS orchestrator binary" — supervisor, sidecar link, chat |
 | Guard | `crates/everyaios-guard` | "Guard-1: deterministic pre-exec scanning of every…" effect |
 | Audit | `crates/everyaios-audit` | "append-only NDJSON event log (ARCH/06 §6.5, J5)" |
@@ -49,8 +49,8 @@ See [invariants.md](invariants.md).
 | Browser | `crates/everyaios-browser` | "accessibility-tree snapshot engine + action layer" |
 | CDP | `crates/everyaios-cdp` | "Chrome DevTools Protocol client (ARCH/08, E1)" |
 | Computer use | `crates/everyaios-desktop` | "E9 desktop computer-use" — **package name `everyaios-computeruse`** (renamed to avoid collision with the src-tauri shell crate, per `crates/Cargo.toml` comment) |
-| Sidecar | `packages/coordinator` | LLM turn loop over stdio JSON-RPC |
-| Core-* libs | `packages/core-*` (10) | Domain, engine, AI runtime, providers, memory, tools, search, connectors, security, agents — consolidation targets in `TODO.md` P69.D (one registry / one vault / one context manager each) |
+| Sidecar | `packages/coordinator` | Turn **coordination** over stdio JSON-RPC (load state, build context, project tools, emit events, drive recovery) — not an LLM turn loop; the loop and the `provider/stream` broker seam were deleted/archived 2026-09-22 (`P71.2c`, `ARCH/ADR/0005`) and the bound external agent owns the loop |
+| Core-* libs | `packages/core-*` (9) | Domain, AI runtime, providers, memory, tools, search, connectors, security, agents — consolidation targets in `TODO.md` P69.D (one registry / one vault / one context manager each). `core-engine` left the workspace entirely (`ARCH/archive/core-engine/`, P71.2c). |
 
 ## Post-thaw mapping (authority: `ARCH/CORE.md` §§3–10, 13–14)
 
@@ -94,8 +94,10 @@ architecture claim in `AGENTS.md` §10 and is the graph-level signature of
 
 1. **No new cross-layer imports.** If L4 needs L2 data, it goes through a
    `#[tauri::command]`; if L1 needs an effect, it proposes and L2 disposes.
-2. **Keys touch only the vault.** Provider streams are brokered; the sidecar
-   receives tokens/frames, never key material (see [flows.md](flows.md) F3).
+2. **Keys touch only the vault.** EveryAIOS-owned keys (connector tokens, browser
+   sessions, EveryAIOS-managed API keys) never leave `everyaios-vault`. A live turn's
+   provider credentials belong to the bound external agent, which owns its own
+   transport; the retired broker relay is described as history in [flows.md](flows.md) F3.
 3. **Every effect carries authorization provenance and is audited.** Agent and
    automation mutations consume an `AuthorizationTicket` (`everyaios-guard`);
    human UI mutations carry trusted user-gesture provenance. Both append an

@@ -55,10 +55,10 @@ Already using Claude Code, OpenAI Codex, Aider, Cline or another coding CLI? Eve
 EveryAIOS embeds a genuine spreadsheet engine, so an `.xlsx` file is recalculated natively: formulas run, dependencies resolve, and the numbers are right. Word and PDF files are edited at the XML level, so your formatting, styles, charts and macros come out the other side intact.
 
 **Browse the web and drive your desktop**
-Agents get three tiers of browser — a fast headless engine for speed, a stealth tier for awkward sites, and full Chrome automation when you need everything. Computer use goes further: agents can operate your actual OS windows, which is how you reach legacy software, SAP, QuickBooks, or that internal tool nobody ever built an API for.
+Agents get three tiers of browser — a static fetch for plain pages, a fast headless engine (Lightpanda or Obscura) for speed, and full Chrome automation when you need everything. Computer use goes further: agents can operate your actual OS windows, which is how you reach legacy software, SAP, QuickBooks, or that internal tool nobody ever built an API for.
 
 **Let it work while you are not watching**
-Schedule recurring jobs in plain language or cron — morning briefings, repo health digests, inbox triage, weekly data pulls. A background daemon keeps them running even with the window closed.
+Schedule recurring jobs in plain language or cron — morning briefings, repo health digests, inbox triage, weekly data pulls. They fire while the app is open. For unattended runs on a machine you leave switched on, deploy the headless node (`everyaios-core --headless`, [`deploy/BYO-HOST.md`](deploy/BYO-HOST.md)): the desktop app installs no service or tray daemon, and closing its last window ends the process.
 
 **Memory that outlives the conversation**
 EveryAIOS remembers your projects: the approaches you prefer, the errors that bit you last week, the ideas you already rejected. Agents stop repeating mistakes and stop asking you the same question twice.
@@ -82,7 +82,7 @@ An autonomy control sits right in the message box: decide how much an agent may 
 EveryAIOS is **166 capabilities across ten layers**, all specified in this repository. Here is the whole set, in plain English.
 
 **Models & keys** · 11 capabilities
-Bring your own key to OpenAI, Anthropic, Google Gemini, DeepSeek, Qwen, Llama, or any OpenAI-compatible endpoint — plus OAuth sign-in where a provider offers it. Keep several keys per provider and EveryAIOS rotates to the next one automatically when a limit is hit. Run entirely offline on Ollama, LM Studio, vLLM, llama.cpp or Apple MLX. A live model catalogue with per-model hints, cheap-and-expensive tiering so small jobs use small models, cache-aware cost accounting, an alias layer for model renames, and a local OpenAI-compatible endpoint so your other tools can share the same setup. *(Image generation and the local endpoint land after v1.)*
+Bring your own key to OpenAI, Anthropic, Google Gemini, DeepSeek, Qwen, Llama, or any OpenAI-compatible endpoint — plus OAuth sign-in where a provider offers it. Keep several keys per provider and EveryAIOS rotates to the next one automatically when a limit is hit. EveryAIOS may also discover, install and supervise a local runtime (Ollama, LM Studio, vLLM, llama.cpp) as a **managed resource** a bound agent can be pointed at — that is resource management, not an EveryAIOS inference path, provider row, or model source ([`ARCH/16`](ARCH/16-LOCAL-RUNTIME-INTEROP.md)); Apple MLX is macOS-only and out of v1 scope. A live model catalogue with per-model hints, cheap-and-expensive tiering so small jobs use small models, cache-aware cost accounting, an alias layer for model renames, and a local OpenAI-compatible endpoint so your other tools can share the same setup. *(Image generation and the local endpoint land after v1.)*
 
 **Agents & automation** · 11 capabilities
 Spec-driven work with blueprints, parallel subagents, and messaging between agents — **the loop itself belongs to your bound agent**: external agents are the v1 engines, and the built-in engine (including its streaming turn loop and provider stream broker) is deferred to post-v1 as a governed baseline binding, per [`ADR-0005`](ARCH/ADR/0005-external-agents-are-the-v1-engines.md) (reconciled 2026-09-22). Grammar-enforced extraction, so you get structured data back instead of prose you have to parse. Iteration and cost budgets so nothing runs away. Scheduled tasks. Crystallization — turning a one-off success into a repeatable routine. A builder for authoring your own agents. First-class control tools — ask, plan, todo, subagent — that reach the bound agent mid-turn as governed shared-plane capabilities (2026-09-22), not as an afterthought of a native loop.
@@ -94,7 +94,7 @@ Four kinds of memory working together: **Context** (this turn), **Episodic** (wh
 Open, edit and save Word, Excel, PowerPoint and PDF. Native spreadsheet recalculation. Round-trip conformance, so a file survives a trip through EveryAIOS unchanged where it should be. Rollback when an edit was wrong. Legacy formats supported. Storage intelligence on top: duplicate detection by content hash, a large-file finder, and storage health and analytics across your machine.
 
 **Browser & computer use** · 17 capabilities
-Three browser tiers — a lightweight engine, a stealth-scraping tier, and full Chrome over CDP — behind a 37-tool catalogue. Accessibility-tree snapshots with stable references cut token use dramatically compared to raw HTML. Tab ownership, session replay, login import, authenticated scraping, challenge handling, a session vault, session inheritance, behavioural realism, Electron-app automation, and multi-protocol action parsing. Then the desktop layer: any real OS window, driven through the accessibility tree plus Win32, macOS AX or Linux X11 — with a hardware emergency stop.
+Three browser tiers — a static fetch, a lightweight headless engine (Lightpanda or Obscura over CDP), and full Chrome over CDP — behind a 37-tool catalogue. Accessibility-tree snapshots with stable references cut token use dramatically compared to raw HTML. Tab ownership, session replay, login import, authenticated scraping, challenge handling, a session vault, session inheritance, behavioural realism, Electron-app automation, and multi-protocol action parsing. Then the desktop layer: any real OS window, driven through the accessibility tree plus Win32, macOS AX or Linux X11 — with a hardware emergency stop.
 
 **Connectors** · 16 capabilities
 A hub router with native adapters, browser-session connectors, and a local auth bridge. MCP in both directions: consume other MCP servers, and serve your own tools to other clients. A harness installer, a unified tool registry, a WSL/POSIX bridge, port and network hooks, messaging bridges, plus email and calendar connectors. Shared-plane façades expose EveryAIOS's own tools to external agents as task-shaped actions. *(Composio, Zapier and Nango arrive after v1.)*
@@ -103,7 +103,7 @@ A hub router with native adapters, browser-session connectors, and a local auth 
 Search that works with no API key at all. Deep research with real citations. Multi-channel search, site- and domain-scoped search, and instant filename and content search across your own machine. A tiered cascade with caching, so repeat questions are instant. A read-cleaner that strips navigation, ads and boilerplate before text ever reaches the model. A data-analysis REPL for when you need actual computation rather than a plausible-sounding paragraph.
 
 **Cockpit** · 36 capabilities
-12 center screens and 19 viewports: Chat, Projects, Files, Browser, Terminal, Office viewers, the Guard dashboard, and an Activity rail with a multi-view viewport. A blueprint editor, permission cards with visual diffs, token and cost analytics, scheduled-task and automation builders, a knowledge browser, an MCP marketplace, a progress timeline of every step, takeover/resume, widget cards, generative UI, voice input and output, a tray daemon, local dashboard artifacts, and the autonomy control in the message box.
+12 center screens and 22 viewports: Chat, Projects, Files, Browser, Terminal, Office viewers, the Guard dashboard, and an Activity rail with a multi-view viewport. A blueprint editor, permission cards with visual diffs, token and cost analytics, scheduled-task and automation builders, a knowledge browser, an MCP marketplace, a progress timeline of every step, takeover/resume, widget cards, generative UI, local dashboard artifacts, and the autonomy control in the message box. Voice input and output are post-v1, and there is no tray daemon — unattended runs need the separately deployed headless node.
 
 **Forge & skills** · 17 capabilities
 A code synthesis loop and a TDD loop. A skill registry with Ed25519-signed indexes that refuses anything tampered with. Guardrail checks. An extension and plugin ABI. Repo-map and semantic indexing. Per-model edit strategies. Architect mode — plan first, then build. A file watcher that reacts to AI comments. LSP-backed code intelligence. A unified edit ladder (exact, then structured, then fuzzy — and it fails closed rather than guessing). Risk-gated shadow preflight before it commits to a change. Per-step checkpoints with rollback. A validated skill-distillation loop.
@@ -122,12 +122,12 @@ Every one of these is a row in the [capability matrix](ARCH/09-FEATURE-MATRIX.md
 | Dimension | EveryAIOS | Claude (Desktop & Cowork) | OpenAI Codex / ChatGPT | Claude Code (CLI) | Cursor / Windsurf |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | **Primary Role** | **Universal Desktop OS & Agent Harness** | Knowledge work & conversational assistant | Developer workstation & coding agent | Terminal-first coding agent CLI | AI-first code editor (IDE) |
-| **Model Freedom & Privacy** | **100+ models + 100% offline** (Ollama, MLX, BYOK); AES-256 local vault | Anthropic Claude only; cloud-hosted data | OpenAI models only; cloud/hybrid execution | Anthropic Claude only; cloud inference | Curated cloud models + limited BYOK |
+| **Model Freedom & Privacy** | **100+ models + a fully local stack** (BYOK; a local runtime such as Ollama an agent can be pointed at — not an EveryAIOS inference path); AES-256 local vault | Anthropic Claude only; cloud-hosted data | OpenAI models only; cloud/hybrid execution | Anthropic Claude only; cloud inference | Curated cloud models + limited BYOK |
 | **External Agent Hosting** | **Yes** — hosts Claude Code, Codex, Aider, Cline via ACP stdio | ❌ None (closed Anthropic loop) | ❌ None (closed OpenAI loop) | N/A (runs as agent; hostable in EveryAIOS) | ❌ None (closed editor composer) |
-| **Parallel Subagents** | **Up to 3 at once** (6 per task, depth 2) in isolated Git worktrees, auto-merged — spawned by your bound agent through the shared-plane delegation façades, not a built-in swarm loop ([`ADR-0005`](ARCH/ADR/0005-external-agents-are-the-v1-engines.md), reconciled 2026-09-22) | ❌ Single linear session | ⚠️ Background task execution (linear) | ❌ Single terminal loop | ❌ Single composer session |
+| **Parallel Subagents** | **Up to 3 at once** (6 per task, depth 2 — the **delegation governor's** limits, `everyaios-blueprint::subagent::SubAgentLimits` mirrored in `everyaios-core::governor`; a different cap from `multirun`'s 1..=5 Runs) in isolated Git worktrees, auto-merged — spawned by your bound agent through the shared-plane delegation façades, not a built-in swarm loop ([`ADR-0005`](ARCH/ADR/0005-external-agents-are-the-v1-engines.md), reconciled 2026-09-22) | ❌ Single linear session | ⚠️ Background task execution (linear) | ❌ Single terminal loop | ❌ Single composer session |
 | **Office & Spreadsheet Engine** | **Native IronCalc 0.8.3** (300+ Excel formulas) + surgical OOXML patcher | Claude Docs & Slides (text/markdown; no formula DAG) | Scripted file generation (Python) | ❌ Code/text edits only | ❌ Code files only |
-| **Browser & Computer Use (CUA)** | **Tiered local browser** (Lightpanda + Chrome CDP) + Win32/A11y OS control | Cloud-rendered browser; remote VM preview | Cloud browsing tool; developer environment | CLI bash & web fetch tools | Basic web fetch / doc scraping |
-| **Background Automations** | **24/7 background cron daemon** (runs with window closed) | ❌ Active session only | ⚠️ CLI background tasks | ❌ Active terminal only | ❌ Active editor session only |
+| **Browser & Computer Use (CUA)** | **Tiered local browser** (static fetch + Lightpanda/Obscura light tier + Chrome CDP) + Win32/A11y OS control | Cloud-rendered browser; remote VM preview | Cloud browsing tool; developer environment | CLI bash & web fetch tools | Basic web fetch / doc scraping |
+| **Background Automations** | **Cron scheduler inside the app** (runs while the app is open), plus an optional separately deployed always-on headless node (`everyaios-core --headless`) for unattended runs — the desktop app has no tray daemon and exits with its last window | ❌ Active session only | ⚠️ CLI background tasks | ❌ Active terminal only | ❌ Active editor session only |
 | **Security & Governance** | **7-layer Guard-2**: zero-I/O SSRF firewall, diff cards, Merkle audit | Cloud safety filters & permissions | Sandbox execution & confirmation prompts | Terminal permission prompts (allow/ask/deny) | Standard IDE file permissions |
 | **Cost & Licensing** | **Free & open-source** (MIT/Apache-2.0); pay raw tokens or \$0 offline | \$20–\$100+/month subscription | \$20–\$30/month or API tokens | Anthropic API tokens or subscription | \$20/month subscription + usage |
 
@@ -196,9 +196,9 @@ cp packages/coordinator/dist/coordinator src-tauri/bin/coordinator
 cd src-tauri && cargo tauri dev                 # launch
 ```
 
-**3. First run** — open **Settings → Providers**, add a key (or point at a local model such as Ollama), then start a chat. To bring in Claude Code, Codex or another CLI, open the agent picker; EveryAIOS discovers what you already have installed and offers the rest from the [ACP registry](https://agentclientprotocol.com/registry).
+**3. First run** — open the agent picker and bind an agent that reports **Ready**; a chat is refused without one, and the agent signs in with its own model and account. EveryAIOS discovers what you already have installed and offers the rest from the [ACP registry](https://agentclientprotocol.com/registry). Add an EveryAIOS key in **Settings → Providers** only if you want EveryAIOS's *own* tools and connectors — connector tokens, browser sessions, EveryAIOS-managed API keys — to reach a provider.
 
-> **Stuck?** If `cargo tauri dev` fails on a native dependency, that's almost always the Tauri prerequisites in step 1. If the app opens with no models, the vault needs a provider added first (Settings → Providers).
+> **Stuck?** If `cargo tauri dev` fails on a native dependency, that's almost always the Tauri prerequisites in step 1. If a chat answers "No runnable agent bound", no Ready agent is bound — fix the binding in the agent picker; an EveryAIOS key will not satisfy it. If an EveryAIOS-owned tool reports a missing credential (a connector, a browser session), add that key in Settings → Providers.
 
 ---
 
@@ -210,11 +210,11 @@ EveryAIOS is built on 21 Rust core modules, 10 TypeScript coordination packages,
 | :--- | :--- |
 | **Agent Hosting** | Connects external AI coding agents via open protocols. They keep their own tools; you get a unified cockpit. |
 | **Agent Registry & Keys** | Agent discovery/install/binding plus an encrypted local vault for **EveryAIOS-owned** credentials (connectors, browser sessions, EveryAIOS-managed API keys). External agents keep their own provider and login. |
-| **Desktop Shell** | Fast, native cockpit with 12 center screens and 19 viewports. Built for real work, not demos. |
+| **Desktop Shell** | Fast, native cockpit with 12 center screens and 22 viewports. Built for real work, not demos. |
 | **MCP Tools** | A governed 19-façade shared plane (over a 51-tool native catalog) covering browser, office, memory, search, and storage — external agents see façades, never the primitive dump. |
 | **Office & Browser** | Real spreadsheet engine, surgical document editing, and 3-tier browser automation — all local. |
 | **Memory & Work** | Four-class memory that persists across sessions. Learns your preferences and avoids past mistakes. |
-| **Automations** | Schedule recurring tasks. Background cron daemon runs even when the app is closed. |
+| **Automations** | Schedule recurring tasks; they fire while the app is open. Unattended runs need the separately deployed headless node (`everyaios-core --headless`) — the desktop app exits with its last window. |
 | **Security** | 7-layer review membrane. Every destructive action requires your approval. Tamper-evident audit log. |
 
 <details>
@@ -245,7 +245,7 @@ The architecture is documented in detail starting from [`ARCH/CORE.md`](ARCH/COR
 <summary><strong>Is this really free? What's the catch?</strong></summary>
 <br/>
 
-No catch. EveryAIOS itself is free and open-source (MIT / Apache-2.0). You bring your own API keys and pay your AI provider directly for tokens — usually fractions of a cent per request. You can also run completely free with local models like Ollama.
+No catch. EveryAIOS itself is free and open-source (MIT / Apache-2.0). You bring your own API keys and pay your AI provider directly for tokens — usually fractions of a cent per request. You can also run at no model cost by pointing your agent at a local runtime you operate yourself (Ollama, LM Studio, vLLM, llama.cpp); EveryAIOS can install and supervise that runtime as a managed resource but never infers through it ([`ARCH/16`](ARCH/16-LOCAL-RUNTIME-INTEROP.md)).
 
 </details>
 
@@ -258,7 +258,7 @@ Web chatbots are great for quick questions. EveryAIOS is for getting actual work
 - **Your own keys, your own models.** Use whatever model makes sense for the job — not just the one the website offers.
 - **Real documents.** EveryAIOS can open a real `.xlsx` file, recalculate its formulas, and save it back — without hallucinating numbers or corrupting your formatting.
 - **Persistent memory.** EveryAIOS remembers your preferences, past errors, and project context across sessions. Web chats start fresh every time.
-- **Background tasks.** Schedule agents to run at 7 AM, pull data, and send you a briefing — even when the app is closed.
+- **Background tasks.** Schedule agents to run at 7 AM, pull data, and send you a briefing. With the app open, the schedule fires; for unattended runs on a machine you leave switched on, deploy the headless node ([`deploy/BYO-HOST.md`](deploy/BYO-HOST.md)).
 - **Your data stays local.** Everything is encrypted on your own drive.
 
 </details>
@@ -267,7 +267,7 @@ Web chatbots are great for quick questions. EveryAIOS is for getting actual work
 <summary><strong>Can I run it completely offline?</strong></summary>
 <br/>
 
-Yes. Connect EveryAIOS to a local model runtime — Ollama, LM Studio, vLLM, llama.cpp, or Apple MLX — and everything runs on your computer with zero network traffic. Inference, memory indexing, document processing: all local.
+Yes, with one honest limit. Memory indexing, document processing, search, storage and the audit ledger are all local and need no network. **Inference is the agent's**: a chat runs on your bound agent, which you can point at a local runtime on your own machine — Ollama, LM Studio, vLLM or llama.cpp — so the model call itself never leaves the host. EveryAIOS manages that runtime as a resource (lifecycle, health, identity) but offers no inference path of its own ([`ARCH/16`](ARCH/16-LOCAL-RUNTIME-INTEROP.md)). Apple MLX is macOS-only and out of v1 scope ([`SUPPORT-MATRIX.md`](SUPPORT-MATRIX.md)).
 
 </details>
 
