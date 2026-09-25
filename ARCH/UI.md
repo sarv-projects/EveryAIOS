@@ -301,13 +301,26 @@ The right-rail Drafting Table provides unified, keyboard-first in-pane discovery
   - `$<range>` (e.g. `$A1:D50`): Cell range selection and formula inspection in XLSX viewports.
 - **Escape Hatch & Keyboard Priority:** `Escape` clears active search highlights before unfocusing; `Cmd/Ctrl+F` attaches search context directly to the active viewport rather than the global application frame.
 
-## 10. Physical Spring Motion & Semantic Cool-Blue Theming Tokens
+## 10. Spring Motion & Semantic Accent Theming Tokens
 
-To achieve top-tier visual craft (Linear / Apple standard):
-- **Physical Spring Damping:** All sidebar collapsing, modal reveals, and viewport expansions use Framer Motion damped springs (`{ type: "spring", mass: 1.0, stiffness: 280, damping: 28 }`), ensuring zero cumulative layout shift (`CLS = 0`).
-- **Semantic Color Tokens:** Accent colors are fully tokenized semantic variables:
-  - `accent-primary`: Default Cool Blue (`#2563eb` light / `#3b82f6` dark)
-  - `accent-muted`: `#93c5fd` / `#1e3a8a`
-  - User-selectable themes (Cool Blue, Slate, Emerald, Violet, Indigo) dynamically bind semantic tokens without hardcoded hex values.
-- **Tabular Numerical Telemetry:** JetBrains Mono tabular figures (`font-variant-numeric: tabular-nums`) format all token counts, latency metrics, line numbers, and financial spend readouts to prevent horizontal jitter during real-time streaming.
-- **WCAG 2.2 Accessibility:** Focus outlines (`ring-2 ring-accent-primary`), ARIA labels, and keyboard tab sequences are strictly validated across all 12 center screens and 22 right-rail viewports.
+> **Corrected 2026-09-25 against source.** The previous revision of this section named a Framer Motion
+> spring (`mass: 1.0, stiffness: 280, damping: 28`), `accent-primary` / `accent-muted` tokens, hex values
+> (`#2563eb`, `#3b82f6`, `#93c5fd`, `#1e3a8a`), and five accents (Cool Blue, Slate, Emerald, Violet,
+> Indigo). **None of those match the tree.** The real values are below, read from
+> `ui/src/globals.css`, `ui/src/components/theme-provider.tsx` and the only spring in the codebase.
+
+- **Spring Motion:** the shipped spring is `{ type: 'spring', stiffness: 420, damping: 38 }`, used by
+  `ui/src/components/shell/cockpit-slideover.tsx`. Every other transition in `ui/src` is a duration/easing
+  tween, **not** a spring. A cockpit-wide spring spec (and the `mass: 1.0` / `damping: 28` constants above)
+  is **specified — not implemented**.
+- **Semantic Accent Tokens:** the token is `--accent` / `--accent-foreground`, defined as **HSL channel
+  triples** (e.g. `164: --accent: 48 14% 93%`), not hex. There is no `accent-primary` and no
+  `accent-muted`. The accent is switched by `[data-accent="…"]` blocks in `globals.css`.
+- **User-selectable accents:** **seven** presets, from `Accent` in `ui/src/components/theme-provider.tsx` —
+  `blue · sky · emerald · violet · amber · rose · teal`. There is no `slate` and no `indigo`.
+- **Tabular Numerical Telemetry:** the mono font is installed as `--font-geist-mono`
+  (`ui/src/globals.css`), not JetBrains Mono; the `tabular-nums` utility is applied per-surface where
+  telemetry needs it (the run surface and composer use it), not globally.
+- **WCAG 2.2 Accessibility:** focus rings use the `ring` token (`ring-2 ring-ring/50`), not
+  `ring-accent-primary`; ARIA labels and keyboard order are asserted by the surfaces' DOM tests across all
+  12 center screens and 22 right-rail viewports.
