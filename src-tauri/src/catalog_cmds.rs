@@ -461,7 +461,6 @@ impl ResolveCtx {
             .collect();
         connected_ids_from(&keyed, &usable_profiles, &keyless)
     }
-
 }
 
 // P71.2c — `ResolveCtx::is_connected` was deleted with the relay's endpoint map

@@ -38,6 +38,7 @@ use crate::oauth_cmds;
 use crate::office_cmds;
 use crate::openai_cmds;
 use crate::replay_cmds;
+use crate::runtime_cmds;
 use crate::scheduler_cmds;
 use crate::search_cmds;
 use crate::settings_cmds;
@@ -208,6 +209,8 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Syn
         acp_cmds::acp_session_commands,
         acp_cmds::acp_session_config_options,
         acp_cmds::acp_session_set_config_option,
+        acp_cmds::acp_config_options,
+        acp_cmds::acp_set_session_config_option,
         acp_cmds::acp_tool_log,
         // P53.6 — Settings → Subagents rows + when-to-use note edits.
         acp_cmds::chief_subagents,
@@ -442,6 +445,12 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Syn
         crate::model_cmds::model_registry_remove,
         crate::model_cmds::model_recommend_quant,
         crate::model_cmds::model_serve,
+        crate::model_cmds::model_serve_stop,
+        crate::model_cmds::model_serve_list,
+        runtime_cmds::runtime_inventory_list,
+        runtime_cmds::runtime_models,
+        runtime_cmds::runtime_start,
+        runtime_cmds::runtime_stop,
         // P52.1/P52.2/P52.5: fit estimate, gallery parse, best-variant pick.
         crate::model_cmds::model_estimate_fit,
         crate::model_cmds::model_gallery_parse,

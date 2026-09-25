@@ -27,7 +27,8 @@ use std::sync::{Arc, Mutex};
 
 use everyaios_core::models::hf::{part_path, quant_from_filename, HfClient, HfError};
 use everyaios_core::models::store::{ModelEntry, ModelRegistry};
-use everyaios_core::models::{probe_hardware, ModelsRuntime};
+use everyaios_core::models::{probe_hardware, ManagedServeHandle, ModelsRuntime};
+use everyaios_types::RuntimeHealthState;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
 
@@ -64,6 +65,159 @@ pub struct DownloadStatus {
 }
 
 static DL_COUNTER: AtomicU64 = AtomicU64::new(1);
+static SERVE_COUNTER: AtomicU64 = AtomicU64::new(1);
+
+/// The process-custody operations the shell needs from a managed model serve.
+///
+/// Production uses [`ManagedServeHandle`]. The generic registry keeps the
+/// lifecycle bookkeeping independently testable with an injected fake process.
+pub(crate) trait ManagedServeProcess: Send {
+    /// Return the retained child's listening port.
+    fn port(&self) -> u16;
+    /// Return the retained child's loopback base URL.
+    fn base_url(&self) -> &str;
+    /// Return the model identity served by the retained child.
+    fn model_id(&self) -> &str;
+    /// Return the deterministic launch configuration identity.
+    fn config_hash(&self) -> &str;
+    /// Probe current process/runtime health without releasing custody.
+    fn health(&mut self) -> RuntimeHealthState;
+    /// Stop and reap the process while consuming custody.
+    fn stop_owned(handle: Self) -> Result<(), String>
+    where
+        Self: Sized;
+}
+
+impl ManagedServeProcess for ManagedServeHandle {
+    fn port(&self) -> u16 {
+        self.port
+    }
+
+    fn base_url(&self) -> &str {
+        &self.base_url
+    }
+
+    fn model_id(&self) -> &str {
+        &self.model_id
+    }
+
+    fn config_hash(&self) -> &str {
+        &self.config_hash
+    }
+
+    fn health(&mut self) -> RuntimeHealthState {
+        ManagedServeHandle::health(self)
+    }
+
+    fn stop_owned(handle: Self) -> Result<(), String> {
+        ManagedServeHandle::stop(handle).map_err(|error| error.to_string())
+    }
+}
+
+/// One retained managed serve and its stable shell metadata.
+struct ManagedServeEntry<H> {
+    kind: String,
+    started_at_ms: u64,
+    handle: H,
+}
+
+/// A point-in-time projection of one retained managed serve.
+pub(crate) struct ManagedServeSnapshot {
+    pub id: String,
+    pub kind: String,
+    pub health: RuntimeHealthState,
+    pub port: u16,
+    pub base_url: String,
+    pub model_id: String,
+    pub config_hash: String,
+    pub started_at_ms: u64,
+}
+
+/// The AppState registry that retains every EveryAIOS-started model serve.
+///
+/// Dropping the registry drops every retained handle, which invokes the core
+/// handle's RAII child cleanup. Stop removes custody first and calls the
+/// handle's explicit stop method outside the registry lock.
+pub(crate) struct ManagedServeRegistry<H = ManagedServeHandle> {
+    entries: std::collections::HashMap<String, ManagedServeEntry<H>>,
+}
+
+impl<H> Default for ManagedServeRegistry<H> {
+    fn default() -> Self {
+        Self {
+            entries: std::collections::HashMap::new(),
+        }
+    }
+}
+
+impl<H: ManagedServeProcess> ManagedServeRegistry<H> {
+    /// Retain one newly-started process under a stable serve id.
+    pub(crate) fn insert(
+        &mut self,
+        id: String,
+        kind: String,
+        started_at_ms: u64,
+        handle: H,
+    ) -> Result<(), String> {
+        if self.entries.contains_key(&id) {
+            return Err(format!("managed serve id already exists: {id}"));
+        }
+        self.entries.insert(
+            id,
+            ManagedServeEntry {
+                kind,
+                started_at_ms,
+                handle,
+            },
+        );
+        Ok(())
+    }
+
+    /// Return whether this exact id names a process in the managed registry.
+    pub(crate) fn contains(&self, id: &str) -> bool {
+        self.entries.contains_key(id)
+    }
+
+    /// Remove and return one retained process without running provider/network I/O.
+    pub(crate) fn remove(&mut self, id: &str) -> Option<H> {
+        self.entries.remove(id).map(|entry| entry.handle)
+    }
+
+    /// Snapshot every retained process, probing health while the registry is locked.
+    pub(crate) fn rows(&mut self) -> Vec<ManagedServeSnapshot> {
+        let mut rows: Vec<_> = self
+            .entries
+            .iter_mut()
+            .map(|(id, entry)| ManagedServeSnapshot {
+                id: id.clone(),
+                kind: entry.kind.clone(),
+                health: entry.handle.health(),
+                port: entry.handle.port(),
+                base_url: entry.handle.base_url().to_string(),
+                model_id: entry.handle.model_id().to_string(),
+                config_hash: entry.handle.config_hash().to_string(),
+                started_at_ms: entry.started_at_ms,
+            })
+            .collect();
+        rows.sort_by(|left, right| left.id.cmp(&right.id));
+        rows
+    }
+
+    /// Snapshot one retained process without releasing or cloning its handle.
+    pub(crate) fn row(&mut self, id: &str) -> Option<ManagedServeSnapshot> {
+        let entry = self.entries.get_mut(id)?;
+        Some(ManagedServeSnapshot {
+            id: id.to_string(),
+            kind: entry.kind.clone(),
+            health: entry.handle.health(),
+            port: entry.handle.port(),
+            base_url: entry.handle.base_url().to_string(),
+            model_id: entry.handle.model_id().to_string(),
+            config_hash: entry.handle.config_hash().to_string(),
+            started_at_ms: entry.started_at_ms,
+        })
+    }
+}
 
 fn models_base() -> PathBuf {
     everyaios_core::default_data_dir().join("models")
@@ -405,40 +559,53 @@ pub fn model_recommend_quant(repo: String) -> Result<serde_json::Value, String> 
     }))
 }
 
-/// Bind an installed model to a managed llamafile runtime (P27
-/// `ModelsRuntime::serve_gguf`). Honest-fail when no llamafile binary is
-/// configured. Serves on the config port; health is verified in the
-/// background thread and reported via a `serve` event.
-///
-/// P52.4 — `serve_options` (optional) carries the real llama.cpp/llamafile
-/// launch flags the UI exposes (gpu layers, flash attention, ctx override,
-/// mmap/mlock, KV cache type). `None` = the previous fixed-context launch.
-#[tauri::command]
-pub fn model_serve(
-    app: AppHandle,
-    id: String,
-    serve_options: Option<serde_json::Value>,
-) -> Result<serde_json::Value, String> {
-    let base = models_base();
-    let registry = ModelRegistry::load(base.clone());
-    let entry = registry
-        .get(&id)
-        .cloned()
-        .ok_or_else(|| format!("model not in registry: {id}"))?;
-    let cfg = everyaios_core::Config::load().unwrap_or_default();
-    let mgr = everyaios_core::LocalManager::from_config(&cfg);
-    let port = cfg.local.llamafile_port;
-    let num_ctx = cfg.local.num_ctx;
+/// Stable start response for one EveryAIOS-owned model runtime.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelServeStart {
+    pub serve_id: String,
+    pub port: u16,
+    pub base_url: String,
+    pub model_id: String,
+    pub config_hash: String,
+    pub health: RuntimeHealthState,
+    pub ownership: String,
+}
 
-    // Parse the optional P52.4 options (best-effort per-field; unknown /
-    // malformed fields fall back to the llama.cpp default rather than
-    // blocking the whole serve). `kvCache` is the P39.4 element type.
+/// One row in `model_serve_list`.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelServeListRow {
+    pub id: String,
+    pub kind: String,
+    pub health: RuntimeHealthState,
+    pub port: u16,
+    pub model: String,
+    pub config_hash: String,
+    pub started_at: u64,
+}
+
+fn now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+fn parse_serve_options(
+    serve_options: Option<serde_json::Value>,
+) -> (
+    everyaios_core::models::ServeOptions,
+    Option<everyaios_core::models::KvCacheType>,
+) {
+    use everyaios_core::models::{FlashAttn, ServeOptions};
+
     let mut kv_cache = None;
-    let mut opts = match serve_options {
-        Some(v) => {
-            use everyaios_core::models::{FlashAttn, ServeOptions};
-            let mut o = serde_json::from_value::<ServeOptions>(v.clone()).unwrap_or_default();
-            if let Some(kv) = v.get("kvCache").and_then(|k| k.as_str()) {
+    let opts = match serve_options {
+        Some(value) => {
+            let mut parsed =
+                serde_json::from_value::<ServeOptions>(value.clone()).unwrap_or_default();
+            if let Some(kv) = value.get("kvCache").and_then(serde_json::Value::as_str) {
                 kv_cache = match kv.to_ascii_lowercase().as_str() {
                     "q8_0" => Some(everyaios_core::models::KvCacheType::Q8_0),
                     "q4_0" => Some(everyaios_core::models::KvCacheType::Q4_0),
@@ -446,86 +613,202 @@ pub fn model_serve(
                     _ => Some(everyaios_core::models::KvCacheType::F16),
                 };
             }
-            if o.num_ctx.is_none() {
-                if let Some(n) = v.get("numCtx").and_then(|n| n.as_u64()) {
-                    o.num_ctx = Some(n as u32);
+            if parsed.num_ctx.is_none() {
+                if let Some(num_ctx) = value.get("numCtx").and_then(serde_json::Value::as_u64) {
+                    parsed.num_ctx = Some(num_ctx as u32);
                 }
             }
-            if o.flash_attn.is_none() {
-                if let Some(fa) = v.get("flashAttn").and_then(|f| f.as_str()) {
-                    o.flash_attn = match fa.to_ascii_lowercase().as_str() {
+            if parsed.flash_attn.is_none() {
+                if let Some(flash_attn) = value.get("flashAttn").and_then(serde_json::Value::as_str)
+                {
+                    parsed.flash_attn = match flash_attn.to_ascii_lowercase().as_str() {
                         "on" => Some(FlashAttn::On),
                         "off" => Some(FlashAttn::Off),
                         _ => Some(FlashAttn::Auto),
                     };
                 }
             }
-            if o.gpu_layers.is_none() {
-                if let Some(n) = v.get("gpuLayers").and_then(|g| g.as_i64()) {
-                    o.gpu_layers = Some(u32::try_from(n).unwrap_or(0));
+            if parsed.gpu_layers.is_none() {
+                if let Some(gpu_layers) = value.get("gpuLayers").and_then(serde_json::Value::as_i64)
+                {
+                    parsed.gpu_layers = Some(u32::try_from(gpu_layers).unwrap_or(0));
                 }
             }
-            o
+            parsed
         }
-        None => everyaios_core::models::ServeOptions::default(),
+        None => ServeOptions::default(),
     };
+    (opts, kv_cache)
+}
 
-    // P52.7 — the MLX sidecar branch skips the llamafile requirement: it
-    // serves an HF model id via `mlx_lm.server` (Apple Silicon). When the
-    // caller picks the MLX runtime without a model id, derive the
-    // `mlx-community/<name>-4bit` id from the registry row's HF id.
+/// Start and retain one managed model serve under a stable shell id.
+///
+/// The core call is synchronous through its health gate. Its returned handle
+/// is moved directly into `AppState.model_serves`; no worker owns or drops it.
+pub(crate) fn start_managed_serve(
+    state: &AppState,
+    id: &str,
+    serve_options: Option<serde_json::Value>,
+) -> Result<ModelServeStart, String> {
+    let base = models_base();
+    let registry = ModelRegistry::load(base);
+    let entry = registry
+        .get(id)
+        .cloned()
+        .ok_or_else(|| format!("model not in registry: {id}"))?;
+    let cfg = everyaios_core::Config::load().unwrap_or_default();
+    let mgr = everyaios_core::LocalManager::from_config(&cfg);
+    let port = cfg.local.llamafile_port;
+    let (mut opts, kv_cache) = parse_serve_options(serve_options.clone());
+
     use everyaios_core::models::{mlx_quant_id, ServeRuntime};
     let is_mlx = opts.runtime == ServeRuntime::Mlx;
     if is_mlx && opts.model_id.is_none() {
         let hf_part = entry.id.rsplit(':').next().unwrap_or(&entry.id);
         opts.model_id = Some(mlx_quant_id(hf_part));
     }
+    let kind = if is_mlx { "mlx" } else { "gguf" };
     let bin = if is_mlx {
         None
     } else {
-        Some(
-            mgr.find_llamafile(&cfg.data_dir)
-                .ok_or_else(|| "no llamafile binary found — drop one in `<data_dir>/bin` or set `EVERYAIOS_LLAMAFILE`".to_string())?,
-        )
+        Some(mgr.find_llamafile(&cfg.data_dir).ok_or_else(|| {
+            "no llamafile binary found — drop one in `<data_dir>/bin` or set `EVERYAIOS_LLAMAFILE`"
+                .to_string()
+        })?)
     };
 
-    let status = Arc::new(Mutex::new(DownloadStatus {
-        phase: "serving".into(),
-        ..Default::default()
-    }));
-    let app2 = app.clone();
-    let status2 = Arc::clone(&status);
-    let id2 = id.clone();
-    let opts2 = opts;
-    let kv2 = kv_cache;
-    std::thread::spawn(move || {
-        let outcome = ModelsRuntime::serve_gguf_with_options(
-            &entry,
-            bin.as_deref(),
-            port,
-            num_ctx,
-            kv2,
-            opts2,
-        );
-        let mut s = status2.lock().unwrap_or_else(|e| e.into_inner());
-        match outcome {
-            Ok(ep) => {
-                s.phase = "served".into();
-                s.base_url = Some(ep.base_url.clone());
-            }
-            Err(e) => {
-                s.phase = "error".into();
-                s.error = Some(format!("{e:?}"));
-            }
+    {
+        let mut registry = state
+            .model_serves
+            .lock()
+            .map_err(|error| error.to_string())?;
+        if registry.rows().iter().any(|row| row.port == port) {
+            return Err(format!(
+                "managed runtime port {port} is already retained by EveryAIOS"
+            ));
         }
-        let snapshot = s.clone();
-        drop(s);
-        emit_download(&app2, "serve", &id2, &entry.id, "", &snapshot);
-    });
-    Ok(serde_json::json!({
-        "ok": true, "id": id, "port": port, "baseUrl": format!("http://127.0.0.1:{port}"),
-        "starting": true,
-    }))
+    }
+
+    let args_identity = serde_json::to_string(&(
+        kind,
+        entry.id.as_str(),
+        port,
+        cfg.local.num_ctx,
+        kv_cache,
+        &opts,
+    ))
+    .unwrap_or_default();
+    let args_hash = crate::runtime_cmds::runtime_effect_args_hash(
+        "runtime.start",
+        &format!("{kind}\u{1f}{}\u{1f}{port}\u{1f}{args_identity}", entry.id),
+    );
+    crate::runtime_cmds::authorize_runtime_effect(
+        state,
+        "runtime.start",
+        &format!("start managed {kind} runtime for {id}"),
+        port,
+        &args_hash,
+    )?;
+
+    let mut handle = ModelsRuntime::serve_gguf_with_options(
+        &entry,
+        bin.as_deref(),
+        port,
+        cfg.local.num_ctx,
+        kv_cache,
+        opts,
+    )
+    .map_err(|error| format!("managed runtime start failed: {error}"))?;
+    let health = handle.health();
+    let serve_id = format!("serve-{:04}", SERVE_COUNTER.fetch_add(1, Ordering::Relaxed));
+    let result = ModelServeStart {
+        serve_id: serve_id.clone(),
+        port: handle.port(),
+        base_url: handle.base_url.clone(),
+        model_id: handle.model_id.clone(),
+        config_hash: handle.config_hash.clone(),
+        health,
+        ownership: "Managed".to_string(),
+    };
+    state
+        .model_serves
+        .lock()
+        .map_err(|error| error.to_string())?
+        .insert(serve_id, kind.to_string(), now_ms(), handle)?;
+    crate::control::record_mutation(
+        state,
+        crate::control::AuthKind::AgentTicket,
+        "runtime.start",
+        serde_json::json!({
+            "serveId": result.serve_id,
+            "kind": kind,
+            "port": result.port,
+            "modelId": result.model_id,
+            "configHash": result.config_hash,
+            "health": result.health,
+            "ownership": result.ownership,
+        }),
+    );
+    Ok(result)
+}
+
+/// Bind an installed model to a managed llamafile/MLX runtime.
+///
+/// The returned process handle is retained by AppState for its whole lifetime;
+/// stopping the app drops the registry and invokes the handle's RAII cleanup.
+#[tauri::command]
+pub fn model_serve(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: String,
+    serve_options: Option<serde_json::Value>,
+) -> Result<ModelServeStart, String> {
+    let result = start_managed_serve(&state, &id, serve_options)?;
+    let status = DownloadStatus {
+        phase: "served".into(),
+        base_url: Some(result.base_url.clone()),
+        ..Default::default()
+    };
+    emit_download(
+        &app,
+        "serve",
+        &result.serve_id,
+        &result.model_id,
+        "",
+        &status,
+    );
+    Ok(result)
+}
+
+/// List every model serve still retained in the managed process registry.
+#[tauri::command]
+pub fn model_serve_list(state: State<'_, AppState>) -> Result<Vec<ModelServeListRow>, String> {
+    let mut registry = state
+        .model_serves
+        .lock()
+        .map_err(|error| error.to_string())?;
+    Ok(registry
+        .rows()
+        .into_iter()
+        .map(|row| ModelServeListRow {
+            id: row.id,
+            kind: row.kind,
+            health: row.health,
+            port: row.port,
+            model: row.model_id,
+            config_hash: row.config_hash,
+            started_at: row.started_at_ms,
+        })
+        .collect())
+}
+
+/// Remove one registered managed serve and stop/reap its retained child.
+#[tauri::command]
+pub fn model_serve_stop(
+    state: State<'_, AppState>,
+    serve_id: String,
+) -> Result<serde_json::Value, String> {
+    crate::runtime_cmds::stop_managed_serve(&state, &serve_id)
 }
 
 /// Test seam parity: the registry entry shape the UI expects (used by

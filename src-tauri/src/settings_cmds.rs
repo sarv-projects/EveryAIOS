@@ -1572,7 +1572,10 @@ mod tests {
             agent_readiness(false, "api_key", false, false, true),
             "not_installed"
         );
-        assert_eq!(agent_readiness(true, "keyless", false, false, true), "ready");
+        assert_eq!(
+            agent_readiness(true, "keyless", false, false, true),
+            "ready"
+        );
         assert_eq!(
             agent_readiness(true, "subscription", false, false, false),
             "sign_in_required"
@@ -1581,8 +1584,14 @@ mod tests {
             agent_readiness(true, "api_key", false, false, false),
             "api_key_required"
         );
-        assert_eq!(agent_readiness(true, "api_key", false, false, true), "ready");
-        assert_eq!(agent_readiness(true, "local", false, false, false), "local_cli");
+        assert_eq!(
+            agent_readiness(true, "api_key", false, false, true),
+            "ready"
+        );
+        assert_eq!(
+            agent_readiness(true, "local", false, false, false),
+            "local_cli"
+        );
         // A live handle outranks install facts (P71.3f).
         assert_eq!(
             agent_readiness(true, "api_key", true, true, true),

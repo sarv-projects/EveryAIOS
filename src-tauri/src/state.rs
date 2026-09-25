@@ -41,6 +41,10 @@ pub struct AppState {
     /// lets the readiness probe detect a dead/stale relay instead of treating
     /// `Option<ChatRelay>` as proof that the sidecar is alive.
     pub sidecar_activity_ms: Mutex<Option<Arc<AtomicU64>>>,
+    /// P45.8 — the shell sets this when a turn needs a parked sidecar.
+    pub sidecar_resume: Arc<AtomicBool>,
+    /// True while the coordinator is down after an idle exit.
+    pub sidecar_parked: Arc<AtomicBool>,
     /// P1.4: the chat relay over the coordinator link. `None` until the
     /// supervisor hands the sidecar's stdio pipes to a `SidecarLink` (the
     /// integration seam — the relay + protocol are fully built + tested).
@@ -123,6 +127,14 @@ pub struct AppState {
     /// `.part` staging file in place so a later start resumes via `Range`.
     pub model_downloads:
         Mutex<std::collections::HashMap<String, crate::model_cmds::ModelDownloadSlot>>,
+    /// EveryAIOS-owned model-runtime process handles keyed by stable serve id.
+    /// Dropping AppState drops this registry and therefore kills/reaps every
+    /// retained managed child through `ManagedServeHandle`'s RAII contract.
+    pub(crate) model_serves: Mutex<crate::model_cmds::ManagedServeRegistry>,
+    /// Last runtime/model observations used to answer a failed live probe with
+    /// the prior fact explicitly marked Down, never an invented empty list.
+    pub(crate) runtime_observations:
+        Mutex<std::collections::HashMap<String, crate::runtime_cmds::CachedRuntimeObservation>>,
     /// P56.1 — the live models.dev catalog: the durable snapshot store, its
     /// refresh cadence, and the serialized refresh gate. The background job,
     /// Settings → Providers, the model table and the chat relay's endpoint
@@ -133,6 +145,10 @@ pub struct AppState {
     /// `updater_cmds::PendingUpdateSlot` (different lifetime); this slot only
     /// tracks *that a download is in flight* so a second one can be refused.
     pub pending_update: Mutex<Option<crate::updater_cmds::PendingUpdate>>,
+    /// P63.11 — the loopback shared-plane lease handed to ACP `session/new`.
+    pub channel_b: Mutex<Option<crate::channel_b::ChannelBSlot>>,
+    /// Tool service published by the chat relay for that lease's handler.
+    pub channel_b_tools: crate::channel_b::SharedTools,
 }
 
 impl AppState {
@@ -142,10 +158,7 @@ impl AppState {
     /// second binding registry. Callers use the returned ids only after the
     /// map lock is released; provider I/O must never run under this lock.
     #[allow(dead_code)] // the control-channel writer owns the final call site
-    pub(crate) fn acp_handles_for_session(
-        &self,
-        session_id: &str,
-    ) -> Result<Vec<String>, String> {
+    pub(crate) fn acp_handles_for_session(&self, session_id: &str) -> Result<Vec<String>, String> {
         let sessions = self.acp_sessions.lock().map_err(|e| e.to_string())?;
         Ok(sessions
             .iter()

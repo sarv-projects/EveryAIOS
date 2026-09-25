@@ -6,7 +6,7 @@
 
 use std::path::PathBuf;
 use std::process::{ChildStdin, ChildStdout};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 mod acp_cmds;
@@ -17,6 +17,7 @@ mod boot;
 mod browser_cmds;
 mod calendar_cmds;
 mod catalog_cmds;
+mod channel_b;
 mod cockpit_cmds;
 mod codeintel_cmds;
 mod commands;
@@ -40,6 +41,7 @@ mod oauth_cmds;
 mod office_cmds;
 mod openai_cmds;
 mod replay_cmds;
+mod runtime_cmds;
 // P55.8 — the SearXNG endpoint config + searx.space instance feed surface.
 mod scheduler_cmds;
 mod scheduler_fire;
@@ -98,6 +100,7 @@ pub const MODEL_DOWNLOAD_EVENT: &str = "model-download";
 /// is forwarded as an `agui/event` notification over the sidecar link.
 #[tauri::command]
 fn agui_send(state: State<'_, AppState>, line: String) -> Result<(), String> {
+    ensure_sidecar(&state);
     let relay = state.chat_relay.lock().map_err(|e| e.to_string())?;
     let relay = relay
         .as_ref()
@@ -117,6 +120,22 @@ fn agui_listen(state: State<'_, AppState>) -> Result<(), String> {
         Some(r) if r.agui().is_attached() => Ok(()),
         Some(_) => Err("agui sink not attached".to_string()),
         None => Err("sidecar not connected".to_string()),
+    }
+}
+
+/// P45.8 — if the coordinator exited because nobody was chatting, ask the
+/// supervisor to spawn it again and wait until that spawn clears the park
+/// flag. A turn that arrives while the process is still up does nothing.
+pub(crate) fn ensure_sidecar(state: &AppState) {
+    if !state.sidecar_parked.load(Ordering::Acquire) {
+        return;
+    }
+    state.sidecar_resume.store(true, Ordering::Release);
+    let start = std::time::Instant::now();
+    while state.sidecar_parked.load(Ordering::Acquire)
+        && start.elapsed() < std::time::Duration::from_millis(2_000)
+    {
+        std::thread::sleep(std::time::Duration::from_millis(20));
     }
 }
 
@@ -226,6 +245,14 @@ fn connect_chat_relay(
     relay.spawn();
     eprintln!("everyaios-desktop: relay stage spawn ok");
     *state.chat_relay.lock().expect("chat_relay poisoned") = Some(relay);
+    if let Some(relay) = state
+        .chat_relay
+        .lock()
+        .expect("chat_relay poisoned")
+        .as_ref()
+    {
+        crate::channel_b::publish_tools(&state.channel_b_tools, relay.tools());
+    }
     // Boot diagnostic: `runtime_status.sidecar` reads this slot, so "coordinator
     // offline" in the UI is exactly "this line never printed".
     eprintln!("everyaios-desktop: chat relay live — coordinator connected");
@@ -583,6 +610,12 @@ fn pre_spawn_coordinator(app: AppHandle) {
     };
     let (mut supervisor, link_rx) = everyaios_core::start_supervisor_with_link(bin);
     let activity = Arc::clone(&supervisor.last_activity_ms);
+    // Share the park/resume flags with commands so the next turn can wake
+    // a sidecar that exited because the user went idle.
+    if let Some(state) = app.try_state::<AppState>() {
+        supervisor.resume = Arc::clone(&state.sidecar_resume);
+        supervisor.parked = Arc::clone(&state.sidecar_parked);
+    }
     // Lifecycle thread: spawn, watchdog, restart. Blocks until circuit open.
     std::thread::spawn(move || {
         if let Err(e) = supervisor.wait_or_restart() {
@@ -691,6 +724,8 @@ pub fn run() {
             vault: Arc::clone(&vault),
             vault_unlocked: std::sync::atomic::AtomicBool::new(vault_unlocked),
             sidecar_activity_ms: Mutex::new(None),
+            sidecar_resume: Arc::new(AtomicBool::new(false)),
+            sidecar_parked: Arc::new(AtomicBool::new(false)),
             chat_relay: Mutex::new(None),
             replay_dir: everyaios_core::default_data_dir(),
             cockpit: Arc::new(Mutex::new(Default::default())),
@@ -708,6 +743,8 @@ pub fn run() {
             mcp_remote_tokens: Arc::new(Mutex::new(std::collections::HashMap::new())),
             mcp_pending_calls: Mutex::new(std::collections::HashMap::new()),
             model_downloads: Mutex::new(std::collections::HashMap::new()),
+            model_serves: Mutex::new(Default::default()),
+            runtime_observations: Mutex::new(std::collections::HashMap::new()),
             desktop: Mutex::new(desktop_cmds::DesktopSlot::default()),
             artifacts: Mutex::new(std::collections::HashMap::new()),
             openai_server: Mutex::new(Default::default()),
@@ -730,6 +767,8 @@ pub fn run() {
                 everyaios_core::default_data_dir().join("catalog"),
             )),
             pending_update: Mutex::new(None),
+            channel_b: Mutex::new(None),
+            channel_b_tools: crate::channel_b::SharedTools::default(),
         })
         // P70.C3 — the slot holding a downloaded-but-not-installed update
         // artifact between the background download and the explicit restart.

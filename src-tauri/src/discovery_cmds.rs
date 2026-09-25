@@ -39,9 +39,21 @@ pub fn discovery_inventory() -> Result<serde_json::Value, String> {
     inv.extend(collect_browsers());
 
     let counts = inv.counts();
+    let cards: Vec<serde_json::Value> = inv
+        .cards
+        .into_iter()
+        .map(|card| {
+            let local_model = card.kind == ResourceKind::Model && card.source == "local_runtime";
+            let mut value = serde_json::to_value(card).unwrap_or_else(|_| serde_json::json!({}));
+            if local_model {
+                value["lifecycle"] = serde_json::json!("observed");
+            }
+            value
+        })
+        .collect();
     Ok(serde_json::json!({
         "counts": counts,
-        "cards": inv.cards,
+        "cards": cards,
         "generation": inv.generation,
     }))
 }
@@ -91,6 +103,7 @@ pub fn routing_feed_decide(
 // --- live collectors (best-effort, never harvest secrets) ------------------
 
 fn collect_local_models() -> Vec<ResourceCard> {
+    // Wire `status` is this catalog projection; process `lifecycle` uses core `ManagedResource<R>` and never occupies this field.
     let cfg = everyaios_core::Config::load().unwrap_or_default();
     let mgr = everyaios_core::LocalManager::from_config(&cfg);
     mgr.list_ollama_models()
@@ -103,11 +116,11 @@ fn collect_local_models() -> Vec<ResourceCard> {
             source: "local_runtime".into(),
             auth: "keyless".into(),
             capabilities: vec![format!("ctx:{}", m.context_window)],
-            capabilities_verified: true, // locally observed
+            capabilities_verified: false,
             governance: "local".into(),
             base_url: String::new(),
             doc_url: String::new(),
-            status: ManagedResource::Healthy,
+            status: ManagedResource::Inventoried,
         })
         .collect()
 }
@@ -178,11 +191,11 @@ fn collect_agents(data_dir: &Path) -> Vec<ResourceCard> {
         source: "builtin".into(),
         auth: "none".into(),
         capabilities: vec!["chat".into(), "tools".into(), "plan".into()],
-        capabilities_verified: true,
+        capabilities_verified: false,
         governance: "inbuilt".into(),
         base_url: String::new(),
         doc_url: String::new(),
-        status: ManagedResource::Healthy,
+        status: ManagedResource::Discovered,
     }];
     let dir = data_dir.join("agents");
     if let Ok(rd) = std::fs::read_dir(&dir) {
@@ -305,11 +318,11 @@ fn collect_browsers() -> Vec<ResourceCard> {
             source: "system".into(),
             auth: "none".into(),
             capabilities: vec!["cdp".into()],
-            capabilities_verified: true,
+            capabilities_verified: false,
             governance: String::new(),
             base_url: String::new(),
             doc_url: String::new(),
-            status: ManagedResource::Healthy,
+            status: ManagedResource::Discovered,
         })
         .collect()
 }

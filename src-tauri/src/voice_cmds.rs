@@ -28,11 +28,7 @@ pub fn voice_vad_classify(samples: Vec<i16>) -> Value {
 }
 
 #[tauri::command]
-pub fn voice_process_utterance(
-    samples: Vec<i16>,
-    utterance_len_ms: u64,
-    auto_send: bool,
-) -> Value {
+pub fn voice_process_utterance(samples: Vec<i16>, utterance_len_ms: u64, auto_send: bool) -> Value {
     let pipeline = VoicePipeline::new(VadDetector::default(), auto_send, Rc::new(NoopStt));
     let ev = pipeline.process_utterance(&samples, utterance_len_ms);
     json!({

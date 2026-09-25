@@ -10,14 +10,14 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use everyaios_core::automation_runtime::{WorkSpec, compile_work};
+use everyaios_core::automation_runtime::{compile_work, WorkSpec};
 use everyaios_core::execution::{ExecutionPhase, ExecutionTrigger};
 use everyaios_core::scheduler_service::{
     AutomationOccurrence, SchedulerService, WorkRunAdmissionReceipt,
 };
 use everyaios_core::work_gateway::{DomainEvent, WorkEvent};
 use everyaios_types::{SessionKind, WorkState};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use tauri::{AppHandle, Manager, State};
 
 use crate::AppState;
@@ -546,11 +546,9 @@ pub fn spawn_loop(app: &AppHandle) {
     let app = app.clone();
     std::thread::Builder::new()
         .name("everyaios-automation-firing".to_string())
-        .spawn(move || {
-            loop {
-                std::thread::sleep(std::time::Duration::from_secs(TICK_SECS));
-                let _ = fire_due(&app);
-            }
+        .spawn(move || loop {
+            std::thread::sleep(std::time::Duration::from_secs(TICK_SECS));
+            let _ = fire_due(&app);
         })
         .ok();
 }

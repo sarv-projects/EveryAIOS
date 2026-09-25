@@ -94,8 +94,11 @@ fn write_channel(channel: &str) -> Result<(), String> {
     // Atomic write (temp + rename) so a crash mid-write cannot leave a
     // half-file that silently reverts the channel.
     let tmp = path.with_extension("json.tmp");
-    std::fs::write(&tmp, serde_json::to_vec_pretty(&json!({ "channel": channel })).unwrap())
-        .map_err(|e| format!("write channel: {e}"))?;
+    std::fs::write(
+        &tmp,
+        serde_json::to_vec_pretty(&json!({ "channel": channel })).unwrap(),
+    )
+    .map_err(|e| format!("write channel: {e}"))?;
     std::fs::rename(&tmp, &path).map_err(|e| format!("persist channel: {e}"))?;
     Ok(())
 }
@@ -104,7 +107,9 @@ fn write_channel(channel: &str) -> Result<(), String> {
 /// path segment; the GitHub `latest.json` fallback is stable-only by design.
 fn channel_endpoints(channel: &str) -> Vec<String> {
     match channel {
-        "beta" => vec![format!("{HOSTED_ENDPOINT_BASE}/beta/{{{{target}}}}/{{{{arch}}}}/{{{{current_version}}}}")],
+        "beta" => vec![format!(
+            "{HOSTED_ENDPOINT_BASE}/beta/{{{{target}}}}/{{{{arch}}}}/{{{{current_version}}}}"
+        )],
         // stable keeps the published order: hosted first, GitHub fallback.
         _ => vec![
             format!("{HOSTED_ENDPOINT_BASE}/{{{{target}}}}/{{{{arch}}}}/{{{{current_version}}}}"),
@@ -143,10 +148,7 @@ fn channel_updater(
 /// Check the configured endpoints for a pending update. Returns
 /// `{ available, currentVersion?, version?, notes?, channel? }`.
 #[tauri::command]
-pub async fn updater_check(
-    app: AppHandle,
-    state: State<'_, AppState>,
-) -> Result<Value, String> {
+pub async fn updater_check(app: AppHandle, state: State<'_, AppState>) -> Result<Value, String> {
     let channel = read_channel();
     let updater = channel_updater(&app, &channel)?;
     let update = updater
@@ -162,7 +164,11 @@ pub async fn updater_check(
                 "notes": u.body,
                 "channel": channel,
             });
-            emit_phase(&app, "available", json!({ "version": u.version, "channel": channel }));
+            emit_phase(
+                &app,
+                "available",
+                json!({ "version": u.version, "channel": channel }),
+            );
             v
         }
         None => {
@@ -193,10 +199,7 @@ pub fn updater_channel_set(channel: String) -> Result<Value, String> {
 /// `updater-status` events with `phase: "downloading"` / `downloaded` /
 /// `failed` / `available`. Installing stays explicit (`updater_restart`).
 #[tauri::command]
-pub async fn updater_download(
-    app: AppHandle,
-    state: State<'_, AppState>,
-) -> Result<Value, String> {
+pub async fn updater_download(app: AppHandle, state: State<'_, AppState>) -> Result<Value, String> {
     let channel = read_channel();
     let updater = channel_updater(&app, &channel)?;
     let Some(update) = updater
@@ -215,10 +218,14 @@ pub async fn updater_download(
     let channel_for_task = channel.clone();
 
     tauri::async_runtime::spawn(async move {
-        emit_phase(&app_handle, "downloading", json!({
-            "version": version_for_task,
-            "channel": channel_for_task,
-        }));
+        emit_phase(
+            &app_handle,
+            "downloading",
+            json!({
+                "version": version_for_task,
+                "channel": channel_for_task,
+            }),
+        );
         let total: std::sync::Mutex<Option<u64>> = std::sync::Mutex::new(None);
         let received: std::sync::Mutex<usize> = std::sync::Mutex::new(0);
         let mut last_emitted_pct: u8 = 0;
@@ -236,10 +243,14 @@ pub async fn updater_download(
                             let pct = ((*r as f64 / t as f64) * 100.0).min(100.0) as u8;
                             if pct >= last_emitted_pct + 5 {
                                 last_emitted_pct = pct;
-                                emit_phase(&app_for_progress, "downloading", json!({
-                                    "version": version_for_task,
-                                    "progress": pct,
-                                }));
+                                emit_phase(
+                                    &app_for_progress,
+                                    "downloading",
+                                    json!({
+                                        "version": version_for_task,
+                                        "progress": pct,
+                                    }),
+                                );
                             }
                         }
                     }
@@ -252,26 +263,31 @@ pub async fn updater_download(
                 if let Some(pending) = app_handle.try_state::<PendingUpdateSlot>() {
                     *pending.0.lock().unwrap() = Some(bytes);
                 }
-                emit_phase(&app_handle, "downloaded", json!({
-                    "version": version_for_task,
-                    "channel": channel_for_task,
-                }));
+                emit_phase(
+                    &app_handle,
+                    "downloaded",
+                    json!({
+                        "version": version_for_task,
+                        "channel": channel_for_task,
+                    }),
+                );
             }
             Err(e) => {
-                emit_phase(&app_handle, "failed", json!({
-                    "version": version_for_task,
-                    "error": format!("download failed: {e}"),
-                }));
+                emit_phase(
+                    &app_handle,
+                    "failed",
+                    json!({
+                        "version": version_for_task,
+                        "error": format!("download failed: {e}"),
+                    }),
+                );
             }
         }
     });
 
     // A second concurrent check while a download is in flight would race the
     // slot; tracked coarsely via the pending slot itself.
-    *state.pending_update.lock().unwrap() = Some(PendingUpdate {
-        version,
-        channel,
-    });
+    *state.pending_update.lock().unwrap() = Some(PendingUpdate { version, channel });
     Ok(json!({ "downloading": true }))
 }
 
@@ -279,9 +295,9 @@ pub async fn updater_download(
 /// explicit restart). Fails honestly when nothing was downloaded.
 #[tauri::command]
 pub async fn updater_restart(app: AppHandle) -> Result<Value, String> {
-    let slot = app.try_state::<PendingUpdateSlot>().ok_or_else(|| {
-        "no downloaded update — call updater_download first".to_string()
-    })?;
+    let slot = app
+        .try_state::<PendingUpdateSlot>()
+        .ok_or_else(|| "no downloaded update — call updater_download first".to_string())?;
     let bytes = slot.0.lock().unwrap().clone();
     let Some(bytes) = bytes else {
         return Err("no downloaded update — call updater_download first".to_string());

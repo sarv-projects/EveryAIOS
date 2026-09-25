@@ -67,7 +67,7 @@ pub fn diagnostics_sandbox_posture() -> serde_json::Value {
 const BUNDLE_ALLOWED: &[&str] = &[
     // (the audit ledger is NOT embedded raw — `audit_summary` carries its
     //  shape: last-40 kinds with scrubbed payload previews)
-    "store-schema.json",  // versions + adopted flags
+    "store-schema.json",   // versions + adopted flags
     "update_channel.json", // { channel } only
 ];
 
@@ -214,7 +214,9 @@ pub fn data_remove_all(state: State<'_, AppState>) -> Result<serde_json::Value, 
     let mut removed_bytes = 0u64;
     let mut removed_files = 0u64;
     fn measure(dir: &std::path::Path, files: &mut u64, bytes: &mut u64) {
-        let Ok(entries) = std::fs::read_dir(dir) else { return };
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            return;
+        };
         for e in entries.flatten() {
             let p = e.path();
             if p.is_dir() {

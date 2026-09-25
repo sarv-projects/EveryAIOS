@@ -39,6 +39,7 @@ use everyaios_acp::{
 use everyaios_core::config::Config;
 use everyaios_core::{ExecutionPhase, ExecutionTrigger, GuardDecision};
 use everyaios_guard::{DecisionPackage, Operation, RiskLevel};
+use everyaios_types::RuntimeControl;
 use serde::Serialize;
 use tauri::State;
 
@@ -54,7 +55,11 @@ static ACP_COUNTER: AtomicU64 = AtomicU64::new(1);
 #[tauri::command]
 pub fn chief_default_get() -> Result<serde_json::Value, String> {
     let cfg = Config::load().map_err(|e| e.to_string())?;
-    let known: Vec<String> = launch_registry().agents.iter().map(|m| m.id.clone()).collect();
+    let known: Vec<String> = launch_registry()
+        .agents
+        .iter()
+        .map(|m| m.id.clone())
+        .collect();
     Ok(serde_json::json!({
         "primaryChief": cfg.primary_chief,
         "known": known
@@ -218,7 +223,11 @@ pub(crate) fn agents_doctor_check(
             if unavailable.is_empty() {
                 String::new()
             } else {
-                format!(" · {} unprobed ({})", unavailable.len(), unavailable.join(", "))
+                format!(
+                    " · {} unprobed ({})",
+                    unavailable.len(),
+                    unavailable.join(", ")
+                )
             }
         ),
     }
@@ -226,16 +235,12 @@ pub(crate) fn agents_doctor_check(
 
 impl everyaios_core::tools::AgentReadinessSource for ShellAgentReadiness {
     fn readiness(&self, agent_id: &str) -> everyaios_types::AgentReadiness {
-        let live = self
-            .sessions
-            .lock()
-            .ok()
-            .and_then(|sessions| {
-                sessions
-                    .values()
-                    .find(|h| h.agent_id == agent_id)
-                    .map(live_facts)
-            });
+        let live = self.sessions.lock().ok().and_then(|sessions| {
+            sessions
+                .values()
+                .find(|h| h.agent_id == agent_id)
+                .map(live_facts)
+        });
         agent_readiness_with_live(agent_id, live)
     }
 }
@@ -975,24 +980,19 @@ pub fn acp_install_status(state: State<'_, AppState>) -> Result<serde_json::Valu
         // truths. A live handle outranks install facts.
         let readiness = {
             use everyaios_types::AgentReadiness;
-            let live = state
-                .acp_sessions
-                .lock()
-                .ok()
-                .and_then(|sessions| {
-                    sessions
-                        .values()
-                        .find(|h| h.agent_id == m.id)
-                        .map(live_facts)
-                });
+            let live = state.acp_sessions.lock().ok().and_then(|sessions| {
+                sessions
+                    .values()
+                    .find(|h| h.agent_id == m.id)
+                    .map(live_facts)
+            });
             match live {
                 Some((true, _)) => AgentReadiness::AuthRequired,
                 Some((false, true)) => AgentReadiness::Ready,
                 Some((false, false)) => AgentReadiness::ProtocolCompatible,
                 None if installed.is_some() => AgentReadiness::Installed,
-                None
-                    if package_manager_ready
-                        || matches!(location_kind, "path" | "windows_path" | "wsl") =>
+                None if package_manager_ready
+                    || matches!(location_kind, "path" | "windows_path" | "wsl") =>
                 {
                     AgentReadiness::Launchable
                 }
@@ -1724,7 +1724,11 @@ fn build_acp_prompt_with_passport(state: &State<'_, AppState>, text: &str) -> (S
         &core_facts,
         &governance,
         Some(everyaios_acp::COWORK_AFFINITY_STEERING),
-        if mix.is_empty() { None } else { Some(mix.as_str()) },
+        if mix.is_empty() {
+            None
+        } else {
+            Some(mix.as_str())
+        },
     );
     // P69.E9 — fingerprint the shell-owned stable prefix with the exact
     // inputs this builder assembled (`ARCH/CONTEXT.md` §4: the warm-memory
@@ -1732,7 +1736,11 @@ fn build_acp_prompt_with_passport(state: &State<'_, AppState>, text: &str) -> (S
     let fingerprint = everyaios_acp::fingerprint_stable_prefix(
         governance.badge(),
         Some(everyaios_acp::COWORK_AFFINITY_STEERING),
-        if mix.is_empty() { None } else { Some(mix.as_str()) },
+        if mix.is_empty() {
+            None
+        } else {
+            Some(mix.as_str())
+        },
     );
     (prompt, fingerprint)
 }
@@ -1942,7 +1950,9 @@ pub fn chief_subagent_set_policy(
     }
     if let Some(v) = workspace {
         if v != "shared" && v != "isolated" {
-            return Err(format!("workspace must be \"shared\" or \"isolated\", got {v:?}"));
+            return Err(format!(
+                "workspace must be \"shared\" or \"isolated\", got {v:?}"
+            ));
         }
         policy.workspace = v;
     }
@@ -2000,6 +2010,245 @@ pub fn acp_session_commands(
     Ok(entry.available_commands.clone())
 }
 
+const NATIVE_ONLY_MODEL_REASON: &str =
+    "This agent manages its own model — configure it inside the agent.";
+
+fn runtime_control_wire(control: RuntimeControl) -> &'static str {
+    match control {
+        RuntimeControl::NativeOnly => "NativeOnly",
+        RuntimeControl::LaunchOverride => "LaunchOverride",
+        RuntimeControl::SessionConfig => "SessionConfig",
+        RuntimeControl::Unknown => "Unknown",
+    }
+}
+
+#[derive(Clone)]
+struct AcpConfigTarget {
+    handle: String,
+    agent_id: String,
+    binding_id: Option<String>,
+    session: AcpSessionSlot,
+}
+
+fn resolve_acp_config_target(
+    state: &AppState,
+    agent_id: Option<&str>,
+    binding_id: Option<&str>,
+    handle: Option<&str>,
+) -> Result<AcpConfigTarget, String> {
+    let agent_id = agent_id.map(str::trim).filter(|value| !value.is_empty());
+    let binding_id = binding_id.map(str::trim).filter(|value| !value.is_empty());
+    let handle = handle.map(str::trim).filter(|value| !value.is_empty());
+    if agent_id.is_none() && binding_id.is_none() && handle.is_none() {
+        return Err("agentId, bindingId, or a live ACP handle is required".to_string());
+    }
+
+    let sessions = state.acp_sessions.lock().map_err(|e| e.to_string())?;
+    let selected = if let Some(handle) = handle {
+        sessions
+            .get_key_value(handle)
+            .map(|(key, entry)| (key, entry))
+    } else if let Some(binding_id) = binding_id {
+        sessions.iter().find(|(_, entry)| {
+            entry.binding_id() == Some(binding_id)
+                && agent_id.map_or(true, |agent_id| entry.agent_id == agent_id)
+        })
+    } else {
+        let agent_id = agent_id.expect("agentId checked above");
+        let matches: Vec<_> = sessions
+            .iter()
+            .filter(|(_, entry)| entry.agent_id == agent_id)
+            .collect();
+        match matches.as_slice() {
+            [only] => Some(*only),
+            [] => None,
+            _ => {
+                return Err(format!(
+                    "agent {agent_id} has multiple live ACP sessions; bindingId is required"
+                ));
+            }
+        }
+    };
+    let (handle, entry) = selected.ok_or_else(|| {
+        let subject = handle
+            .map(|id| format!("ACP handle {id}"))
+            .or_else(|| binding_id.map(|id| format!("binding {id}")))
+            .unwrap_or_else(|| format!("agent {}", agent_id.unwrap_or("<unknown>")));
+        format!("no live ACP session is bound to {subject}")
+    })?;
+    if let Some(agent_id) = agent_id {
+        if entry.agent_id != agent_id {
+            return Err(format!(
+                "ACP handle {handle} belongs to agent {}, not {agent_id}",
+                entry.agent_id
+            ));
+        }
+    }
+    if let Some(binding_id) = binding_id {
+        if entry.binding_id() != Some(binding_id) {
+            return Err(format!(
+                "ACP handle {handle} is not owned by binding {binding_id}"
+            ));
+        }
+    }
+    Ok(AcpConfigTarget {
+        handle: handle.to_string(),
+        agent_id: entry.agent_id.clone(),
+        binding_id: entry.binding_id().map(str::to_string),
+        session: entry.session.clone(),
+    })
+}
+
+fn live_config_options(target: &AcpConfigTarget) -> Result<Vec<ConfigOption>, String> {
+    let session = target.session.lock()?;
+    Ok(session.config_options().to_vec())
+}
+
+fn config_options_projection(
+    target: &AcpConfigTarget,
+    options: Vec<ConfigOption>,
+) -> serde_json::Value {
+    let control = if options.is_empty() {
+        RuntimeControl::NativeOnly
+    } else {
+        RuntimeControl::SessionConfig
+    };
+    serde_json::json!({
+        "handle": target.handle,
+        "agentId": target.agent_id,
+        "bindingId": target.binding_id,
+        "control": runtime_control_wire(control),
+        "reason": (options.is_empty()).then_some(NATIVE_ONLY_MODEL_REASON),
+        "options": options,
+    })
+}
+
+fn native_only_config_request_projection(
+    agent_id: &str,
+    binding_id: Option<&str>,
+    handle: &str,
+) -> serde_json::Value {
+    serde_json::json!({
+        "state": "requested",
+        "detail": "No configuration change was sent because the agent advertises no session options",
+        "control": runtime_control_wire(RuntimeControl::NativeOnly),
+        "reason": NATIVE_ONLY_MODEL_REASON,
+        "agentId": agent_id,
+        "bindingId": binding_id,
+        "handle": handle,
+        "options": [],
+        "agentConfirmed": false,
+    })
+}
+
+fn config_option_request_projection<F>(
+    agent_id: &str,
+    binding_id: Option<&str>,
+    handle: &str,
+    config_id: &str,
+    value: serde_json::Value,
+    options: &[ConfigOption],
+    apply: F,
+) -> Result<serde_json::Value, String>
+where
+    F: FnOnce(&str, serde_json::Value) -> Result<Vec<ConfigOption>, String>,
+{
+    if options.is_empty() {
+        return Ok(native_only_config_request_projection(
+            agent_id, binding_id, handle,
+        ));
+    }
+    if !options.iter().any(|option| option.id == config_id) {
+        return Err(format!(
+            "agent does not advertise config option {config_id}; EveryAIOS will not fabricate one"
+        ));
+    }
+    let updated = apply(config_id, value)?;
+    Ok(serde_json::json!({
+        "state": "requested",
+        "detail": "agent confirmed session/set_config_option; the agent remains the owner of model activation",
+        "control": runtime_control_wire(RuntimeControl::SessionConfig),
+        "agentId": agent_id,
+        "bindingId": binding_id,
+        "handle": handle,
+        "configId": config_id,
+        "options": updated,
+        "agentConfirmed": true,
+    }))
+}
+
+/// Return the bound agent's advertised ACP config vocabulary, never a host catalog.
+#[tauri::command]
+pub fn acp_config_options(
+    state: State<'_, AppState>,
+    agent_id: Option<String>,
+    binding_id: Option<String>,
+    handle: Option<String>,
+) -> Result<serde_json::Value, String> {
+    let target = resolve_acp_config_target(
+        &state,
+        agent_id.as_deref(),
+        binding_id.as_deref(),
+        handle.as_deref(),
+    )?;
+    let options = live_config_options(&target)?;
+    Ok(config_options_projection(&target, options))
+}
+
+/// Apply one advertised ACP session config option through the existing mediated
+/// ACP session. The command reports a request state even after confirmation.
+#[tauri::command]
+pub fn acp_set_session_config_option(
+    state: State<'_, AppState>,
+    agent_id: Option<String>,
+    binding_id: Option<String>,
+    handle: Option<String>,
+    config_id: String,
+    value: serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    let target = resolve_acp_config_target(
+        &state,
+        agent_id.as_deref(),
+        binding_id.as_deref(),
+        handle.as_deref(),
+    )?;
+    let options = live_config_options(&target)?;
+    let confirmed_handle = target.handle.clone();
+    let result = config_option_request_projection(
+        &target.agent_id,
+        target.binding_id.as_deref(),
+        &target.handle,
+        &config_id,
+        value,
+        &options,
+        |config_id, value| {
+            let mut session = target.session.lock()?;
+            session
+                .set_config_option(config_id, value)
+                .map_err(|e| e.to_string())
+        },
+    )?;
+    if result
+        .get("agentConfirmed")
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(false)
+    {
+        let updated: Vec<ConfigOption> = serde_json::from_value(
+            result
+                .get("options")
+                .cloned()
+                .unwrap_or_else(|| serde_json::json!([])),
+        )
+        .map_err(|error| error.to_string())?;
+        if let Ok(mut sessions) = state.acp_sessions.lock() {
+            if let Some(entry) = sessions.get_mut(&confirmed_handle) {
+                entry.config_options = updated;
+            }
+        }
+    }
+    Ok(result)
+}
+
 /// Return the complete model/config vocabulary owned by one external ACP
 /// session. No native provider keys or models are returned here.
 #[tauri::command]
@@ -2023,14 +2272,21 @@ pub fn acp_session_set_config_option(
     config_id: String,
     value: serde_json::Value,
 ) -> Result<Vec<ConfigOption>, String> {
-    let session = {
+    let (session, advertised) = {
         let sessions = state.acp_sessions.lock().map_err(|e| e.to_string())?;
-        sessions
+        let entry = sessions
             .get(&handle)
-            .ok_or_else(|| format!("unknown ACP handle: {handle}"))?
-            .session
-            .clone()
+            .ok_or_else(|| format!("unknown ACP handle: {handle}"))?;
+        (entry.session.clone(), entry.config_options.clone())
     };
+    if advertised.is_empty() {
+        return Ok(Vec::new());
+    }
+    if !advertised.iter().any(|option| option.id == config_id) {
+        return Err(format!(
+            "agent does not advertise config option {config_id}; EveryAIOS will not fabricate one"
+        ));
+    }
     let options = {
         let mut session = session.lock().map_err(|e| e.to_string())?;
         session
@@ -2099,9 +2355,7 @@ type AcpRelayPlanes = (
     Arc<Mutex<everyaios_core::ExecutionKernel>>,
 );
 
-fn relay_planes(
-    state: &State<'_, AppState>,
-) -> Result<AcpRelayPlanes, AcpIdentityError> {
+fn relay_planes(state: &State<'_, AppState>) -> Result<AcpRelayPlanes, AcpIdentityError> {
     let relay = state
         .chat_relay
         .lock()
@@ -2177,8 +2431,7 @@ fn prepare_acp_turn(
         });
     }
 
-    let deterministic_binding_id =
-        canonical_binding_id(application_session_id, &work_id, agent_id);
+    let deterministic_binding_id = canonical_binding_id(application_session_id, &work_id, agent_id);
     let existing = gateway
         .bindings_for(&work_id)
         .into_iter()
@@ -2254,7 +2507,8 @@ fn prepare_acp_turn(
                     .map_err(AcpIdentityError::Binding)?;
                 activated_here = true;
             }
-            everyaios_types::BindingLifecycle::Dead | everyaios_types::BindingLifecycle::Unavailable => {
+            everyaios_types::BindingLifecycle::Dead
+            | everyaios_types::BindingLifecycle::Unavailable => {
                 return Err(AcpIdentityError::Binding(format!(
                     "binding {binding_id} is {:?}",
                     binding.state
@@ -2319,7 +2573,9 @@ fn prepare_acp_turn(
                     )));
                 }
             }
-            if let Some(bound_binding) = context.get("bindingId").and_then(serde_json::Value::as_str) {
+            if let Some(bound_binding) =
+                context.get("bindingId").and_then(serde_json::Value::as_str)
+            {
                 if bound_binding != binding_id {
                     return Err(AcpIdentityError::Binding(format!(
                         "Run {existing_id} is bound to {bound_binding}, not {binding_id}"
@@ -2467,7 +2723,9 @@ fn transition_acp_run(
         | everyaios_types::WorkState::Running => ExecutionPhase::Running,
     };
     let mut kernel = kernel.lock().map_err(|e| e.to_string())?;
-    kernel.transition(execution_id, phase).map_err(|e| e.to_string())?;
+    kernel
+        .transition(execution_id, phase)
+        .map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -2536,15 +2794,7 @@ pub fn acp_prompt(
     // Copy per-handle state out of the global registry and release the global
     // lock before any provider I/O. The per-handle session mutex serializes
     // turns for this handle; the cancellation hook remains independent.
-    let (
-        agent_id,
-        cwd,
-        embedded_context,
-        provider_session_id,
-        session,
-        cancel,
-        existing_owner,
-    ) = {
+    let (agent_id, cwd, embedded_context, provider_session_id, session, cancel, existing_owner) = {
         let sessions = state.acp_sessions.lock().map_err(|e| e.to_string())?;
         let entry = sessions
             .get(&handle)
@@ -2579,8 +2829,8 @@ pub fn acp_prompt(
         )
     };
 
-    let provider_session_id = provider_session_id
-        .ok_or_else(|| AcpIdentityError::MissingProviderSession.to_string())?;
+    let provider_session_id =
+        provider_session_id.ok_or_else(|| AcpIdentityError::MissingProviderSession.to_string())?;
     if provider_session_id.trim().is_empty() {
         return Err(AcpIdentityError::MissingProviderSession.to_string());
     }
@@ -2718,8 +2968,7 @@ pub fn acp_prompt(
         entry.run_id = Some(identity.run_id.clone());
     }
 
-    let (mut prompt_text, prefix_fingerprint) =
-        build_acp_prompt_with_passport(&state, &text);
+    let (mut prompt_text, prefix_fingerprint) = build_acp_prompt_with_passport(&state, &text);
     let prefix_event = {
         let mut sessions = state.acp_sessions.lock().map_err(|e| e.to_string())?;
         let entry = sessions
@@ -3283,6 +3532,30 @@ mod tests {
     use super::*;
 
     #[test]
+    fn agent_without_advertised_config_options_is_native_only_and_unchanged() {
+        let mut apply_count = 0_u32;
+        let response = config_option_request_projection(
+            "native-agent",
+            Some("binding-native"),
+            "acp-fixture",
+            "model",
+            serde_json::json!("fixture-model"),
+            &[],
+            |_, _| {
+                apply_count += 1;
+                Ok(Vec::new())
+            },
+        )
+        .unwrap();
+        assert_eq!(apply_count, 0);
+        assert_eq!(response["control"], "NativeOnly");
+        assert_eq!(response["reason"], NATIVE_ONLY_MODEL_REASON);
+        assert_eq!(response["state"], "requested");
+        assert_eq!(response["agentConfirmed"], false);
+        assert_eq!(response["options"], serde_json::json!([]));
+    }
+
+    #[test]
     fn missing_application_or_provider_identity_fails_closed() {
         let mut gateway = everyaios_core::WorkGateway::new();
         let mut kernel = everyaios_core::ExecutionKernel::new();
@@ -3349,8 +3622,14 @@ mod tests {
                 .and_then(|b| b.provider_session_id.as_deref()),
             Some("provider-b")
         );
-        assert_eq!(kernel.get(&first.run_id).unwrap().session_id, "application-a");
-        assert_eq!(kernel.get(&second.run_id).unwrap().session_id, "application-b");
+        assert_eq!(
+            kernel.get(&first.run_id).unwrap().session_id,
+            "application-a"
+        );
+        assert_eq!(
+            kernel.get(&second.run_id).unwrap().session_id,
+            "application-b"
+        );
     }
 
     #[test]
@@ -3377,8 +3656,12 @@ mod tests {
                 vec![],
             )
             .id;
-        kernel.transition(&existing, ExecutionPhase::Running).unwrap();
-        gateway.bind_execution("automation-session", &existing).unwrap();
+        kernel
+            .transition(&existing, ExecutionPhase::Running)
+            .unwrap();
+        gateway
+            .bind_execution("automation-session", &existing)
+            .unwrap();
         gateway
             .record_execution_transition(
                 "automation-session",
@@ -3397,7 +3680,10 @@ mod tests {
         )
         .unwrap();
         assert_eq!(identity.run_id, existing);
-        assert_eq!(gateway.execution_id("automation-session"), Some(existing.as_str()));
+        assert_eq!(
+            gateway.execution_id("automation-session"),
+            Some(existing.as_str())
+        );
     }
 
     #[test]
@@ -3434,12 +3720,25 @@ mod tests {
         let replay = everyaios_core::WorkGateway::open(&path).unwrap();
         let binding = replay.agent_binding(&identity.owner.binding_id).unwrap();
         assert_eq!(binding.session_id.as_str(), "replay-session");
-        assert_eq!(binding.provider_session_id.as_deref(), Some("provider-replay"));
+        assert_eq!(
+            binding.provider_session_id.as_deref(),
+            Some("provider-replay")
+        );
         assert_eq!(binding.usage.input_tokens, 7);
         assert_eq!(binding.usage.output_tokens, 3);
         assert_eq!(binding.usage.cost_micros, 11);
-        assert_eq!(replay.execution_id("replay-session"), Some(identity.run_id.as_str()));
-        assert_eq!(replay.get_work("replay-session").unwrap().session_id.as_deref(), Some("replay-session"));
+        assert_eq!(
+            replay.execution_id("replay-session"),
+            Some(identity.run_id.as_str())
+        );
+        assert_eq!(
+            replay
+                .get_work("replay-session")
+                .unwrap()
+                .session_id
+                .as_deref(),
+            Some("replay-session")
+        );
         let _ = std::fs::remove_file(path);
     }
 
@@ -3460,9 +3759,13 @@ mod tests {
         let error = validate_cancel_owner("h1", Some(&owner), Some("session-b"), None)
             .expect_err("a handle cannot be reused by another Session");
         assert!(matches!(error, AcpIdentityError::OwnerMismatch { .. }));
-        let binding_error = validate_cancel_owner("h1", Some(&owner), Some("session-a"), Some("binding-b"))
-            .expect_err("a handle cannot be reused by another binding");
-        assert!(matches!(binding_error, AcpIdentityError::BindingMismatch { .. }));
+        let binding_error =
+            validate_cancel_owner("h1", Some(&owner), Some("session-a"), Some("binding-b"))
+                .expect_err("a handle cannot be reused by another binding");
+        assert!(matches!(
+            binding_error,
+            AcpIdentityError::BindingMismatch { .. }
+        ));
     }
 
     #[test]

@@ -13,7 +13,6 @@
 
 use tauri::Manager;
 
-
 /// P2.11 (E16) — spawn the WebMCP HTTP server on a loopback port so browser
 /// sessions can serve MCP tools (`tools/list` + `tools/call`) to any local
 /// HTTP client. The registry mirrors the 37-tool browser catalog; tool calls

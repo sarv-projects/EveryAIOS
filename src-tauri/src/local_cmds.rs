@@ -19,26 +19,17 @@ pub fn local_models() -> Result<serde_json::Value, String> {
 }
 
 #[tauri::command]
-pub fn local_ensure(runtime: String, model: Option<String>) -> Result<serde_json::Value, String> {
-    let cfg = everyaios_core::Config::load().unwrap_or_default();
-    let mgr = LocalManager::from_config(&cfg);
-    match runtime.as_str() {
-        "ollama" => {
-            mgr.ensure_ollama().map_err(|e| e.to_string())?;
-            if let Some(name) = model.as_deref() {
-                mgr.disqualify_unfit(name).map_err(|e| e.to_string())?;
-            }
-        }
-        "llamafile" => {
-            let bin = mgr
-                .find_llamafile(&everyaios_core::default_data_dir())
-                .ok_or_else(|| "no llamafile binary found".to_string())?;
-            mgr.ensure_llamafile(bin, mgr.cfg.llamafile_port)
-                .map_err(|e| e.to_string())?;
-        }
-        other => return Err(format!("unknown runtime {other}")),
-    }
-    Ok(serde_json::json!({ "ok": true, "runtime": runtime }))
+pub fn local_ensure(
+    state: State<'_, AppState>,
+    runtime: String,
+    model: Option<String>,
+) -> Result<serde_json::Value, String> {
+    let result = crate::runtime_cmds::runtime_start(state, None, Some(runtime.clone()), model)?;
+    Ok(serde_json::json!({
+        "ok": true,
+        "runtime": runtime,
+        "result": result,
+    }))
 }
 
 #[tauri::command]
