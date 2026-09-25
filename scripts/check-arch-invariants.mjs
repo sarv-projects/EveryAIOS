@@ -16,6 +16,7 @@
 //   SCHEMA-1 the canonical schema objects exist in `everyaios-types`
 //   DECIDE-1 permission classification is not exported from `core-tools`
 //   DECIDE-2 the ACP permission path never hardcodes `Approval::allow()`
+//   E3-ACP-V2 an ACP v2 connection is refused, never silently downgraded
 //   LAYER-1 `core-engine` is policies/helpers only — no transport, no egress
 //   LAYER-2 `everyaios-eval` stays outside the runtime (no production dep)
 //   TS-DUP   TypeScript never re-declares a canonical record/id (P69.D15/D25)
@@ -472,6 +473,31 @@ for (const root of SCAN_ROOTS) {
   }
 }
 
+// --- E3-ACP-V2: a v2 connection is refused, never silently downgraded ------
+// ADR-0007 §4 / TODO P71.11. The client hard-sends `protocolVersion: 1`; the
+// only thing standing between a v2 agent and a silent v1 downgrade is the
+// comparison against the agent's advertised version. ACP v2 removes the client
+// filesystem/terminal surface, so a downgraded connection would let us claim a
+// mediated fs/terminal path the agent cannot serve. Nothing in CI would notice
+// if that check were deleted, so it is asserted here.
+{
+  const clientPath = join(ROOT, "crates", "everyaios-acp", "src", "client.rs");
+  const src = readFileSync(clientPath, "utf8");
+  const checks = [
+    { pattern: /if\s+result\.protocol_version\s*!=\s*PROTOCOL_VERSION/, why: "the advertised-version comparison" },
+    { pattern: /AcpError::ProtocolMismatch\s*\(\s*result\.protocol_version\s*\)/, why: "the ProtocolMismatch refusal" },
+  ];
+  for (const { pattern, why } of checks) {
+    if (!pattern.test(src)) {
+      fail(
+        "E3-ACP-V2",
+        rel(clientPath),
+        `ACP v2 must be refused, never downgraded (ADR-0007 §4, TODO P71.11): ${why} is missing — the client would accept a v2 agent as v1`,
+      );
+    }
+  }
+}
+
 // --- LAYER-1: no second turn runtime in the TS workspace ------------------
 // P71.2c (ADR-0005 §2) — the built-in engine is deferred to post-v1, so the
 // strongest form of P69.D8's invariant is now the literal one: `packages/core-engine`
@@ -789,32 +815,38 @@ function productionDeps(crateName) {
   const server = productionCode(read(serverPath));
   const handle = findRustFn(server, "handle_json");
   const serve = findRustFn(server, "serve_http_connection");
-  const auth = findRustFn(server, "is_authorized");
+  // The host seam is `handler.call_outcome` inside the tools/call arm.
+  // HTTP auth lives on `HttpPolicy::validate` (bearer, then origin_is_local
+  // via origin_matches) before `serve_http_connection` dispatches the body.
+  // `thread::spawn` is the lease worker, not an effect; process spawn is
+  // still forbidden in this file.
   if (!handle) {
     fail("E3-MCP", serverPath, "McpServer::handle_json is missing from production source (line 1)");
-  } else if (!firstMatch(handle.text, /\bself\s*\.\s*handler\s*\.\s*call\s*\(/)) {
+  }
+  const toolArm = firstMatch(server, /"tools\/call"/);
+  const hostCall = firstMatch(server, /\bself\s*\.\s*handler\s*\.\s*call_outcome\s*\(/);
+  if (!toolArm || !hostCall || hostCall.index < toolArm.index) {
     fail("E3-MCP", serverPath, "tools/call must dispatch through the host ToolCallHandler seam");
   }
   if (!serve) {
     fail("E3-MCP", serverPath, "McpServer::serve_http_connection is missing (line 1)");
+  } else if (!firstMatch(serve.text, /\bserve_http_connection_with_dispatch\s*\(/)) {
+    fail("E3-MCP", serverPath, "HTTP MCP must enter the shared dispatch path");
+  }
+  const validate = findRustFn(server, "validate");
+  if (!validate) {
+    fail("E3-MCP", serverPath, "HttpPolicy::validate is missing");
   } else {
-    const authorized = firstMatch(serve.text, /\bself\s*\.\s*is_authorized\s*\(/);
-    const origin = firstMatch(serve.text, /\breq\s*\.\s*origin_ok\b/);
-    const dispatch = firstMatch(serve.text, /\bself\s*\.\s*handle_json\s*\(/);
-    if (!authorized || !origin || !dispatch) {
-      fail("E3-MCP", serverPath, "HTTP MCP dispatch must check bearer authorization, loopback origin, then dispatch");
-    } else if (authorized.index > origin.index || origin.index > dispatch.index) {
-      fail("E3-MCP", serverPath, "MCP authorization/origin gates do not precede handle_json dispatch");
+    const bearer = firstMatch(validate.text, /\bbearer_matches\s*\(/);
+    const origin = firstMatch(validate.text, /\borigin_matches\s*\(/);
+    if (!bearer || !origin || bearer.index > origin.index) {
+      fail("E3-MCP", serverPath, "HTTP MCP dispatch must check bearer authorization, then loopback origin, before the body is accepted");
     }
+    requirePattern("E3-MCP", serverPath, validate.text, /\bauthorization\b/, "MCP Authorization header handling is missing");
   }
-  if (!auth) {
-    fail("E3-MCP", serverPath, "MCP bearer authorization seam is_authorized is missing");
-  } else {
-    requirePattern("E3-MCP", serverPath, auth.text, /\bbearer_token\b/, "MCP bearer token state is missing");
-    requirePattern("E3-MCP", serverPath, auth.text, /\bauthorization\b/, "MCP Authorization header handling is missing");
-  }
-  requirePattern("E3-MCP", serverPath, server, /origin_ok\s*=\s*origin_is_local\s*\(/, "MCP HTTP origin must be checked with origin_is_local before dispatch");
-  for (const pattern of [/\bstd::process\s*::/, /\bCommand\s*::\s*new\s*\(/, /\bspawn\s*\(/]) {
+  requirePattern("E3-MCP", serverPath, server, /\borigin_is_local\s*\(/, "MCP HTTP origin must be checked with origin_is_local before dispatch");
+  requirePattern("E3-MCP", serverPath, server, /\bbearer_token\b/, "MCP bearer token state is missing");
+  for (const pattern of [/\bstd::process\s*::/, /\bCommand\s*::\s*new\s*\(/]) {
     const hit = firstMatch(server, pattern);
     if (hit) {
       fail("E3-MCP", serverPath, `MCP protocol transport must not spawn/execute effects directly (line ${lineAt(server, hit.index)})`);
@@ -1067,6 +1099,9 @@ function productionDeps(crateName) {
     "crates/everyaios-core/src/chat.rs",
     "src-tauri/src/scheduler_fire.rs",
     "src-tauri/src/work_cmds.rs",
+    // ACP turns call WorkGateway::create_work_in_session. They do not append
+    // a WorkCreated event themselves.
+    "src-tauri/src/acp_cmds.rs",
   ]);
   const creationPattern = /\.\s*(create_work(?:_in_session)?|create_child_work|delegate_child_work)\s*\(/g;
   for (const file of productionRustFiles(["crates", "src-tauri/src"])) {
@@ -1089,6 +1124,12 @@ function productionDeps(crateName) {
       }
       const createdEvent = /\b(?:DomainEvent\s*::\s*WorkCreated|WorkEvent\s*::\s*Domain\s*\(\s*DomainEvent\s*::\s*WorkCreated)/g;
       for (const match of code.matchAll(createdEvent)) {
+        const before = code.slice(Math.max(0, match.index - 500), match.index);
+        const ahead = code.slice(match.index, match.index + 240);
+        // Replay and idempotency checks read WorkCreated. Only a constructed
+        // event (an append of a new value) is a second writer.
+        const reading = /matches!\s*\(/.test(before) || ahead.includes("=>");
+        if (reading) continue;
         fail("E4-WORK-CREATION", name, `direct WorkCreated event at line ${lineAt(code, match.index)}; append it only through WorkGateway`);
       }
     }
@@ -1109,6 +1150,79 @@ function productionDeps(crateName) {
   }
 }
 
+// --- P69.E5: the UI is not a second Work writer -------------------------
+{
+  const uiRoot = join(ROOT, "ui", "src");
+  for (const file of walk(uiRoot, TS)) {
+    const src = readFileSync(file, "utf8");
+    if (/create_work_in_session|DomainEvent::WorkCreated|WorkEvent::Domain/.test(src)) {
+      fail("E5-UI", rel(file), "UI source constructs Work; call a Work Gateway command instead");
+    }
+  }
+}
+
+// --- P69.F1: freeze canonical type names ---------------------------------
+{
+  const frozen = [
+    "pub enum AuthMode",
+    "pub struct AgentBinding",
+    "pub struct EffectRequest",
+    "pub struct ContextPassport",
+    "pub struct EventEnvelope",
+    "pub struct AuthorizationTicket",
+  ];
+  const allowed = new Map([
+    ["pub enum AuthMode", new Set(["crates/everyaios-types/src/lib.rs"])],
+    ["pub struct AgentBinding", new Set(["crates/everyaios-types/src/lib.rs"])],
+    ["pub struct EffectRequest", new Set(["crates/everyaios-types/src/lib.rs"])],
+    ["pub struct EventEnvelope", new Set(["crates/everyaios-types/src/lib.rs"])],
+    [
+      "pub struct ContextPassport",
+      new Set([
+        "crates/everyaios-types/src/lib.rs",
+        "crates/everyaios-memory/src/passport.rs",
+      ]),
+    ],
+    [
+      "pub struct AuthorizationTicket",
+      new Set([
+        "crates/everyaios-guard/src/ticket.rs",
+        "crates/everyaios-types/src/lib.rs",
+      ]),
+    ],
+  ]);
+  for (const file of productionRustFiles(["crates", "src-tauri/src"])) {
+    const name = rel(file);
+    const src = readFileSync(file, "utf8");
+    for (const symbol of frozen) {
+      if (!src.includes(symbol)) continue;
+      const owners = allowed.get(symbol);
+      if (!owners.has(name)) {
+        fail("F1-FREEZE", name, `${symbol} is declared outside the frozen set`);
+      }
+    }
+  }
+}
+
+// --- P69.C5 / C6: stale authorization slogans and over-broad audit claims ---
+{
+  const files = readdirSync(join(ROOT, "ARCH")).filter((name) => name.endsWith(".md"));
+  for (const name of files) {
+    const lines = read(`ARCH/${name}`).split("\n");
+    lines.forEach((line, index) => {
+      const lower = line.toLowerCase();
+      const ticketSlogan = lower.includes("every mutation is ticketed") || lower.includes("everything is ticketed");
+      const correction = /stale|false|obsolete|superseded|never|not the invariant|must not be used|was always wrong/.test(lower);
+      if (ticketSlogan && !correction) {
+        fail("C5-WORDING", `ARCH/${name}`, `line ${index + 1} states the retired ticket slogan as current`);
+      }
+      if (lower.includes("every action in the app is audited") || lower.includes("every external agent action is audited")) {
+        fail("C6-OBSERVABILITY", `ARCH/${name}`, `line ${index + 1} claims an audit trail the host does not mediate`);
+      }
+    });
+  }
+}
+
 // --- report ---------------------------------------------------------------
 if (failures.length) {
   console.error(`architecture-invariant gate: ${failures.length} violation(s)\n`);
@@ -1121,5 +1235,5 @@ if (failures.length) {
 }
 
 console.log(
-  "architecture-invariant gate: OK (CRED-1/2/3, AUTH-1/2/3, SCHEMA-1, DECIDE-1/2, LAYER-1/2/3/4, E3-CONNECTOR/MCP/ACP/UI, E4-JOURNAL/SPAWN/WORK-CREATION, PURITY-1/3/4, TS-DUP, RUST-DUP)",
+  "architecture-invariant gate: OK (CRED-1/2/3, AUTH-1/2/3, SCHEMA-1, DECIDE-1/2, LAYER-1/2/3/4, E3-CONNECTOR/MCP/ACP/UI, E3-ACP-V2, E4-JOURNAL/SPAWN/WORK-CREATION, PURITY-1/3/4, TS-DUP, RUST-DUP)",
 );
