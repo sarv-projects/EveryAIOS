@@ -29,11 +29,11 @@ The artifact names below are the intended Windows v1 outputs, not evidence that 
 
 | v1 surface | Required evidence | Current state |
 |---|---|---|
-| ACP identity and Channel B | Real `Session → Work → Run → AgentBinding` lifecycle; per-Session handle/cancellation; reconnect/resume policy; Channel B `tools/list`/`tools/call` through Guard, executor, receipt, and event. | **Open — implemented — unverified.** The live ACP launch passes an empty `mcpServers` list and production resume/load is not wired. |
-| Automation admission and provenance | Durable occurrence before Work; immutable revision and occurrence stamped by the production `compile_work` path; event/webhook admission; honest `pending`/`uncertain`/`cancelled` projections. | **Open — implemented — unverified.** The compiler seam exists, but the live scheduler firing path still constructs Work/Run directly. |
+| ACP identity and Channel B | Real `Session → Work → Run → AgentBinding` lifecycle; per-Session handle/cancellation; reconnect/resume policy; Channel B `tools/list`/`tools/call` through Guard, executor, receipt, and event. | **Open — implemented — unverified.** Channel B `mcpServers` **is** populated at `session_new` (empty only on a lease failure); `session_load` exists and is gated on the negotiated capability but has no live consumer; no recorded guarded `tools/call` round-trip. |
+| Automation admission and provenance | Durable occurrence before Work; immutable revision and occurrence stamped by the production `compile_work` path; event/webhook admission; honest `pending`/`uncertain`/`cancelled` projections. | **Open — implemented — unverified.** The live scheduler firing path **does** go through `compile_work` with occurrence-derived ids; what remains open is durable occurrence identity for `mark_fired` and live acceptance. |
 | Windows runtime | Real x64/ARM64 hosts; enforced child policy and Job-Object containment; WGC, UI Automation, and ConPTY behavior on the shipped host. | **Blocked — unverified.** Windows code and packaging gates are not runtime acceptance evidence. |
 | Office, PDF, browser, accessibility, and CUA | Real workflows on Windows, including Office snapshot/rollback, PDF redaction, browser/session behavior, accessibility truth, and independent CUA verification. | **Blocked — open — unverified.** No complete live-host acceptance record exists; P68.7/P57.6/P66.6–P66.9 remain visible. |
-| Recovery, replay, audit, and receipts | Production `ExecutionKernel` recovery, full Work replay, durable audit/per-effect receipts, and `uncertain` outcomes across a crash/reconnect. | **Open — implemented — unverified.** WorkGateway foundations exist, but the live relay still constructs a fresh kernel. |
+| Recovery, replay, audit, and receipts | Production `ExecutionKernel` recovery, full Work replay, durable audit/per-effect receipts, and `uncertain` outcomes across a crash/reconnect. | **Open — implemented — unverified.** The live relay recovers via `ExecutionKernel::recover_from_work_gateway_with_checkpoint` — the journal is authoritative and the snapshot is only a validated cache. Open: full cross-surface replay, real-host recovery, durable per-effect receipt attachment. |
 | Rust quality and release evidence | Rust 2024 `cargo fmt --all -- --check`, clippy with warnings denied, the complete workspace test matrix, and the coordinator/UI typecheck/test gates. | **Runnable/open.** These are release obligations; this matrix does not turn a wired command into a pass. |
 | Sequential upgrade and clean-machine lifecycle | N−1 → N upgrade and rollback preserving durable stores; clean-machine install → first run → real task → uninstall, recorded for the release candidate. | **Blocked — open — unverified.** No sequential Windows build or clean-machine drill has been recorded. |
 | Release sign-off | `P70.E1`–`P70.E12` all report `PASS` in one release-candidate record. | **Open — not qualified.** The recorded harness state is 3 `PASS` / 4 `RUNNABLE` / 5 `BLOCKED`; no sign-off file exists. |
@@ -67,11 +67,13 @@ The platform matrix therefore describes a Windows-first target, not a completed 
   never run on a Windows host. Until the acceptance pass is recorded they are listed as *acceptance in
   progress*, and no surface may describe them as working (`ARCH/DESKTOP.md` §6.2).
 - **Windows ConPTY is not yet verified** (`P68.7`).
-- **ACP Channel B and the full agent lifecycle are not yet qualified on a live host.** The current launch
-  passes an empty MCP-server list; production resume/load, per-handle cancellation, reconnect, and a real
-  `tools/list`/`tools/call` pass remain open (`P70.E5`, `P70.E12`).
-- **Automation occurrence provenance is not yet qualified on the production path.** The `compile_work`
-  factory is present, but the live scheduler path still creates Work/Run directly (`P70.E5`, `P70.E12`).
+- **ACP Channel B and the full agent lifecycle are not yet qualified on a live host.** The production
+  launch **does** pass the Channel B shared-tool server list (empty only on a lease failure) and
+  `session_load` is implemented; what remains open is a real guarded `tools/list`/`tools/call` pass,
+  per-handle cancellation, and reconnect (`P70.E5`, `P70.E12`).
+- **Automation occurrence provenance is not yet qualified on the production path.** The live scheduler
+  firing path goes through the `compile_work` factory with occurrence-derived ids; durable occurrence
+  identity and live acceptance remain open (`P70.E5`, `P70.E12`).
 - **Production recovery/replay and durable receipt attachment remain open.** The WorkGateway journal is
   not the same as a qualified live `ExecutionKernel` recovery run.
 - **No release candidate is signed off.** `P70.E1`–`P70.E12` must all report `PASS`; the recorded state

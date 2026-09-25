@@ -132,7 +132,7 @@ Linux tooling reachable without shipping a Linux desktop build.
 | Platform | Status |
 |---|---|
 | Linux | verified on this host — the acceptance host, not a v1 artifact (§6.1) |
-| Windows capture (Graphics Capture) | **not implemented/verified — never run on a Windows host** |
+| Windows capture (Graphics Capture) | **implemented — never run on a Windows host** (`crates/everyaios-desktop/src/platform/wgc.rs` is a compiled module; cross-compile + clippy clean. Runtime evidence is the open item, `P57.6`) |
 | Windows UI Automation (invoke/hit-testing halves) | **not verified on Windows** |
 | Windows ConPTY (terminal plane) | **not verified on Windows** (`P68.7`) |
 

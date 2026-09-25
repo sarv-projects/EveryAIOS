@@ -593,8 +593,9 @@ remainders), D15 (naming half), D19/D20 (`SCOPED` shrink plans).
 
 ### 11.3 Honest gaps
 
-Windows ConPTY (P68.7) and WGC/WinUia (P57.6/P66.7) are unimplemented and untested — no Windows host has
-run them. Non-Linux MCP confinement reports `Ambient`. [`ADR/0007`](ADR/0007-windows-first-v1-qualification.md)
+Windows ConPTY (P68.7) is unimplemented and untested — no Windows host has run it. WGC (P57.6) and the
+UIA invoke/hit-test halves (P66.7) are **implemented but never executed on a Windows host**: a compile and
+a capability flag are not runtime enforcement. Non-Linux MCP confinement reports `Ambient`. [`ADR/0007`](ADR/0007-windows-first-v1-qualification.md)
 makes real Windows runtime enforcement, WGC/UIA/ConPTY acceptance, and x64/ARM64 qualification v1 release
 obligations, so these remain limitations until a recorded Windows acceptance pass exists. Per-edge confidence
 is **not** persisted in the codegraph index (`edges.confidence` is NULL for all 2,203 edges), so graph

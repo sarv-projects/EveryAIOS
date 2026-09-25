@@ -12,10 +12,16 @@ The earlier v1 ruling chose a Windows-first product and deferred several hard qu
 rather than treating source seams as finished behavior. The current delivery tree now has important
 foundations — canonical Work identity, a Work journal, an ACP adapter, an automation compiler, native
 Windows code paths, packaging gates, and a release-qualification harness — but it also has material
-gaps. In particular, the live ACP launch still passes an empty MCP-server list, the ACP client has no
-production `session/load`/`session/resume` path, the scheduler firing path creates Work without the
-automation compiler's revision/occurrence provenance, Windows runtime acceptance has not run on a real
-host, and the release sign-off is deliberately absent.
+gaps. In particular, no live guarded Channel B tool call has been recorded, `session_load` has no live
+consumer and `session/resume` is out of scope by policy, durable occurrence identity for `mark_fired` is
+absent, Windows runtime acceptance has not run on a real host, and the release sign-off is deliberately
+absent.
+
+> **Corrected 2026-09-25 against source.** An earlier revision of this paragraph claimed the live ACP
+> launch passed an empty MCP-server list, that the client had no `session/load` path, and that the
+> scheduler firing path created Work without the automation compiler. All three are now contradicted by
+> the tree — see the evidence table below, which was re-verified line by line. The correct statement of
+> each residual is the narrower one recorded there.
 
 The user has now expanded v1 to include those obligations. This ADR changes **scope and qualification
 policy**, not the architecture's identity model. It must not be used to turn a half-built row into a
@@ -194,11 +200,11 @@ The following are the exact current reasons the expanded scope is not yet a qual
 
 | Obligation | Current evidence | Qualification state |
 |---|---|---|
-| Channel B | `src-tauri/src/acp_cmds.rs:1548` and the authentication retry at `:1643` call `session.session_new(&cwd, vec![])`; the real MCP server is not passed in that launch path. | **Unverified / open.** The shared-plane server exists, but the live ACP binding does not yet prove Channel B. |
-| ACP resume/reconnect | `crates/everyaios-acp/src/client.rs:614`–`646` implements `session/new`; the client has cancellation and prompt paths but no production `session/load` or `session/resume` method. | **Unverified / open.** Native provider resume is not implemented; a fresh provider session must not be reported as resume. |
-| Automation provenance | `crates/everyaios-core/src/automation_runtime.rs:150`–`193` exposes `compile_work` and stamps `automation_id`, `revision_id`, and `trigger_occurrence_id`. The live firing path in `src-tauri/src/scheduler_fire.rs:177`–`210` creates Work/Run directly and does not call that compiler. `scheduler_service.rs:743`–`754` records `mark_fired` as a job timestamp, not a durable occurrence identity. | **Unverified / open.** Compiler tests are not evidence that the production firing path preserves provenance. |
+| Channel B | As of 2026-09-25 both production `session_new` calls pass `channel_b_servers`, not `vec![]`. Older line cites (`:1548`/`:1643`, `:1526`/`:1621`) described the empty list and are stale. | **Unverified / open.** The server is on the launch path. A live guarded tool call, including on Windows, has not been recorded. |
+| ACP resume/reconnect | `crates/everyaios-acp/src/client.rs:614`–`646` implements `session/new`; the client has cancellation and prompt paths; `client.rs:1568` implements `session_load` (+ `load_session` alias), gated on the agent negotiating `agentCapabilities.loadSession`, exercised by `crates/everyaios-acp/tests/acceptance_acp_handshake.rs:123`. `session/resume` is absent **by policy** (ACP v2; see §4). | **Unverified / open.** `session_load` has no live consumer outside the crate test; reconnect and per-handle cancellation are unqualified; a fresh provider session must never be reported as resume. |
+| Automation provenance | `crates/everyaios-core/src/automation_runtime.rs:150`–`193` exposes `compile_work` and stamps `automation_id`, `revision_id`, and `trigger_occurrence_id`. The live firing path in `src-tauri/src/scheduler_fire.rs` **does** call it (`compile_occurrence` at `:123` → `compile_work` at `:125`, occurrence-derived work/run ids at `:225`–`226`, `gateway.create_work_in_session` at `:265`). `scheduler_service.rs:743`–`754` still records `mark_fired` as a job timestamp, not a durable occurrence identity. | **Unverified / open.** The production path preserves provenance; durable occurrence identity and live acceptance are unqualified. |
 | Windows runtime | WGC, UIA, ConPTY, and supervisor Job-Object code exist in the tree, but the repository has no real Windows acceptance run for the shipped artifact; the P68.7/P57.6/P66.6–P66.9 residuals remain. | **Blocked / unverified.** A compile or capability flag is not runtime enforcement. |
-| Production recovery/replay | `WorkGateway` opens a durable journal and replays Work events/bindings; `crates/everyaios-core/src/chat.rs:1127`–`1154` constructs a fresh `ExecutionKernel::new()` in the live relay. | **Unverified / open.** Full cross-surface replay and production recovery are not qualified. |
+| Production recovery/replay | `WorkGateway` opens a durable journal and replays Work events/bindings. The live relay recovers with `ExecutionKernel::recover_from_work_gateway_with_checkpoint` (`crates/everyaios-core/src/chat.rs:1165`–`1169`); the journal is authoritative and the snapshot is accepted only after its identities/states validate against the replayed events. There is no `ExecutionKernel::new()` on the live path. | **Unverified / open.** Full cross-surface replay, real-host recovery, and durable per-effect receipt attachment are not qualified. |
 | Release sign-off | `scripts/release-qualify.mjs` is fail-loud and currently reports 3 `PASS` / 4 `RUNNABLE` / 5 `BLOCKED`; no `qualification-*.json` sign-off is written. | **Not qualified.** `P70.E12` remains open until every item is `PASS`. |
 
 These limitations are intentionally preserved in the capability, support, and delivery surfaces. This
