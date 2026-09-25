@@ -774,7 +774,7 @@ complete function accounting for the file. `refs` is the cross-file `stem::` ref
 | `crates/everyaios-core/` | 113 | 71,409 | 2848 | 886 |
 | `crates/everyaios-desktop/` | 15 | 6,944 | 279 | 65 |
 | `crates/everyaios-eval/` | 11 | 2,892 | 133 | 47 |
-| `crates/everyaios-guard/` | 37 | 10,573 | 544 | 198 |
+| `crates/everyaios-guard/` | 37 | 10,559 | 544 | 198 |
 | `crates/everyaios-ipc/` | 7 | 1,178 | 74 | 33 |
 | `crates/everyaios-mcp/` | 18 | 9,854 | 390 | 106 |
 | `crates/everyaios-memory/` | 34 | 10,287 | 593 | 217 |
@@ -784,8 +784,8 @@ complete function accounting for the file. `refs` is the cross-file `stem::` ref
 | `crates/everyaios-storage/` | 19 | 4,339 | 219 | 57 |
 | `crates/everyaios-types/` | 3 | 3,672 | 137 | 26 |
 | `crates/everyaios-vault/` | 15 | 10,749 | 411 | 148 |
-| `src-tauri/` | 52 | 23,264 | 819 | 98 |
-| **TOTAL** | **515** | **231,286** | **9864** | **2980** |
+| `src-tauri/` | 53 | 24,047 | 850 | 101 |
+| **TOTAL** | **516** | **232,055** | **9895** | **2983** |
 
 ### 9.1 `crates/everyaios-acp/`
 
@@ -1621,7 +1621,7 @@ complete function accounting for the file. `refs` is the cross-file `stem::` ref
 **`const`** (3): `SNAPSHOT_FILE`:28, `META_FILE`:30, `SETTINGS_FILE`:32 · **`fn`** (15): `from_snapshot`:61, `if_none_match`:74, `new`:87, `dir`:91, `snapshot_path`:95, `meta_path`:99, `settings_path`:103, `load_settings`:108, `refresh_interval_secs`:116, `save_settings`:120, `load`:129, `load_meta`:135, `save`:142, `save_meta`:157, `clear`:165 · **`struct`** (3): `CatalogSettings`:37, `CatalogMeta`:45, `CatalogStore`:82
 - `fns` (26): from_snapshot:61, if_none_match:74, new:87, dir:91, snapshot_path:95, meta_path:99, settings_path:103, load_settings:108, refresh_interval_secs:116, save_settings:120, load:129, load_meta:135, save:142, save_meta:157, clear:165, write_atomic:179, dir:196, snapshot:205, save_then_load_round_trips_snapshot_and_meta:211, missing_files_are_none_not_an_error:234, corrupt_snapshot_reads_as_absent:244, meta_records_failed_attempts_honestly:254, clear_removes_both_files_and_is_idempotent:270, settings_default_to_four_hours_and_clamp:288, clear_keeps_settings:309, atomic_write_leaves_no_tmp_behind:330
 
-#### `crates/everyaios-catalog/src/sync.rs` — 395 lines · 7 tests · refs 367
+#### `crates/everyaios-catalog/src/sync.rs` — 395 lines · 7 tests · refs 369
 
 > P14-5 — Sync automation (doc 66 §1.4 — deferred maintenance loop): the vendored `models.json` baseline ships **static**; a refresh path exists for when we need it.
 
@@ -2918,12 +2918,12 @@ complete function accounting for the file. `refs` is the cross-file `stem::` ref
 **`enum`** (3): `FloorVerdict`:108, `GrantAxis`:222, `FsOp`:246 · **`fn`** (10): `normalize_lexical`:12, `canonicalize_no_follow`:57, `leaf_symlink_target`:85, `is_inside_root`:98, `enforce_floor`:121, `adversarial_paths`:155, `path_floor_fuzz_passes`:205, `from_permissions_string`:258, `allows`:280, `floor_root`:314 · **`struct`** (1): `PathGrant`:239
 - `fns` (20): normalize_lexical:12, canonicalize_no_follow:57, leaf_symlink_target:85, is_inside_root:98, enforce_floor:121, adversarial_paths:155, path_floor_fuzz_passes:205, from_permissions_string:258, allows:280, floor_root:314, grant_parse_permissions_strings:324, axis_gates_operations:334, grant_never_escapes_the_floor:366, lexical_normalization:395, floor_allows_inside:402, floor_blocks_outside:414, floor_blocks_parent_escape:426, fuzz_gate_allowed_implies_inside:436, is_inside_helpers:455, leaf_symlink_is_not_followed_but_escape_is_refused:462
 
-#### `crates/everyaios-guard/src/permissions.rs` — 699 lines · 11 tests · refs 2
+#### `crates/everyaios-guard/src/permissions.rs` — 685 lines · 11 tests · refs 2
 
 > P7.5 / J21 — the `~/.everyaios/permissions.toml` escalation-rules policy layer (doc 52 §2).
 
-**`enum`** (4): `PolicyAction`:27, `Operation`:40, `Rule`:79, `AutonomyPreset`:221 · **`fn`** (12): `name`:64, `as_str`:238, `parse`:247, `to_mode`:260, `new`:271, `preset`:280, `preset_toml`:333, `parse`:362, `is_preset`:414, `apply_rules`:430, `evaluate`:452, `auto_confidence_ok`:470 · **`struct`** (1): `PermissionsPolicy`:178
-- `fns` (27): name:64, rule_str:92, parse:104, evaluate:120, default:197, as_str:238, parse:247, to_mode:260, new:271, preset:280, preset_toml:333, parse:362, is_preset:414, apply_rules:430, evaluate:452, auto_confidence_ok:470, defaults_match_spec:480, parses_full_toml:513, malformed_doc_falls_back_to_defaults:546, unknown_rule_string_falls_back_to_default:552, confidence_threshold:559, sandbox_preset_denies_every_mutation:566, ask_preset_matches_default_policy:587, auto_preset_runs_low_risk_keeps_floors:602, maximum_preset_is_auto_within_hard_floors:625, preset_toml_round_trips_through_parse:648, preset_maps_to_autonomy_gradient_modes:683
+**`enum`** (4): `PolicyAction`:27, `Operation`:40, `Rule`:79, `AutonomyPreset`:221 · **`fn`** (12): `name`:64, `as_str`:238, `parse`:247, `to_mode`:260, `new`:271, `preset`:280, `preset_toml`:333, `parse`:362, `is_preset`:400, `apply_rules`:416, `evaluate`:438, `auto_confidence_ok`:456 · **`struct`** (1): `PermissionsPolicy`:178
+- `fns` (27): name:64, rule_str:92, parse:104, evaluate:120, default:197, as_str:238, parse:247, to_mode:260, new:271, preset:280, preset_toml:333, parse:362, is_preset:400, apply_rules:416, evaluate:438, auto_confidence_ok:456, defaults_match_spec:466, parses_full_toml:499, malformed_doc_falls_back_to_defaults:532, unknown_rule_string_falls_back_to_default:538, confidence_threshold:545, sandbox_preset_denies_every_mutation:552, ask_preset_matches_default_policy:573, auto_preset_runs_low_risk_keeps_floors:588, maximum_preset_is_auto_within_hard_floors:611, preset_toml_round_trips_through_parse:634, preset_maps_to_autonomy_gradient_modes:669
 
 #### `crates/everyaios-guard/src/prescan.rs` — 206 lines · 4 tests · refs 10
 
@@ -3427,7 +3427,7 @@ complete function accounting for the file. `refs` is the cross-file `stem::` ref
 
 ### 9.16 `crates/everyaios-office/`
 
-#### `crates/everyaios-office/src/atomic.rs` — 101 lines · 3 tests · refs 144
+#### `crates/everyaios-office/src/atomic.rs` — 101 lines · 3 tests · refs 145
 
 > D7 — atomic writes (ARCH/04 §4.4): write a sibling temp file, fsync it, then rename over the target.
 
@@ -4009,12 +4009,12 @@ complete function accounting for the file. `refs` is the cross-file `stem::` ref
 #### `src-tauri/build.rs` — 4 lines · 0 tests · refs 0
 - `fns` (1): main:1
 
-#### `src-tauri/src/acp_cmds.rs` — 4,068 lines · 21 tests · refs 44
+#### `src-tauri/src/acp_cmds.rs` — 4,100 lines · 21 tests · refs 44
 
 > F12 / J17 — the **ACP harness bridge** commands (doc 45 §1, doc 57 §2).
 
-**`enum`** (1): `AcpIdentityError`:313 · **`fn`** (43): `chief_default_get`:56, `chief_default_set`:72, `agent_readiness`:131, `agent_readiness_with_live`:165, `agents_doctor_check`:190, `agent_installed`:248, `launch_registry`:270, `application_session_id`:494, `work_id`:498, `binding_id`:502, `acp_agents`:581, `acp_registry_refresh`:614, `acp_registry_status`:628, `acp_registry_install_plan`:643, `spawn_registry_refresh_job`:681, `resolve_wsl_spawn`:838, `runtime_location_json`:849, `runtime_location_for`:933, `acp_install_status`:949, `acp_install_request`:1029, `acp_install_await`:1161, `acp_install_commit`:1188, `acp_install`:1236, `acp_agent_import`:1247, `acp_agent_verify`:1300, `acp_launch`:1453, `acp_authenticate`:1614, `chief_subagents`:1825, `chief_subagent_set_note`:1855, `chief_subagent_set_enabled`:1876, `chief_subagent_set_policy`:1898, `chief_subagent_mix`:1981, `acp_session_commands`:1993, `acp_config_options`:2175, `acp_set_session_config_option`:2194, `acp_session_config_options`:2246, `acp_session_set_config_option`:2260, `acp_tool_log`:2301, `acp_prompt`:2752, `acp_cancel`:3325, `cancel_acp_for_session`:3376, `acp_shutdown`:3406, `acp_sessions`:3429 · **`struct`** (5): `ShellAgentReadiness`:182, `AcpCanonicalOwner`:303, `AcpSessionSlot`:419, `AcpHandle`:452, `AcpHandleInfo`:510
-- `fns` (107): chief_default_get:56, chief_default_set:72, install_outcome_usable:94, resolve_native_binary:112, live_facts:119, agent_readiness:131, agent_readiness_with_live:165, agents_doctor_check:190, readiness:229, agent_installed:248, launch_registry:270, fmt:351, new:425, lock:433, cancellation_handle:437, clone:443, application_session_id:494, work_id:498, binding_id:502, from:541, acp_agents:581, acp_registry_refresh:614, acp_registry_status:628, acp_registry_install_plan:643, registry_client:657, spawn_registry_refresh_job:681, now_ms:699, installer:708, resolve_spec:714, resolve_on_path:743, discover_windows_app_path:766, discover_windows_app_path:799, discover_wsl_path:807, discover_wsl_path:832, resolve_wsl_spawn:838, runtime_location_json:849, runtime_location_for:933, acp_install_status:949, acp_install_request:1029, acp_install_await:1161, acp_install_commit:1188, acp_install:1236, acp_agent_import:1247, acp_agent_verify:1300, channel_b_servers:1427, acp_launch:1453, acp_authenticate:1614, build_acp_prompt_with_passport:1671, append_acp_tool_log:1747, chief_subagents:1825, chief_subagent_set_note:1855, chief_subagent_set_enabled:1876, chief_subagent_set_policy:1898, chief_subagent_mix:1981, acp_session_commands:1993, runtime_control_wire:2007, resolve_acp_config_target:2024, live_config_options:2095, config_options_projection:2100, native_only_config_request_projection:2119, config_option_request_projection:2137, acp_config_options:2175, acp_set_session_config_option:2194, acp_session_config_options:2246, acp_session_set_config_option:2260, acp_tool_log:2301, canonical_work_id:2336, canonical_binding_id:2340, relay_planes:2349, prepare_acp_turn:2374, transition_acp_run:2689, record_acp_binding_usage:2721, acp_prompt:2752, validate_cancel_owner:3232, request_acp_cancellation:3277, cancel_acp_targets_for_session:3295, acp_cancel:3325, cancel_acp_for_session:3376, acp_shutdown:3406, acp_sessions:3429, read_workspace_resource:3440, is_brokered_op:3476, map_tool_call:3486, hash_tool_args:3501, install_args_hash:3514, url_host:3524, agent_without_advertised_config_options_is_native_only_and_unchanged:3533, missing_application_or_provider_identity_fails_closed:3557, canonical_owner_keeps_provider_ids_separate_for_shared_agent:3586, existing_active_run_is_resolved_instead_of_replaced:3628, binding_and_run_replay_from_the_work_journal:3675, owner_validation_rejects_a_handle_from_another_session:3718, session_scoped_cancellation_leaves_other_session_handles_alone:3740, delete_tool_maps_to_high_risk_delete:3780, read_tool_maps_to_low_risk_write:3793, file_and_terminal_ops_are_brokered:3807, args_hash_is_stable_for_same_input:3816, install_args_hash_is_deterministic_and_scoped:3827, url_host_extracts_authority:3843, registry_has_no_builtin_and_lists_launch_agents:3852, resolve_on_path_finds_real_binaries_and_misses_absences:3861, stale_managed_install_is_not_occupancy:3876, package_manager_install_requires_manager_readiness:3902, path_discovery_reports_installed_with_kind_path:3917, live_acp_registry_refresh_drives_the_shell_launch_registry:3958, test_user_path_import_and_verification:4024, test_wsl_spawn_resolution:4061
+**`enum`** (1): `AcpIdentityError`:317 · **`fn`** (43): `chief_default_get`:56, `chief_default_set`:76, `agent_readiness`:135, `agent_readiness_with_live`:169, `agents_doctor_check`:194, `agent_installed`:252, `launch_registry`:274, `application_session_id`:498, `work_id`:502, `binding_id`:506, `acp_agents`:585, `acp_registry_refresh`:618, `acp_registry_status`:632, `acp_registry_install_plan`:647, `spawn_registry_refresh_job`:685, `resolve_wsl_spawn`:842, `runtime_location_json`:853, `runtime_location_for`:937, `acp_install_status`:953, `acp_install_request`:1028, `acp_install_await`:1160, `acp_install_commit`:1187, `acp_install`:1235, `acp_agent_import`:1246, `acp_agent_verify`:1299, `acp_launch`:1452, `acp_authenticate`:1613, `chief_subagents`:1832, `chief_subagent_set_note`:1862, `chief_subagent_set_enabled`:1883, `chief_subagent_set_policy`:1905, `chief_subagent_mix`:1990, `acp_session_commands`:2002, `acp_config_options`:2182, `acp_set_session_config_option`:2201, `acp_session_config_options`:2255, `acp_session_set_config_option`:2269, `acp_tool_log`:2310, `acp_prompt`:2763, `acp_cancel`:3327, `cancel_acp_for_session`:3378, `acp_shutdown`:3408, `acp_sessions`:3431 · **`struct`** (5): `ShellAgentReadiness`:186, `AcpCanonicalOwner`:307, `AcpSessionSlot`:423, `AcpHandle`:456, `AcpHandleInfo`:514
+- `fns` (107): chief_default_get:56, chief_default_set:76, install_outcome_usable:98, resolve_native_binary:116, live_facts:123, agent_readiness:135, agent_readiness_with_live:169, agents_doctor_check:194, readiness:237, agent_installed:252, launch_registry:274, fmt:355, new:429, lock:437, cancellation_handle:441, clone:447, application_session_id:498, work_id:502, binding_id:506, from:545, acp_agents:585, acp_registry_refresh:618, acp_registry_status:632, acp_registry_install_plan:647, registry_client:661, spawn_registry_refresh_job:685, now_ms:703, installer:712, resolve_spec:718, resolve_on_path:747, discover_windows_app_path:770, discover_windows_app_path:803, discover_wsl_path:811, discover_wsl_path:836, resolve_wsl_spawn:842, runtime_location_json:853, runtime_location_for:937, acp_install_status:953, acp_install_request:1028, acp_install_await:1160, acp_install_commit:1187, acp_install:1235, acp_agent_import:1246, acp_agent_verify:1299, channel_b_servers:1426, acp_launch:1452, acp_authenticate:1613, build_acp_prompt_with_passport:1670, append_acp_tool_log:1754, chief_subagents:1832, chief_subagent_set_note:1862, chief_subagent_set_enabled:1883, chief_subagent_set_policy:1905, chief_subagent_mix:1990, acp_session_commands:2002, runtime_control_wire:2016, resolve_acp_config_target:2033, live_config_options:2102, config_options_projection:2107, native_only_config_request_projection:2126, config_option_request_projection:2144, acp_config_options:2182, acp_set_session_config_option:2201, acp_session_config_options:2255, acp_session_set_config_option:2269, acp_tool_log:2310, canonical_work_id:2345, canonical_binding_id:2349, relay_planes:2358, prepare_acp_turn:2381, transition_acp_run:2698, record_acp_binding_usage:2732, acp_prompt:2763, validate_cancel_owner:3234, request_acp_cancellation:3279, cancel_acp_targets_for_session:3297, acp_cancel:3327, cancel_acp_for_session:3378, acp_shutdown:3408, acp_sessions:3431, read_workspace_resource:3442, is_brokered_op:3478, map_tool_call:3488, hash_tool_args:3503, install_args_hash:3516, url_host:3526, agent_without_advertised_config_options_is_native_only_and_unchanged:3535, missing_application_or_provider_identity_fails_closed:3559, canonical_owner_keeps_provider_ids_separate_for_shared_agent:3588, existing_active_run_is_resolved_instead_of_replaced:3636, binding_and_run_replay_from_the_work_journal:3690, owner_validation_rejects_a_handle_from_another_session:3746, session_scoped_cancellation_leaves_other_session_handles_alone:3772, delete_tool_maps_to_high_risk_delete:3812, read_tool_maps_to_low_risk_write:3825, file_and_terminal_ops_are_brokered:3839, args_hash_is_stable_for_same_input:3848, install_args_hash_is_deterministic_and_scoped:3859, url_host_extracts_authority:3875, registry_has_no_builtin_and_lists_launch_agents:3884, resolve_on_path_finds_real_binaries_and_misses_absences:3893, stale_managed_install_is_not_occupancy:3908, package_manager_install_requires_manager_readiness:3934, path_discovery_reports_installed_with_kind_path:3949, live_acp_registry_refresh_drives_the_shell_launch_registry:3990, test_user_path_import_and_verification:4056, test_wsl_spawn_resolution:4093
 
 #### `src-tauri/src/agent_backend_cmds.rs` — 703 lines · 5 tests · refs 8
 
@@ -4037,12 +4037,12 @@ complete function accounting for the file. `refs` is the cross-file `stem::` ref
 **`fn`** (2): `artifact_serve`:42, `artifact_stop`:114
 - `fns` (4): serve_args_hash:28, artifact_serve:42, artifact_stop:114, args_hash_is_stable_and_path_sensitive:131
 
-#### `src-tauri/src/boot.rs` — 134 lines · 0 tests · refs 2
+#### `src-tauri/src/boot.rs` — 133 lines · 0 tests · refs 2
 
 > Boot-time "small boot" glue (Fix 1c). Self-contained side systems the Tauri shell brings up alongside the window and the coordinator sidecar. Kept out of `lib.rs` (which now owns only the app assembly, state wiring an...
 
-**`fn`** (2): `spawn_webmcp_server`:22, `setup_tray`:88
-- `fns` (3): spawn_webmcp_server:22, execute:61, setup_tray:88
+**`fn`** (2): `spawn_webmcp_server`:21, `setup_tray`:87
+- `fns` (3): spawn_webmcp_server:21, execute:60, setup_tray:87
 
 #### `src-tauri/src/browser_cmds.rs` — 609 lines · 2 tests · refs 13
 
@@ -4058,12 +4058,12 @@ complete function accounting for the file. `refs` is the cross-file `stem::` ref
 **`fn`** (6): `calendar_list`:13, `calendar_put`:20, `calendar_delete`:29, `calendar_event_list`:36, `calendar_event_put`:52, `calendar_event_delete`:63
 - `fns` (6): calendar_list:13, calendar_put:20, calendar_delete:29, calendar_event_list:36, calendar_event_put:52, calendar_event_delete:63
 
-#### `src-tauri/src/catalog_cmds.rs` — 1,329 lines · 11 tests · refs 27
+#### `src-tauri/src/catalog_cmds.rs` — 1,328 lines · 11 tests · refs 27
 
 > P56.1–P56.7 — the live provider-catalog surface.
 
-**`fn`** (25): `new`:43, `refresh`:51, `status`:88, `observed_registry`:137, `observation_file`:142, `provider_rows`:170, `resolve_endpoint`:493, `catalog_status`:512, `catalog_refresh`:518, `catalog_set_interval`:530, `catalog_clear`:548, `catalog_providers`:555, `catalog_provider_models`:568, `provider_probe`:652, `probe_provider`:659, `probe_provider_vault`:772, `spawn_boot_observation_sweep`:848, `spawn_observation_sweep`:858, `provider_profiles_list`:873, `provider_profile_upsert`:885, `provider_profile_remove`:975, `provider_nim_profile`:982, `catalog_sync_plan`:998, `catalog_sync_refresh`:1019, `spawn_refresh_job`:1052 · **`struct`** (1): `CatalogState`:37
-- `fns` (55): new:43, refresh:51, status:88, now_ms:119, profile_store:126, observed_registry:137, observation_file:142, observation_store_in:150, observation_file_in:154, observed_registry_in:158, provider_rows:170, load:335, profile:343, base_url:351, endpoint:371, connected_ids:436, connected_ids_from:475, probe_base_url:488, resolve_endpoint:493, catalog_status:512, catalog_refresh:518, catalog_set_interval:530, catalog_clear:548, catalog_providers:555, catalog_provider_models:568, provider_probe:652, probe_provider:659, record_observation:706, record_observation_in:717, drop:750, probe_provider_vault:772, observation_from_probe:792, sweep_connected_providers:816, spawn_boot_observation_sweep:848, spawn_observation_sweep:858, provider_profiles_list:873, provider_profile_upsert:885, provider_profile_remove:975, provider_nim_profile:982, catalog_sync_plan:998, catalog_sync_refresh:1019, spawn_refresh_job:1052, connected_set_is_the_union_of_the_three_sources:1088, connected_set_is_deduplicated_and_sorted:1103, an_unconnected_catalog_row_is_never_dialable:1114, an_empty_device_connects_nothing:1122, temp_dir:1128, probe:1137, a_recorded_probe_becomes_the_registrys_observed_truth:1151, the_latest_probe_is_the_observation:1181, a_failed_probe_is_history_and_not_a_verification:1210, a_vault_probe_is_shaped_by_the_catalogs_own_rule:1241, a_broker_error_produces_no_observation_rather_than_a_failed_one:1277, a_successful_broker_probe_becomes_the_observation:1288, observing_a_provider_does_not_rewrite_its_identity:1309
+**`fn`** (25): `new`:43, `refresh`:51, `status`:88, `observed_registry`:137, `observation_file`:142, `provider_rows`:170, `resolve_endpoint`:492, `catalog_status`:511, `catalog_refresh`:517, `catalog_set_interval`:529, `catalog_clear`:547, `catalog_providers`:554, `catalog_provider_models`:567, `provider_probe`:651, `probe_provider`:658, `probe_provider_vault`:771, `spawn_boot_observation_sweep`:847, `spawn_observation_sweep`:857, `provider_profiles_list`:872, `provider_profile_upsert`:884, `provider_profile_remove`:974, `provider_nim_profile`:981, `catalog_sync_plan`:997, `catalog_sync_refresh`:1018, `spawn_refresh_job`:1051 · **`struct`** (1): `CatalogState`:37
+- `fns` (55): new:43, refresh:51, status:88, now_ms:119, profile_store:126, observed_registry:137, observation_file:142, observation_store_in:150, observation_file_in:154, observed_registry_in:158, provider_rows:170, load:335, profile:343, base_url:351, endpoint:371, connected_ids:436, connected_ids_from:474, probe_base_url:487, resolve_endpoint:492, catalog_status:511, catalog_refresh:517, catalog_set_interval:529, catalog_clear:547, catalog_providers:554, catalog_provider_models:567, provider_probe:651, probe_provider:658, record_observation:705, record_observation_in:716, drop:749, probe_provider_vault:771, observation_from_probe:791, sweep_connected_providers:815, spawn_boot_observation_sweep:847, spawn_observation_sweep:857, provider_profiles_list:872, provider_profile_upsert:884, provider_profile_remove:974, provider_nim_profile:981, catalog_sync_plan:997, catalog_sync_refresh:1018, spawn_refresh_job:1051, connected_set_is_the_union_of_the_three_sources:1087, connected_set_is_deduplicated_and_sorted:1102, an_unconnected_catalog_row_is_never_dialable:1113, an_empty_device_connects_nothing:1121, temp_dir:1127, probe:1136, a_recorded_probe_becomes_the_registrys_observed_truth:1150, the_latest_probe_is_the_observation:1180, a_failed_probe_is_history_and_not_a_verification:1209, a_vault_probe_is_shaped_by_the_catalogs_own_rule:1240, a_broker_error_produces_no_observation_rather_than_a_failed_one:1276, a_successful_broker_probe_becomes_the_observation:1287, observing_a_provider_does_not_rewrite_its_identity:1308
 
 #### `src-tauri/src/cockpit_cmds.rs` — 150 lines · 0 tests · refs 7
 
@@ -4086,7 +4086,7 @@ complete function accounting for the file. `refs` is the cross-file `stem::` ref
 **`fn`** (1): `handler`:62
 - `fns` (1): handler:62
 
-#### `src-tauri/src/control.rs` — 348 lines · 3 tests · refs 90
+#### `src-tauri/src/control.rs` — 348 lines · 3 tests · refs 92
 
 > H4 — unix control-channel dispatcher. `agent/stop`, `agent/undo`, `agent/interrupt-response` mutate live AppState (chat cancel / cockpit undo / plan respond). Tauri commands call the same helpers.
 
@@ -4100,12 +4100,12 @@ complete function accounting for the file. `refs` is the cross-file `stem::` ref
 **`fn`** (19): `policy_path`:62, `load_policy`:66, `desktop_status`:322, `desktop_attach`:377, `desktop_windows`:391, `desktop_read`:413, `desktop_see`:433, `desktop_act`:498, `desktop_escalation`:538, `desktop_act_escalating`:562, `desktop_stop`:611, `desktop_policy_get`:623, `desktop_apps`:649, `desktop_policy_allow_path`:697, `desktop_policy_remove_path`:724, `desktop_policy_set_interaction`:752, `publish_desktop_backend`:879, `cua_dag_get`:910, `cua_dag_edit_remaining`:921 · **`struct`** (1): `DesktopSlot`:42
 - `fns` (44): policy_path:62, load_policy:66, save_policy:73, policy_json:84, commit_policy:98, request:121, auth_kind_for:135, default:159, write:167, get_or_attach:188, resolve_window:239, window_by_id_only:250, windows_json:265, snapshot_json:277, render_tree:303, desktop_status:322, desktop_attach:377, desktop_windows:391, desktop_read:413, desktop_see:433, parse_act:451, desktop_act:498, desktop_escalation:538, desktop_act_escalating:562, desktop_stop:611, desktop_policy_get:623, desktop_apps:649, desktop_policy_allow_path:697, desktop_policy_remove_path:724, desktop_policy_set_interaction:752, agent_act_kind:801, list_windows:822, read:827, act:833, publish_desktop_backend:879, cua_dir:893, cua_dag_get:910, cua_dag_edit_remaining:921, policy_json_exposes_the_contract_fields:943, provenance_maps_to_the_right_authority_class:964, agent_act_refuses_coordinate_acts_it_cannot_express:989, window_json_carries_the_contract_fields:1012, missing_window_falls_back_to_id_only_never_a_borrowed_app:1033, a_malformed_policy_file_is_never_a_partial_allow_list:1041
 
-#### `src-tauri/src/diagnostics_cmds.rs` — 309 lines · 3 tests · refs 3
+#### `src-tauri/src/diagnostics_cmds.rs` — 311 lines · 3 tests · refs 3
 
 > P70.D4 · D7 · D8 — diagnostics, sandbox honesty and the data-removal path.
 
 **`fn`** (3): `diagnostics_sandbox_posture`:36, `diagnostics_support_bundle`:140, `data_remove_all`:207
-- `fns` (10): diagnostics_sandbox_posture:36, secret_shaped:76, scrub:92, audit_summary:113, diagnostics_support_bundle:140, data_remove_all:207, measure:216, secret_shaped_catches_the_obvious:258, scrub_drops_secret_members_and_truncates_strings:271, audit_summary_reports_shape_without_values:287
+- `fns` (10): diagnostics_sandbox_posture:36, secret_shaped:76, scrub:92, audit_summary:113, diagnostics_support_bundle:140, data_remove_all:207, measure:216, secret_shaped_catches_the_obvious:260, scrub_drops_secret_members_and_truncates_strings:273, audit_summary_reports_shape_without_values:289
 
 #### `src-tauri/src/discovery_cmds.rs` — 345 lines · 0 tests · refs 3
 
@@ -4163,12 +4163,12 @@ complete function accounting for the file. `refs` is the cross-file `stem::` ref
 **`const`** (4): `CHAT_EVENT`:80, `GUARD_EVENT`:87, `AGUI_EVENT`:92, `MODEL_DOWNLOAD_EVENT`:96 · **`fn`** (2): `ensure_sidecar`:129, `run`:677
 - `fns` (24): agui_send:102, agui_listen:117, ensure_sidecar:129, connect_chat_relay:146, runtime_status:270, now_ms:314, version:322, core_boot_report:327, scan_text:336, usage_snapshot:347, session_totals:363, probe_vault:371, vault_key_status:383, reopen_disk_vault:406, vault_setup:415, vault_unlock:438, session_list:461, session_put:472, session_delete:486, locate_coordinator_bin:497, sidecar_probe:552, pre_spawn_coordinator:606, serve_unix_control_channel:637, run:677
 
-#### `src-tauri/src/local_cmds.rs` — 44 lines · 0 tests · refs 3
+#### `src-tauri/src/local_cmds.rs` — 39 lines · 0 tests · refs 3
 
 > P1.8 — local model picker (LM Studio-style fit badges + context floor).
 
-**`fn`** (3): `local_models`:9, `local_ensure`:22, `local_hardware`:41
-- `fns` (3): local_models:9, local_ensure:22, local_hardware:41
+**`fn`** (3): `local_models`:9, `local_ensure`:22, `local_hardware`:36
+- `fns` (3): local_models:9, local_ensure:22, local_hardware:36
 
 #### `src-tauri/src/lsp_cmds.rs` — 67 lines · 0 tests · refs 1
 
@@ -4201,12 +4201,12 @@ complete function accounting for the file. `refs` is the cross-file `stem::` ref
 **`fn`** (2): `memory_request`:37, `memory_read`:68
 - `fns` (3): memory_arc:21, memory_request:37, memory_read:68
 
-#### `src-tauri/src/model_cmds.rs` — 856 lines · 0 tests · refs 14
+#### `src-tauri/src/model_cmds.rs` — 864 lines · 0 tests · refs 16
 
 > P50.4.2 — Local model downloads (Tauri wiring over the P27 backend).
 
-**`fn`** (18): `insert`:155, `contains`:177, `remove`:182, `rows`:187, `row`:207, `model_download_start`:257, `model_downloads`:426, `model_download_cancel`:492, `model_registry_list`:508, `model_registry_remove`:535, `model_recommend_quant`:550, `start_managed_serve`:645, `model_serve`:759, `model_serve_list`:777, `model_serve_stop`:799, `model_estimate_fit`:816, `model_gallery_parse`:835, `model_best_pick`:844 · **`struct`** (6): `ModelDownloadSlot`:41, `DownloadStatus`:53, `ManagedServeSnapshot`:125, `ManagedServeRegistry`:141, `ModelServeStart`:565, `ModelServeListRow`:578 · **`trait`** (1): `ManagedServeProcess`:74
-- `fns` (37): port:76, base_url:78, model_id:80, config_hash:82, health:84, stop_owned:86, port:92, base_url:96, model_id:100, config_hash:104, health:108, stop_owned:112, default:146, insert:155, contains:177, remove:182, rows:187, row:207, models_base:222, emit_download:226, model_download_start:257, model_downloads:426, walk_parts:461, model_download_cancel:492, model_registry_list:508, model_registry_remove:535, model_recommend_quant:550, now_ms:588, parse_serve_options:595, start_managed_serve:645, model_serve:759, model_serve_list:777, model_serve_stop:799, _entry_shape:810, model_estimate_fit:816, model_gallery_parse:835, model_best_pick:844
+**`fn`** (18): `insert`:155, `contains`:177, `remove`:182, `rows`:187, `row`:207, `model_download_start`:257, `model_downloads`:426, `model_download_cancel`:492, `model_registry_list`:508, `model_registry_remove`:535, `model_recommend_quant`:550, `start_managed_serve`:648, `model_serve`:760, `model_serve_list`:785, `model_serve_stop`:807, `model_estimate_fit`:824, `model_gallery_parse`:843, `model_best_pick`:852 · **`struct`** (6): `ModelDownloadSlot`:41, `DownloadStatus`:53, `ManagedServeSnapshot`:125, `ManagedServeRegistry`:141, `ModelServeStart`:565, `ModelServeListRow`:578 · **`trait`** (1): `ManagedServeProcess`:74
+- `fns` (37): port:76, base_url:78, model_id:80, config_hash:82, health:84, stop_owned:86, port:92, base_url:96, model_id:100, config_hash:104, health:108, stop_owned:112, default:146, insert:155, contains:177, remove:182, rows:187, row:207, models_base:222, emit_download:226, model_download_start:257, model_downloads:426, walk_parts:461, model_download_cancel:492, model_registry_list:508, model_registry_remove:535, model_recommend_quant:550, now_ms:588, parse_serve_options:595, start_managed_serve:648, model_serve:760, model_serve_list:785, model_serve_stop:807, _entry_shape:818, model_estimate_fit:824, model_gallery_parse:843, model_best_pick:852
 
 #### `src-tauri/src/oauth_cmds.rs` — 182 lines · 0 tests · refs 6
 
@@ -4236,6 +4236,13 @@ complete function accounting for the file. `refs` is the cross-file `stem::` ref
 **`fn`** (6): `replay_store`:11, `replay_sessions`:17, `replay_timeline`:28, `replay_screenshot`:39, `watch_events`:58, `agent_stop`:70
 - `fns` (7): replay_store:11, replay_sessions:17, replay_timeline:28, replay_screenshot:39, watch_events:58, agent_stop:70, base64_encode:75
 
+#### `src-tauri/src/runtime_cmds.rs` — 732 lines · 3 tests · refs 9
+
+> Local-runtime inventory and managed lifecycle commands.
+
+**`fn`** (7): `runtime_effect_args_hash`:56, `authorize_runtime_effect`:67, `runtime_inventory_list`:177, `runtime_models`:368, `runtime_start`:486, `stop_managed_serve`:576, `runtime_stop`:631 · **`struct`** (2): `CachedRuntimeObservation`:30, `RuntimeModelsObservation`:37
+- `fns` (31): now_ms:48, runtime_effect_args_hash:56, authorize_runtime_effect:67, managed_inventory_entry:100, managed_inventory_from_start:115, merge_runtime_inventory:136, cache_observations:154, runtime_inventory_list:177, cached_observation:199, parse_loopback_url:211, decode_chunked:227, read_http_json:254, query_runtime_models:310, runtime_models_view:346, runtime_models:368, normalize_runtime_kind:463, runtime_start_response:472, runtime_start:486, unregistered_managed_serve_error:569, stop_managed_serve:576, runtime_stop:631, port:651, base_url:655, model_id:659, config_hash:663, health:667, stop_owned:671, external_entry:677, registry_retains_and_stops_an_injected_managed_serve:693, stopping_a_non_registered_runtime_is_an_explicit_user_owned_refusal:717, inventory_keeps_external_runtime_as_external_and_observed:724
+
 #### `src-tauri/src/scheduler_cmds.rs` — 745 lines · 4 tests · refs 24
 
 > P6.4 (B7) / P71.3d — scheduled-task commands over the **trigger plane**.
@@ -4243,12 +4250,12 @@ complete function accounting for the file. `refs` is the cross-file `stem::` ref
 **`fn`** (22): `scheduler_handle`:19, `scheduler_list`:106, `scheduler_create`:131, `scheduler_delete`:153, `scheduler_enable`:161, `scheduler_pause_session`:175, `scheduler_pause`:188, `scheduler_resume`:197, `scheduler_run_now`:210, `scheduler_battery`:233, `scheduler_fire_event`:252, `scheduler_fire_webhook`:282, `scheduler_nudges`:310, `scheduler_nudge`:318, `scheduler_notepad_get`:332, `scheduler_notepad_append`:343, `scheduler_incidents`:355, `scheduler_incident_ack`:363, `scheduler_doctor`:378, `scheduler_runs`:438, `scheduler_duplicate`:510, `scheduler_export`:546
 - `fns` (36): scheduler_handle:19, svc:31, now_secs:41, require_idempotency_key:52, manual_ingress_params:63, event_ingress_params:72, webhook_ingress_params:87, scheduler_list:106, scheduler_create:131, scheduler_delete:153, scheduler_enable:161, scheduler_pause_session:175, scheduler_pause:188, scheduler_resume:197, scheduler_run_now:210, scheduler_battery:233, scheduler_fire_event:252, scheduler_fire_webhook:282, scheduler_nudges:310, scheduler_nudge:318, scheduler_notepad_get:332, scheduler_notepad_append:343, scheduler_incidents:355, scheduler_incident_ack:363, scheduler_doctor:378, bound_agent_for:396, scheduler_runs:438, scheduler_duplicate:510, scheduler_export:546, add_job:579, occurrence_id:583, first_occurrence_id:590, ingress_params_preserve_the_caller_key_and_reject_missing_keys:598, manual_retry_with_the_same_key_reuses_one_occurrence:623, event_retry_conflict_and_distinct_keys_follow_scheduler_semantics:645, webhook_retry_conflict_and_distinct_keys_follow_scheduler_semantics:695
 
-#### `src-tauri/src/scheduler_fire.rs` — 626 lines · 2 tests · refs 5
+#### `src-tauri/src/scheduler_fire.rs` — 624 lines · 2 tests · refs 5
 
 > Host-owned automation admission and Work dispatch.
 
 **`const`** (2): `MONITOR_STOP_MARKER`:29, `TICK_SECS`:32 · **`fn`** (3): `fire_due_checked`:435, `fire_due`:533, `spawn_loop`:545
-- `fns` (20): now_secs:34, service:41, automation_session_id:48, automation_work_id:56, automation_run_id:60, job_id_for_occurrence:64, ensure_automation_session:78, compile_occurrence:123, provenance_patch:141, has_provenance_event:154, bound_agent:184, dispatch_occurrence:218, work_state_for_phase:405, mark_occurrence_uncertain:424, fire_due_checked:435, fire_due:533, spawn_loop:545, occurrence:567, production_compile_preserves_occurrence_provenance:605, deterministic_work_does_not_require_an_agent:619
+- `fns` (20): now_secs:34, service:41, automation_session_id:48, automation_work_id:56, automation_run_id:60, job_id_for_occurrence:64, ensure_automation_session:78, compile_occurrence:123, provenance_patch:141, has_provenance_event:154, bound_agent:184, dispatch_occurrence:218, work_state_for_phase:405, mark_occurrence_uncertain:424, fire_due_checked:435, fire_due:533, spawn_loop:545, occurrence:565, production_compile_preserves_occurrence_provenance:603, deterministic_work_does_not_require_an_agent:617
 
 #### `src-tauri/src/search_cmds.rs` — 93 lines · 0 tests · refs 3
 
@@ -4257,12 +4264,12 @@ complete function accounting for the file. `refs` is the cross-file `stem::` ref
 **`fn`** (3): `search_config`:19, `search_instances`:33, `search_instances_apply`:48
 - `fns` (3): search_config:19, search_instances:33, search_instances_apply:48
 
-#### `src-tauri/src/settings_cmds.rs` — 1,781 lines · 14 tests · refs 11
+#### `src-tauri/src/settings_cmds.rs` — 1,790 lines · 14 tests · refs 11
 
 > P65 — Settings Control Center backend (ARCH/17 §17.12).
 
 **`enum`** (1): `RuntimeLocation`:81 · **`fn`** (11): `settings_providers_list`:455, `settings_default_model_get`:510, `settings_default_model_set`:518, `settings_agents_list`:891, `settings_agent_get`:902, `settings_agent_loadout`:914, `settings_connections_list`:977, `settings_schedules_list`:1311, `settings_schedule_get`:1321, `settings_schedule_set_enabled`:1334, `settings_extensions_list`:1390 · **`struct`** (9): `SettingsReadModel`:53, `BackendBindingView`:116, `AgentConfigOptionView`:130, `SessionLoadoutRow`:144, `AgentSettings`:159, `ConnectionRecord`:188, `ScheduleSettings`:207, `InstalledExtension`:239, `SettingsMutationResult`:261
-- `fns` (53): config_hash_of:277, failed_mutation:284, settings_mutate:304, atomic_write_json:323, provider_state:356, split_provider_groups:375, profile_store:394, default_model_path:398, read_default_model:402, validate_default_model:413, known_models_for:436, settings_providers_list:455, settings_default_model_get:510, settings_default_model_set:518, model_owner_for:580, agent_readiness:590, auth_mode_for:625, protocol_for:631, runtime_location_from_json:642, native_caps:726, shared_caps:737, session_loadout_for:751, build_agent_settings:785, settings_agents_list:891, settings_agent_get:902, settings_agent_loadout:914, connection_state:939, remote_token_present:952, settings_connections_list:977, schedule_trigger_kind:1160, schedule_state:1171, capability_scope_for:1183, guard_autonomy_level:1203, schedule_settings_for:1220, scheduler_jobs:1294, settings_schedules_list:1311, settings_schedule_get:1321, settings_schedule_set_enabled:1334, settings_extensions_list:1390, provider_state_never_invents_connected:1487, groups_split_configured_popular_rest:1516, default_model_validation_is_fail_closed:1542, model_owner_rule:1561, readiness_never_claims_ready_without_occupancy:1570, runtime_location_mapping_keeps_provenance_distinct:1599, connection_state_never_false_connected:1632, schedule_trigger_and_state_mapping:1646, capability_scope_derives_from_step_families:1669, mutation_envelope_uses_contract_field_names:1683, settings_read_model_uses_contract_field_names:1712, agent_settings_shape_keeps_writes_flag_false:1750, config_hash_is_stable_and_sensitive:1765, loadout_rows_apply_from_next_turn:1773
+- `fns` (53): config_hash_of:277, failed_mutation:284, settings_mutate:304, atomic_write_json:323, provider_state:356, split_provider_groups:375, profile_store:394, default_model_path:398, read_default_model:402, validate_default_model:413, known_models_for:436, settings_providers_list:455, settings_default_model_get:510, settings_default_model_set:518, model_owner_for:580, agent_readiness:590, auth_mode_for:625, protocol_for:631, runtime_location_from_json:642, native_caps:726, shared_caps:737, session_loadout_for:751, build_agent_settings:785, settings_agents_list:891, settings_agent_get:902, settings_agent_loadout:914, connection_state:939, remote_token_present:952, settings_connections_list:977, schedule_trigger_kind:1160, schedule_state:1171, capability_scope_for:1183, guard_autonomy_level:1203, schedule_settings_for:1220, scheduler_jobs:1294, settings_schedules_list:1311, settings_schedule_get:1321, settings_schedule_set_enabled:1334, settings_extensions_list:1390, provider_state_never_invents_connected:1487, groups_split_configured_popular_rest:1516, default_model_validation_is_fail_closed:1542, model_owner_rule:1561, readiness_never_claims_ready_without_occupancy:1570, runtime_location_mapping_keeps_provenance_distinct:1608, connection_state_never_false_connected:1641, schedule_trigger_and_state_mapping:1655, capability_scope_derives_from_step_families:1678, mutation_envelope_uses_contract_field_names:1692, settings_read_model_uses_contract_field_names:1721, agent_settings_shape_keeps_writes_flag_false:1759, config_hash_is_stable_and_sensitive:1774, loadout_rows_apply_from_next_turn:1782
 
 #### `src-tauri/src/skills_cmds.rs` — 354 lines · 2 tests · refs 5
 
@@ -4271,7 +4278,7 @@ complete function accounting for the file. `refs` is the cross-file `stem::` ref
 **`const`** (4): `STORE_PUBLIC_KEY_B64`:28, `STORE_INDEX_BODY`:31, `STORE_INDEX_SIGNATURE_B64`:34, `RUNTIME_CAPABILITY_ALLOWLIST`:39 · **`fn`** (5): `skills_learn`:124, `skills_catalog`:179, `skills_install`:220, `skills_uninstall`:274, `plain_language_scope`:282 · **`struct`** (1): `SkillRowView`:52
 - `fns` (14): skills_root:44, verify_bundled:71, verify:95, skills_learn:124, installed_names:161, skill_tampered:171, skills_catalog:179, skills_install:220, skills_uninstall:274, plain_language_scope:282, chrono_like_now:292, civil_from_days:306, bundled_seed_verifies:328, tampered_seed_rejected:342
 
-#### `src-tauri/src/state.rs` — 175 lines · 0 tests · refs ambiguous
+#### `src-tauri/src/state.rs` — 172 lines · 0 tests · refs ambiguous
 
 > Shell managed state (Fix 1b). Extracted verbatim — field-for-field and type-for-type — from the old `lib.rs` `AppState` so this is pure motion: every existing `use crate::AppState` (26 files) still resolves through th...
 
@@ -4313,12 +4320,12 @@ complete function accounting for the file. `refs` is the cross-file `stem::` ref
 **`fn`** (2): `trajectory_sessions`:12, `trajectory_snapshot`:20
 - `fns` (2): trajectory_sessions:12, trajectory_snapshot:20
 
-#### `src-tauri/src/updater_cmds.rs` — 397 lines · 3 tests · refs 10
+#### `src-tauri/src/updater_cmds.rs` — 413 lines · 3 tests · refs 10
 
 > P8.8 / P70.C1–C4 — auto-updater Tauri commands.
 
-**`const`** (1): `UPDATER_EVENT`:33 · **`fn`** (7): `updater_check`:146, `updater_channel_get`:179, `updater_channel_set`:186, `updater_download`:196, `updater_restart`:281, `updater_install`:311, `spawn_periodic_check`:330 · **`struct`** (2): `PendingUpdate`:54, `PendingUpdateSlot`:358
-- `fns` (17): channel_path:60, normalize_channel:64, read_channel:76, write_channel:89, channel_endpoints:105, emit_phase:116, channel_updater:128, updater_check:146, updater_channel_get:179, updater_channel_set:186, updater_download:196, updater_restart:281, updater_install:311, spawn_periodic_check:330, channels_are_normalized_and_refused:365, stable_endpoints_carry_the_github_fallback_beta_does_not:373, unknown_channel_read_falls_back_to_stable:386
+**`const`** (1): `UPDATER_EVENT`:33 · **`fn`** (7): `updater_check`:151, `updater_channel_get`:185, `updater_channel_set`:192, `updater_download`:202, `updater_restart`:297, `updater_install`:327, `spawn_periodic_check`:346 · **`struct`** (2): `PendingUpdate`:54, `PendingUpdateSlot`:374
+- `fns` (17): channel_path:60, normalize_channel:64, read_channel:76, write_channel:89, channel_endpoints:108, emit_phase:121, channel_updater:133, updater_check:151, updater_channel_get:185, updater_channel_set:192, updater_download:202, updater_restart:297, updater_install:327, spawn_periodic_check:346, channels_are_normalized_and_refused:381, stable_endpoints_carry_the_github_fallback_beta_does_not:389, unknown_channel_read_falls_back_to_stable:402
 
 #### `src-tauri/src/vault_cmds.rs` — 168 lines · 0 tests · refs 4
 
@@ -4327,12 +4334,12 @@ complete function accounting for the file. `refs` is the cross-file `stem::` ref
 **`fn`** (4): `vault_keys_list`:9, `vault_key_add`:47, `vault_key_remove`:129, `vault_key_rotate`:147
 - `fns` (4): vault_keys_list:9, vault_key_add:47, vault_key_remove:129, vault_key_rotate:147
 
-#### `src-tauri/src/voice_cmds.rs` — 73 lines · 3 tests · refs 3
+#### `src-tauri/src/voice_cmds.rs` — 69 lines · 3 tests · refs 3
 
 > P50.4.3 — Tauri surface over `everyaios_core::voice`.
 
 **`fn`** (3): `voice_status`:13, `voice_vad_classify`:23, `voice_process_utterance`:31
-- `fns` (6): voice_status:13, voice_vad_classify:23, voice_process_utterance:31, status_never_claims_stt:50, classify_speech_vs_silence:58, noop_stt_does_not_invent_a_transcript:66
+- `fns` (6): voice_status:13, voice_vad_classify:23, voice_process_utterance:31, status_never_claims_stt:46, classify_speech_vs_silence:54, noop_stt_does_not_invent_a_transcript:62
 
 #### `src-tauri/src/work_cmds.rs` — 681 lines · 0 tests · refs 43
 **`fn`** (43): `work_list`:18, `work_snapshot`:25, `work_events`:32, `work_presence`:44, `work_reviews`:51, `work_pty_spawn`:67, `work_pty_resize`:83, `work_pty_signal`:98, `work_pty_close`:112, `work_pty_snapshot`:126, `work_worktree_create`:135, `work_worktree_attach`:163, `work_worktree_op`:177, `work_agent_spawn`:202, `work_agent_op`:233, `work_children`:256, `work_agent_sessions`:264, `work_create`:279, `work_get`:294, `work_archive`:302, `work_locator`:310, `work_nodes`:320, `work_node_register`:329, `work_node_bind`:363, `work_node_unbind`:375, `work_authority_acquire`:383, `work_authority_renew`:397, `work_authority_release`:412, `work_clients`:425, `work_client_connect`:433, `work_client_detach`:448, `work_capabilities`:456, `work_capability_grant`:465, `work_capability_resolve`:487, `work_review_resolve`:510, `work_steer`:523, `work_steer_interrupt`:550, `work_manifest_create`:565, `work_manifest_get`:596, `work_manifest_restore`:605, `work_attachment_add`:630, `work_attachment_list`:663, `work_attachment_resolve`:671
@@ -4356,7 +4363,7 @@ complete function accounting for the file. `refs` is the cross-file `stem::` ref
 
 ## 10. TypeScript / TSX — per-area, per-file LLD
 
-**Every tracked `.ts`/`.tsx` file is enumerated below** (630 of them). `exports:` lists every exported
+**Every tracked `.ts`/`.tsx` file is enumerated below** (629 of them). `exports:` lists every exported
 declaration and re-export. `fns:` lists **every named function** — declarations, class and object-literal
 methods, constructors, get/set accessors, and function/arrow expressions bound to a name — as `name:line`,
 parsed with the TypeScript compiler. `anon:` counts the
@@ -4379,7 +4386,7 @@ population. `wiring:` is the §11 verdict.
 | `packages/core-security` | 5 | 556 | 24 | 28 | 10 | 23 | 0 |
 | `packages/core-tools` | 6 | 349 | 9 | 6 | 21 | 3 | 0 |
 | `ui` | 1 | 198 | 7 | 0 | 0 | 0 | 0 |
-| `ui/src` | 287 | 69,601 | 2031 | 3901 | 1273 | 534 | 169 |
+| `ui/src` | 286 | 69,834 | 2048 | 3921 | 1273 | 540 | 169 |
 
 ### 10.1 `ARCH/archive`
 
@@ -5943,9 +5950,13 @@ population. `wiring:` is the §11 verdict.
 - `fns` (7): greeting:17, statusLine:24, HomeLaunchpad:36, startTask:59, ActivityPanel:185, Section:204, ProjectsPanel:233
 - `anon` (33): function/arrow expressions with no binding name
 
-#### `ui/src/components/panels/local-models-panel.tsx` — 1,734 lines · 0 tests · REACHABLE · imported by 1
+#### `ui/src/components/panels/local-models-panel.dom.test.tsx` — 219 lines · 6 tests · TEST · imported by 0
+- `fns` (16): inventory:19, resetStore:23, runtime_inventory_list:44, runtime_models:45, local_hardware:46, model_downloads:47, model_registry_list:48, runtime_inventory_list:61, runtime_models:72, runtime_inventory_list:85, runtime_models:102, runtime_inventory_list:125, runtime_inventory_list:167, runtime_inventory_list:188, model_registry_list:189, model_estimate_fit:202
+- `anon` (20): function/arrow expressions with no binding name
+
+#### `ui/src/components/panels/local-models-panel.tsx` — 1,745 lines · 0 tests · REACHABLE · imported by 1
 - `exports` (1): function LocalModelsPanel
-- `fns` (28): isFitEstimate:126, delay:137, FitDot:142, CapChip:171, healthView:189, ownershipView:216, compatibilityFor:222, compatibilityLabel:259, runtimeKindLabel:265, DownloadRow:269, AgentHandoffCard:333, LocalModelsPanel:552, savePrefs:895, download:900, resume:919, cancel:930, remove:940, bulkRemove:951, prepareEndpoint:975, autoPick:993, parseGallery:1015, startRecommendedRuntime:1029, changeRuntime:1081, handoffKey:1114, handoffState:1115, applyConfigOption:1117, requestOverride:1144, messageForRuntime:1729
+- `fns` (29): isFitEstimate:126, delay:137, FitDot:142, CapChip:171, healthView:189, ownershipView:216, compatibilityFor:222, compatibilityLabel:259, runtimeKindLabel:265, runtimeDisplayLabel:270, DownloadRow:275, AgentHandoffCard:339, LocalModelsPanel:558, savePrefs:906, download:911, resume:930, cancel:941, remove:951, bulkRemove:962, prepareEndpoint:986, autoPick:1004, parseGallery:1026, startRecommendedRuntime:1040, changeRuntime:1092, handoffKey:1125, handoffState:1126, applyConfigOption:1128, requestOverride:1155, messageForRuntime:1740
 - `anon` (136): function/arrow expressions with no binding name
 
 #### `ui/src/components/panels/memory-panel.tsx` — 950 lines · 0 tests · REACHABLE · imported by 2
@@ -6731,9 +6742,9 @@ population. `wiring:` is the §11 verdict.
 - `fns` (1): useChatColumnClass:6
 - `anon` (2): function/arrow expressions with no binding name
 
-#### `ui/src/lib/local-models.ts` — 695 lines · 0 tests · REACHABLE · imported by 2
+#### `ui/src/lib/local-models.ts` — 700 lines · 0 tests · REACHABLE · imported by 2
 - `exports` (35): interface HardwareProfile, interface HubModel, interface HubFile, interface LocalPrefs, function formatBytes, function formatDownloads, function relativeUpdated, function quantFromPath, function ramBytes, function cpuCores, function searchHub, function listHubFiles, function hubCaps, function getHardware, function getLocalPrefs, function setLocalPrefs, type RuntimeOwnership, type RuntimeHealth, type RuntimeCompatibility, interface RuntimeModelObservation, interface RuntimeAgentCompatibility, interface RuntimeInventoryRow, interface RuntimeStartResult, interface RuntimeStopResult, function normalizeRuntimeInventory, function listRuntimeInventory, function startManagedRuntime, function stopManagedRuntime, function listRuntimeModels, type AgentModelControlLevel, function resolveAgentModelControlLevel, interface AgentConfigOptionsResult, function getBoundAgentConfigOptions, function setBoundAgentConfigOption, function requestAgentLaunchOverride
-- `fns` (33): formatBytes:37, formatDownloads:44, relativeUpdated:50, quantFromPath:60, ramBytes:80, cpuCores:84, searchHub:91, listHubFiles:126, hubCaps:139, getHardware:150, getLocalPrefs:155, setLocalPrefs:165, asRecord:255, firstString:261, firstBoolean:270, firstNumber:278, normalizeOwnership:286, normalizeHealth:293, normalizeCompatibility:341, normalizeRuntimeModels:386, normalizeRuntimeRow:414, normalizeRuntimeInventory:468, normalizeMutationResult:482, listRuntimeInventory:511, startManagedRuntime:520, stopManagedRuntime:540, listRuntimeModels:555, parseControlLevel:573, resolveAgentModelControlLevel:590, normalizeAgentConfigResult:625, getBoundAgentConfigOptions:647, setBoundAgentConfigOption:658, requestAgentLaunchOverride:679
+- `fns` (33): formatBytes:37, formatDownloads:44, relativeUpdated:50, quantFromPath:60, ramBytes:80, cpuCores:84, searchHub:91, listHubFiles:126, hubCaps:139, getHardware:150, getLocalPrefs:155, setLocalPrefs:165, asRecord:256, firstString:262, firstBoolean:271, firstNumber:279, normalizeOwnership:287, normalizeHealth:294, normalizeCompatibility:342, normalizeRuntimeModels:388, normalizeRuntimeRow:416, normalizeRuntimeInventory:470, normalizeMutationResult:484, listRuntimeInventory:517, startManagedRuntime:526, stopManagedRuntime:545, listRuntimeModels:560, parseControlLevel:578, resolveAgentModelControlLevel:595, normalizeAgentConfigResult:630, getBoundAgentConfigOptions:652, setBoundAgentConfigOption:663, requestAgentLaunchOverride:684
 - `anon` (27): function/arrow expressions with no binding name
 
 #### `ui/src/lib/lsp.ts` — 39 lines · 0 tests · UNREACHED · imported by 1
@@ -6758,10 +6769,6 @@ population. `wiring:` is the §11 verdict.
 #### `ui/src/lib/model-fit.ts` — 112 lines · 0 tests · REACHABLE · imported by 2
 - `exports` (11): const DEFAULT_QUANT, const FIT_CTX, const FIT_CTX_LABEL, type FitTier, interface FitEstimate, interface TierTone, function tierTone, function hostHwClass, function fileHwClass, function buildCandidates, function bytesToGib
 - `fns` (5): tierTone:47, hostHwClass:73, fileHwClass:81, buildCandidates:89, bytesToGib:108
-
-#### `ui/src/lib/model-routing.test.ts` — 1 lines · 0 tests · TEST · imported by 0
-
-#### `ui/src/lib/model-routing.ts` — 1 lines · 0 tests · NOT IMPORTED · imported by 0
 
 #### `ui/src/lib/models-download.ts` — 212 lines · 0 tests · REACHABLE · imported by 4
 - `exports` (23): interface ModelDownloadRow, interface OrphanPart, interface RegistryEntry, interface RegistryList, interface ModelDownloadEvent, function startDownload, function listDownloads, function cancelDownload, function registryList, function removeModel, function recommendQuant, function estimateFit, interface ServeOptions, function serveModel, interface GalleryFile, interface GalleryEntry, interface GalleryIndex, function parseGalleryYaml, type HwClass, interface VariantCandidate, function bestPick, function onModelDownloadEvent, function downloadsAvailable
@@ -6931,7 +6938,7 @@ population. `wiring:` is the §11 verdict.
 - `fns` (12): storageHealth:65, storageScan:71, storageLargeFiles:77, storageDuplicates:87, storageCleanupProposals:97, storageBattery:112, bytes:117, demoHealth:133, demoScan:146, demoLargeFiles:161, demoDupGroups:169, demoCleanupProposals:176
 - `anon` (6): function/arrow expressions with no binding name
 
-#### `ui/src/lib/store.ts` — 3,160 lines · 0 tests · REACHABLE · imported by 105
+#### `ui/src/lib/store.ts` — 3,160 lines · 0 tests · REACHABLE · imported by 106
 - `exports` (43): type ViewId, type ChatMode, function normalizeChatMode, type SessionStatus, interface ToolCallRecord, interface SpooledOutput, interface ChatMessage, interface ChatError, interface ArtifactActionUi, interface ArtifactServerState, interface Artifact, interface ProgressStep, interface MCQInterrupt, interface TaskElevation, interface TaskSnapshot, interface VerificationRecord, interface StreamStats, interface Session, function sessionTranscriptMarkdown, function sanitizeSessionRows, function mergeHydratedSessions, interface Automation, interface SessionLayout, interface DiaryEntry, interface PendingPatch, interface Connector, interface MemoryItem, interface PermissionEntry, const mockSessions, const mockMemory, interface LiveBudget, interface QueuedTurn, type TurnDispatcher, interface LiveNotification, interface AgentSendBlocker, function streamElapsedMs, function resetStreamingTestState, type StatusBarPills, const readStatusBarPills, const SETTINGS_SECTION_IDS, type SettingsSectionId, function taskScopeHash, const useAppStore
 - `fns` (159): normalizeChatMode:57, sessionTranscriptMarkdown:316, sanitizeSessionRows:328, mergeHydratedSessions:348, iso:443, markFirstDelta:727, ttfbFor:732, freshId:742, streamSessionId:748, hasActiveStream:753, bindStreamId:759, retireStream:770, streamElapsedMs:778, resetStreamingTestState:788, patchActiveAssistant:802, patchStreamMessage:822, readStatusBarPills:846, writeStatusBarPills:857, readPowerMode:868, writePowerMode:879, readPermission:943, writePermission:953, taskScopeHash:965, streamTestReset:1436, setWorkProjection:1458, setCoworkMode:1460, markSessionsHydrated:1463, setActiveSession:1464, newSession:1480, openAutomationRun:1507, pushMonitor:1534, clearMonitorBadge:1548, deleteSession:1549, reopenClosedSession:1583, reopenClosedSessionId:1592, purgeClosedSession:1618, purgeAllClosed:1620, cycleSession:1621, renameSession:1630, toggleSessionPinned:1639, clearSessionMessages:1646, compactSessionMessages:1660, setSessionGoal:1683, markGoalAchieved:1692, rewindToUserMessage:1697, rewindBeforeAssistant:1715, forkSession:1738, setActiveView:1763, setBrowserAttached:1775, clearBrowserUrl:1776, setDesktopAttached:1779, setCuaVisionGate:1782, setProviderKeysConfigured:1784, openSetup:1786, closeSetup:1787, setAgentSendBlocker:1789, setSessionChiefPin:1796, clearSessionChiefPin:1804, setUserDefaultChief:1822, openInBrowser:1823, toggleRail:1834, setRailCollapsed:1838, setFullscreenView:1843, addView:1846, closeView:1856, switchOfficeDoc:1867, closeOfficeDoc:1872, openOfficeDoc:1883, reorderViews:1915, setScopedView:1929, setScopedDoc:1931, patchArtifactServer:1936, setArtifactActions:1937, openSpooledOutput:1939, setAiPointerOpen:1945, pushDiaryEntry:1948, clearDiary:1950, toggleSidebar:1953, togglePowerMode:1956, setPowerMode:1962, setDevMode:1968, setStatusBarPills:1971, setComposerMode:1977, setComposerValue:1979, setSelectedAgent:1985, setSelectedModel:2001, cycleModelVariant:2006, setPersonaId:2016, setSoulId:2018, setAgentName:2020, setReconnect:2025, noteStreamTick:2026, forkFromMessage:2051, setAutoRoute:2077, setRouting:2079, setCenterScreen:2083, setSettingsSection:2085, setPermissionMode:2087, syncAutonomyFromRust:2104, freezeTaskSnapshot:2117, clearTaskSnapshot:2137, respondAutonomyCard:2138, pushAutonomyLimit:2193, effectiveAutonomyLevel:2213, setComposerRole:2232, setTaskFolder:2234, setOfficeFlyoutOpen:2237, setPaletteOpen:2240, setCockpitOpen:2243, toggleAgentPause:2246, notify:2267, notifyMcpError:2268, setLiveAgents:2271, setLiveBudget:2273, pushLiveNotification:2279, markLiveNotificationsRead:2284, setLiveStreamId:2288, clearLiveStreamId:2290, pushUserMessage:2298, streamStart:2315, appendReasoning:2338, streamAppend:2365, streamFinalize:2411, streamFail:2453, streamBudgetKill:2505, streamCancelled:2548, streamCitations:2581, streamWalkthrough:2590, streamToolCall:2602, streamToolResult:2620, streamToolProgress:2652, retryToolCall:2662, streamStep:2704, pushMcq:2732, respondMcq:2772, clearMcq:2829, setAcpHandle:2846, getAcpHandle:2883, clearAcpHandles:2885, setAcpConfigOptions:2898, setPendingPlan:2904, setTurnDispatcher:2911, queueTurn:2914, editQueuedTurn:2935, removeQueuedTurn:2946, setQueuePaused:2957, promoteQueuedTurn:2960, dequeueNextTurn:2976, parkEditorWrite:3006, takeEditorWrite:3008, pushVerification:3020, setOnboardingDone:3032, saveSessionLayout:3046, restoreSessionLayout:3060, setSessionPaused:3090, setPendingPatches:3100, setNlAutomationDraft:3104, setSessionCapabilityOverride:3107, resetSessionCapabilities:3122
 - `anon` (193): function/arrow expressions with no binding name
@@ -7035,7 +7042,7 @@ population. `wiring:` is the §11 verdict.
 - `fns` (1): Bootstrap:12
 - `anon` (3): function/arrow expressions with no binding name
 
-#### `ui/src/test/dom-harness.tsx` — 171 lines · 0 tests · TEST-ONLY · imported by 8
+#### `ui/src/test/dom-harness.tsx` — 171 lines · 0 tests · TEST-ONLY · imported by 9
 - `exports` (12): type ShellHandler, function registerDom, function unregisterDom, function installShell, function removeShell, interface Mounted, function mount, function tick, function waitFor, function click, function withAct, function findButton
 - `fns` (20): chief_default_get:36, local_models:37, local_hardware:38, runtime_status:39, registerDom:43, unregisterDom:50, installShell:59, invoke:64, transformCallback:70, unregisterCallback:71, convertFileSrc:72, removeShell:79, mount:91, unmount:108, settle:116, tick:121, waitFor:136, click:151, withAct:161, findButton:166
 - `anon` (6): function/arrow expressions with no binding name
@@ -7059,7 +7066,7 @@ population. `wiring:` is the §11 verdict.
 
 ### 11.2 Rust files with zero cross-file references
 
-131 of 515 files have no `stem::` reference anywhere else.
+131 of 516 files have no `stem::` reference anywhere else.
 **86 are non-test source files** (the real candidates); the other 45 are
 integration tests, fixtures, and mock servers, which are never referenced by name.
 
@@ -7182,7 +7189,7 @@ The tail of this list is where "referenced once, by its own re-export" hides.
 
 ### 11.4 TS/TSX files never imported by anything
 
-172 files (excluding test files).
+171 files (excluding test files).
 
 - `ARCH/archive/core-engine/vitest.config.ts`
 - `packages/coordinator/src/companion.ts`
@@ -7353,7 +7360,6 @@ The tail of this list is where "referenced once, by its own re-export" hides.
 - `ui/src/components/views/pdf-canvas.tsx`
 - `ui/src/globals.d.ts`
 - `ui/src/lib/doctor.ts`
-- `ui/src/lib/model-routing.ts`
 - `ui/src/lib/plan-draft.ts`
 - `ui/vite.config.ts`
 
@@ -7503,7 +7509,7 @@ matches unrelated identifiers. Counts above 50 are flagged `(noisy)` and carry n
 | `file_outline` | `codeintel_cmds` | 0 | 2 |
 | `repomap_build` | `codeintel_cmds` | 0 | 4 |
 | `agui_send` | `crate` | 0 | 6 |
-| `version` | `crate` | 2 | 794 (noisy) |
+| `version` | `crate` | 2 | 797 (noisy) |
 
 
 ---
@@ -8397,9 +8403,9 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 | docs/codebase/ | 10 | 977 |
 | docs/release/ | 4 | 208 |
 | docs/testing/ | 2 | 892 |
-| root — specs, handover, and this map | 17 | 14,524 |
+| root — specs, handover, and this map | 17 | 14,537 |
 | ui/ — UI design docs | 1 | 83 |
-| **TOTAL** | **203** | **44,420** |
+| **TOTAL** | **203** | **44,433** |
 
 ### 14.1 .agents/
 
@@ -9369,10 +9375,10 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 
 - opening: Read [`ARCH/CORE.md`](ARCH/CORE.md) — the root architecture authority — and [`AGENTS.md`](AGENTS.md), which is the durable contract for any agent or human working here.
 
-#### `CURRENT_RUN.md` — 2,785 lines · 319.8 KB
+#### `CURRENT_RUN.md` — 2,798 lines · 322.3 KB
 > CURRENT RUN STATE — Task Handover & Checkpoint
 
-- opening: - Conform local-model handling to ADR-0005: **EveryAIOS owns the environment; the external agent owns the engine.** EveryAIOS may observe/connect to local inference runtimes and provision+start one as
+- opening: - `7f6e775` (runtime retirement) CI was red.
 
 #### `DESKTOP-APP-SPEC.md` — 1,609 lines · 345.7 KB
 > DESKTOP-APP-SPEC.md — Complete Product Specification
@@ -9459,7 +9465,7 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 | ---: | --- | --- | ---: | ---: | ---: |
 | 1 | `runtime_status` | `crate` | 1 | 1 | 0 |
 | 2 | `sidecar_probe` | `crate` | 1 | 1 | 0 |
-| 3 | `version` | `crate` | 0 | 2 | 794 (noisy) |
+| 3 | `version` | `crate` | 0 | 2 | 797 (noisy) |
 | 4 | `catalog_sync_plan` | `catalog_cmds` | 0 | 0 | 0 |
 | 5 | `catalog_sync_refresh` | `catalog_cmds` | 0 | 0 | 0 |
 | 6 | `catalog_status` | `catalog_cmds` | 0 | 0 | 2 |
@@ -10002,31 +10008,31 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 - `src-tauri/capabilities/` — default.json, guard.json
 - `src-tauri/gen/schemas/` — acl-manifests.json, capabilities.json, desktop-schema.json, linux-schema.json, windows-schema.json
 - `src-tauri/icons/` — 128x128.png, 128x128@2x.png, 32x32.png, icon.ico, icon.png
-- `src-tauri/src/` — acp_cmds.rs, agent_backend_cmds.rs, agent_cmds.rs, artifact_cmds.rs, boot.rs, browser_cmds.rs, calendar_cmds.rs, catalog_cmds.rs, cockpit_cmds.rs, codeintel_cmds.rs, commands.rs, control.rs, desktop_cmds.rs, diagnostics_cmds.rs, discovery_cmds.rs, doctor_cmds.rs, feedback_cmds.rs, fs_cmds.rs, git_cmds.rs, guard_cmds.rs, guard_window.rs, lib.rs, local_cmds.rs, lsp_cmds.rs, main.rs, maintenance_cmds.rs, mcp_cmds.rs, memory_cmds.rs, model_cmds.rs, oauth_cmds.rs, office_cmds.rs, openai_cmds.rs, replay_cmds.rs, scheduler_cmds.rs, scheduler_fire.rs, search_cmds.rs, settings_cmds.rs, skills_cmds.rs, state.rs, storage_cmds.rs, sync_cmds.rs, tasks_cmds.rs, terminal_cmds.rs, trajectory_cmds.rs, updater_cmds.rs, vault_cmds.rs, voice_cmds.rs, work_cmds.rs, xlsx_cmds.rs
+- `src-tauri/src/` — acp_cmds.rs, agent_backend_cmds.rs, agent_cmds.rs, artifact_cmds.rs, boot.rs, browser_cmds.rs, calendar_cmds.rs, catalog_cmds.rs, cockpit_cmds.rs, codeintel_cmds.rs, commands.rs, control.rs, desktop_cmds.rs, diagnostics_cmds.rs, discovery_cmds.rs, doctor_cmds.rs, feedback_cmds.rs, fs_cmds.rs, git_cmds.rs, guard_cmds.rs, guard_window.rs, lib.rs, local_cmds.rs, lsp_cmds.rs, main.rs, maintenance_cmds.rs, mcp_cmds.rs, memory_cmds.rs, model_cmds.rs, oauth_cmds.rs, office_cmds.rs, openai_cmds.rs, replay_cmds.rs, runtime_cmds.rs, scheduler_cmds.rs, scheduler_fire.rs, search_cmds.rs, settings_cmds.rs, skills_cmds.rs, state.rs, storage_cmds.rs, sync_cmds.rs, tasks_cmds.rs, terminal_cmds.rs, trajectory_cmds.rs, updater_cmds.rs, vault_cmds.rs, voice_cmds.rs, work_cmds.rs, xlsx_cmds.rs
 - `src-tauri/tests/` — registration_sync.rs
 - `ui/` — DESIGN-SYSTEM.md, bun.lock, guard.html, index.html, package-lock.json, package.json, postcss.config.js, tsconfig.json, vite.config.ts
 - `ui/scripts/` — build.mjs, check-monaco-dompurify.mjs
 - `ui/src/` — App.tsx, globals.css, globals.d.ts, guard-main.ts, main.tsx
 - `ui/src/components/` — nps-prompt.tsx, onboarding-modal.test.ts, onboarding-modal.tsx, theme-provider.tsx
 - `ui/src/components/chat/` — agent-model-picker.dom.test.tsx, agent-model-picker.tsx, artifact-card.tsx, casual-layer.dom.test.tsx, chat-composer.tsx, chat-panel.tsx, mcq-interrupt-card.tsx, message-bubble.tsx, now-doing-strip.tsx, pending-queue-chips.tsx, progress-steps.tsx, session-tabs.tsx, session-timeline.tsx, tool-chip.tsx, turn-checkpoint.tsx
-- `ui/src/components/panels/` — agent-builder-panel.tsx, agents-models-section.dom.test.tsx, agents-models-section.tsx, analytics-panel.tsx, analytics-sections.tsx, automation-editor.tsx, automations-panel.tsx, capability-matrix-panel.tsx, computer-use-section.dom.test.tsx, connectors-panel.dom.test.tsx, connectors-panel.tsx, discover-section.tsx, feedback-panel.tsx, guard-panel.tsx, home-launchpad.tsx, local-models-panel.tsx, memory-panel.tsx, runtime-session-section.tsx, schedules-section.tsx, settings-panel.tsx, settings-providers.tsx, settings-sections-extra.tsx, settings-sections-security.tsx, settings-sections-studio.tsx, settings-sections.tsx, settings-shared.tsx, skills-panel.tsx, tasks-rail.tsx, usage-metrics-section.tsx
+- `ui/src/components/panels/` — agent-builder-panel.tsx, agents-models-section.dom.test.tsx, agents-models-section.tsx, analytics-panel.tsx, analytics-sections.tsx, automation-editor.tsx, automations-panel.tsx, capability-matrix-panel.tsx, computer-use-section.dom.test.tsx, connectors-panel.dom.test.tsx, connectors-panel.tsx, discover-section.tsx, feedback-panel.tsx, guard-panel.tsx, home-launchpad.tsx, local-models-panel.dom.test.tsx, local-models-panel.tsx, memory-panel.tsx, runtime-session-section.tsx, schedules-section.tsx, settings-panel.tsx, settings-providers.tsx, settings-sections-extra.tsx, settings-sections-security.tsx, settings-sections-studio.tsx, settings-sections.tsx, settings-shared.tsx, skills-panel.tsx, tasks-rail.tsx, usage-metrics-section.tsx
 - `ui/src/components/shell/` — ai-pointer.tsx, center-column.tsx, cockpit-slideover.tsx, command-palette.tsx, companion-chip.tsx, keyboard-shortcuts.tsx, left-sidebar.tsx, notifications-popover.tsx, p0-shell.dom.test.tsx, right-rail.tsx, runtime-status-banner.tsx, setup-gate.tsx, status-bar.dom.test.tsx, status-bar.tsx, title-bar.tsx, toast-bridge.tsx, vault-gate.tsx
 - `ui/src/components/ui/` — accordion.tsx, alert-dialog.tsx, alert.tsx, aspect-ratio.tsx, avatar.tsx, badge.tsx, breadcrumb.tsx, button.tsx, calendar.tsx, card.tsx, carousel.tsx, chart.tsx, checkbox.tsx, collapsible.tsx, command.tsx, context-menu.tsx, dialog.tsx, drawer.tsx, dropdown-menu.tsx, empty-state.tsx, error-state.tsx, form.tsx, hover-card.tsx, input-otp.tsx, input.tsx, label.tsx, loading-state.tsx, menubar.tsx, navigation-menu.tsx, pagination.tsx, popover.tsx, progress.tsx, radio-group.tsx, resizable.tsx, scroll-area.tsx, select.tsx, separator.tsx, sheet.tsx, sidebar.tsx, skeleton.tsx, slider.tsx, sonner.tsx, switch.tsx, table.tsx, tabs.tsx, textarea.tsx, toast.tsx, toaster.tsx, toggle-group.tsx, toggle.tsx, tooltip.tsx
 - `ui/src/components/views/` — artifact-view.tsx, audit-view.tsx, blueprint-view.tsx, browse-view.tsx, chat-overlay.tsx, desktop-view.tsx, diff-view.tsx, folder-view.tsx, generative-view.tsx, kanban-view.tsx, local-server-view.tsx, office-docx-view.tsx, office-file-switcher.tsx, office-open-bar.tsx, office-pdf-view.tsx, office-pptx-view.tsx, office-ribbon.tsx, office-xlsx-view.tsx, pdf-canvas.tsx, progress-view.tsx, shell-view.tsx, storage-view.tsx, tool-output-view.tsx, trajectory-view.tsx
 - `ui/src/components/views/generative/` — generative-ui.tsx
 - `ui/src/components/views/ide/` — diff-rail.tsx, editor-tabs.tsx, explorer-panel.tsx, ide-workbench.tsx, monaco-pane.tsx, problems-panel.tsx, scm-panel.tsx
 - `ui/src/hooks/` — use-mobile.ts, use-toast.ts
-- `ui/src/lib/` — acp.ts, agent-backend.test.ts, agent-backend.ts, agent-builder.ts, agent-ownership.test.ts, agent-registry.ts, agents.ts, artifact.ts, at-refs.ts, attachments.test.ts, attachments.ts, audit.ts, autonomy.test.ts, bridge-agent-send.test.ts, bridge.ts, browser.ts, calendar.test.ts, calendar.ts, capabilities.ts, capability-status.test.ts, capability-status.ts, catalog-models.test.ts, catalog-models.ts, chat-event-routing.test.ts, checkpoints-preflight.test.ts, checkpoints-restore.test.ts, checkpoints.ts, chief-handoff.test.ts, chief-handoff.ts, chief-pin.test.ts, citations.test.ts, citations.ts, cockpit.ts, connections.ts, connector-scopes.ts, cua-dag.test.ts, cua-dag.ts, design-tokens.test.ts, desktop-apps.test.ts, desktop-apps.ts, desktop.ts, discovery.ts, doctor.ts, error-ttfb.test.ts, errors.test.ts, errors.ts, feedback.ts, first-run.test.ts, first-run.ts, fs.ts, fuzzy.test.ts, fuzzy.ts, git.ts, guard-autonomy.test.ts, guard-ux.test.ts, guard.ts, i18n.ts, interrupts.test.ts, interrupts.ts, layout.ts, local-models.ts, lsp.ts, mcp.ts, memory.ts, model-fit.test.ts, model-fit.ts, model-routing.test.ts, model-routing.ts, models-download.ts, monaco.ts, nps.test.ts, nps.ts, oauth.ts, occupancy.test.ts, occupancy.ts, office-open-bar.test.ts, office.ts, openai-server.ts, perf.ts, personas.ts, plain-language.test.ts, plain-language.ts, plan-draft.ts, project-groups.test.ts, provider-groups.test.ts, provider-groups.ts, providers.test.ts, providers.ts, queue-while-generating.test.ts, reasoning-stream.test.ts, recovery.test.ts, recovery.ts, rewind-goals-queue.test.ts, runtime.test.ts, runtime.ts, scheduler.test.ts, scheduler.ts, session-recording.test.ts, session-recording.ts, session-truth.test.ts, settings-groups.test.ts, settings.ts, skills-surfaces.test.ts, skills.ts, spend.test.ts, spend.ts, spreadsheet.ts, stagger.ts, storage.ts, store.ts, tasks-contract.test.ts, tasks.ts, tauri.ts, terminal-split.test.ts, terminal-split.ts, terminal.test.ts, terminal.ts, theme-persist.test.ts, tool-json.test.ts, tool-json.ts, trajectory.ts, ui-prefs.ts, utils.ts, ux-metrics.ts, ux.ts, version.ts, voice.test.ts, voice.ts, walkthrough.test.ts, walkthrough.ts, work.test.ts, work.ts
+- `ui/src/lib/` — acp.ts, agent-backend.test.ts, agent-backend.ts, agent-builder.ts, agent-ownership.test.ts, agent-registry.ts, agents.ts, artifact.ts, at-refs.ts, attachments.test.ts, attachments.ts, audit.ts, autonomy.test.ts, bridge-agent-send.test.ts, bridge.ts, browser.ts, calendar.test.ts, calendar.ts, capabilities.ts, capability-status.test.ts, capability-status.ts, catalog-models.test.ts, catalog-models.ts, chat-event-routing.test.ts, checkpoints-preflight.test.ts, checkpoints-restore.test.ts, checkpoints.ts, chief-handoff.test.ts, chief-handoff.ts, chief-pin.test.ts, citations.test.ts, citations.ts, cockpit.ts, connections.ts, connector-scopes.ts, cua-dag.test.ts, cua-dag.ts, design-tokens.test.ts, desktop-apps.test.ts, desktop-apps.ts, desktop.ts, discovery.ts, doctor.ts, error-ttfb.test.ts, errors.test.ts, errors.ts, feedback.ts, first-run.test.ts, first-run.ts, fs.ts, fuzzy.test.ts, fuzzy.ts, git.ts, guard-autonomy.test.ts, guard-ux.test.ts, guard.ts, i18n.ts, interrupts.test.ts, interrupts.ts, layout.ts, local-models.ts, lsp.ts, mcp.ts, memory.ts, model-fit.test.ts, model-fit.ts, models-download.ts, monaco.ts, nps.test.ts, nps.ts, oauth.ts, occupancy.test.ts, occupancy.ts, office-open-bar.test.ts, office.ts, openai-server.ts, perf.ts, personas.ts, plain-language.test.ts, plain-language.ts, plan-draft.ts, project-groups.test.ts, provider-groups.test.ts, provider-groups.ts, providers.test.ts, providers.ts, queue-while-generating.test.ts, reasoning-stream.test.ts, recovery.test.ts, recovery.ts, rewind-goals-queue.test.ts, runtime.test.ts, runtime.ts, scheduler.test.ts, scheduler.ts, session-recording.test.ts, session-recording.ts, session-truth.test.ts, settings-groups.test.ts, settings.ts, skills-surfaces.test.ts, skills.ts, spend.test.ts, spend.ts, spreadsheet.ts, stagger.ts, storage.ts, store.ts, tasks-contract.test.ts, tasks.ts, tauri.ts, terminal-split.test.ts, terminal-split.ts, terminal.test.ts, terminal.ts, theme-persist.test.ts, tool-json.test.ts, tool-json.ts, trajectory.ts, ui-prefs.ts, utils.ts, ux-metrics.ts, ux.ts, version.ts, voice.test.ts, voice.ts, walkthrough.test.ts, walkthrough.ts, work.test.ts, work.ts
 - `ui/src/test/` — dom-harness.tsx
 
 ### 15.4 Census
 
 | Extension | Files |
 | --- | ---: |
-| `.rs` | 515 |
-| `.ts` | 480 |
+| `.rs` | 516 |
+| `.ts` | 478 |
 | `.md` | 203 |
-| `.tsx` | 150 |
+| `.tsx` | 151 |
 | `.json` | 43 |
 | `.mjs` | 35 |
 | `.log` | 34 |
@@ -10047,7 +10053,7 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 | `.css` | 1 |
 | **TOTAL tracked** | **1528** |
 
-Lines counted across the 1520 tracked text files at generation time: **455,010** (this map excluded — self-referential).
+Lines counted across the 1520 tracked text files at generation time: **456,027** (this map excluded — self-referential).
 
 ### 15.5 Coverage audit — is any tracked file unaccounted for?
 
@@ -10055,8 +10061,8 @@ Each section registers the files it gives an entry to; this table is a diff agai
 
 | Section | Files accounted for |
 | --- | ---: |
-| §9 Rust — per-file `####` | 515 |
-| §10 TS/TSX — per-file `####` | 630 |
+| §9 Rust — per-file `####` | 516 |
+| §10 TS/TSX — per-file `####` | 629 |
 | §12.2 npm manifests | 13 |
 | §13 non-source inventory | 167 |
 | §14 documentation index | 203 |
