@@ -69,6 +69,7 @@ import StorageView from '@/components/views/storage-view'
 import TrajectoryView from '@/components/views/trajectory-view'
 import BlueprintView from '@/components/views/blueprint-view'
 import LocalServerView from '@/components/views/local-server-view'
+import ToolOutputView from '@/components/views/tool-output-view'
 import { SessionTimeline } from '@/components/chat/session-timeline'
 
 // P39.5 — heavy views load on first use, not at startup. The IDE workbench
@@ -115,7 +116,7 @@ export type NarrowRightTab = (typeof NARROW_RIGHT_TABS)[number]['id']
 
 export function narrowTabForView(view: ViewId): NarrowRightTab {
   if (view === 'folder') return 'files'
-  if (view === 'progress' || view === 'trajectory' || view === 'diff' || view === 'audit' || view === 'storage' || view === 'timeline' || view === 'kanban' || view === 'blueprint' || view === 'local-server') return 'tools'
+  if (view === 'progress' || view === 'trajectory' || view === 'diff' || view === 'audit' || view === 'storage' || view === 'timeline' || view === 'kanban' || view === 'blueprint' || view === 'local-server' || view === 'tool-output') return 'tools'
   return 'preview'
 }
 
@@ -232,6 +233,7 @@ const VIEW_META: Record<ViewId, { label: string; icon: React.ElementType }> = {
   generative: { label: 'Generative UI', icon: Sparkles },
   artifact: { label: 'Artifact', icon: MonitorSmartphone },
   desktop: { label: 'Computer use', icon: MonitorSmartphone },
+  'tool-output': { label: 'Tool output', icon: FileText },
 }
 
 function ViewportContent({ view }: { view: ViewId }) {
@@ -270,6 +272,7 @@ function renderView(view: ViewId) {
     case 'generative': return <GenerativeView />
     case 'artifact': return <ArtifactView />
     case 'desktop': return <DesktopView />
+    case 'tool-output': return <ToolOutputView />
     default:
       return (
         <div className="grid h-full w-full place-items-center p-6 text-center">

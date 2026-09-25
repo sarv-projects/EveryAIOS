@@ -1,5 +1,30 @@
 # CURRENT RUN STATE — Task Handover & Checkpoint
 
+## Right-Rail Spooled Viewer Handover — 2026-09-25
+
+### Active Goal
+- Build the dedicated right-rail `tool-output` viewer closing the tool-chip follow-up (Inspect button truthfully opens the rail).
+
+### Where We Stopped
+- NEW `ui/src/components/views/tool-output-view.tsx`: header w/ kind + done/failed badge + stats, filter/wrap/copy toolbar, line-numbered log, 2000-line honesty cap, empty state. Styled list, not Monaco (read-only log vs file-bound ticketed pane — documented in file).
+- `ui/src/lib/store.ts`: `ViewId` + ephemeral `spooledOutput`/`openSpooledOutput()` (payload never persisted).
+- `ui/src/components/shell/right-rail.tsx`: registration + `tools` narrow mapping.
+- `ui/src/components/chat/tool-chip.tsx`: primary button back to truthful `Inspect in Right Rail ↗` (supersedes orchestrator's interim `Inspect full output` label); inline expand kept as secondary fallback.
+
+### Validation
+- `git diff --check` — clean. `tsc` — 0 errors in the 4 files; same 2 pre-existing errors elsewhere.
+- `ipc-parity` untouched (no IPC changes).
+
+### Next Exact Steps
+1. Stage/commit/push viewer files + handover (done below).
+2. Still running: P71.10 Rust (fix-1, oracle review gated after), P64.4-6 (fix-2), A28/A30 docs (fix-3). Then: A30 code rename, P71.10 UI projection, F1-F9 per recon plan.
+
+### Decisions & Gotchas
+- store.ts/right-rail.tsx were clean in HEAD (no foreign in-flight edits), so this commit is viewer-pure.
+- Live acceptance (seed >2000-token result → Inspect → rail tab) still owed; Windows run unverified per ADR-0007.
+
+---
+
 ## P64.11/P64.12/P63.12 Chat + Roster Implementation Handover — 2026-09-25
 
 ### Active Goal

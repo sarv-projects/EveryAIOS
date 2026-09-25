@@ -49,6 +49,7 @@ export type ViewId =
   | 'generative'
   | 'artifact'
   | 'desktop'
+  | 'tool-output'
 
 /** v3.57 Work Mode (WHAT) — Code/browser/Office/terminal live *inside* Build. */
 export type ChatMode = 'auto' | 'plan' | 'build' | 'research'
@@ -84,6 +85,24 @@ export interface ToolCallRecord {
    * elapsed timer while running and the settled duration once done. */
   startedAt?: number
   endedAt?: number
+  /** P64.12 — which specialist ran this delegated step, when the host said so. */
+  specialist?: string
+}
+
+/** One spooled tool result opened for inspection in the right rail. The
+ * `tool-output` view renders this; it is ephemeral UI state (never
+ * persisted, never a lease) — switching chats keeps the text until another
+ * spooled card replaces it. */
+export interface SpooledOutput {
+  /** The tool-call record the output came from. */
+  toolCallId: string
+  /** Raw tool id (the view shows a short kind + the full id). */
+  toolId: string
+  /** The full cleaned output text (already CLI-normalized by the card). */
+  text: string
+  failed: boolean
+  /** Wall-clock ms when it was opened. */
+  openedAt: number
 }
 
 export interface ChatMessage {
@@ -119,6 +138,8 @@ export interface ChatMessage {
   ttfbMs?: number
   /** P52.20 — numbered citations produced from live search hits. */
   citations?: Array<{ index: number; title: string; url: string; snippet?: string; source?: string }>
+  /** P64.12 — warm memories, skills, and governance shown in the passport pill. */
+  passport?: { memories: string[]; skills: string[]; governance: string }
 }
 
 /** P51.21 — which layer reported a failed turn, shown as the card's badge.
@@ -1107,6 +1128,11 @@ interface AppState {
   artifactActions: ArtifactActionUi[]
   patchArtifactServer: (server: ArtifactServerState | null) => void
   setArtifactActions: (actions: ArtifactActionUi[]) => void
+  /** Spooled tool output inspection surface (the `tool-output` right-rail
+   * view). Ephemeral projection state — the full cleaned text of one tool
+   * result, never persisted. Opening it is a lens action, not a lease. */
+  spooledOutput: SpooledOutput | null
+  openSpooledOutput: (s: Omit<SpooledOutput, 'openedAt'>) => void
 
   // P30.12 — AIPointer quick-ask overlay (hotkey-anchored ask-box).
   aiPointerOpen: boolean
@@ -1471,7 +1497,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       status: 'idle',
       preview: 'What would you like to do?',
       updatedAt: new Date().toISOString(),
-      agent: 'analyst',
+      agent: '',
       messages: [],
     }
     set((s) => ({
@@ -1913,6 +1939,11 @@ export const useAppStore = create<AppState>((set, get) => ({
   artifactActions: [] as ArtifactActionUi[],
   patchArtifactServer: (server) => set({ artifactServer: server }),
   setArtifactActions: (actions) => set({ artifactActions: actions }),
+  spooledOutput: null,
+  openSpooledOutput: (s) => {
+    set({ spooledOutput: { ...s, openedAt: Date.now() } })
+    get().addView('tool-output')
+  },
 
   aiPointerOpen: false,
   setAiPointerOpen: (v) => set({ aiPointerOpen: v }),

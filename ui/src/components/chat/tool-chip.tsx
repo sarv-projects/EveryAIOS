@@ -233,13 +233,14 @@ function shortToolKind(toolId: string): string {
 /** P64.11 — spooled big-payload card. Results over ~2,000 tokens are treated
  * as spooled to content-addressed disk storage (`retrieve_original(hash)` on
  * the host): the drawer shows stats plus a short preview, and `Inspect in
- * Right Rail ↗` expands the full cleaned output in place without bloating
- * the thread. Until a dedicated right-rail Monaco/diff viewer lands, this
- * drawer is the inspection surface (see the follow-up note on the button). */
-function SpooledBlobCard({ id, text, failed }: { id: string; text: string; failed: boolean }) {
-  const [inspecting, setInspecting] = useState(false)
+ * Right Rail ↗` opens the full cleaned output in the dedicated `tool-output`
+ * right-rail view without bloating the thread. The inline expand remains as
+ * the fallback when the rail is unavailable. */
+function SpooledBlobCard({ id, toolId, text, failed }: { id: string; toolId: string; text: string; failed: boolean }) {
+  const [expanded, setExpanded] = useState(false)
   const [copied, setCopied] = useState(false)
   const notify = useAppStore((s) => s.notify)
+  const openSpooledOutput = useAppStore((s) => s.openSpooledOutput)
   const tokens = estimateTokens(text)
   const lines = text.split('\n').length
   const preview = text.split('\n').slice(0, 8).join('\n')
@@ -256,7 +257,7 @@ function SpooledBlobCard({ id, text, failed }: { id: string; text: string; faile
           spooled
         </span>
       </div>
-      {!inspecting && (
+      {!expanded && (
         <pre className="mt-1 max-h-24 overflow-hidden whitespace-pre-wrap break-words font-mono text-[10px] text-muted-foreground/80">
           {preview}
         </pre>
@@ -265,12 +266,20 @@ function SpooledBlobCard({ id, text, failed }: { id: string; text: string; faile
         <button
           type="button"
           className="inline-flex items-center gap-1 rounded border border-brand/40 bg-brand/10 px-2 py-1 text-[10px] text-brand transition-colors hover:bg-brand/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-          onClick={() => setInspecting((v) => !v)}
-          aria-expanded={inspecting}
-          aria-controls={inspectId}
-          title="Show the full spooled output here — a dedicated right-rail viewer is a follow-up"
+          onClick={() => openSpooledOutput({ toolCallId: id, toolId, text, failed })}
+          title="Open the full spooled output in the right rail"
         >
-          {inspecting ? 'Collapse output' : 'Inspect full output'}
+          Inspect in Right Rail ↗
+        </button>
+        <button
+          type="button"
+          className="inline-flex items-center gap-1 rounded border border-border px-2 py-1 text-[10px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+          onClick={() => setExpanded((v) => !v)}
+          aria-expanded={expanded}
+          aria-controls={inspectId}
+          title="Show the full spooled output inline here instead"
+        >
+          {expanded ? 'Collapse inline' : 'Expand inline'}
         </button>
         <button
           type="button"
@@ -286,7 +295,7 @@ function SpooledBlobCard({ id, text, failed }: { id: string; text: string; faile
           {copied ? 'Copied' : 'Copy full output'}
         </button>
       </div>
-      {inspecting && (
+      {expanded && (
         <pre
           id={inspectId}
           className={cn(
@@ -461,7 +470,7 @@ const ToolChip = memo(function ToolChip({ rec }: { rec: ToolCallRecord }) {
             </div>
           )}
           {spooled && (
-            <SpooledBlobCard id={rec.id} text={rawResult} failed={rec.status === 'failed'} />
+            <SpooledBlobCard id={rec.id} toolId={rec.toolId} text={rawResult} failed={rec.status === 'failed'} />
           )}
           {rec.status === 'failed' && (
             <button
