@@ -35,15 +35,14 @@ const STATUS_STYLE: Record<CapabilityStatus, { label: string; cls: string; dot: 
 export default function CapabilityMatrixPanel() {
   const runtime = useRuntimeState()
   const browserAttached = useAppStore((s) => s.browserAttached)
-  const localRuntime = useAppStore((s) => s.localRuntime)
   const providerKeysConfigured = useAppStore((s) => s.providerKeysConfigured)
   const [anyConnectorConnected, setAnyConnectorConnected] = useState(false)
   const [anyLocalModel, setAnyLocalModel] = useState(false)
   const [fault, setFault] = useState<string | null>(null)
 
-  // Live one-shot probes: attached OAuth connectors + downloaded local models
-  // (the store only tracks the picked local runtime; a downloaded-but-unpicked
-  // model is still a configured capability).
+  // Live one-shot probes: attached OAuth connectors + downloaded local models.
+  // Runtime inventory and agent handoff are separate projections; neither one
+  // makes a model selectable for an external agent.
   useEffect(() => {
     if (!inTauri()) return
     let alive = true
@@ -82,7 +81,7 @@ export default function CapabilityMatrixPanel() {
     desktopAttached: false,
     providerRoutesAvailable: providerKeysConfigured === true,
     anyConnectorConnected,
-    anyLocalModelConfigured: anyLocalModel || localRuntime !== undefined,
+    anyLocalModelConfigured: anyLocalModel,
   })
 
   return (

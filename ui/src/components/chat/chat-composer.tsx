@@ -248,8 +248,6 @@ export default function ChatComposer({ budget, centered }: Props) {
   // Amber ≥75% (start planning compaction), loud red ≥90% (loop risk).
   const selectedAgentId = useAppStore((s) => s.selectedAgentId)
   const selectedModelId = useAppStore((s) => s.selectedModelId)
-  const localRuntime = useAppStore((s) => s.localRuntime)
-  const localCtxWindow = useAppStore((s) => s.localCtxWindow)
   const ctxWindow =
     getModelsForAgent(selectedAgentId).find((m) => m.id === selectedModelId)
       ?.context ?? 128_000
@@ -657,12 +655,6 @@ export default function ChatComposer({ budget, centered }: Props) {
         <span>Esc clear</span>
         <span className="ml-auto">Tab completes · @ mention · / command · ! macro</span>
       </div>
-
-      {localRuntime && (localCtxWindow ?? ctxWindow) <= 20_000 && (
-        <div className="border-t border-warning/30 bg-warning/10 px-2 py-0.5 font-mono text-[10px] text-warning">
-          Local {localRuntime} · {(localCtxWindow ?? ctxWindow).toLocaleString()} tok context
-        </div>
-      )}
     </div>
   )
 }

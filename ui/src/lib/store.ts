@@ -1189,10 +1189,6 @@ interface AppState {
   /** P32.2 — the agent's chosen name (name-your-agent ownership moment). */
   agentName: string
   setAgentName: (name: string) => void
-  /** `ollama` | `llamafile` when the picker selected a local model. */
-  localRuntime?: string
-  localCtxWindow?: number
-  setLocalRuntime: (runtime?: string, ctx?: number) => void
   streamStats: StreamStats
   // P11.5.12 — reconnect chip state (dropped IPC stream → auto-resume).
   reconnect: { show: boolean; lastToken: string; tokens: number }
@@ -2005,8 +2001,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   setSelectedModel: (id, provider) =>
     set({ selectedModelId: id, selectedModelProvider: provider }),
   // P51.3 — variant cycle over the current agent's available models. The
-  // order is the picker's row order; auto-route is switched off so the
-  // pinned variant actually reaches the send path (see resolveProviderModel).
+  // agent's own control surface owns the choice; this compatibility action
+  // never creates a host-side provider/model pin.
   cycleModelVariant: (_dir) => {
     // P71.2d — there is no EveryAIOS-owned model list to cycle. A bound agent's
     // model is switched through that agent's own ACP config options (the picker
@@ -2022,9 +2018,6 @@ export const useAppStore = create<AppState>((set, get) => ({
   setSoulId: (id) => set({ soulId: id }),
   agentName: '',
   setAgentName: (name) => set({ agentName: name }),
-  localRuntime: undefined,
-  localCtxWindow: undefined,
-  setLocalRuntime: (runtime, ctx) => set({ localRuntime: runtime, localCtxWindow: ctx }),
   streamStats: { tokensPerSec: 0, ctxPct: 0, tokensThisTurn: 0 },
   // P11.5.12 — reconnect chip state: set when the IPC stream drops, cleared
   // when the stream resumes or the user dismisses the chip.
