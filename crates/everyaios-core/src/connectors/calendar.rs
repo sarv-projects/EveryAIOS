@@ -175,10 +175,12 @@ impl<T: HttpTransport> CalendarConnector<T> {
             body_json["location"] = serde_json::json!(loc);
         }
         if !attendees.is_empty() {
-            body_json["attendees"] = serde_json::json!(attendees
-                .iter()
-                .map(|a| serde_json::json!({"email": a}))
-                .collect::<Vec<_>>());
+            body_json["attendees"] = serde_json::json!(
+                attendees
+                    .iter()
+                    .map(|a| serde_json::json!({"email": a}))
+                    .collect::<Vec<_>>()
+            );
         }
         let body_bytes = serde_json::to_vec(&body_json).map_err(|e| TransportError {
             kind: TransportErrorKind::InvalidResponse,

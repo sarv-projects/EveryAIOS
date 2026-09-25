@@ -11,9 +11,9 @@
 
 use std::sync::{Arc, Mutex};
 
+use everyaios_mcp::ToolCatalog;
 use everyaios_mcp::attach::AttachedServer;
 use everyaios_mcp::server::{McpServer, ToolCallHandler};
-use everyaios_mcp::ToolCatalog;
 
 fn mock_server() -> &'static str {
     env!("CARGO_BIN_EXE_mock-mcp-server")

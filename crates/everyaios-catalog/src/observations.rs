@@ -43,7 +43,7 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 use crate::probe::ProbeResult;
-use crate::provider::{normalize, ProviderRegistry};
+use crate::provider::{ProviderRegistry, normalize};
 
 /// Which probe produced an observation.
 ///
@@ -369,8 +369,8 @@ impl ProviderObservationsFile {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::probe::{trusted_capabilities, Capability};
-    use crate::provider::{base_registry, DiscoverySource, ProviderRecord};
+    use crate::probe::{Capability, trusted_capabilities};
+    use crate::provider::{DiscoverySource, ProviderRecord, base_registry};
 
     fn dir(tag: &str) -> PathBuf {
         let d = std::env::temp_dir().join(format!(

@@ -16,11 +16,11 @@ use thiserror::Error;
 
 use crate::xml::{escape_text, parse};
 
-use super::address::{format_ref, CellRef, RangeRef};
+use super::address::{CellRef, RangeRef, format_ref};
 use super::dsl::{
-    pivot_result, FillMode, Operation, PivotRow, Scalar, ShiftKind, WorkbookCommandBatch,
+    FillMode, Operation, PivotRow, Scalar, ShiftKind, WorkbookCommandBatch, pivot_result,
 };
-use super::recalc::{recalc, RecalcResult};
+use super::recalc::{RecalcResult, recalc};
 
 pub const SPREADSHEET_NS: &str = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
 const REL_NS: &str = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
@@ -682,7 +682,7 @@ fn sort_range(
                     super::read::CellValue::Number(n) => return (1, n, String::new()),
                     super::read::CellValue::Text(s) => return (2, 0.0, s.to_lowercase()),
                     super::read::CellValue::Bool(b) => {
-                        return (1, if b { 1.0 } else { 0.0 }, String::new())
+                        return (1, if b { 1.0 } else { 0.0 }, String::new());
                     }
                     _ => return (3, 0.0, String::new()),
                 }

@@ -28,12 +28,12 @@ pub mod socket;
 pub use channel::{BoundedChannel, DEFAULT_CAPACITY};
 pub mod budget;
 
-pub use budget::{apply_budget, budget_for, Budgeted, MessageKind, PayloadBudget};
-pub use frame::{encode, FrameError, MAX_FRAME_LEN};
+pub use budget::{Budgeted, MessageKind, PayloadBudget, apply_budget, budget_for};
+pub use frame::{FrameError, MAX_FRAME_LEN, encode};
 pub use handle::{HandleRef, HandleStore, WirePayload};
 pub use message::{JsonRpcError, Request, Response};
 #[cfg(unix)]
-pub use socket::{request, socket_path, UnixFrameServer};
+pub use socket::{UnixFrameServer, request, socket_path};
 
 /// Protocol version for the `initialize` handshake — mirrors the ACP
 /// integer `protocolVersion` approach (only bumped on breaking changes).

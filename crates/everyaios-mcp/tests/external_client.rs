@@ -130,9 +130,11 @@ fn inspector_cli_calls_shared_plane_facade_over_stdio() {
         v["result"]["structuredContent"]["mode"],
         "standalone-test-harness"
     );
-    assert!(!v["result"]["content"]
-        .as_array()
-        .is_none_or(|c| c.is_empty()));
+    assert!(
+        !v["result"]["content"]
+            .as_array()
+            .is_none_or(|c| c.is_empty())
+    );
 }
 
 #[test]

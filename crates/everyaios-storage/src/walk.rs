@@ -13,7 +13,7 @@ use std::collections::HashMap;
 use std::fs::{self, Metadata};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{mpsc, Arc};
+use std::sync::{Arc, mpsc};
 use std::time::UNIX_EPOCH;
 
 use crossbeam_deque::{Steal, Stealer, Worker};
@@ -182,40 +182,42 @@ pub fn scan(root: &Path, opts: &ScanOptions) -> Result<Vec<FileRecord>, StorageE
             let pending = pending.clone();
             let stealers = stealers.clone();
             let opts = *opts;
-            std::thread::spawn(move || loop {
-                let dir = worker.pop().or_else(|| {
-                    let mut stolen = None;
-                    for (j, s) in stealers.iter().enumerate() {
-                        if j == i {
-                            continue;
-                        }
-                        loop {
-                            match s.steal() {
-                                Steal::Success(d) => {
-                                    stolen = Some(d);
-                                    break;
+            std::thread::spawn(move || {
+                loop {
+                    let dir = worker.pop().or_else(|| {
+                        let mut stolen = None;
+                        for (j, s) in stealers.iter().enumerate() {
+                            if j == i {
+                                continue;
+                            }
+                            loop {
+                                match s.steal() {
+                                    Steal::Success(d) => {
+                                        stolen = Some(d);
+                                        break;
+                                    }
+                                    Steal::Empty => break,
+                                    Steal::Retry => continue,
                                 }
-                                Steal::Empty => break,
-                                Steal::Retry => continue,
+                            }
+                            if stolen.is_some() {
+                                break;
                             }
                         }
-                        if stolen.is_some() {
-                            break;
-                        }
-                    }
-                    stolen
-                });
+                        stolen
+                    });
 
-                match dir {
-                    Some(d) => {
-                        pending.fetch_sub(1, Ordering::SeqCst);
-                        walk_dir(&d, &opts, root_dev, &sender, &worker, &pending);
-                    }
-                    None => {
-                        if pending.load(Ordering::SeqCst) == 0 {
-                            break;
+                    match dir {
+                        Some(d) => {
+                            pending.fetch_sub(1, Ordering::SeqCst);
+                            walk_dir(&d, &opts, root_dev, &sender, &worker, &pending);
                         }
-                        std::thread::yield_now();
+                        None => {
+                            if pending.load(Ordering::SeqCst) == 0 {
+                                break;
+                            }
+                            std::thread::yield_now();
+                        }
                     }
                 }
             })

@@ -114,14 +114,18 @@ mod tests {
 
     #[test]
     fn partial_and_unverifiable_are_not_complete() {
-        assert!(!CompletionStatus::PartiallyComplete {
-            missing: vec!["report.xlsx".into()]
-        }
-        .is_complete());
-        assert!(!CompletionStatus::Unverifiable {
-            reason: "no evidence".into()
-        }
-        .is_complete());
+        assert!(
+            !CompletionStatus::PartiallyComplete {
+                missing: vec!["report.xlsx".into()]
+            }
+            .is_complete()
+        );
+        assert!(
+            !CompletionStatus::Unverifiable {
+                reason: "no evidence".into()
+            }
+            .is_complete()
+        );
     }
 
     #[test]

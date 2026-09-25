@@ -127,6 +127,50 @@ pub struct SwarmVerdict {
     pub digest: Vec<String>,
 }
 
+/// Who may start now, and who waits for a free slot. This is a plan over
+/// child Work, not a swarm runtime: nothing here spawns a process.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ParallelFanOut {
+    pub start_now: Vec<String>,
+    pub deferred: Vec<String>,
+    pub refused: Vec<(String, String)>,
+}
+
+/// P53.9 — admit installed subagents in parallel up to the existing
+/// concurrency cap. Overflow is deferred, not a second executor. An agent
+/// that is not ready is refused by name and does not take a slot.
+pub fn plan_parallel_fan_out(
+    members: &[(String, everyaios_types::AgentReadiness)],
+    policy: &crate::subagent::DelegationPolicy,
+    mut gauge: crate::subagent::DelegationGauge,
+) -> Result<ParallelFanOut, crate::subagent::SubAgentError> {
+    let mut plan = ParallelFanOut {
+        start_now: Vec::new(),
+        deferred: Vec::new(),
+        refused: Vec::new(),
+    };
+    for (agent_id, readiness) in members {
+        if !readiness.can_delegate() {
+            plan.refused
+                .push((agent_id.clone(), readiness.summary().to_string()));
+            continue;
+        }
+        match policy.admit(agent_id, gauge, agent_id, *readiness) {
+            Ok(()) => {
+                plan.start_now.push(agent_id.clone());
+                gauge.active = gauge.active.saturating_add(1);
+                gauge.total = gauge.total.saturating_add(1);
+            }
+            Err(crate::subagent::SubAgentError::ConcurrentLimitExceeded { .. })
+            | Err(crate::subagent::SubAgentError::TotalLimitExceeded { .. }) => {
+                plan.deferred.push(agent_id.clone());
+            }
+            Err(other) => return Err(other),
+        }
+    }
+    Ok(plan)
+}
+
 /// Pure reduction: classify `(spec, results)` into a [`SwarmVerdict`].
 ///
 /// Total — never fails. Duplicate entries for one member keep the **first**
@@ -179,9 +223,9 @@ pub fn reduce(spec: &SwarmSpec, results: &[MemberResult]) -> SwarmVerdict {
             counts
                 .into_iter()
                 .max_by(|a, b| {
-                    a.1 .0.cmp(&b.1 .0).then_with(|| {
-                        a.1 .1
-                            .partial_cmp(&b.1 .1)
+                    a.1.0.cmp(&b.1.0).then_with(|| {
+                        a.1.1
+                            .partial_cmp(&b.1.1)
                             .unwrap_or(std::cmp::Ordering::Equal)
                     })
                 })
@@ -253,21 +297,56 @@ mod tests {
     }
 
     #[test]
+    fn parallel_fan_out_stops_at_the_concurrency_cap() {
+        use crate::subagent::{DelegationGauge, DelegationPolicy, SubAgentLimits};
+        let policy = DelegationPolicy::new(SubAgentLimits {
+            max_depth: 2,
+            max_concurrent: 2,
+            max_total: 10,
+        });
+        let members = vec![
+            ("a".into(), everyaios_types::AgentReadiness::Ready),
+            ("b".into(), everyaios_types::AgentReadiness::Ready),
+            ("c".into(), everyaios_types::AgentReadiness::Ready),
+            ("d".into(), everyaios_types::AgentReadiness::Installed),
+        ];
+        let plan = plan_parallel_fan_out(
+            &members,
+            &policy,
+            DelegationGauge {
+                child_depth: 1,
+                ..DelegationGauge::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(plan.start_now, vec!["a".to_string(), "b".to_string()]);
+        assert_eq!(plan.deferred, vec!["c".to_string()]);
+        assert_eq!(plan.refused.len(), 1);
+        assert_eq!(plan.refused[0].0, "d");
+    }
+
+    #[test]
     fn spec_validation() {
-        assert!(SwarmSpec::new("x", "", vec![], SwarmMode::Race)
-            .validate()
-            .is_err());
-        assert!(SwarmSpec::new("x", "p", vec![], SwarmMode::Race)
-            .validate()
-            .is_err());
+        assert!(
+            SwarmSpec::new("x", "", vec![], SwarmMode::Race)
+                .validate()
+                .is_err()
+        );
+        assert!(
+            SwarmSpec::new("x", "p", vec![], SwarmMode::Race)
+                .validate()
+                .is_err()
+        );
         assert!(
             SwarmSpec::new("x", "p", vec!["a".into(), "a".into()], SwarmMode::Race)
                 .validate()
                 .is_err()
         );
-        assert!(SwarmSpec::new("x", "p", vec!["a".into()], SwarmMode::Race)
-            .validate()
-            .is_ok());
+        assert!(
+            SwarmSpec::new("x", "p", vec!["a".into()], SwarmMode::Race)
+                .validate()
+                .is_ok()
+        );
     }
 
     #[test]

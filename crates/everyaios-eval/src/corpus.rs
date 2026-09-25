@@ -186,9 +186,11 @@ mod tests {
         assert_eq!(qs.len(), 3);
         let multi = &qs[0];
         assert_eq!(multi.required_evidence.len(), 2);
-        assert!(multi
-            .forbidden_evidence
-            .contains(&"travel_policy_draft_old.pdf".to_string()));
+        assert!(
+            multi
+                .forbidden_evidence
+                .contains(&"travel_policy_draft_old.pdf".to_string())
+        );
         // The first question authorizes only the two required docs.
         assert_eq!(multi.authorization.len(), 2);
     }
@@ -216,18 +218,21 @@ mod tests {
             .iter()
             .find(|f| f.task_id == files_task.manifest.task_id)
             .unwrap();
-        assert!(fx
-            .files
-            .iter()
-            .any(|f| f.path.starts_with("/workspace/raw/")));
+        assert!(
+            fx.files
+                .iter()
+                .any(|f| f.path.starts_with("/workspace/raw/"))
+        );
         // Email tasks seed nothing to modify, but still produce a fixture.
         let email_task = suite
             .iter()
             .find(|t| t.category == TaskCategory::EmailDraft)
             .unwrap();
-        assert!(fixtures
-            .iter()
-            .any(|f| f.task_id == email_task.manifest.task_id));
+        assert!(
+            fixtures
+                .iter()
+                .any(|f| f.task_id == email_task.manifest.task_id)
+        );
     }
 
     #[test]

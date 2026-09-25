@@ -500,9 +500,10 @@ mod tests {
         g.add_edge("ep1", "memory", EdgeType::Contradicts, 1.0, 0);
         assert_eq!(g.node_count(), 3);
         assert_eq!(g.edge_count(), 3);
-        assert!(g
-            .edge_between("rust", "memory", EdgeType::DerivedFrom, 0)
-            .is_some());
+        assert!(
+            g.edge_between("rust", "memory", EdgeType::DerivedFrom, 0)
+                .is_some()
+        );
     }
 
     #[test]
@@ -594,7 +595,7 @@ mod tests {
         g.add_node_at("a", NodeKind::Entity, "A", 0, 0);
         g.add_node_at("b", NodeKind::Entity, "B", 5, 3); // recorded at 3
         g.add_node_at("c", NodeKind::Entity, "C", 0, 10); // recorded at 10
-                                                          // At (valid=5, recorded=5): a and b, but not c (recorded later).
+        // At (valid=5, recorded=5): a and b, but not c (recorded later).
         let snapshot = g.nodes_active_at(5, 5);
         let ids: Vec<&str> = snapshot.iter().map(|n| n.id.as_str()).collect();
         assert!(ids.contains(&"a"));
@@ -614,14 +615,16 @@ mod tests {
         // relationship is only observable after it is recorded).
         let ei = g.add_edge("a", "b", EdgeType::Supports, 1.0, 0);
         g.edges[ei].recorded_at = 7;
-        assert!(g
-            .edge_between("a", "b", EdgeType::Supports, 0)
-            .unwrap()
-            .is_active_at(0, 7));
-        assert!(!g
-            .edge_between("a", "b", EdgeType::Supports, 0)
-            .unwrap()
-            .is_active_at(0, 6));
+        assert!(
+            g.edge_between("a", "b", EdgeType::Supports, 0)
+                .unwrap()
+                .is_active_at(0, 7)
+        );
+        assert!(
+            !g.edge_between("a", "b", EdgeType::Supports, 0)
+                .unwrap()
+                .is_active_at(0, 6)
+        );
     }
 
     #[test]

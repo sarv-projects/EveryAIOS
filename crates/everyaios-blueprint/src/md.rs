@@ -30,7 +30,7 @@
 
 use crate::blueprint::{Blueprint, BlueprintTask, TaskStatus, VerifyBlock};
 use crate::frontmatter::{
-    parse_frontmatter, AgentConfig, FrontmatterError, Isolation, PermissionMode,
+    AgentConfig, FrontmatterError, Isolation, PermissionMode, parse_frontmatter,
 };
 use crate::spec::TaskSpec;
 use crate::verify::{HashAlgorithm, OutcomeCheck};

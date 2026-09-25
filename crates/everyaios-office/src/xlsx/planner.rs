@@ -27,8 +27,7 @@ impl std::fmt::Display for PlannerError {
     }
 }
 
-const SUGGESTED: &str =
-    "Try 'set A1 to 42', 'formula B1 = SUM(A1:A10)', 'rename sheet to Budget', \
+const SUGGESTED: &str = "Try 'set A1 to 42', 'formula B1 = SUM(A1:A10)', 'rename sheet to Budget', \
      'sort Sheet1 by column B descending', 'fill B2:B10 with 5', or 'clear A1:C20'.";
 
 /// Compile a user prompt into a command batch. `base_revision` is the
@@ -133,7 +132,7 @@ fn compile_set(address: &str, value: &str, rev: u64) -> PlannerOutcome {
             return PlannerOutcome::NeedsLlm {
                 reason: format!("bad cell address {address:?}: {e}"),
                 suggested: SUGGESTED.to_string(),
-            }
+            };
         }
     };
     let mut batch = WorkbookCommandBatch::new(rev, format!("set {address} to {value}"));
@@ -151,7 +150,7 @@ fn compile_formula(address: &str, formula: &str, rev: u64) -> PlannerOutcome {
             return PlannerOutcome::NeedsLlm {
                 reason: format!("bad cell address {address:?}: {e}"),
                 suggested: SUGGESTED.to_string(),
-            }
+            };
         }
     };
     let formula = formula.trim();
@@ -184,7 +183,7 @@ fn compile_sort(target: &str, by_col: &str, dir: &str, rev: u64) -> PlannerOutco
             return PlannerOutcome::NeedsLlm {
                 reason: format!("bad sort range {target:?}: {e}"),
                 suggested: SUGGESTED.to_string(),
-            }
+            };
         }
     };
     // by_col may be a column letter (B) or a 1-based index (2)
@@ -196,7 +195,7 @@ fn compile_sort(target: &str, by_col: &str, dir: &str, rev: u64) -> PlannerOutco
                 return PlannerOutcome::NeedsLlm {
                     reason: format!("bad sort column {by_col:?}"),
                     suggested: SUGGESTED.to_string(),
-                }
+                };
             }
         },
     };
@@ -218,7 +217,7 @@ fn compile_fill(range: &str, value: &str, down: &str, rev: u64) -> PlannerOutcom
             return PlannerOutcome::NeedsLlm {
                 reason: format!("bad fill range {range:?}: {e}"),
                 suggested: SUGGESTED.to_string(),
-            }
+            };
         }
     };
     let (mode, scalar) = if !down.is_empty() {
@@ -242,7 +241,7 @@ fn compile_clear(range: &str, rev: u64) -> PlannerOutcome {
             return PlannerOutcome::NeedsLlm {
                 reason: format!("bad clear range {range:?}: {e}"),
                 suggested: SUGGESTED.to_string(),
-            }
+            };
         }
     };
     let mut batch = WorkbookCommandBatch::new(rev, format!("clear {range}"));
@@ -294,7 +293,7 @@ fn compile_pivot(
             return PlannerOutcome::NeedsLlm {
                 reason: format!("bad pivot range {range:?}: {e}"),
                 suggested: SUGGESTED.to_string(),
-            }
+            };
         }
     };
     let (Ok(group_by), Ok(aggregate)) = (
@@ -314,7 +313,7 @@ fn compile_pivot(
             return PlannerOutcome::NeedsLlm {
                 reason: format!("unknown pivot aggregate {agg:?}"),
                 suggested: SUGGESTED.to_string(),
-            }
+            };
         }
     };
     let mut batch = WorkbookCommandBatch::new(

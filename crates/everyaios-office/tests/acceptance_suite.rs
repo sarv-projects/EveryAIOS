@@ -28,8 +28,8 @@ use everyaios_office::xlsx::read::CellValue;
 use everyaios_office::xlsx::recalc::recalc;
 use everyaios_office::zip::OoxmlArchive;
 use everyaios_office::{
-    extract_pages, inspect, page_count, replace_text, rotate_pages, DocxEngine, PptxEngine,
-    Snapshot,
+    DocxEngine, PptxEngine, Snapshot, extract_pages, inspect, page_count, replace_text,
+    rotate_pages,
 };
 
 fn cell(row: u32, col: u32) -> CellRef {
@@ -404,10 +404,12 @@ fn pptx_patches_text_and_adds_and_removes_slides() {
         .remove_slide("ppt/slides/slide1.xml")
         .expect("remove slide");
     assert_eq!(engine.slides().len(), 2);
-    assert!(!engine
-        .slides()
-        .iter()
-        .any(|s| s.part == "ppt/slides/slide1.xml"));
+    assert!(
+        !engine
+            .slides()
+            .iter()
+            .any(|s| s.part == "ppt/slides/slide1.xml")
+    );
 
     // Save + reopen: the patched text survived and the removed part is gone.
     let saved = engine.save().expect("save pptx");

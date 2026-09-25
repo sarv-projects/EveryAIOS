@@ -505,21 +505,27 @@ mod tests {
             policy.admit("t", gauge(9, 9, 9), "coder", AgentReadiness::Installed),
             Err(SubAgentError::NotReady { .. })
         ));
-        assert!(policy
-            .admit("t", gauge(1, 0, 0), "coder", AgentReadiness::Ready)
-            .is_ok());
+        assert!(
+            policy
+                .admit("t", gauge(1, 0, 0), "coder", AgentReadiness::Ready)
+                .is_ok()
+        );
     }
 
     #[test]
     fn admission_judges_the_depth_the_graph_reports() {
         let policy = DelegationPolicy::new(SubAgentLimits::default());
         // A root Work's child is depth 1; its grandchild is depth 2 (== max).
-        assert!(policy
-            .admit("child", gauge(1, 0, 0), "member", readiness())
-            .is_ok());
-        assert!(policy
-            .admit("grandchild", gauge(2, 1, 1), "member", readiness())
-            .is_ok());
+        assert!(
+            policy
+                .admit("child", gauge(1, 0, 0), "member", readiness())
+                .is_ok()
+        );
+        assert!(
+            policy
+                .admit("grandchild", gauge(2, 1, 1), "member", readiness())
+                .is_ok()
+        );
         // Depth 3 would be recursion — refused with the numbers it judged.
         assert!(matches!(
             policy.admit("great-grandchild", gauge(3, 0, 0), "member", readiness()),
@@ -565,9 +571,11 @@ mod tests {
             max_concurrent: 4,
             max_total: 10,
         });
-        assert!(policy
-            .admit("child", gauge(1, 0, 0), "member", readiness())
-            .is_ok());
+        assert!(
+            policy
+                .admit("child", gauge(1, 0, 0), "member", readiness())
+                .is_ok()
+        );
         assert!(matches!(
             policy.admit("grandchild", gauge(2, 1, 1), "member", readiness()),
             Err(SubAgentError::DepthExceeded {
@@ -629,9 +637,11 @@ mod tests {
             Err(SubAgentError::TotalLimitExceeded { .. })
         ));
         // Nothing exceeded → admitted.
-        assert!(policy
-            .admit("t", gauge(1, 0, 0), "member", readiness())
-            .is_ok());
+        assert!(
+            policy
+                .admit("t", gauge(1, 0, 0), "member", readiness())
+                .is_ok()
+        );
     }
 
     #[test]
@@ -716,12 +726,16 @@ mod tests {
         let planner = spec("planner", "claude-sonnet");
         let coder = spec("coder", "gpt-5-codex").with_parent("planner");
         // The planner is a root Work's child (depth 1); the coder is depth 2.
-        assert!(policy
-            .admit(&planner.spec.id, gauge(1, 0, 0), "planner", readiness())
-            .is_ok());
-        assert!(policy
-            .admit(&coder.spec.id, gauge(2, 1, 1), "coder", readiness())
-            .is_ok());
+        assert!(
+            policy
+                .admit(&planner.spec.id, gauge(1, 0, 0), "planner", readiness())
+                .is_ok()
+        );
+        assert!(
+            policy
+                .admit(&coder.spec.id, gauge(2, 1, 1), "coder", readiness())
+                .is_ok()
+        );
 
         // Per-agent models are a property of the spec, not of any runtime.
         assert_eq!(planner.model, "claude-sonnet");

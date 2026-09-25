@@ -22,7 +22,7 @@
 use std::io::{BufRead, BufReader};
 use std::time::Duration;
 
-use crate::broker::{parse_sse, BrokerError, ChatStreamEvent};
+use crate::broker::{BrokerError, ChatStreamEvent, parse_sse};
 use crate::ledger::Usage;
 
 /// The two supported local runtimes (A5, doc 34 §2 / doc 33 §7.4).

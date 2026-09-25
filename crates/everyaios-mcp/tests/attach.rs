@@ -1,8 +1,8 @@
 //! P6.6 — MCP server attach loopback tests (spawn the mock server binary and
 //! reconcile its tools with native precedence).
 
-use everyaios_mcp::attach::AttachedServer;
 use everyaios_mcp::ToolCatalog;
+use everyaios_mcp::attach::AttachedServer;
 
 fn mock_server() -> &'static str {
     env!("CARGO_BIN_EXE_mock-mcp-server")

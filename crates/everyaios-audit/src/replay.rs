@@ -12,7 +12,7 @@
 //! (per-tab → per-document segments with event counts + timestamps).
 //! Retention: 7 days default, configurable; wipe = delete files.
 
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 use std::fs::{self, OpenOptions};
 use std::io::{self, Write};
@@ -941,11 +941,13 @@ mod tests {
         assert_eq!(tail.len(), 2);
         assert_eq!(tail[0].seq, 2);
         assert_eq!(tail[1].seq, 3);
-        assert!(ingest
-            .store()
-            .events_since("docTail1", 99)
-            .unwrap()
-            .is_empty());
+        assert!(
+            ingest
+                .store()
+                .events_since("docTail1", 99)
+                .unwrap()
+                .is_empty()
+        );
         let _ = fs::remove_dir_all(&dir);
     }
 

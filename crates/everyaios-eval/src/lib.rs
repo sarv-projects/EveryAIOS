@@ -48,35 +48,35 @@ pub mod usage;
 // (`crate::manifest::…`) and external callers keep resolving unchanged.
 pub use everyaios_blueprint::verify::{manifest, status, surface, verifier};
 
-pub use batch::{run_retrieval_batch, run_suite, RetrievalBatchReport, SuiteReport};
+pub use batch::{RetrievalBatchReport, SuiteReport, run_retrieval_batch, run_suite};
 pub use corpus::{
-    builtin_fixtures, builtin_retrieval_cases, builtin_retrieval_corpus,
-    builtin_retrieval_questions, RetrievalCase,
+    RetrievalCase, builtin_fixtures, builtin_retrieval_cases, builtin_retrieval_corpus,
+    builtin_retrieval_questions,
 };
 pub use everyaios_blueprint::verify::manifest::{
     Budgets, Constraint, EvidenceRequirement, HashAlgorithm, OutcomeCheck, TaskManifest,
 };
 pub use everyaios_blueprint::verify::status::{CompletionStatus, Score};
 pub use everyaios_blueprint::verify::surface::{
-    verify_surface, Surface, SurfaceCheck, SurfaceContext, SurfaceVerdict,
+    Surface, SurfaceCheck, SurfaceContext, SurfaceVerdict, verify_surface,
 };
 pub use everyaios_blueprint::verify::verifier::{
-    run_outcome_check, verify, verify_with_policy, OutcomeCheckResult, VerificationReport,
-    VerificationScore,
+    OutcomeCheckResult, VerificationReport, VerificationScore, run_outcome_check, verify,
+    verify_with_policy,
 };
 pub use evidence::{ApprovalEvent, ArtifactHash, EvidenceBundle};
 pub use report::{Finding, LoopReport};
 pub use retrieval::{
-    score_retrieval, EvidenceSpan, ExpectedAnswer, RetrievalDocument, RetrievalQuestion,
-    RetrievalResult, RetrievalScores,
+    EvidenceSpan, ExpectedAnswer, RetrievalDocument, RetrievalQuestion, RetrievalResult,
+    RetrievalScores, score_retrieval,
 };
-pub use runner::{apply_filesystem_fault, Agent, Fixture, FixtureFile, RunOutcome, SandboxRunner};
+pub use runner::{Agent, Fixture, FixtureFile, RunOutcome, SandboxRunner, apply_filesystem_fault};
 pub use simulator::{
-    compile as compile_demo, CompiledDemo, CompiledStep, SimulationFixture, SimulationReport,
-    Simulator, StepVerdict,
+    CompiledDemo, CompiledStep, SimulationFixture, SimulationReport, Simulator, StepVerdict,
+    compile as compile_demo,
 };
 pub use store::EvidenceStore;
-pub use suite::{builtin_suite, AdversarialTask, FaultInjection, FaultKind, TaskCategory};
+pub use suite::{AdversarialTask, FaultInjection, FaultKind, TaskCategory, builtin_suite};
 pub use usage::{
     EfficiencyMetrics, GenericUsageParser, TurnClass, TurnKind, TurnStat, Usage, UsageParser,
     UsageParserRegistry,

@@ -4,7 +4,7 @@
 //! generate a clean new document (Courier/Type1, no embedded fonts).
 
 use lopdf::content::{Content, Operation};
-use lopdf::{dictionary, Document, Object, Stream};
+use lopdf::{Document, Object, Stream, dictionary};
 
 use super::PdfError;
 

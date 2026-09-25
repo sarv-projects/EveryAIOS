@@ -19,7 +19,7 @@
 use crate::capture::CdpSession;
 use everyaios_cdp::CdpError;
 use everyaios_vault::{CaptureInput, Cookie, SessionError, SessionVault, TrustLevel};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 /// Errors crossing both the CDP and vault halves of the bridge.
 #[derive(Debug, thiserror::Error)]

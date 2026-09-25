@@ -44,43 +44,43 @@ pub mod webmcp_http;
 mod live_tests;
 
 pub use actions::{
-    find_ref, ActKind, ActResult, AnnotatedScreenshot, BrowserActions, EnhancedSnapshot,
-    FieldValue, NavigateAction, Point, ReadMode, ScreenshotLabel, ScrollDirection, TextResult,
-    WaitFor, WaitOutcome,
+    ActKind, ActResult, AnnotatedScreenshot, BrowserActions, EnhancedSnapshot, FieldValue,
+    NavigateAction, Point, ReadMode, ScreenshotLabel, ScrollDirection, TextResult, WaitFor,
+    WaitOutcome, find_ref,
 };
 pub use ax::{AxNode, INTERACTIVE_ROLES};
-pub use capture::{CdpSession, SnapshotEngine, MAX_FRAME_DEPTH};
-pub use content::{clean_markdown, CleanedText, FilterSet, RuleKind};
+pub use capture::{CdpSession, MAX_FRAME_DEPTH, SnapshotEngine};
+pub use content::{CleanedText, FilterSet, RuleKind, clean_markdown};
 pub use demo::{
-    anchor_from_node, outcome_holds, DemoAnchor, DemoInput, DemoRecording, DemoStep,
-    OutcomeEvidence,
+    DemoAnchor, DemoInput, DemoRecording, DemoStep, OutcomeEvidence, anchor_from_node,
+    outcome_holds,
 };
 pub use diff::{diff_snapshots, snapshot_lines};
 pub use electron::ElectronHandle;
 pub use locator::{
-    a11y_audit, find_first, find_semantic, first_actionable_ref, parse_batch, A11yIssue,
-    A11ySeverity, BatchParseError, Located, RefRegistry, SemanticQuery,
+    A11yIssue, A11ySeverity, BatchParseError, Located, RefRegistry, SemanticQuery, a11y_audit,
+    find_first, find_semantic, first_actionable_ref, parse_batch,
 };
 pub use ownership::{OwnershipError, TabClaim, TabOwner, TabRecord, TabRegistry};
-pub use protocol::{parse_action, ActionParseError, ActionProtocol, ParsedAction};
-pub use read::{read_http, ReadOptions, ReadSource};
+pub use protocol::{ActionParseError, ActionProtocol, ParsedAction, parse_action};
+pub use read::{ReadOptions, ReadSource, read_http};
 pub use resources::{Domain, ResourceDropPolicy};
 pub use selector::{CssOrXPath, SelectorResolver, SemanticTarget};
 pub use session::{
-    cookie_from_cdp, cookie_to_cdp, get_cookies, group_cookies_by_site,
-    inherit_cookies_from_chrome, inject_session, seal_session, set_cookies, SessionBridgeError,
+    SessionBridgeError, cookie_from_cdp, cookie_to_cdp, get_cookies, group_cookies_by_site,
+    inherit_cookies_from_chrome, inject_session, seal_session, set_cookies,
 };
 pub use tiers::{
     EngineConfig, EngineError, EngineResult, EngineTier, FetchIntent, LightEngine, TieredEngine,
 };
-pub use tree::{build_tree, RefMinter, TreeOptions};
+pub use tree::{RefMinter, TreeOptions, build_tree};
 pub use webmcp::{
     InvocationState, InvocationTracker, WebMcpError, WebMcpExecutor, WebMcpRegistry, WebMcpResult,
     WebMcpTool,
 };
 pub use webmcp_http::{
-    bearer_token, fresh_token, handle_mcp_request, parse_http_request, HttpParseError,
-    McpHttpServer, MAX_BODY_BYTES, MCP_PATH,
+    HttpParseError, MAX_BODY_BYTES, MCP_PATH, McpHttpServer, bearer_token, fresh_token,
+    handle_mcp_request, parse_http_request,
 };
 
 use serde::{Deserialize, Serialize};

@@ -8,7 +8,7 @@
 //! a tiny threaded server wraps it for real connections.
 
 use crate::webmcp::{WebMcpExecutor, WebMcpRegistry};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::Arc;
@@ -145,7 +145,7 @@ pub fn handle_mcp_request(
                     return http_response(
                         "400 Bad Request",
                         &jsonrpc_error(-32700, "parse error").to_string(),
-                    )
+                    );
                 }
             };
             let method_name = req.get("method").and_then(Value::as_str).unwrap_or("");
@@ -396,10 +396,12 @@ mod tests {
         let v: Value = serde_json::from_str(resp.split("\r\n\r\n").nth(1).unwrap()).unwrap();
         assert_eq!(calls.load(Ordering::SeqCst), 1);
         assert_eq!(v["result"]["isError"], false);
-        assert!(v["result"]["content"][0]["text"]
-            .as_str()
-            .unwrap()
-            .contains("\"tool\":\"search\""));
+        assert!(
+            v["result"]["content"][0]["text"]
+                .as_str()
+                .unwrap()
+                .contains("\"tool\":\"search\"")
+        );
     }
 
     #[test]

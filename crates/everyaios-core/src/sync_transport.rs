@@ -33,8 +33,8 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::sync::{
-    open_set, reconcile, seal_set, KeyExchange, SharedSession, SyncEnvelope, SyncError, SyncHello,
-    SyncSession, SyncSet,
+    KeyExchange, SharedSession, SyncEnvelope, SyncError, SyncHello, SyncSession, SyncSet, open_set,
+    reconcile, seal_set,
 };
 
 /// Hard cap for one wire frame (16 MiB of JSON envelope).
@@ -246,45 +246,47 @@ impl SyncServer {
 
         let stop_c = Arc::clone(&stop);
         let outcomes_c = Arc::clone(&outcomes);
-        let thread = std::thread::spawn(move || loop {
-            if stop_c.load(Ordering::Relaxed) {
-                break;
-            }
-            match listener.accept() {
-                Ok((mut stream, _peer)) => {
-                    let session = Arc::clone(&session);
-                    let outcomes_conn = Arc::clone(&outcomes_c);
-                    let on_synced_conn = on_synced.clone();
-                    let gate = password.clone();
-                    std::thread::spawn(move || {
-                        let _ = stream.set_read_timeout(Some(Duration::from_secs(30)));
-                        let _ = stream.set_write_timeout(Some(Duration::from_secs(30)));
-                        // P51.31 — the auth gate runs BEFORE the handshake;
-                        // a failed gate never locks or mutates the session.
-                        if let Some(pw) = gate {
-                            if read_auth_frame(&mut stream, &pw).is_err() {
-                                return; // drop silently — no session contact
-                            }
-                        }
-                        let mut guard = session.lock().unwrap_or_else(|e| e.into_inner());
-                        match run_exchange(stream, &mut guard) {
-                            Ok(outcome) => {
-                                outcomes_conn
-                                    .lock()
-                                    .unwrap_or_else(|e| e.into_inner())
-                                    .push(outcome);
-                                if let Some(cb) = on_synced_conn {
-                                    cb(&guard);
+        let thread = std::thread::spawn(move || {
+            loop {
+                if stop_c.load(Ordering::Relaxed) {
+                    break;
+                }
+                match listener.accept() {
+                    Ok((mut stream, _peer)) => {
+                        let session = Arc::clone(&session);
+                        let outcomes_conn = Arc::clone(&outcomes_c);
+                        let on_synced_conn = on_synced.clone();
+                        let gate = password.clone();
+                        std::thread::spawn(move || {
+                            let _ = stream.set_read_timeout(Some(Duration::from_secs(30)));
+                            let _ = stream.set_write_timeout(Some(Duration::from_secs(30)));
+                            // P51.31 — the auth gate runs BEFORE the handshake;
+                            // a failed gate never locks or mutates the session.
+                            if let Some(pw) = gate {
+                                if read_auth_frame(&mut stream, &pw).is_err() {
+                                    return; // drop silently — no session contact
                                 }
                             }
-                            Err(_) => { /* failed/handshake refused — drop conn */ }
-                        }
-                    });
+                            let mut guard = session.lock().unwrap_or_else(|e| e.into_inner());
+                            match run_exchange(stream, &mut guard) {
+                                Ok(outcome) => {
+                                    outcomes_conn
+                                        .lock()
+                                        .unwrap_or_else(|e| e.into_inner())
+                                        .push(outcome);
+                                    if let Some(cb) = on_synced_conn {
+                                        cb(&guard);
+                                    }
+                                }
+                                Err(_) => { /* failed/handshake refused — drop conn */ }
+                            }
+                        });
+                    }
+                    Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                        std::thread::sleep(Duration::from_millis(100));
+                    }
+                    Err(_) => break,
                 }
-                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                    std::thread::sleep(Duration::from_millis(100));
-                }
-                Err(_) => break,
             }
         });
 

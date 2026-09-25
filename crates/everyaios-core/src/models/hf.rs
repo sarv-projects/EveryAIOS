@@ -14,7 +14,7 @@ use std::sync::atomic::AtomicBool;
 
 use serde::Deserialize;
 
-use super::store::{entry_path, ModelEntry};
+use super::store::{ModelEntry, entry_path};
 
 /// One file in a repo's `tree/main`.
 #[derive(Debug, Clone, Deserialize)]

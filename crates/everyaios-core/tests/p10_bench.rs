@@ -152,7 +152,7 @@ fn bench_ipc_roundtrip_latency() {
 #[test]
 fn bench_browser_snapshot_tree_build() {
     use everyaios_browser::ax::AxNode;
-    use everyaios_browser::tree::{build_tree, RefMinter, TreeOptions};
+    use everyaios_browser::tree::{RefMinter, TreeOptions, build_tree};
     // A large page: 5,000 nodes in a shallow tree.
     let mut nodes = Vec::with_capacity(5_000);
     nodes.push(AxNode {

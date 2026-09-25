@@ -29,34 +29,34 @@ pub mod session;
 pub mod warp;
 
 pub use edit::{
-    parse_verify, replace_body, safe_delete, DeleteVerdict, EditRegion, LspCapabilities,
-    LspServerCatalog, LspServerEntry,
+    DeleteVerdict, EditRegion, LspCapabilities, LspServerCatalog, LspServerEntry, parse_verify,
+    replace_body, safe_delete,
 };
 pub use graph::{GraphEdge, GraphSymbol, SymbolGraph, SymbolQueryResult};
 pub use graphify::{KnowledgeEdge, KnowledgeGraph, KnowledgeKind, KnowledgeNode};
 pub use lsp::{
-    decode_messages, encode_message, CodeAction, Diagnostic, FramingError, Hover, HoverContents,
-    InlayHint, Location, LspRequest, LspResponse, Position, Range, TextEdit, WorkspaceEdit,
+    CodeAction, Diagnostic, FramingError, Hover, HoverContents, InlayHint, Location, LspRequest,
+    LspResponse, Position, Range, TextEdit, WorkspaceEdit, decode_messages, encode_message,
 };
 pub use lsp_config::{DiagnosticBatch, DiagnosticsService, LspConfig, LspServerConfig};
 pub use lsp_runner::{LspRunner, LspRunnerError};
-pub use repo_cache::{map_hash, CachedRow, RepoMapCache};
+pub use repo_cache::{CachedRow, RepoMapCache, map_hash};
 pub use repomap::{
+    CompositeTagSource, LexicalTagSource, RankedTag, RepoMap, Tag, TagKind, TagSource,
     build_repo_map, build_repo_map_with, extract_tags, extract_tags_with, fit_budget, page_rank,
-    rank_tags, ranked_tags, read_source_files, CompositeTagSource, LexicalTagSource, RankedTag,
-    RepoMap, Tag, TagKind, TagSource,
+    rank_tags, ranked_tags, read_source_files,
 };
 pub use scip::{
-    parse_document, to_semantic_index, ScipDocument, ScipError, ScipOccurrence, ScipSymbol,
+    ScipDocument, ScipError, ScipOccurrence, ScipSymbol, parse_document, to_semantic_index,
 };
 pub use scip_watch::{
-    build_index, find_scip_files, scan_dir, symbol_heat, ScipScanReport, ScipWatchState,
+    ScipScanReport, ScipWatchState, build_index, find_scip_files, scan_dir, symbol_heat,
 };
 pub use semantic::{
     OccurrenceRole, RelationKind, Relationship, SemanticIndex, Symbol, SymbolKind, SymbolOccurrence,
 };
 pub use session::{LspSession, LspSessionError, LspTransport, ProcessTransport};
 pub use warp::{
-    chunk_text, chunks_for, embed_sync, sync_changed, ChangedChunk, Chunk, ChunkMode, Embedder,
-    FileState, WarpIndex,
+    ChangedChunk, Chunk, ChunkMode, Embedder, FileState, WarpIndex, chunk_text, chunks_for,
+    embed_sync, sync_changed,
 };

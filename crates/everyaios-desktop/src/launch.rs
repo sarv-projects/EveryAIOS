@@ -16,8 +16,8 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use crate::types::ActKind;
 use crate::DesktopError;
+use crate::types::ActKind;
 
 /// P57.1 — reject a launch we cannot attribute to one exact program, **before**
 /// any policy or platform work. A relative path is refused outright: it would

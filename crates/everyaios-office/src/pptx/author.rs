@@ -12,8 +12,8 @@ use std::io::{Cursor, Write};
 use zip::write::SimpleFileOptions;
 use zip::{CompressionMethod, ZipWriter};
 
-use super::notes::{build_speaker_notes, SpeakerNotesEntry};
-use super::transition::{set_transition, Transition};
+use super::notes::{SpeakerNotesEntry, build_speaker_notes};
+use super::transition::{Transition, set_transition};
 
 /// PresentationML namespace.
 const P: &str = "http://schemas.openxmlformats.org/presentationml/2006/main";
@@ -269,7 +269,7 @@ fn slide_rels() -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::super::transition::{extract_transition, TransitionKind};
+    use super::super::transition::{TransitionKind, extract_transition};
     use super::*;
     use crate::pptx::PptxEngine;
 

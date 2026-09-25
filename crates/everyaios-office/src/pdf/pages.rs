@@ -13,7 +13,7 @@
 //! `/Resources` fonts/images, ...) into the destination with fresh ids —
 //! lopdf has no `merge`, so the copier below is the missing half.
 
-use lopdf::{dictionary, Dictionary, Document, Object, ObjectId};
+use lopdf::{Dictionary, Document, Object, ObjectId, dictionary};
 use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, thiserror::Error)]

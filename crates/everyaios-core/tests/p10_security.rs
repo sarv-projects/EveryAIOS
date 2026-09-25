@@ -16,8 +16,8 @@ use everyaios_guard::granter::{CapabilityGranter, HostGrant};
 use everyaios_guard::injection::{
     has_injection_marker, sanitize_tool_result, scan_context, wrap_user_document,
 };
-use everyaios_guard::pathfloor::{enforce_floor, FloorVerdict};
-use everyaios_guard::redteam::{run_red_team, RED_TEAM_CORPUS};
+use everyaios_guard::pathfloor::{FloorVerdict, enforce_floor};
+use everyaios_guard::redteam::{RED_TEAM_CORPUS, run_red_team};
 use everyaios_guard::{DecisionPackage, Operation};
 use everyaios_vault::{KeyRing, KeySpec, KeyStatus, RoutingPolicy, Vault};
 
@@ -319,9 +319,10 @@ fn revoked_key_suspension_and_failover() {
     // "user alert + failover" surface the broker turns into an alert.
     ring.set_status("nvidia", "k2", KeyStatus::Suspended)
         .unwrap();
-    assert!(ring
-        .select("nvidia", "m", "s", RoutingPolicy::Priority)
-        .is_err());
+    assert!(
+        ring.select("nvidia", "m", "s", RoutingPolicy::Priority)
+            .is_err()
+    );
 }
 
 // ---------------------------------------------------------------------------

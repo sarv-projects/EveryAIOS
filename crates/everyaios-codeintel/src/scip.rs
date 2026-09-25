@@ -387,7 +387,7 @@ mod tests {
         e.string_field(2, "src/main.rs"); // relative_path
         e.message_field(3, &symbol_msg("sym::main", 1, "main")); // fn
         e.message_field(3, &symbol_msg("sym::Helper", 3, "Helper")); // class
-                                                                     // Occurrence: definition of main at 0:0.
+        // Occurrence: definition of main at 0:0.
         let mut occ = Encoder::new();
         occ.packed_field(1, &[0, 0, 0, 8]);
         occ.string_field(2, "sym::main");

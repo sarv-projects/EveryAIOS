@@ -186,11 +186,15 @@ fn find_llamafile_scans_data_dir_bin() {
 #[test]
 fn ollama_host_env_overrides_config() {
     let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-    std::env::set_var("OLLAMA_HOST", mock_host());
+    unsafe {
+        std::env::set_var("OLLAMA_HOST", mock_host());
+    }
     let mgr = LocalManager::new(LocalConfig::default());
     assert_eq!(mgr.ollama_host(), mock_host());
     assert!(mgr.ollama_running());
-    std::env::remove_var("OLLAMA_HOST");
+    unsafe {
+        std::env::remove_var("OLLAMA_HOST");
+    }
 }
 
 #[test]

@@ -11,7 +11,7 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 
 use crate::dedup::DupGroup;
-use crate::finder::{find_large_files, FinderOptions, SortBy};
+use crate::finder::{FinderOptions, SortBy, find_large_files};
 use crate::walk::Arena;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]

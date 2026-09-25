@@ -42,7 +42,7 @@ use serde::{Deserialize, Serialize};
 // into the shell-integration module.
 pub use crate::shell_integration::{CommandRecord, CommandTracker};
 use crate::shell_integration::{
-    IntegrationEvent, IntegrationParser, IntegrationShell, Segment, INJECTION_ENV, NONCE_ENV,
+    INJECTION_ENV, IntegrationEvent, IntegrationParser, IntegrationShell, NONCE_ENV, Segment,
 };
 
 // ---------------------------------------------------------------------------

@@ -3,7 +3,7 @@
 //! visible window). Pure read path; writes go through the surgical part
 //! patch (`xlsx/patch.rs`).
 
-use calamine::{open_workbook, Data, Range, Reader, Xlsx};
+use calamine::{Data, Range, Reader, Xlsx, open_workbook};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use thiserror::Error;

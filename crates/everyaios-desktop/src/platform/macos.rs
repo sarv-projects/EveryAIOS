@@ -26,10 +26,10 @@ use std::process::Command;
 // the enum — without this import `see()` does not compile on macOS.
 use image::GenericImageView;
 
+use crate::DesktopError;
 use crate::launch;
 use crate::policy::InteractionMode;
 use crate::types::{ActKind, ReadResult, Region, SeeMethod, SeeResult, WindowInfo};
-use crate::DesktopError;
 
 pub struct MacBackend;
 
@@ -207,9 +207,9 @@ impl MacBackend {
             }
         }
         let script = match act {
-            ActKind::Click { x, y } => format!(
-                "tell application \"System Events\" to click at {{{x}, {y}}}"
-            ),
+            ActKind::Click { x, y } => {
+                format!("tell application \"System Events\" to click at {{{x}, {y}}}")
+            }
             ActKind::ClickByName { name } => format!(
                 "tell application \"System Events\" to tell process \"{app}\" to click \"{name}\" of window 1"
             ),
@@ -236,9 +236,7 @@ impl MacBackend {
                     "pagedown" => 121,
                     _ => return Err(DesktopError::Platform(format!("unknown key {key}"))),
                 };
-                format!(
-                    "tell application \"System Events\" to key code {code}"
-                )
+                format!("tell application \"System Events\" to key code {code}")
             }
             ActKind::Scroll { x, y, delta } => format!(
                 "tell application \"System Events\" to tell process \"{app}\" to scroll {delta} at {{{x}, {y}}}"
@@ -270,7 +268,7 @@ impl MacBackend {
             ActKind::LaunchApp { .. } => {
                 return Err(DesktopError::Platform(
                     "launch was not handled on the pre-script path".into(),
-                ))
+                ));
             }
         };
         let status = Command::new("osascript")

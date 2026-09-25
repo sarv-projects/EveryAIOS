@@ -30,6 +30,61 @@ pub fn apply_read_heavy(conn: &Connection) -> rusqlite::Result<()> {
     conn.execute_batch("PRAGMA mmap_size=268435456;")
 }
 
+/// P45.3 — checkpoint when the machine is idle or on battery and the WAL
+/// has reached the page cap. This is the policy; it does not measure latency.
+/// True when this Linux host is on battery. Other hosts report false.
+pub fn host_on_battery() -> bool {
+    let Ok(entries) = std::fs::read_dir("/sys/class/power_supply") else {
+        return false;
+    };
+    for entry in entries.flatten() {
+        let status = entry.path().join("status");
+        if let Ok(text) = std::fs::read_to_string(status) {
+            if text.trim().eq_ignore_ascii_case("Discharging") {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// Run a passive WAL checkpoint when the idle/battery policy says so.
+/// Returns whether a checkpoint was requested.
+pub fn checkpoint_connection(conn: &Connection, user_idle: bool) -> rusqlite::Result<bool> {
+    let wal_pages = wal_file_pages(conn);
+    if !checkpoint_when_idle_or_battery(user_idle, host_on_battery(), wal_pages, 1) {
+        return Ok(false);
+    }
+    conn.query_row("PRAGMA wal_checkpoint(PASSIVE)", [], |_| Ok(()))?;
+    Ok(true)
+}
+
+fn wal_file_pages(conn: &Connection) -> u64 {
+    let path: String = conn
+        .query_row("PRAGMA database_list", [], |row| row.get::<_, String>(2))
+        .unwrap_or_default();
+    if path.is_empty() {
+        return 0;
+    }
+    let bytes = std::fs::metadata(format!("{path}-wal"))
+        .map(|meta| meta.len())
+        .unwrap_or(0);
+    let page = conn
+        .query_row("PRAGMA page_size", [], |row| row.get::<_, i64>(0))
+        .unwrap_or(4096)
+        .max(1) as u64;
+    bytes / page
+}
+
+pub fn checkpoint_when_idle_or_battery(
+    idle: bool,
+    on_battery: bool,
+    wal_pages: u64,
+    page_cap: u64,
+) -> bool {
+    (idle || on_battery) && wal_pages >= page_cap
+}
+
 /// Single call for the common read-heavy case.
 pub fn apply_read_heavy_index(conn: &Connection) -> rusqlite::Result<()> {
     apply_non_vault(conn)?;
@@ -105,5 +160,79 @@ mod tests {
             "mmap must not be applied by the plain call"
         );
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn idle_or_battery_checkpoints_only_after_the_page_cap() {
+        assert!(!checkpoint_when_idle_or_battery(true, false, 10, 4000));
+        assert!(checkpoint_when_idle_or_battery(true, false, 4000, 4000));
+        assert!(checkpoint_when_idle_or_battery(false, true, 4000, 4000));
+        assert!(!checkpoint_when_idle_or_battery(false, false, 9000, 4000));
+    }
+
+    #[test]
+    fn synchronous_normal_and_mmap_are_measured_on_a_real_database() {
+        let dir =
+            std::env::temp_dir().join(format!("everyaios-p45-measure-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let rows = 400u32;
+        let normal = timed_inserts(&dir.join("normal.sqlite"), false, rows);
+        let full = timed_inserts(&dir.join("full.sqlite"), true, rows);
+        let buffered = timed_reads(&dir.join("normal.sqlite"), false);
+        let mapped = timed_reads(&dir.join("mapped.sqlite"), true);
+        eprintln!(
+            "p45 measure normal_ms={normal} full_ms={full} buffered_read_ms={buffered} mmap_read_ms={mapped}"
+        );
+        assert!(normal > 0 || full > 0);
+        assert!(buffered > 0 && mapped > 0);
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    fn timed_inserts(path: &std::path::Path, full: bool, rows: u32) -> u128 {
+        let conn = Connection::open(path).unwrap();
+        if full {
+            conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL;")
+                .unwrap();
+        } else {
+            apply_non_vault(&conn).unwrap();
+        }
+        conn.execute_batch("CREATE TABLE t(id INTEGER PRIMARY KEY, body TEXT);")
+            .unwrap();
+        let start = std::time::Instant::now();
+        let tx = conn.unchecked_transaction().unwrap();
+        for i in 0..rows {
+            tx.execute("INSERT INTO t(body) VALUES (?1)", [format!("row-{i}")])
+                .unwrap();
+        }
+        tx.commit().unwrap();
+        start.elapsed().as_millis()
+    }
+
+    fn timed_reads(path: &std::path::Path, mmap: bool) -> u128 {
+        let conn = Connection::open(path).unwrap();
+        apply_non_vault(&conn).unwrap();
+        if mmap {
+            apply_read_heavy(&conn).unwrap();
+        }
+        conn.execute_batch("CREATE TABLE IF NOT EXISTS t(id INTEGER PRIMARY KEY, body TEXT);")
+            .unwrap();
+        let n: i64 = conn
+            .query_row("SELECT COUNT(*) FROM t", [], |row| row.get(0))
+            .unwrap_or(0);
+        if n == 0 {
+            for i in 0..200 {
+                conn.execute("INSERT INTO t(body) VALUES (?1)", [format!("row-{i}")])
+                    .unwrap();
+            }
+        }
+        let start = std::time::Instant::now();
+        for _ in 0..20 {
+            let mut stmt = conn.prepare("SELECT body FROM t").unwrap();
+            let rows = stmt.query_map([], |row| row.get::<_, String>(0)).unwrap();
+            for row in rows {
+                let _ = row.unwrap();
+            }
+        }
+        start.elapsed().as_millis().max(1)
     }
 }

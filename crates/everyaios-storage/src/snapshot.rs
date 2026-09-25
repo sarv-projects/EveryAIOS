@@ -11,8 +11,8 @@ use std::sync::Arc;
 use arc_swap::ArcSwap;
 use serde::{Deserialize, Serialize};
 
-use crate::walk::Arena;
 use crate::StorageError;
+use crate::walk::Arena;
 
 /// One immutable scan result.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -64,7 +64,7 @@ impl SnapshotStore {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::walk::{build_arena, scan, ScanOptions};
+    use crate::walk::{ScanOptions, build_arena, scan};
     use std::fs;
 
     fn tmpdir(tag: &str) -> std::path::PathBuf {

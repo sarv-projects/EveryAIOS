@@ -16,7 +16,7 @@
 //! imports real Chrome storage; this module stores bytes verbatim and leaves
 //! the decode to the import path.
 
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::Vault;
 

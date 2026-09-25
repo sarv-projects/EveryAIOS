@@ -166,11 +166,7 @@ pub fn host_of(url: &str) -> Option<String> {
     let rest = url.split_once("://").map(|(_, r)| r).unwrap_or(url);
     let host = rest.split(['/', '?', '#']).next().unwrap_or("");
     let host = host.split(':').next().unwrap_or("").to_lowercase();
-    if host.is_empty() {
-        None
-    } else {
-        Some(host)
-    }
+    if host.is_empty() { None } else { Some(host) }
 }
 
 /// Cubic Bézier point at `t` (0..=1).
@@ -294,13 +290,15 @@ mod tests {
     #[test]
     fn mouse_path_zero_distance_is_empty() {
         let mut rng = XorShift::new(1);
-        assert!(mouse_path(
-            &mut rng,
-            &MouseProfile::human(),
-            &pt(5.0, 5.0),
-            &pt(5.0, 5.0)
-        )
-        .is_empty());
+        assert!(
+            mouse_path(
+                &mut rng,
+                &MouseProfile::human(),
+                &pt(5.0, 5.0),
+                &pt(5.0, 5.0)
+            )
+            .is_empty()
+        );
     }
 
     #[test]

@@ -182,8 +182,16 @@ impl ExitCriterion {
             self.test_parity,
             self.warm_rss_mb,
             Self::TARGET_WARM_RSS_MB,
-            if self.no_plaintext_key { "clean" } else { "LEAK" },
-            if self.no_capability_regression { "none" } else { "YES" },
+            if self.no_plaintext_key {
+                "clean"
+            } else {
+                "LEAK"
+            },
+            if self.no_capability_regression {
+                "none"
+            } else {
+                "YES"
+            },
             if self.met() { "EXIT MET" } else { "not met" },
         )
     }

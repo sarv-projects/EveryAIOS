@@ -253,14 +253,16 @@ mod tests {
         .expect_err("six runs must be rejected");
         assert!(err.contains('6') || err.contains('5'), "got: {err}");
         // Five is the budget edge and still fits.
-        assert!(MultiRun::new(
-            "run-1",
-            "work-1",
-            agents(5),
-            vec!["wt-1".to_string(); 5],
-            FuseMode::KeepBest,
-        )
-        .is_ok());
+        assert!(
+            MultiRun::new(
+                "run-1",
+                "work-1",
+                agents(5),
+                vec!["wt-1".to_string(); 5],
+                FuseMode::KeepBest,
+            )
+            .is_ok()
+        );
     }
 
     #[test]

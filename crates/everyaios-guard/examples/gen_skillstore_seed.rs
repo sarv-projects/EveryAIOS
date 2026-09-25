@@ -8,7 +8,7 @@
 //! The printed `PUBLIC_KEY_B64` goes into the shell's pinned key const and the
 //! `SIGNED_INDEX_JSON` into the bundled index const. Re-run for a fresh pair.
 
-use everyaios_guard::skillstore::{sign_skill_index, SkillRow};
+use everyaios_guard::skillstore::{SkillRow, sign_skill_index};
 
 fn row(id: &str, name: &str, version: &str, description: &str, permissions: &[&str]) -> SkillRow {
     SkillRow {

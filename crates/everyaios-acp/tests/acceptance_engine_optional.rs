@@ -21,7 +21,7 @@
 //! credential, a provider, or a network.
 
 use everyaios_acp::{
-    AcpSession, ClientInfo, HarnessProtocol, PermissionDecision, ProcessTransport, PROTOCOL_VERSION,
+    AcpSession, ClientInfo, HarnessProtocol, PROTOCOL_VERSION, PermissionDecision, ProcessTransport,
 };
 use everyaios_memory::{UsageLedger, UsageSource};
 // The canonical agent protocol lives in the schema crate (P69.D25).
@@ -215,7 +215,8 @@ fn the_built_in_engine_is_archived_or_deleted() {
         "the sidecar turn loop must be gone (P71.2c)"
     );
     // The archive keeps them recoverable and self-documenting.
-    assert!(root
-        .join("ARCH/archive/coordinator-loop/README.md")
-        .exists());
+    assert!(
+        root.join("ARCH/archive/coordinator-loop/README.md")
+            .exists()
+    );
 }

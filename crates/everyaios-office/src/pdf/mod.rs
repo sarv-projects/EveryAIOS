@@ -68,7 +68,7 @@ pub fn inspect(bytes: &[u8]) -> Result<PdfInfo, PdfError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use lopdf::{dictionary, Object};
+    use lopdf::{Object, dictionary};
 
     /// A one-page PDF with "Hello" text + an AcroForm field "name".
     fn acro_pdf() -> Vec<u8> {

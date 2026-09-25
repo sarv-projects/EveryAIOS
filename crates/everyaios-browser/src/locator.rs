@@ -412,9 +412,11 @@ mod tests {
     fn audit_flags_nameless_actionable_and_missing_alt() {
         let issues = a11y_audit(&tree());
         // `img` with empty name → warning (not actionable, so not an error).
-        assert!(issues
-            .iter()
-            .any(|i| i.rule == "image_without_alt" && i.severity == A11ySeverity::Warning));
+        assert!(
+            issues
+                .iter()
+                .any(|i| i.rule == "image_without_alt" && i.severity == A11ySeverity::Warning)
+        );
         // nested button inside searchbox → nested_interactive warning.
         assert!(issues.iter().any(|i| i.rule == "nested_interactive"));
     }

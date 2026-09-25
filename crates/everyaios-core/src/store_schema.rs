@@ -303,7 +303,7 @@ pub fn load_manifest(data_dir: &Path) -> Result<StoreManifest, StoreSchemaError>
                 path: path.display().to_string(),
                 action: "read",
                 source: e,
-            })
+            });
         }
     };
     if raw.trim().is_empty() {

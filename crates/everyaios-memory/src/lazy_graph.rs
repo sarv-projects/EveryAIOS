@@ -383,8 +383,7 @@ impl LazyGraphRag {
         if self.assessor.is_none() {
             CapabilityStatus {
                 enabled: false,
-                reason:
-                    "LLM relevance assessor not wired; deterministic lexical/graph fallback only",
+                reason: "LLM relevance assessor not wired; deterministic lexical/graph fallback only",
                 mode: "lazy-graph (deterministic)",
             }
         } else {
@@ -590,9 +589,10 @@ mod tests {
         assert_eq!(a, b, "same input → same concepts");
         assert!(a.iter().any(|c| c.contains("LazyGraphRAG")));
         // Stopwords never appear as standalone concepts.
-        assert!(a
-            .iter()
-            .all(|c| !STOPWORDS.contains(&c.to_lowercase().as_str())));
+        assert!(
+            a.iter()
+                .all(|c| !STOPWORDS.contains(&c.to_lowercase().as_str()))
+        );
     }
 
     #[test]

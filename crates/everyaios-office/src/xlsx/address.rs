@@ -78,11 +78,7 @@ pub fn col_index(letters: &str) -> Option<u32> {
             .checked_mul(26)?
             .checked_add((c as u32) - ('A' as u32) + 1)?;
     }
-    if idx == 0 {
-        None
-    } else {
-        Some(idx)
-    }
+    if idx == 0 { None } else { Some(idx) }
 }
 
 /// 1-based column index → column letters (1→A, 27→AA).

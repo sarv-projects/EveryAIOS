@@ -18,8 +18,8 @@ use serde::{Deserialize, Serialize};
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::{Component, Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::JoinHandle;
 use thiserror::Error;
 
@@ -271,7 +271,7 @@ impl WorkspaceRoot {
                 Component::Normal(part) => out.push(part),
                 Component::CurDir => {}
                 Component::ParentDir | Component::RootDir | Component::Prefix(_) => {
-                    return Err(ArtifactError::PathEscape(rel.to_string()))
+                    return Err(ArtifactError::PathEscape(rel.to_string()));
                 }
             }
         }

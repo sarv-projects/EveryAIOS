@@ -25,7 +25,7 @@ pub use receipt::{
     CostSummary, EffectReceipt, EvidenceRef, Provenance, ReceiptActionRef, ReceiptBuilder,
     VerificationSummary, WorkReceipt,
 };
-pub use repair::{started_unknown_repair, StartedUnknownClassification, StartedUnknownItem};
+pub use repair::{StartedUnknownClassification, StartedUnknownItem, started_unknown_repair};
 pub use session_log::{ForkLineage, ProjectedMessage};
 
 /// One audit event. `kind` is a stable dotted name (e.g. `browser.act`,
@@ -121,6 +121,37 @@ impl AuditWriter {
         Ok(self.seq)
     }
 
+    /// P45.5 — write a turn's audit lines in one append and one flush, in order.
+    /// Each line is still one complete record.
+    pub fn write_batch(
+        &mut self,
+        events: &[(&str, serde_json::Value)],
+    ) -> Result<Vec<u64>, AuditError> {
+        if events.is_empty() {
+            return Ok(Vec::new());
+        }
+        let mut body = Vec::new();
+        let mut seqs = Vec::with_capacity(events.len());
+        for (kind, payload) in events {
+            self.seq += 1;
+            seqs.push(self.seq);
+            let event = AuditEvent {
+                seq: self.seq,
+                ts_ms: now_ms(),
+                kind: (*kind).to_string(),
+                payload: payload.clone(),
+                trace_id: String::new(),
+                span_id: String::new(),
+            };
+            let mut line = serde_json::to_vec(&event)?;
+            line.push(b'\n');
+            body.extend_from_slice(&line);
+        }
+        self.file.write_all(&body)?;
+        self.file.flush()?;
+        Ok(seqs)
+    }
+
     pub fn seq(&self) -> u64 {
         self.seq
     }
@@ -205,6 +236,30 @@ mod tests {
         assert_eq!(ev3.seq, 3);
         assert_eq!(ev3.kind, "vault.rotate");
 
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn write_batch_keeps_order_in_one_flush() {
+        let dir =
+            std::env::temp_dir().join(format!("everyaios-audit-batch-{}", std::process::id()));
+        let path = dir.join("audit.ndjson");
+        let _ = std::fs::remove_dir_all(&dir);
+        let mut writer = AuditWriter::open(&path).unwrap();
+        let seqs = writer
+            .write_batch(&[
+                ("turn.start", serde_json::json!({"n": 1})),
+                ("turn.tool", serde_json::json!({"n": 2})),
+                ("turn.end", serde_json::json!({"n": 3})),
+            ])
+            .unwrap();
+        assert_eq!(seqs, vec![1, 2, 3]);
+        drop(writer);
+        let text = std::fs::read_to_string(&path).unwrap();
+        let lines: Vec<&str> = text.lines().filter(|line| !line.is_empty()).collect();
+        assert_eq!(lines.len(), 3);
+        assert!(lines[0].contains("turn.start"));
+        assert!(lines[2].contains("turn.end"));
         let _ = std::fs::remove_dir_all(&dir);
     }
 

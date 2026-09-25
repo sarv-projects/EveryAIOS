@@ -127,8 +127,8 @@ crate is heavy (tokio/hyper/rayon tree) so the default build never pulls it.";
 #[cfg(feature = "hybrid-seekstorm")]
 pub mod embedded {
     use std::path::{Path, PathBuf};
-    use std::sync::mpsc::{channel, Receiver, Sender};
     use std::sync::Arc;
+    use std::sync::mpsc::{Receiver, Sender, channel};
 
     use seekstorm::commit::Commit;
     use seekstorm::index::IndexDocument;
@@ -232,9 +232,9 @@ pub mod embedded {
 
     async fn open_or_create(path: &Path) -> Result<IndexArc, String> {
         use seekstorm::index::{
-            create_index, open_index, AccessType, Clustering, DocumentCompression,
-            FrequentwordType, IndexMetaObject, LexicalSimilarity, NgramSet, SchemaField,
-            StemmerType, StopwordType, TokenizerType,
+            AccessType, Clustering, DocumentCompression, FrequentwordType, IndexMetaObject,
+            LexicalSimilarity, NgramSet, SchemaField, StemmerType, StopwordType, TokenizerType,
+            create_index, open_index,
         };
         use seekstorm::vector::Inference;
         let meta = IndexMetaObject {
@@ -364,9 +364,10 @@ mod tests {
         // Every hit is a known chunk and at least one brown-doc is on top
         // (3.3.4 ranking may prefer doc-c, whose brown token is first).
         assert!(ids.contains(&"doc-a") || ids.contains(&"doc-c"));
-        assert!(ids
-            .iter()
-            .all(|id| matches!(*id, "doc-a" | "doc-b" | "doc-c")));
+        assert!(
+            ids.iter()
+                .all(|id| matches!(*id, "doc-a" | "doc-b" | "doc-c"))
+        );
         assert!(hits[0].score > 0.0);
         idx.close();
         let _ = std::fs::remove_dir_all(&dir);

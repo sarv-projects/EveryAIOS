@@ -108,7 +108,7 @@ impl ContextPassport {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::reference::{make_ref_handle, RefKind};
+    use crate::reference::{RefKind, make_ref_handle};
 
     fn passport() -> ContextPassport {
         ContextPassport {

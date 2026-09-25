@@ -158,11 +158,7 @@ fn doctor(registry: &LaunchRegistry, json: bool) -> i32 {
             }
         );
     }
-    if all_ok {
-        0
-    } else {
-        1
-    }
+    if all_ok { 0 } else { 1 }
 }
 
 /// The doctor gate: refuse to run an agent whose command is missing.

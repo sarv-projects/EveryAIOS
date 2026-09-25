@@ -35,6 +35,7 @@ pub mod capability_broker;
 pub mod capability_contract;
 pub mod configscan;
 pub mod decision;
+pub mod deflection;
 pub mod diffcard;
 pub mod ecc;
 pub mod egress;
@@ -64,35 +65,35 @@ pub mod urlfloor;
 
 pub use autonomy::{AutonomyPolicy, AutonomyVerdict, Mode, RiskClass};
 pub use batch::{
-    change_set_hash, BatchAction, BatchOperation, BatchReceipt, BatchTicket, BatchTicketStore,
+    BatchAction, BatchOperation, BatchReceipt, BatchTicket, BatchTicketStore, change_set_hash,
 };
-pub use blocklist::{blocklist_for, BlocklistCategory, BLOCKLIST};
+pub use blocklist::{BLOCKLIST, BlocklistCategory, blocklist_for};
 pub use capability_broker::{
     CapabilityBroker, CapabilityBrokerError, CapabilityGrant, CapabilityRequest,
     EphemeralCredential, LocalCapabilityBroker,
 };
 pub use capability_contract::CapabilityInvocation;
 pub use decision::{DecisionPackage, WebActionKind};
-pub use diffcard::{render_native_card, CardAction, CardResponse, NativeCard};
+pub use diffcard::{CardAction, CardResponse, NativeCard, render_native_card};
 pub use egress::{ConnectivityMode, EgressEngine, EgressPlan, EgressVerdict};
 pub use fs_broker::{
     BrokerHost, BrokerOp, BrokerRequest, BrokerResponse, BrokerTransport, InProcessBroker,
 };
 pub use granter::{
-    wildcard_match, CapabilityGranter, GrantError, GrantRequest, GrantedCapabilities, HostGrant,
-    TrustFlags,
+    CapabilityGranter, GrantError, GrantRequest, GrantedCapabilities, HostGrant, TrustFlags,
+    wildcard_match,
 };
 pub use injection::Estop;
 pub use netfloor::{
-    classify_host, classify_ip, host_allowed, is_always_blocked, NetClass, NetPolicy,
+    NetClass, NetPolicy, classify_host, classify_ip, host_allowed, is_always_blocked,
 };
 pub use path_seal::{PathSeal, SealError, SealState};
 pub use pathfloor::{
-    canonicalize_no_follow, enforce_floor, is_inside_root, normalize_lexical, FloorVerdict, FsOp,
-    GrantAxis, PathGrant,
+    FloorVerdict, FsOp, GrantAxis, PathGrant, canonicalize_no_follow, enforce_floor,
+    is_inside_root, normalize_lexical,
 };
 pub use permissions::{AutonomyPreset, Operation, PermissionsPolicy, PolicyAction, Rule};
-pub use prescan::{scan_path, scan_shell, scan_url, PreExecScan, ScanTarget};
+pub use prescan::{PreExecScan, ScanTarget, scan_path, scan_shell, scan_url};
 pub use profiles::{GateAction, Hook, Profile};
 pub use release::{
     EgressPolicy, EgressPolicyEngine, EnforcementZone, ReleaseDecision, ReleaseReceipt,
@@ -100,22 +101,21 @@ pub use release::{
 #[cfg(target_os = "linux")]
 pub use sandbox::LinuxBwrapBackend;
 pub use sandbox::{
-    enforced_backend_capabilities, linux_bwrap_available, resolve_sandbox_backend, PathAccess,
-    PathRule, SandboxBackend, SandboxBackendKind, SandboxError, SandboxProcess, SandboxProfile,
-    SandboxReceipt, SandboxRole, SandboxSpec, SyscallGroup,
+    PathAccess, PathRule, SandboxBackend, SandboxBackendKind, SandboxError, SandboxProcess,
+    SandboxProfile, SandboxReceipt, SandboxRole, SandboxSpec, SyscallGroup,
+    enforced_backend_capabilities, linux_bwrap_available, resolve_sandbox_backend,
 };
 pub use seccomp::{Action, ArgFilter, SeccompError, SeccompPolicy, SyscallRule};
 pub use structural::{
-    contains_shell_operator, structural_verdict, StructuralVerdict, SHELL_OPERATORS,
+    SHELL_OPERATORS, StructuralVerdict, contains_shell_operator, structural_verdict,
 };
 pub use ticket::{
     ApprovalSource, AuthorizationTicket, GuardReceipt, ReceiptAction, RiskLevel, RiskTier,
     TicketState, TicketStore,
 };
 pub use toctou::{
-    bind_exec_bytes, bind_path, bind_url, is_blocked_ip, open_parent_dir, reverify_exec,
-    reverify_path, reverify_url, ExecBinding, FileBinding, NetBinding, ResourceBinding,
-    ToctouError,
+    ExecBinding, FileBinding, NetBinding, ResourceBinding, ToctouError, bind_exec_bytes, bind_path,
+    bind_url, is_blocked_ip, open_parent_dir, reverify_exec, reverify_path, reverify_url,
 };
 
 /// Scan everything pre-exec: shell string, filesystem paths, URLs.

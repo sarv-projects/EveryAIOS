@@ -3,11 +3,11 @@
 //! multi-frame capture, max frame depth 5, refs scoped to (document_id, url)).
 
 use crate::ax::AxNode;
-use crate::tree::{build_tree, RefMinter, TreeOptions};
+use crate::tree::{RefMinter, TreeOptions, build_tree};
 use crate::{A11yNode, Snapshot, SnapshotMode};
 use everyaios_cdp::{CdpClient, CdpError, Session, TargetInfo};
-use serde_json::json;
 use serde_json::Value;
+use serde_json::json;
 use std::collections::HashMap;
 
 /// Max nested-frame depth (doc 33 §5.2 `MAX_FRAME_DEPTH 5`).

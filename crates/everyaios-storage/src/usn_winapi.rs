@@ -26,14 +26,14 @@ use windows_sys::Win32::Foundation::{
 use windows_sys::Win32::Storage::FileSystem::{
     CreateFileW, FILE_FLAG_BACKUP_SEMANTICS, FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING,
 };
+use windows_sys::Win32::System::IO::DeviceIoControl;
 use windows_sys::Win32::System::Ioctl::{
     FSCTL_ENUM_USN_DATA, FSCTL_QUERY_USN_JOURNAL, FSCTL_READ_USN_JOURNAL, MFT_ENUM_DATA_V0,
     READ_USN_JOURNAL_DATA_V0, USN_JOURNAL_DATA_V0,
 };
-use windows_sys::Win32::System::IO::DeviceIoControl;
 
 use crate::usn::UsnRecord;
-use crate::usn_reader::{assemble_path, parse_record_stream, UsnRawRecord};
+use crate::usn_reader::{UsnRawRecord, assemble_path, parse_record_stream};
 
 /// FSCTL_* response buffer size. 64 KiB is the standard journal read chunk;
 /// the MFT enum pass uses the same buffer (records are ≤ ~1 KiB each).

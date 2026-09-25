@@ -393,9 +393,11 @@ mod tests {
                   We value your privacy. Accept all cookies.\n\
                   Normal content line.\n";
         let cleaned = clean_markdown(&f, "https://example.com", md);
-        assert!(cleaned
-            .text
-            .contains("Read [our story](https://example.com/story)"));
+        assert!(
+            cleaned
+                .text
+                .contains("Read [our story](https://example.com/story)")
+        );
         assert!(!cleaned.text.contains("doubleclick.net"));
         assert!(!cleaned.text.contains("tracker.io"));
         assert!(!cleaned.text.contains("Accept all cookies"));

@@ -815,7 +815,7 @@ mod tests {
             RecoveryAction::ResendWithKey { key: "k2".into() } // same_key
         );
         assert_eq!(plan[2].action, RecoveryAction::ConfirmCard); // unsafe
-                                                                 // Same-key tool already executed → registry lookup flips to Rerun.
+        // Same-key tool already executed → registry lookup flips to Rerun.
         registry.register("k2", serde_json::json!({"ok": true}));
         let plan2 = recovery_plan(&incomplete, &registry);
         assert_eq!(plan2[1].action, RecoveryAction::Rerun);
@@ -1018,7 +1018,7 @@ mod tests {
                 ])
                 .unwrap();
             assert_eq!(seqs, vec![1, 2, 3]); // receipts stable, in order
-                                             // A per-event append continues the same monotonic sequence.
+            // A per-event append continues the same monotonic sequence.
             assert_eq!(
                 log.append(EventInput::new(EventType::PlanCreated, "sess-1", "a"))
                     .unwrap(),

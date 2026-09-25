@@ -25,15 +25,15 @@ use std::sync::mpsc::{self, Receiver};
 use std::time::Duration;
 
 use everyaios_guard::{
+    AuthorizationTicket, BatchOperation, BatchTicket, BatchTicketStore, DecisionPackage, Estop,
+    GuardReceipt, Operation, PermissionsPolicy, PolicyAction, Profile, TicketStore,
     approval_policy::{Approval, ApprovalPolicy},
     floors::HumanFloor,
     protected_paths,
     reviewer::{ReviewOutcome, ReviewerBreaker, ReviewerConfig},
-    AuthorizationTicket, BatchOperation, BatchTicket, BatchTicketStore, DecisionPackage, Estop,
-    GuardReceipt, Operation, PermissionsPolicy, PolicyAction, Profile, TicketStore,
 };
 use serde::Serialize;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 /// The outcome of a pre-flight evaluation.
 ///
@@ -1666,24 +1666,27 @@ mod tests {
     fn sidecar_surface_rejects_control_plane_ops() {
         let mut g = GuardService::new();
         // The sidecar may evaluate + use + read…
-        assert!(g
-            .handle_sidecar(
+        assert!(
+            g.handle_sidecar(
                 "guard/evaluate",
                 &json!({
                     "operation": "delete", "argsHash": "h", "decision": { "risk": "high" }
                 })
             )
-            .is_ok());
+            .is_ok()
+        );
         assert!(g.handle_sidecar("guard/estop_status", &json!({})).is_ok());
         // …but may NOT approve/reset/estop/profile.
-        assert!(g
-            .handle_sidecar("guard/approve", &json!({ "ticketId": "tkt:1" }))
-            .is_err());
+        assert!(
+            g.handle_sidecar("guard/approve", &json!({ "ticketId": "tkt:1" }))
+                .is_err()
+        );
         assert!(g.handle_sidecar("guard/reset", &json!({})).is_err());
         assert!(g.handle_sidecar("guard/estop", &json!({})).is_err());
-        assert!(g
-            .handle_sidecar("guard/profile", &json!({ "profile": "minimal" }))
-            .is_err());
+        assert!(
+            g.handle_sidecar("guard/profile", &json!({ "profile": "minimal" }))
+                .is_err()
+        );
         // The control-plane handle still allows them (the UI path).
         assert!(g.handle("guard/estop", &json!({})).is_ok());
     }
@@ -1738,12 +1741,13 @@ mod tests {
         assert_eq!(out["action"], "ask");
 
         // A pending ticket must not be consumable until approved.
-        assert!(g
-            .handle(
+        assert!(
+            g.handle(
                 "guard/use",
                 &json!({ "ticketId": ticket_id, "argsHash": "h1" })
             )
-            .is_err());
+            .is_err()
+        );
         let approval_nonce = g.pending()[0].approval_nonce.clone();
         g.handle(
             "guard/approve",
@@ -1795,17 +1799,19 @@ mod tests {
         assert_eq!(out["action"], "ask");
 
         // Sidecar cannot approve its own ticket by any control-plane route.
-        assert!(g
-            .handle_sidecar("guard/approve", &json!({ "ticketId": ticket_id }))
-            .is_err());
+        assert!(
+            g.handle_sidecar("guard/approve", &json!({ "ticketId": ticket_id }))
+                .is_err()
+        );
         // And the pending ticket is not consumable until a real approval (which
         // only the control-plane handle can reach, with the nonce).
-        assert!(g
-            .handle_sidecar(
+        assert!(
+            g.handle_sidecar(
                 "guard/use",
                 &json!({ "ticketId": ticket_id, "argsHash": "h" })
             )
-            .is_err());
+            .is_err()
+        );
     }
 
     #[test]
@@ -1835,12 +1841,13 @@ mod tests {
         assert_eq!(out["action"], "ask");
         let ticket_id = out["ticketId"].as_str().unwrap().to_string();
         // Not consumable without approval + nonce.
-        assert!(g
-            .handle(
+        assert!(
+            g.handle(
                 "guard/use",
                 &json!({ "ticketId": ticket_id, "argsHash": "h" })
             )
-            .is_err());
+            .is_err()
+        );
     }
 
     #[test]
@@ -2039,9 +2046,10 @@ mod tests {
         assert!(matches!(d, GuardDecision::Block { .. }));
 
         // Unknown level refuses.
-        assert!(g
-            .handle("guard/set_autonomy", &json!({ "level": "bogus" }))
-            .is_err());
+        assert!(
+            g.handle("guard/set_autonomy", &json!({ "level": "bogus" }))
+                .is_err()
+        );
 
         // guard/policy now carries the autonomy level too.
         let out = g.handle("guard/policy", &json!({})).unwrap();
@@ -2135,9 +2143,10 @@ mod tests {
         assert!(matches!(d, GuardDecision::Ask { .. }));
 
         // Unknown combo refuses; the policy is untouched.
-        assert!(g
-            .handle("guard/apply_combo", &json!({ "name": "nope" }))
-            .is_err());
+        assert!(
+            g.handle("guard/apply_combo", &json!({ "name": "nope" }))
+                .is_err()
+        );
     }
 
     #[test]
@@ -2200,18 +2209,20 @@ mod tests {
         assert!(pol.evaluate("browser.click", "") == Approval::Allow);
 
         // Bad input is refused (fail-closed, never partial-apply).
-        assert!(g
-            .handle(
+        assert!(
+            g.handle(
                 "guard/set_policy_rules",
                 &json!({ "rules": [{ "tool": "", "approval": "deny" }] }),
             )
-            .is_err());
-        assert!(g
-            .handle(
+            .is_err()
+        );
+        assert!(
+            g.handle(
                 "guard/set_policy_rules",
                 &json!({ "rules": [{ "tool": "x", "approval": "maybe" }] }),
             )
-            .is_err());
+            .is_err()
+        );
     }
 
     #[test]

@@ -7,8 +7,8 @@
 //! shape, so the storage watcher can bridge to the ghost index without a
 //! memory-crate dependency.
 
-use notify::event::{EventKind, ModifyKind, RenameMode};
 use notify::Watcher;
+use notify::event::{EventKind, ModifyKind, RenameMode};
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -81,7 +81,7 @@ where
     // Reuse the path-debouncer: classify events into FileEvents, debounce by
     // path freshness, flush a classified batch after the quiet period.
     use std::sync::atomic::{AtomicBool, Ordering};
-    use std::sync::{mpsc, Arc};
+    use std::sync::{Arc, mpsc};
 
     let (tx, rx) = mpsc::channel::<notify::Result<notify::Event>>();
     let mut watcher = notify::recommended_watcher(move |res| {

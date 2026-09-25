@@ -134,8 +134,7 @@ pub const DEFAULT_LAUNCH_WAIT: Duration = Duration::from_secs(20);
 /// Download size cap for the chrome-for-testing zip (~500MB).
 const MAX_DOWNLOAD_BYTES: u64 = 600 * 1024 * 1024;
 /// Official last-known-good chrome-for-testing manifest.
-pub const CFT_KNOWN_GOOD_URL: &str =
-    "https://googlechromelabs.github.io/chrome-for-testing/last-known-good-versions-with-downloads.json";
+pub const CFT_KNOWN_GOOD_URL: &str = "https://googlechromelabs.github.io/chrome-for-testing/last-known-good-versions-with-downloads.json";
 /// Cache dir under the user's data dir.
 pub const CFT_SUBDIR: &str = "browser/chrome-for-testing";
 

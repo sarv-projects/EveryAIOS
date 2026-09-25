@@ -9,8 +9,8 @@
 //! effect rides the same dual-guard as every other effect in the product.
 
 use serde::{Deserialize, Serialize};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 use crate::types::{ActKind, Region};
@@ -780,13 +780,15 @@ mod tests {
     fn kill_switch_fails_closed() {
         let g = gate_allow();
         g.kill.stop();
-        assert!(g
-            .preflight("notepad", &ActKind::Click { x: 1, y: 1 }, None)
-            .is_err());
+        assert!(
+            g.preflight("notepad", &ActKind::Click { x: 1, y: 1 }, None)
+                .is_err()
+        );
         g.kill.resume();
-        assert!(g
-            .preflight("notepad", &ActKind::Click { x: 1, y: 1 }, None)
-            .is_ok());
+        assert!(
+            g.preflight("notepad", &ActKind::Click { x: 1, y: 1 }, None)
+                .is_ok()
+        );
     }
 
     #[test]
@@ -805,11 +807,13 @@ mod tests {
         let p = AppPolicy::default();
         assert_eq!(p.interaction_mode, InteractionMode::Background);
         assert!(!p.allows_raising_windows());
-        assert!(AppPolicy {
-            interaction_mode: InteractionMode::Foreground,
-            ..AppPolicy::default()
-        }
-        .allows_raising_windows());
+        assert!(
+            AppPolicy {
+                interaction_mode: InteractionMode::Foreground,
+                ..AppPolicy::default()
+            }
+            .allows_raising_windows()
+        );
         assert_eq!(
             InteractionMode::parse("foreground"),
             Some(InteractionMode::Foreground)

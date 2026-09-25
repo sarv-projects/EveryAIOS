@@ -1781,30 +1781,28 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
                             // this keeps a refused Work transition from advancing a
                             // cache that the journal would reject.
                             if method == "execution/transition" {
-                                if let (Some(execution_id), Some(state)) =
-                                    (
-                                        params.get("id").and_then(Value::as_str),
-                                        params
-                                            .get("wait")
-                                            .filter(|value| !value.is_null())
-                                            .and_then(|value| {
-                                                serde_json::from_value::<
+                                if let (Some(execution_id), Some(state)) = (
+                                    params.get("id").and_then(Value::as_str),
+                                    params
+                                        .get("wait")
+                                        .filter(|value| !value.is_null())
+                                        .and_then(|value| {
+                                            serde_json::from_value::<
                                                     everyaios_types::WaitCondition,
                                                 >(
                                                     value.clone()
                                                 )
                                                 .ok()
-                                            })
-                                            .map(|wait| wait.work_state())
-                                            .or_else(|| {
-                                                params
-                                                    .get("state")
-                                                    .and_then(Value::as_str)
-                                                    .and_then(everyaios_types::WorkState::try_parse)
-                                            })
-                                            .map(crate::execution::ExecutionPhase::from_work_state),
-                                    )
-                                {
+                                        })
+                                        .map(|wait| wait.work_state())
+                                        .or_else(|| {
+                                            params
+                                                .get("state")
+                                                .and_then(Value::as_str)
+                                                .and_then(everyaios_types::WorkState::try_parse)
+                                        })
+                                        .map(crate::execution::ExecutionPhase::from_work_state),
+                                ) {
                                     let check =
                                         executions.lock().unwrap_or_else(|e| e.into_inner());
                                     if let Err(error) =

@@ -14,7 +14,7 @@
 
 use crate::capture::CdpSession;
 use everyaios_cdp::CdpError;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 /// Marker the injected script exposes on `window` for diagnostics.
 pub const RECORDER_GLOBAL: &str = "__everyaiosRecorder";
@@ -142,7 +142,7 @@ pub fn install_recorder<C: CdpSession>(
             return Err(CdpError::Protocol {
                 code: -1,
                 message: "recorder requires a session (tab)".into(),
-            })
+            });
         }
     };
     let resp = client.call_session(

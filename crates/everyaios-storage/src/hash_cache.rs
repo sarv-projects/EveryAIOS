@@ -3,7 +3,7 @@
 //! (path, size, mtime) changed since the last pass get re-hashed — the
 //! scanned delta, not the whole tree. SQLCipher-backed via rusqlite.
 
-use rusqlite::{params, Connection};
+use rusqlite::{Connection, params};
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, PartialEq)]

@@ -19,6 +19,26 @@ fn main() -> ExitCode {
         return ExitCode::SUCCESS;
     }
 
+    // P51.19 — acpx refuses to mutate a session unless doctor passes.
+    if args.first().map(String::as_str) == Some("acpx") {
+        let probe = everyaios_core::LiveProbe::new(everyaios_core::default_data_dir());
+        let report = everyaios_core::run_doctor(everyaios_core::version::VERSION, &probe);
+        let doctor_ok = report.exit_code() == 0;
+        let home = everyaios_core::default_data_dir().join("acpx-sessions.json");
+        match everyaios_core::acpx::run_acpx(&args[1..], &home, doctor_ok) {
+            Ok(text) => {
+                if !text.is_empty() {
+                    println!("{text}");
+                }
+                return ExitCode::SUCCESS;
+            }
+            Err(e) => {
+                eprintln!("acpx: {e}");
+                return ExitCode::FAILURE;
+            }
+        }
+    }
+
     // P46.2 — `everyaios doctor`: per-subsystem readiness report (spec H35).
     // A support primitive: diagnose a broken component without a support
     // ticket. `--json` emits the machine-readable report; the default is a
@@ -59,9 +79,13 @@ fn main() -> ExitCode {
     }
 
     if headless {
-        eprintln!("[main] headless runtime profile (no tray/UI) — scheduled work runs via the coordinator's B7 scheduler");
+        eprintln!(
+            "[main] headless runtime profile (no tray/UI) — scheduled work runs via the coordinator's B7 scheduler"
+        );
         if coordinator_bin_from_args(&args).is_none() {
-            eprintln!("[main] WARNING: --headless without --coordinator-bin has no scheduler; pass --coordinator-bin <bun binary> to run B7 due-work");
+            eprintln!(
+                "[main] WARNING: --headless without --coordinator-bin has no scheduler; pass --coordinator-bin <bun binary> to run B7 due-work"
+            );
         }
     }
 

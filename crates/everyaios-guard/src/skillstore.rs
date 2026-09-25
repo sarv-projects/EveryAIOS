@@ -21,8 +21,8 @@
 //! Per-skill content integrity is the job of `manifest` (P7.7); this module
 //! is the *catalog* that points to it.
 
-use base64::engine::general_purpose::STANDARD as B64;
 use base64::Engine;
+use base64::engine::general_purpose::STANDARD as B64;
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};

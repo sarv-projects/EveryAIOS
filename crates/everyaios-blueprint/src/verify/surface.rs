@@ -453,13 +453,15 @@ mod tests {
 
         // Browser URL prefix.
         ctx.browser_url = Some("https://example.com/docs".into());
-        assert!(verify_surface(
-            &SurfaceCheck::BrowserUrl {
-                prefix: "https://example.com".into(),
-            },
-            &ctx,
-        )
-        .is_verified());
+        assert!(
+            verify_surface(
+                &SurfaceCheck::BrowserUrl {
+                    prefix: "https://example.com".into(),
+                },
+                &ctx,
+            )
+            .is_verified()
+        );
         assert!(matches!(
             verify_surface(
                 &SurfaceCheck::BrowserUrl {
@@ -472,16 +474,18 @@ mod tests {
 
         // Office cell value.
         ctx.office_cell = Some("42".into());
-        assert!(verify_surface(
-            &SurfaceCheck::OfficeCell {
-                path: "w.xlsx".into(),
-                sheet: "Sheet1".into(),
-                address: "B4".into(),
-                expected: "42".into(),
-            },
-            &ctx,
-        )
-        .is_verified());
+        assert!(
+            verify_surface(
+                &SurfaceCheck::OfficeCell {
+                    path: "w.xlsx".into(),
+                    sheet: "Sheet1".into(),
+                    address: "B4".into(),
+                    expected: "42".into(),
+                },
+                &ctx,
+            )
+            .is_verified()
+        );
     }
 
     #[test]

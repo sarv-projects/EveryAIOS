@@ -140,7 +140,7 @@ pub trait SandboxBackend {
     fn capabilities(&self) -> Vec<String>;
     fn validate(&self, spec: &SandboxSpec) -> Result<(), SandboxError>;
     fn spawn(&self, spec: &SandboxSpec, command: &[String])
-        -> Result<SandboxProcess, SandboxError>;
+    -> Result<SandboxProcess, SandboxError>;
 }
 
 /// A process launched by a concrete sandbox backend. The child remains owned
@@ -688,11 +688,13 @@ mod tests {
                 .unwrap(),
             SandboxBackendKind::NativeProcess
         );
-        assert!(resolve_sandbox_backend(
-            SandboxRole::ChildExecutionSandbox,
-            SandboxBackendKind::TrustedNative
-        )
-        .is_err());
+        assert!(
+            resolve_sandbox_backend(
+                SandboxRole::ChildExecutionSandbox,
+                SandboxBackendKind::TrustedNative
+            )
+            .is_err()
+        );
     }
     #[test]
     fn apply_is_honest() {

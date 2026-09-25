@@ -469,10 +469,10 @@ mod tests {
 
     #[test]
     fn desktop_entry_skips_hidden_and_non_applications() {
-        assert!(parse_desktop_entry(
-            "[Desktop Entry]\nType=Application\nHidden=true\nName=X\nExec=x\n"
-        )
-        .is_none());
+        assert!(
+            parse_desktop_entry("[Desktop Entry]\nType=Application\nHidden=true\nName=X\nExec=x\n")
+                .is_none()
+        );
         assert!(parse_desktop_entry("[Desktop Entry]\nType=Link\nName=X\nExec=x\n").is_none());
         assert!(parse_desktop_entry("[Desktop Entry]\nType=Application\nName=X\n").is_none());
         assert!(parse_desktop_entry("not a desktop file").is_none());

@@ -19,11 +19,14 @@
 //! `refresh_now` is exercised against a local HTTP fixture in tests (no live
 //! network), and the live leg is env-gated like every other client here.
 
+use std::collections::BTreeMap;
+use std::net::ToSocketAddrs;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use serde::Serialize;
 
-use crate::live::{apply_refresh, FetchOutcome, RefreshDecision, MODELS_DEV_API_URL};
+use crate::live::{FetchOutcome, MODELS_DEV_API_URL, RefreshDecision, apply_refresh};
 use crate::store::{CatalogMeta, CatalogStore};
 
 /// Outbound timeout for the catalog fetch (the body is ~4.6 MB).
@@ -37,6 +40,25 @@ pub struct HttpFetch {
     /// Overridable for tests / a mirror. Never a different *path*: the
     /// catalog is only ever one JSON document.
     url: String,
+    /// P45.7 — one resolution and one reused HTTP agent per session.
+    /// `end_session` drops both so the next call cannot reuse a stale address.
+    session: Arc<Mutex<HostSession>>,
+}
+
+struct HostSession {
+    hosts: BTreeMap<String, Vec<String>>,
+    lookups: u64,
+    agent: Option<ureq::Agent>,
+}
+
+impl std::fmt::Debug for HostSession {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("HostSession")
+            .field("hosts", &self.hosts)
+            .field("lookups", &self.lookups)
+            .field("agent", &self.agent.is_some())
+            .finish()
+    }
 }
 
 impl Default for HttpFetch {
@@ -51,7 +73,63 @@ impl HttpFetch {
             timeout: Duration::from_secs(FETCH_TIMEOUT_SECS),
             user_agent: format!("EveryAIOS/{}", env!("CARGO_PKG_VERSION")),
             url: MODELS_DEV_API_URL.to_string(),
+            session: Arc::new(Mutex::new(HostSession {
+                hosts: BTreeMap::new(),
+                lookups: 0,
+                agent: None,
+            })),
         }
+    }
+
+    /// Drop cached addresses and the reused agent. The next request resolves again.
+    pub fn end_session(&self) {
+        let mut session = self.session.lock().expect("dns session");
+        session.hosts.clear();
+        session.agent = None;
+    }
+
+    /// How many times this session has resolved a host. A second call in the
+    /// same session does not increase it.
+    pub fn resolution_count(&self) -> u64 {
+        self.session.lock().expect("dns session").lookups
+    }
+
+    fn host_of(url: &str) -> Option<String> {
+        let rest = url.split("://").nth(1)?;
+        let authority = rest.split(['/', '?', '#']).next().unwrap_or("");
+        let host = authority
+            .rsplit_once(':')
+            .map(|(h, _)| h)
+            .unwrap_or(authority);
+        let host = host.trim_matches(['[', ']']);
+        if host.is_empty() {
+            None
+        } else {
+            Some(host.to_string())
+        }
+    }
+
+    fn remember_host(session: &mut HostSession, host: &str) {
+        if session.hosts.contains_key(host) {
+            return;
+        }
+        let addrs = (host, 443)
+            .to_socket_addrs()
+            .map(|iter| iter.map(|addr| addr.to_string()).collect())
+            .unwrap_or_default();
+        session.hosts.insert(host.to_string(), addrs);
+        session.lookups = session.lookups.saturating_add(1);
+    }
+
+    fn agent(&self) -> ureq::Agent {
+        let mut session = self.session.lock().expect("dns session");
+        if let Some(host) = Self::host_of(&self.url) {
+            Self::remember_host(&mut session, &host);
+        }
+        if session.agent.is_none() {
+            session.agent = Some(ureq::AgentBuilder::new().timeout(self.timeout).build());
+        }
+        session.agent.clone().expect("agent")
     }
 
     /// Point the client at a mirror (tests use a loopback fixture).
@@ -82,7 +160,7 @@ impl HttpFetch {
     /// One conditional GET. Never panics: every failure is a
     /// [`FetchOutcome::Failed`] with the transport's own message.
     pub fn get(&self, etag: Option<&str>) -> FetchOutcome {
-        let agent = ureq::AgentBuilder::new().timeout(self.timeout).build();
+        let agent = self.agent();
         let mut req = agent
             .get(&self.url)
             .set("Accept", "application/json")
@@ -140,6 +218,8 @@ pub fn probe_models_endpoint(
 ) -> EndpointProbe {
     let base = base_url.trim().trim_end_matches('/');
     let url = format!("{base}/models");
+    // One agent for this probe call. Session reuse for catalog refresh is
+    // `HttpFetch::agent`; this probe is a single request.
     let agent = ureq::AgentBuilder::new()
         .timeout(Duration::from_secs(20))
         .build();
@@ -312,6 +392,18 @@ pub fn refresh_now(store: &CatalogStore, client: &HttpFetch, now_ms: i64) -> Ref
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn one_resolution_per_host_until_end_session() {
+        let fetch = HttpFetch::new().with_url("http://127.0.0.1:1/api.json");
+        let _ = fetch.get(None);
+        let _ = fetch.get(None);
+        assert_eq!(fetch.resolution_count(), 1);
+        fetch.end_session();
+        let _ = fetch.get(None);
+        assert_eq!(fetch.resolution_count(), 2);
+    }
+
     use crate::live::CatalogSnapshot;
 
     fn dir(tag: &str) -> std::path::PathBuf {

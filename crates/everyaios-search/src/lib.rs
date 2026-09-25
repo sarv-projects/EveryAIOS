@@ -23,8 +23,8 @@
 pub mod searx_space;
 
 pub use searx_space::{
-    parse_instances, FeedError, FeedSource, InstanceFeedTransport, SearxInstance, SearxSpaceFeed,
-    FEED_TTL, INSTANCES_FEED_URL,
+    FEED_TTL, FeedError, FeedSource, INSTANCES_FEED_URL, InstanceFeedTransport, SearxInstance,
+    SearxSpaceFeed, parse_instances,
 };
 
 use std::collections::HashMap;
@@ -986,9 +986,11 @@ mod tests {
 
     #[test]
     fn channel_query_builders() {
-        assert!(Channel::Arxiv
-            .build_query("transformers")
-            .contains("all:transformers"));
+        assert!(
+            Channel::Arxiv
+                .build_query("transformers")
+                .contains("all:transformers")
+        );
         assert!(Channel::Github.build_query("rust").contains("q=rust"));
         assert!(Channel::Edgar.build_query("apple").contains("apple"));
         assert!(Channel::Reddit.build_query("ai").contains("q=ai"));

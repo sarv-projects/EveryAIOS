@@ -200,12 +200,16 @@ mod tests {
         });
         let problems = validate_slides_notes_sync(&slides, &notes);
         assert_eq!(problems.len(), 2);
-        assert!(problems
-            .iter()
-            .any(|p| p.contains("s2 has no speaker notes")));
-        assert!(problems
-            .iter()
-            .any(|p| p.contains("s9") && p.contains("does not match")));
+        assert!(
+            problems
+                .iter()
+                .any(|p| p.contains("s2 has no speaker notes"))
+        );
+        assert!(
+            problems
+                .iter()
+                .any(|p| p.contains("s9") && p.contains("does not match"))
+        );
     }
 
     #[test]
@@ -221,9 +225,11 @@ mod tests {
         let mut notes = build_speaker_notes(&[("s1".into(), "T".into(), "".into())]);
         notes[0].minutes = Some(2);
         let problems = validate_slides_notes_sync(&slides, &notes);
-        assert!(problems
-            .iter()
-            .any(|p| p.contains("minutes but no talk text")));
+        assert!(
+            problems
+                .iter()
+                .any(|p| p.contains("minutes but no talk text"))
+        );
     }
 
     #[test]

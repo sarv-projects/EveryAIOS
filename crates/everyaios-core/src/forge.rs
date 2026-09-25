@@ -304,7 +304,7 @@ impl<C: CommandRunner, F: FileStore> ForgeRuntime<C, F> {
                     final_source: None,
                     last_output: CommandOutput::default(),
                     trace: Vec::new(),
-                }
+                };
             }
         };
         let trace = vec![

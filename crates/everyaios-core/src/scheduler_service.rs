@@ -346,6 +346,38 @@ impl MonitorConfig {
     }
 }
 
+const RETIRED_JOB_FIELDS: &[&str] = &[
+    "checkpoint",
+    "state",
+    "currentRun",
+    "runs",
+    "successes",
+    "failures",
+    "modelPin",
+    "effortPin",
+    "manifestHash",
+    "lastOutput",
+];
+
+/// Remove execution leftovers from a persisted scheduler document.
+fn drop_retired_execution_fields(value: &mut Value) {
+    let jobs = if let Some(array) = value.as_array_mut() {
+        array
+    } else if let Some(jobs) = value.get_mut("jobs").and_then(|jobs| jobs.as_array_mut()) {
+        jobs
+    } else {
+        return;
+    };
+    for job in jobs {
+        let Some(object) = job.as_object_mut() else {
+            continue;
+        };
+        for key in RETIRED_JOB_FIELDS {
+            object.remove(*key);
+        }
+    }
+}
+
 /// One trigger-plane job: a **definition + trigger**, never a run.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -773,8 +805,12 @@ impl SchedulerService {
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(svc),
             Err(error) => return Err(format!("read scheduler state: {error}")),
         };
-        let raw: Value = serde_json::from_slice(&bytes)
+        let mut raw: Value = serde_json::from_slice(&bytes)
             .map_err(|error| format!("parse scheduler state: {error}"))?;
+        // Older files stored execution leftovers (a checkpoint, a run list).
+        // Those are not trigger-plane fields. Drop them so a restart can read
+        // the jobs. They are not loaded as a second runtime.
+        drop_retired_execution_fields(&mut raw);
         let (jobs, occurrences, generation_counters) = if let Some(array) = raw.as_array() {
             let jobs: Vec<Job> = serde_json::from_value(Value::Array(array.clone()))
                 .map_err(|error| format!("parse scheduler jobs: {error}"))?;
@@ -3933,6 +3969,22 @@ mod tests {
                 "execution state {gone:?} must not exist on the trigger plane: {job}"
             );
         }
+    }
+
+    #[test]
+    fn a_leftover_checkpoint_does_not_refuse_the_registry() {
+        let dir =
+            std::env::temp_dir().join(format!("everyaios-sched-checkpoint-{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&dir);
+        let path = dir.join("jobs.json");
+        std::fs::write(
+            &path,
+            r#"[{"id":"j1","name":"brief","sessionId":"s1","trigger":{"type":"interval","secs":60},"steps":[],"policy":{"suppressOnBattery":false,"maxRunsPerHour":null,"scope":null},"enabled":true,"paused":false,"nextRunAt":null,"checkpoint":{"id":"old"}}]"#,
+        )
+        .unwrap();
+        let svc = SchedulerService::load_or_new_checked(path).expect("checkpoint is ignored");
+        assert!(svc.get("j1").is_some());
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// The structural **I26/I3** assertion: the wire shape itself carries no

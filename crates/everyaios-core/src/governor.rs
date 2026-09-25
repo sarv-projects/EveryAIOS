@@ -383,9 +383,10 @@ mod tests {
         assert_eq!(eff, vec!["read".to_string()]);
         // Depth 3 is refused before any fleet slot is consumed.
         let before = gov.active_counts();
-        assert!(gov
-            .admit_subagent_task(mk("deep"), 3, 1, &granted, &[])
-            .is_err());
+        assert!(
+            gov.admit_subagent_task(mk("deep"), 3, 1, &granted, &[])
+                .is_err()
+        );
         assert_eq!(gov.active_counts(), before);
     }
 }

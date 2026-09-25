@@ -73,7 +73,7 @@ impl PathSeal {
             SealState::Sealed => {
                 return Err(SealError::Sealed {
                     state: SealState::Sealed,
-                })
+                });
             }
             SealState::Closed => return Err(SealError::StillClosed),
             SealState::Unveiling => {}
@@ -101,7 +101,7 @@ impl PathSeal {
             SealState::Sealed => {
                 return Err(SealError::Sealed {
                     state: SealState::Sealed,
-                })
+                });
             }
             SealState::Closed => return Err(SealError::StillClosed),
             SealState::Unveiling => {}

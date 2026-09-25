@@ -1,9 +1,9 @@
 //! P1.8 (A5/B5) — local runtime tests (mock ollama / llamafile endpoints).
 
 use super::*;
+use crate::Vault;
 use crate::broker::Broker;
 use crate::ledger::Usage;
-use crate::Vault;
 use std::io::{Read, Write};
 use std::net::TcpListener;
 use std::thread;

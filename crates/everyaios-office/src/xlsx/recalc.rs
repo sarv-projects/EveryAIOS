@@ -7,7 +7,7 @@
 //! would violate byte-preservation) — we extract the computed values and
 //! the surgical patch writes only the changed cells.
 
-use ironcalc::base::{cell::CellValue as IcValue, Model};
+use ironcalc::base::{Model, cell::CellValue as IcValue};
 use ironcalc::import::load_from_xlsx_bytes;
 use serde::{Deserialize, Serialize};
 

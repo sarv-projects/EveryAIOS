@@ -80,19 +80,27 @@ pub enum GrantError {
         plugin: String,
         bindings: Vec<String>,
     },
-    #[error("plugin `{plugin}` declares capability `{cap}` but its trust flags are fail-closed (missing {flag})")]
+    #[error(
+        "plugin `{plugin}` declares capability `{cap}` but its trust flags are fail-closed (missing {flag})"
+    )]
     TrustFlagClosed {
         plugin: String,
         cap: String,
         flag: &'static str,
     },
-    #[error("plugin `{plugin}` declares `{cap}` but is not sandboxed — dangerous powers require the sandbox")]
+    #[error(
+        "plugin `{plugin}` declares `{cap}` but is not sandboxed — dangerous powers require the sandbox"
+    )]
     UnsandboxedPower { plugin: String, cap: String },
-    #[error("plugin `{plugin}` declares `{cap}` but does not require approval — dangerous powers require human approval")]
+    #[error(
+        "plugin `{plugin}` declares `{cap}` but does not require approval — dangerous powers require human approval"
+    )]
     ApprovalNotRequired { plugin: String, cap: String },
     #[error("capability `{cap}` denied by explicit deny-list for plugin `{plugin}`")]
     ExplicitlyDenied { plugin: String, cap: String },
-    #[error("capability `{cap}` not granted by host (manifest allow-list ∧ host grant is empty) for plugin `{plugin}`")]
+    #[error(
+        "capability `{cap}` not granted by host (manifest allow-list ∧ host grant is empty) for plugin `{plugin}`"
+    )]
     NotHostGranted { plugin: String, cap: String },
 }
 

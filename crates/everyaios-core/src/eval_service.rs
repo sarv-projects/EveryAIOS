@@ -6,10 +6,10 @@
 //! other task) finishes.
 
 use everyaios_blueprint::verify::{
-    verify, Constraint, OutcomeCheck, SurfaceCheck, SurfaceContext, TaskManifest,
-    VerificationReport,
+    Constraint, OutcomeCheck, SurfaceCheck, SurfaceContext, TaskManifest, VerificationReport,
+    verify,
 };
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Default)]

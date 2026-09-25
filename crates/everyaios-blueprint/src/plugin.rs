@@ -598,10 +598,11 @@ bind = ["office-worker"]
         assert_eq!(m.abi_version, ABI_VERSION);
         assert_eq!(m.name, "office-tools");
         assert_eq!(m.contributes.slots, vec![Slot::Loop, Slot::Sandbox]);
-        assert!(m
-            .capabilities
-            .deny
-            .contains(&"fs.write:/tmp/office/secret/**".into()));
+        assert!(
+            m.capabilities
+                .deny
+                .contains(&"fs.write:/tmp/office/secret/**".into())
+        );
         // validate() is idempotent on a good manifest.
         m.validate("test").unwrap();
     }

@@ -325,11 +325,13 @@ mod tests {
     fn derives_deterministic_slug_from_title() {
         let draft = learn_from_evidence(&req(), None).unwrap();
         assert_eq!(draft.skill.manifest.name, "pdf-triage");
-        assert!(draft
-            .skill
-            .manifest
-            .triggers
-            .contains(&"pdf triage".to_string()));
+        assert!(
+            draft
+                .skill
+                .manifest
+                .triggers
+                .contains(&"pdf triage".to_string())
+        );
         // Deterministic: same input ⇒ same everything.
         let again = learn_from_evidence(&req(), None).unwrap();
         assert_eq!(draft, again);

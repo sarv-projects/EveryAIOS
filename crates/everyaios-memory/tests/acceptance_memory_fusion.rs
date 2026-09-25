@@ -19,8 +19,8 @@
 //! Windows end-to-end run remains open — see TODO P66.8.
 
 use everyaios_memory::{
-    activation, derive_queries, forget_sweep, fuse_signals, keyword_hits, recall_score, recency,
-    Bm25Doc, Bm25Index, Hit, Memory, RecallWeights, SignalKind, SignalRank,
+    Bm25Doc, Bm25Index, Hit, Memory, RecallWeights, SignalKind, SignalRank, activation,
+    derive_queries, forget_sweep, fuse_signals, keyword_hits, recall_score, recency,
 };
 
 const DAY: u64 = 86_400;

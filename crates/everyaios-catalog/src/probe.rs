@@ -356,9 +356,11 @@ mod tests {
         assert!(report.is_fully_verified());
         assert_eq!(report.observed_model_ids.len(), 2);
         assert_eq!(report.observed_context_len, Some(32_000));
-        assert!(report
-            .capability_verdicts
-            .iter()
-            .any(|v| v.capability == Capability::StructuredOutput));
+        assert!(
+            report
+                .capability_verdicts
+                .iter()
+                .any(|v| v.capability == Capability::StructuredOutput)
+        );
     }
 }

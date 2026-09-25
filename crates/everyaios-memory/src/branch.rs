@@ -176,7 +176,7 @@ mod tests {
         l.register_root("a").unwrap();
         l.fork("a", "b", "t10", 1).unwrap();
         l.fork("a", "c", "t10", 2).unwrap(); // sibling branch
-                                             // c's recall branch is a → c; b's future is never visible to c.
+        // c's recall branch is a → c; b's future is never visible to c.
         let recall: Vec<&str> = l
             .recall_branch("c")
             .iter()

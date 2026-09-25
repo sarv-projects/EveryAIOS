@@ -13,7 +13,7 @@ pub mod track;
 use std::collections::HashMap;
 
 use crate::zip::OoxmlArchive;
-use blocktree::{build_blocks, Block, BlockTree};
+use blocktree::{Block, BlockTree, build_blocks};
 
 /// Errors surfaced by the office engine. The patch failures are the
 /// documented "safety fallback" cases (GenOffice returns `null` and the
@@ -28,9 +28,13 @@ pub enum OfficeError {
     Utf8(#[from] std::str::Utf8Error),
     #[error("block not found: {0}")]
     BlockNotFound(String),
-    #[error("stale edit on block {address}: rendered text no longer matches the part (re-render before editing)")]
+    #[error(
+        "stale edit on block {address}: rendered text no longer matches the part (re-render before editing)"
+    )]
     StaleEdit { address: String },
-    #[error("edit on block {0} crosses a line break / tab (structural change) — rebuild the paragraph instead")]
+    #[error(
+        "edit on block {0} crosses a line break / tab (structural change) — rebuild the paragraph instead"
+    )]
     PatchAcrossMarker(String),
     #[error("paragraph has no w:t text anchor")]
     NoTextAnchor,
@@ -252,7 +256,7 @@ mod tests {
         let s = String::from_utf8(a.read_part("word/document.xml").unwrap()).unwrap();
         assert!(s.contains("Hello, ")); // first run untouched
         assert!(s.contains("universe!")); // second run patched
-                                          // The exact original w:t for the first run must be present verbatim.
+        // The exact original w:t for the first run must be present verbatim.
         assert!(s.contains("<w:t>Hello, </w:t>"));
     }
 

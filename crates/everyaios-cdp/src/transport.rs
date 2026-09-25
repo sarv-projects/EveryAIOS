@@ -14,15 +14,15 @@
 
 use crate::{CdpError, Session, TargetInfo};
 use futures_util::{SinkExt, StreamExt};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{mpsc, Arc, Mutex};
+use std::sync::{Arc, Mutex, mpsc};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 use tokio::io::{AsyncRead, AsyncWrite};
-use tokio_tungstenite::tungstenite::Message as WsMessage;
 use tokio_tungstenite::WebSocketStream;
+use tokio_tungstenite::tungstenite::Message as WsMessage;
 
 /// Max queued protocol events (drop-oldest beyond this — events are
 /// best-effort diagnostics; responses are never dropped).

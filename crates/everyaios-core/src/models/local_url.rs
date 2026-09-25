@@ -278,12 +278,14 @@ mod tests {
         assert_eq!(lf.provider, "llamafile");
 
         // Fail-closed: not installed / not in registry.
-        assert!(res
-            .resolve(&"local://ollama/not-installed:1".parse().unwrap())
-            .is_err());
-        assert!(res
-            .resolve(&"local://hf/other/model:q8".parse().unwrap())
-            .is_err());
+        assert!(
+            res.resolve(&"local://ollama/not-installed:1".parse().unwrap())
+                .is_err()
+        );
+        assert!(
+            res.resolve(&"local://hf/other/model:q8".parse().unwrap())
+                .is_err()
+        );
         let _ = std::fs::remove_dir_all(&base);
     }
 }

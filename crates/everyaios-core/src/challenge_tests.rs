@@ -4,7 +4,7 @@
 //! claimed locally solvable; PoW kinds must never be paid for.
 
 use super::*;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::sync::Mutex;
 use std::time::Duration;
 

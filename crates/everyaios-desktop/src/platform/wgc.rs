@@ -28,24 +28,24 @@
 
 use std::sync::OnceLock;
 
-use windows::core::Interface;
 use windows::Graphics::Capture::{
     Direct3D11CaptureFramePool, GraphicsCaptureItem, GraphicsCaptureSession,
 };
 use windows::Graphics::DirectX::Direct3D11::{IDirect3DDevice, IDirect3DSurface};
 use windows::Graphics::DirectX::DirectXPixelFormat;
 use windows::Graphics::SizeInt32;
+use windows::UI::WindowId;
 use windows::Win32::Foundation::HWND;
 use windows::Win32::Graphics::Direct3D::{D3D_DRIVER_TYPE_HARDWARE, D3D_FEATURE_LEVEL};
 use windows::Win32::Graphics::Direct3D11::{
+    D3D11_CPU_ACCESS_READ, D3D11_CREATE_DEVICE_BGRA_SUPPORT, D3D11_MAP_READ,
+    D3D11_MAPPED_SUBRESOURCE, D3D11_SDK_VERSION, D3D11_TEXTURE2D_DESC, D3D11_USAGE_STAGING,
     D3D11CreateDevice, ID3D11Device, ID3D11DeviceContext, ID3D11Resource, ID3D11Texture2D,
-    D3D11_CPU_ACCESS_READ, D3D11_CREATE_DEVICE_BGRA_SUPPORT, D3D11_MAPPED_SUBRESOURCE,
-    D3D11_MAP_READ, D3D11_SDK_VERSION, D3D11_TEXTURE2D_DESC, D3D11_USAGE_STAGING,
 };
 use windows::Win32::System::WinRT::Direct3D11::{
     CreateDirect3D11DeviceFromDXGIDevice, IDirect3DDxgiInterfaceAccess,
 };
-use windows::UI::WindowId;
+use windows::core::Interface;
 
 /// Frames to try before giving up: WGC delivers asynchronously, so the first
 /// `TryGetNextFrame` right after `StartCapture` can legitimately be empty.
@@ -123,8 +123,8 @@ unsafe fn capture_inner(hwnd: HWND) -> Option<(Vec<u8>, u32, u32)> {
 
 /// A BGRA-capable D3D11 device + immediate context, wrapped as the WinRT
 /// `IDirect3DDevice` the frame pool needs.
-unsafe fn create_device(
-) -> windows::core::Result<(ID3D11Device, ID3D11DeviceContext, IDirect3DDevice)> {
+unsafe fn create_device()
+-> windows::core::Result<(ID3D11Device, ID3D11DeviceContext, IDirect3DDevice)> {
     let mut device: Option<ID3D11Device> = None;
     let mut context: Option<ID3D11DeviceContext> = None;
     D3D11CreateDevice(

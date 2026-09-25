@@ -1,7 +1,7 @@
 use super::*;
+use crate::Vault;
 use crate::broker::Broker;
 use crate::keyring::KeyRing;
-use crate::Vault;
 use std::io::{Read, Write};
 use std::net::TcpListener;
 use std::thread;
@@ -120,9 +120,11 @@ fn pkce_flow_roundtrip_persists_and_links_ring() {
         .with_token_url(CHATGPT_PRO, &base);
 
     let start = om.start_pkce(CHATGPT_PRO).unwrap();
-    assert!(start
-        .auth_url
-        .starts_with("https://auth0.openai.com/authorize?"));
+    assert!(
+        start
+            .auth_url
+            .starts_with("https://auth0.openai.com/authorize?")
+    );
     assert!(start.auth_url.contains("response_type=code"));
     assert!(start.auth_url.contains("code_challenge_method=S256"));
     assert!(start.auth_url.contains("code_challenge="));
@@ -586,13 +588,17 @@ fn google_connector_pkce_roundtrip() {
         .with_token_url(GOOGLE, &base);
 
     let start = om.start_pkce(GOOGLE).unwrap();
-    assert!(start
-        .auth_url
-        .starts_with("https://accounts.google.com/o/oauth2/v2/auth?"));
+    assert!(
+        start
+            .auth_url
+            .starts_with("https://accounts.google.com/o/oauth2/v2/auth?")
+    );
     assert!(start.auth_url.contains("code_challenge_method=S256"));
-    assert!(start
-        .auth_url
-        .contains("redirect_uri=http%3A%2F%2F127.0.0.1%3A1%2Fcb"));
+    assert!(
+        start
+            .auth_url
+            .contains("redirect_uri=http%3A%2F%2F127.0.0.1%3A1%2Fcb")
+    );
     // Google scopes are space-encoded in the authorize URL.
     assert!(start.auth_url.contains("drive.readonly"));
 
@@ -624,9 +630,11 @@ fn microsoft_connector_pkce_roundtrip() {
         .with_token_url(MICROSOFT, &base);
 
     let start = om.start_pkce(MICROSOFT).unwrap();
-    assert!(start
-        .auth_url
-        .starts_with("https://login.microsoftonline.com/common/oauth2/v2.0/authorize?"));
+    assert!(
+        start
+            .auth_url
+            .starts_with("https://login.microsoftonline.com/common/oauth2/v2.0/authorize?")
+    );
 
     let info = om
         .complete_pkce(MICROSOFT, "code-ms", &start.state)
@@ -672,10 +680,11 @@ fn connector_token_persists_and_loads() {
     let vault = vault();
     let om = OAuthManager::with_enabled(vault, true);
     // Fresh store has no token.
-    assert!(om
-        .load_connector_token("remote-mcp", "google-drive")
-        .unwrap()
-        .is_none());
+    assert!(
+        om.load_connector_token("remote-mcp", "google-drive")
+            .unwrap()
+            .is_none()
+    );
     // Store a finished connector token (encrypted at rest).
     om.store_connector_token(
         "remote-mcp",
@@ -707,16 +716,18 @@ fn connector_token_persists_and_loads() {
         .unwrap();
     assert_eq!(loaded, "acc-tok-2");
     // Different store id stays independent.
-    assert!(om
-        .load_connector_token("remote-mcp", "github")
-        .unwrap()
-        .is_none());
+    assert!(
+        om.load_connector_token("remote-mcp", "github")
+            .unwrap()
+            .is_none()
+    );
     // Revoke removes the connector token too.
     om.revoke("remote-mcp", "google-drive").unwrap();
-    assert!(om
-        .load_connector_token("remote-mcp", "google-drive")
-        .unwrap()
-        .is_none());
+    assert!(
+        om.load_connector_token("remote-mcp", "google-drive")
+            .unwrap()
+            .is_none()
+    );
 }
 
 #[test]

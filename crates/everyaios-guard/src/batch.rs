@@ -11,7 +11,7 @@
 //! Lifecycle mirrors `AuthorizationTicket` (mint → approve-with-nonce →
 //! consume), so the same Guard-2 card surface and audit receipts apply.
 
-use crate::ticket::{hash_args, new_approval_nonce, ApprovalSource, RiskLevel, TicketState};
+use crate::ticket::{ApprovalSource, RiskLevel, TicketState, hash_args, new_approval_nonce};
 use serde::{Deserialize, Serialize};
 
 /// One mutation in the change set: the exact operation + args hash + the

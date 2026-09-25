@@ -379,9 +379,10 @@ mod tests {
             Err(WorktreeError::PayloadTooLarge { .. })
         ));
         // Traversal receipt ids are refused.
-        assert!(mgr
-            .append_receipt(&lease, "../evil", &serde_json::json!({}))
-            .is_err());
+        assert!(
+            mgr.append_receipt(&lease, "../evil", &serde_json::json!({}))
+                .is_err()
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 

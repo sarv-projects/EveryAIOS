@@ -349,12 +349,14 @@ mod tests {
             "x",
         );
         assert!(!out.is_valid());
-        assert!(out
-            .rejected
-            .contains(&("nope".into(), RejectionReason::Unknown)));
-        assert!(out
-            .rejected
-            .contains(&("refactor-helper".into(), RejectionReason::Duplicate)));
+        assert!(
+            out.rejected
+                .contains(&("nope".into(), RejectionReason::Unknown))
+        );
+        assert!(
+            out.rejected
+                .contains(&("refactor-helper".into(), RejectionReason::Duplicate))
+        );
         // Conflict: a skill sharing the `refactor` tag collides with the
         // already-selected one.
         let clash = SkillsIndexFile::new(vec![
@@ -376,9 +378,10 @@ mod tests {
             },
         ]);
         let out = compose_stack(&clash, &["a".into(), "b".into()], &[], "refactor");
-        assert!(out
-            .rejected
-            .contains(&("b".into(), RejectionReason::Conflict { with: "a".into() })));
+        assert!(
+            out.rejected
+                .contains(&("b".into(), RejectionReason::Conflict { with: "a".into() }))
+        );
     }
 
     #[test]
@@ -391,10 +394,11 @@ mod tests {
             ..Default::default()
         }]);
         let auto = compose_stack(&idx, &["deploy".into()], &[], "deploy");
-        assert!(auto
-            .rejected
-            .iter()
-            .any(|(_, r)| { matches!(r, RejectionReason::ModelInvocationDisabled) }));
+        assert!(
+            auto.rejected
+                .iter()
+                .any(|(_, r)| { matches!(r, RejectionReason::ModelInvocationDisabled) })
+        );
         let user = compose_stack_for(
             &idx,
             &["deploy".into()],

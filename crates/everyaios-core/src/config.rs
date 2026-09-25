@@ -86,6 +86,26 @@ pub struct SubagentPolicy {
     pub workspace: String,
     /// Token budget for the agent's subtree (0 = unbounded at the chain cap).
     pub budget: u64,
+    /// P63.12 — this agent may occupy the primary slot.
+    #[serde(default = "default_true")]
+    pub allow_as_primary: bool,
+    /// P63.12 — this agent may be hired through `delegate.spawn`.
+    #[serde(default = "default_true")]
+    pub enable_as_subagent: bool,
+    /// Domain tags used when the primary agent does not name a worker.
+    #[serde(default)]
+    pub domains: Vec<String>,
+    /// Per-turn dollar ceiling in cents. 0 means the chain cap, not a free pass
+    /// past Guard.
+    #[serde(default)]
+    pub max_cents_per_turn: u32,
+    /// Per-turn token ceiling. 0 means unset.
+    #[serde(default)]
+    pub max_tokens_per_turn: u64,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 impl Default for SubagentPolicy {
@@ -100,6 +120,11 @@ impl Default for SubagentPolicy {
             max_concurrency: 6,
             workspace: "shared".to_string(),
             budget: 0,
+            allow_as_primary: true,
+            enable_as_subagent: true,
+            domains: Vec::new(),
+            max_cents_per_turn: 0,
+            max_tokens_per_turn: 0,
         }
     }
 }

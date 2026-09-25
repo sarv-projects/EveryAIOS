@@ -9,14 +9,14 @@
 //! lifetime. Persistent durability (vault/SQLCipher) is a follow-up layer —
 //! the schema here is exactly what that layer will hydrate on boot.
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::collections::HashSet;
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use everyaios_memory::{
-    extract_candidates, Bm25Doc, Bm25Index, ContextPlanner, EdgeType, FsEvent, GhostIndex,
-    GraphStore, MemoryEntry, NodeKind, PagedMemory, PlannerConfig, UsageLedger,
+    Bm25Doc, Bm25Index, ContextPlanner, EdgeType, FsEvent, GhostIndex, GraphStore, MemoryEntry,
+    NodeKind, PagedMemory, PlannerConfig, UsageLedger, extract_candidates,
 };
 
 /// Current wall-clock time in milliseconds since the Unix epoch (0 when the
@@ -1291,9 +1291,10 @@ mod tests {
         assert_eq!(out.unwrap()["written"], 2);
 
         assert!(m.handle("bogus/method", &json!({})).is_err());
-        assert!(m
-            .handle("memory/ghost", &json!({ "kind": "removed" }))
-            .is_err());
+        assert!(
+            m.handle("memory/ghost", &json!({ "kind": "removed" }))
+                .is_err()
+        );
     }
 
     #[test]
@@ -1498,10 +1499,11 @@ mod tests {
             )
             .unwrap();
         assert!(out.get("active").is_some());
-        assert!(m
-            .facts
-            .iter()
-            .any(|f| f.source == "synthesis" || f.text.contains("Rust")));
+        assert!(
+            m.facts
+                .iter()
+                .any(|f| f.source == "synthesis" || f.text.contains("Rust"))
+        );
     }
 
     #[test]
@@ -1531,11 +1533,12 @@ mod tests {
         // paged + graph + ghost all dropped the id.
         assert!(m.paged.read("mem:1").is_none());
         assert!(m.graph.node_active_at("mem:1", m.counter + 1, 0).is_none());
-        assert!(m
-            .ghost
-            .ids_for("memory://s1")
-            .iter()
-            .all(|id| id != "mem:1"));
+        assert!(
+            m.ghost
+                .ids_for("memory://s1")
+                .iter()
+                .all(|id| id != "mem:1")
+        );
 
         // Unknown id is a no-op miss.
         assert!(!m.forget("mem:999"));

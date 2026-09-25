@@ -9,7 +9,7 @@
 //! CDP input/read/screenshot domains.
 
 use crate::{Snapshot, SnapshotEngine, SnapshotMode};
-use everyaios_cdp::{probe_electron, CdpClient, CdpError, ElectronApp, Session};
+use everyaios_cdp::{CdpClient, CdpError, ElectronApp, Session, probe_electron};
 use serde_json::json;
 
 /// An attached Electron app: the app info + a live CDP connection + the first

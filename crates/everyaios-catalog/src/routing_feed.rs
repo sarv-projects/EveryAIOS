@@ -18,8 +18,8 @@ use std::collections::{HashMap, HashSet};
 
 use serde::{Deserialize, Serialize};
 
-use crate::probe::{trusted_capabilities, Capability};
-use crate::provider::{normalize, Auth, ProviderRecord, ProviderRegistry};
+use crate::probe::{Capability, trusted_capabilities};
+use crate::provider::{Auth, ProviderRecord, ProviderRegistry, normalize};
 
 /// Live health for one provider (fed by A7 observations / probe pings).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -345,7 +345,7 @@ fn req_hash(req: &RouteRequirements) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::probe::{verify_report, AdvertisedHardCaps, ProbeResult};
+    use crate::probe::{AdvertisedHardCaps, ProbeResult, verify_report};
 
     fn provider(id: &str, tools_verified: bool) -> ProviderRecord {
         let mut rec = ProviderRecord {
@@ -411,10 +411,11 @@ mod tests {
         });
         assert_eq!(d.ranked.len(), 1);
         assert_eq!(d.top(), Some("a"));
-        assert!(d
-            .excluded
-            .iter()
-            .any(|e| e.id == "b" && e.reason.contains("unverified")));
+        assert!(
+            d.excluded
+                .iter()
+                .any(|e| e.id == "b" && e.reason.contains("unverified"))
+        );
     }
 
     #[test]
@@ -430,10 +431,11 @@ mod tests {
             ..Default::default()
         });
         assert_eq!(d.top(), Some("b"));
-        assert!(d
-            .excluded
-            .iter()
-            .any(|e| e.id == "a" && e.reason.contains("Down")));
+        assert!(
+            d.excluded
+                .iter()
+                .any(|e| e.id == "a" && e.reason.contains("Down"))
+        );
     }
 
     #[test]
@@ -579,10 +581,11 @@ mod tests {
         // Everything is excluded AND unkeyed — no fallback re-admission.
         let d = feed.decide(&RouteRequirements::default());
         assert!(d.ranked.is_empty());
-        assert!(d
-            .excluded
-            .iter()
-            .any(|e| e.id == "a" && e.reason.contains("vault credential")));
+        assert!(
+            d.excluded
+                .iter()
+                .any(|e| e.id == "a" && e.reason.contains("vault credential"))
+        );
     }
 
     #[test]

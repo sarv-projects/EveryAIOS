@@ -35,15 +35,15 @@ use std::sync::Arc;
 
 use thiserror::Error;
 
-pub use apps::{annotate_inventory, installed_apps, search_apps, AppSource, InstalledApp};
+pub use apps::{AppSource, InstalledApp, annotate_inventory, installed_apps, search_apps};
 pub use launch::{is_secret_env_name, prepare_child, resolve_target};
-pub use ocr::{locate_phrase, OcrEngine, VisionHit};
+pub use ocr::{OcrEngine, VisionHit, locate_phrase};
 pub use policy::{
     ActProvenance, AppPolicy, AuditSink, ConfirmClass, DesktopGuard, GateDecision, InteractionMode,
     PermissionGate,
 };
-pub use readiness::{derive as derive_readiness, Readiness, ReadinessState};
-pub use router::{route, Layer, RouteDecision};
+pub use readiness::{Readiness, ReadinessState, derive as derive_readiness};
+pub use router::{Layer, RouteDecision, route};
 pub use types::{
     ActKind, ActOutcome, Capabilities, EscalationRequest, ForegroundSnapshot, ReadNode, ReadResult,
     Region, SeeMethod, SeeResult, VerifyOutcome, WindowInfo,
@@ -455,7 +455,7 @@ impl<'a> Observer for EngineObserver<'a> {
 
 /// Re-export the OcrEngine trait methods for `locate_phrase` callers.
 pub mod prelude {
-    pub use crate::ocr::{locate_phrase, OcrEngine, VisionHit};
+    pub use crate::ocr::{OcrEngine, VisionHit, locate_phrase};
     pub use crate::policy::GateDecision;
 }
 
@@ -518,37 +518,45 @@ mod p57_escalation_tests {
             interaction_mode: InteractionMode::Foreground,
             ..AppPolicy::default()
         });
-        assert!(engine
-            .escalation_for(&window(), &ActKind::ActivateWindow { window_id: 7 })
-            .is_none());
+        assert!(
+            engine
+                .escalation_for(&window(), &ActKind::ActivateWindow { window_id: 7 })
+                .is_none()
+        );
     }
 
     #[test]
     fn scroll_and_drag_are_pointer_motion_by_definition() {
         let engine = engine(AppPolicy::default());
-        assert!(engine
-            .escalation_for(
-                &window(),
-                &ActKind::Scroll {
-                    x: 1,
-                    y: 2,
-                    delta: -1
-                }
-            )
-            .is_some());
-        assert!(engine
-            .escalation_for(
-                &window(),
-                &ActKind::Drag {
-                    from: (0, 0),
-                    to: (5, 5),
-                }
-            )
-            .is_some());
+        assert!(
+            engine
+                .escalation_for(
+                    &window(),
+                    &ActKind::Scroll {
+                        x: 1,
+                        y: 2,
+                        delta: -1
+                    }
+                )
+                .is_some()
+        );
+        assert!(
+            engine
+                .escalation_for(
+                    &window(),
+                    &ActKind::Drag {
+                        from: (0, 0),
+                        to: (5, 5),
+                    }
+                )
+                .is_some()
+        );
         // Typing into a background window is not a foreground act.
-        assert!(engine
-            .escalation_for(&window(), &ActKind::Type { text: "hi".into() })
-            .is_none());
+        assert!(
+            engine
+                .escalation_for(&window(), &ActKind::Type { text: "hi".into() })
+                .is_none()
+        );
     }
 
     #[test]

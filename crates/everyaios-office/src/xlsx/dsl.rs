@@ -14,7 +14,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::address::{format_ref, CellRef, RangeRef};
+use super::address::{CellRef, RangeRef, format_ref};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Scalar {

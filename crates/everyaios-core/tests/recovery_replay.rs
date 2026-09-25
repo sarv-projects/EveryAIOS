@@ -13,7 +13,7 @@ use everyaios_types::{
     AgentBinding, AgentBindingId, AgentGovernanceMode, AgentId, AgentProtocol, IdempotencyClass,
     SessionId, SessionKind, WorkId, WorkState,
 };
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 fn temp_dir(tag: &str) -> PathBuf {
     let path = std::env::temp_dir().join(format!(
@@ -73,34 +73,44 @@ fn automation_kind_provenance_and_terminal_state_replay_exactly() {
         let mut gateway = journal(&path);
         make_automation_work(&mut gateway);
         gateway
-            .record_execution_transition(
-                "automation-work",
-                "automation-run",
-                WorkState::Completed,
-            )
+            .record_execution_transition("automation-work", "automation-run", WorkState::Completed)
             .unwrap();
     }
 
     let gateway = journal(&path);
     let address = gateway.get_work("automation-work").unwrap();
     assert_eq!(address.session_kind, SessionKind::Automation);
-    assert_eq!(address.provenance.automation_id.as_deref(), Some("automation:auto:test"));
-    assert_eq!(address.provenance.revision_id.as_deref(), Some("g1:r1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"));
+    assert_eq!(
+        address.provenance.automation_id.as_deref(),
+        Some("automation:auto:test")
+    );
+    assert_eq!(
+        address.provenance.revision_id.as_deref(),
+        Some("g1:r1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+    );
     assert_eq!(address.provenance.automation_generation, Some(1));
-    assert_eq!(address.provenance.trigger_occurrence_id.as_deref(), Some("occ:test"));
+    assert_eq!(
+        address.provenance.trigger_occurrence_id.as_deref(),
+        Some("occ:test")
+    );
 
     let kernel = ExecutionKernel::recover_from_work_gateway(&gateway).unwrap();
     let run = kernel.get("automation-run").unwrap();
     assert_eq!(run.session_id, "automation-session");
-    assert_eq!(run.trigger, everyaios_core::execution::ExecutionTrigger::Scheduler);
+    assert_eq!(
+        run.trigger,
+        everyaios_core::execution::ExecutionTrigger::Scheduler
+    );
     assert_eq!(run.state, ExecutionPhase::Completed);
     assert_eq!(run.idempotency_key, "exec:automation-run");
     assert!(run.context_snapshot.contains("automation:auto:test"));
 
     let mut gateway = gateway;
-    assert!(gateway
-        .record_execution_transition("automation-work", "automation-run", WorkState::Running)
-        .is_err());
+    assert!(
+        gateway
+            .record_execution_transition("automation-work", "automation-run", WorkState::Running)
+            .is_err()
+    );
     assert_eq!(
         gateway
             .presence("automation-work")
@@ -224,23 +234,23 @@ fn checkpoint_mismatch_is_fail_closed_and_journal_wins() {
     let kernel = ExecutionKernel::recover_from_work_gateway(&gateway).unwrap();
     kernel.persist_to(&checkpoint).unwrap();
 
-    let mut raw: Value = serde_json::from_str(&std::fs::read_to_string(&checkpoint).unwrap()).unwrap();
+    let mut raw: Value =
+        serde_json::from_str(&std::fs::read_to_string(&checkpoint).unwrap()).unwrap();
     raw["executions"]["automation-run"]["state"] = json!("completed");
     raw["executions"]["automation-run"]["journalSequence"] = json!(99);
     std::fs::write(&checkpoint, serde_json::to_vec_pretty(&raw).unwrap()).unwrap();
-    let error = ExecutionKernel::recover_from_work_gateway_with_checkpoint(
-        &gateway,
-        Some(&checkpoint),
-    )
-    .unwrap_err();
+    let error =
+        ExecutionKernel::recover_from_work_gateway_with_checkpoint(&gateway, Some(&checkpoint))
+            .unwrap_err();
     assert!(error.contains("checkpoint"), "got: {error}");
 
     // A matching cache is accepted, while the journal remains authoritative.
-    let matching = ExecutionKernel::recover_from_work_gateway_with_checkpoint(
-        &gateway,
-        Some(&checkpoint),
+    let matching =
+        ExecutionKernel::recover_from_work_gateway_with_checkpoint(&gateway, Some(&checkpoint));
+    assert!(
+        matching.is_err(),
+        "the deliberately mismatched cache stays refused"
     );
-    assert!(matching.is_err(), "the deliberately mismatched cache stays refused");
 }
 
 #[test]
@@ -285,7 +295,11 @@ fn binding_ownership_and_private_session_survive_replay() {
     }
     let gateway = journal(&path);
     assert_eq!(
-        gateway.get_work("binding-work").unwrap().binding_id.as_deref(),
+        gateway
+            .get_work("binding-work")
+            .unwrap()
+            .binding_id
+            .as_deref(),
         Some("binding-1")
     );
     assert_eq!(
@@ -296,7 +310,10 @@ fn binding_ownership_and_private_session_survive_replay() {
     );
     let kernel = ExecutionKernel::recover_from_work_gateway(&gateway).unwrap();
     let run = kernel.get("binding-run").unwrap();
-    assert_eq!(run.trigger, everyaios_core::execution::ExecutionTrigger::Acp);
+    assert_eq!(
+        run.trigger,
+        everyaios_core::execution::ExecutionTrigger::Acp
+    );
     assert!(run.context_snapshot.contains("provider-1"));
 }
 
@@ -306,7 +323,12 @@ fn pending_approval_replays_and_resolution_is_terminal_journal_fact() {
     let path = dir.join("events.jsonl");
     {
         let mut gateway = journal(&path);
-        gateway.create_work("approval-work", None, Some("session".into()), "guarded action");
+        gateway.create_work(
+            "approval-work",
+            None,
+            Some("session".into()),
+            "guarded action",
+        );
         gateway
             .bind_execution_with_metadata(
                 "approval-work",
@@ -354,25 +376,33 @@ fn pending_approval_replays_and_resolution_is_terminal_journal_fact() {
 
     let checkpoint = dir.join("pending.checkpoint.json");
     kernel.persist_to(&checkpoint).unwrap();
-    let mut raw: Value = serde_json::from_str(&std::fs::read_to_string(&checkpoint).unwrap()).unwrap();
+    let mut raw: Value =
+        serde_json::from_str(&std::fs::read_to_string(&checkpoint).unwrap()).unwrap();
     raw["executions"]["approval-run"]["pendingApproval"] = Value::Null;
     std::fs::write(&checkpoint, serde_json::to_vec_pretty(&raw).unwrap()).unwrap();
-    let error = ExecutionKernel::recover_from_work_gateway_with_checkpoint(
-        &gateway,
-        Some(&checkpoint),
-    )
-    .unwrap_err();
+    let error =
+        ExecutionKernel::recover_from_work_gateway_with_checkpoint(&gateway, Some(&checkpoint))
+            .unwrap_err();
     assert!(error.contains("checkpoint"), "got: {error}");
 
     let mut gateway = gateway;
-    assert!(gateway
-        .record_execution_transition("approval-work", "approval-run", WorkState::Running)
-        .is_err());
+    assert!(
+        gateway
+            .record_execution_transition("approval-work", "approval-run", WorkState::Running)
+            .is_err()
+    );
     gateway
         .resolve_pending_approval_for_run("approval-work", "approval-run", "ticket-1", true)
         .unwrap();
-    assert!(gateway.pending_approval("approval-work", "ticket-1").is_none());
-    assert_eq!(gateway.run_state("approval-work", "approval-run"), Some(WorkState::Running));
+    assert!(
+        gateway
+            .pending_approval("approval-work", "ticket-1")
+            .is_none()
+    );
+    assert_eq!(
+        gateway.run_state("approval-work", "approval-run"),
+        Some(WorkState::Running)
+    );
 
     let reopened = journal(&path);
     let kernel = ExecutionKernel::recover_from_work_gateway(&reopened).unwrap();
@@ -395,11 +425,20 @@ fn approval_rpc_handles_are_ticket_scoped_and_match_the_projection() {
         String::new(),
         vec![],
     );
-    kernel.transition(&work.id, ExecutionPhase::Running).unwrap();
-    kernel.transition(&work.id, ExecutionPhase::WaitingApproval).unwrap();
+    kernel
+        .transition(&work.id, ExecutionPhase::Running)
+        .unwrap();
+    kernel
+        .transition(&work.id, ExecutionPhase::WaitingApproval)
+        .unwrap();
 
     let mut gateway = journal(&path);
-    gateway.create_work("approval-rpc-work", None, Some("session".into()), "guarded action");
+    gateway.create_work(
+        "approval-rpc-work",
+        None,
+        Some("session".into()),
+        "guarded action",
+    );
     gateway
         .bind_execution_with_metadata(
             "approval-rpc-work",
@@ -433,9 +472,19 @@ fn approval_rpc_handles_are_ticket_scoped_and_match_the_projection() {
         "riskTier": "R2",
         "requestedAtMs": 99
     });
-    assert!(kernel.handle("execution/record_approval", &record_params).is_ok());
+    assert!(
+        kernel
+            .handle("execution/record_approval", &record_params)
+            .is_ok()
+    );
     assert_eq!(
-        kernel.get(&work.id).unwrap().pending_approval.as_ref().unwrap().ticket_id,
+        kernel
+            .get(&work.id)
+            .unwrap()
+            .pending_approval
+            .as_ref()
+            .unwrap()
+            .ticket_id,
         "ticket-rpc"
     );
 
@@ -444,9 +493,11 @@ fn approval_rpc_handles_are_ticket_scoped_and_match_the_projection() {
         "ticketId": "ticket-rpc",
         "approved": true
     });
-    assert!(kernel
-        .handle("execution/resolve_approval", &resolve_params)
-        .is_ok());
+    assert!(
+        kernel
+            .handle("execution/resolve_approval", &resolve_params)
+            .is_ok()
+    );
     assert_eq!(kernel.get(&work.id).unwrap().state, ExecutionPhase::Running);
     assert!(kernel.get(&work.id).unwrap().pending_approval.is_none());
 }
@@ -491,14 +542,24 @@ fn uncertain_effect_requires_explicit_reconciliation_before_resume() {
 
     let gateway = journal(&path);
     let kernel = ExecutionKernel::recover_from_work_gateway(&gateway).unwrap();
-    assert_eq!(kernel.get("uncertain-run").unwrap().state, ExecutionPhase::Recoverable);
+    assert_eq!(
+        kernel.get("uncertain-run").unwrap().state,
+        ExecutionPhase::Recoverable
+    );
     assert!(kernel.get("uncertain-run").unwrap().receipt.is_none());
     let mut gateway = gateway;
-    assert!(gateway
-        .record_execution_transition("uncertain-work", "uncertain-run", WorkState::Running)
-        .is_err());
+    assert!(
+        gateway
+            .record_execution_transition("uncertain-work", "uncertain-run", WorkState::Running)
+            .is_err()
+    );
     gateway
-        .reconcile_uncertain_effect("uncertain-work", "effect-1", "confirmed not committed", false)
+        .reconcile_uncertain_effect(
+            "uncertain-work",
+            "effect-1",
+            "confirmed not committed",
+            false,
+        )
         .unwrap();
     gateway
         .record_execution_transition("uncertain-work", "uncertain-run", WorkState::Running)

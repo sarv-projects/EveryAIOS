@@ -239,7 +239,7 @@ fn top_level_await_and_sdk_primitives_work() {
     let out = eval_json(&sb, code);
     assert_eq!(out["result"]["matches"], 2);
     assert_eq!(out["result"]["pages"], 2); // p-user + p-other remain (script closed only its own)
-                                           // every primitive was recorded, in order — nothing bypassed the hook
+    // every primitive was recorded, in order — nothing bypassed the hook
     let calls = host.calls.lock().unwrap().clone();
     assert_eq!(
         calls,
@@ -428,10 +428,11 @@ fn multi_step_script_every_primitive_has_audit_row() {
         vec!["pages.newPage", "nav.goto", "read", "grep", "pages.close"]
     );
     // every primitive row is a success; the created page was claimed
-    assert!(rows
-        .iter()
-        .filter(|e| e.kind == "script.primitive")
-        .all(|e| e.payload["ok"] == serde_json::Value::Bool(true)));
+    assert!(
+        rows.iter()
+            .filter(|e| e.kind == "script.primitive")
+            .all(|e| e.payload["ok"] == serde_json::Value::Bool(true))
+    );
     let claims: Vec<String> = rows
         .iter()
         .filter(|e| e.kind == "script.page_created")

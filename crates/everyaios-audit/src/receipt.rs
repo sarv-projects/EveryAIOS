@@ -442,14 +442,16 @@ mod tests {
     #[test]
     fn build_requires_verification_and_provenance() {
         assert!(ReceiptBuilder::new().goal("x").build("r").is_err());
-        assert!(ReceiptBuilder::new()
-            .goal("x")
-            .verification(VerificationSummary {
-                status: "v".into(),
-                checks: vec![]
-            })
-            .build("r")
-            .is_err());
+        assert!(
+            ReceiptBuilder::new()
+                .goal("x")
+                .verification(VerificationSummary {
+                    status: "v".into(),
+                    checks: vec![]
+                })
+                .build("r")
+                .is_err()
+        );
     }
 
     #[test]

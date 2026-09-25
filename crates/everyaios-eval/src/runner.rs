@@ -11,7 +11,7 @@
 use crate::evidence::{ApprovalEvent, ArtifactHash, EvidenceBundle};
 use crate::manifest::{HashAlgorithm, OutcomeCheck, TaskManifest};
 use crate::suite::{AdversarialTask, FaultInjection};
-use crate::verifier::{verify_with_policy, VerificationReport};
+use crate::verifier::{VerificationReport, verify_with_policy};
 use serde::{Deserialize, Serialize};
 use sha2::Digest;
 use std::io;

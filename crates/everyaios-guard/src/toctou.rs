@@ -229,6 +229,12 @@ fn resolve_ips(host: &str, port: u16) -> Result<Vec<IpAddr>, ToctouError> {
 }
 
 /// SHA-256 of executable / script source.
+/// P62.5 — classify a shell or Python command that tries to drive Office,
+/// the browser, or the desktop outside the shared façades.
+pub fn shell_bias_nudge(command: &str) -> Option<crate::deflection::DeflectionNudge> {
+    crate::deflection::deflect_shell_bias(command)
+}
+
 pub fn bind_exec_bytes(bytes: &[u8]) -> ExecBinding {
     let mut h = Sha256::new();
     h.update(bytes);

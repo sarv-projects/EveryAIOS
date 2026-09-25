@@ -20,11 +20,11 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use everyaios_blueprint::crystallize::{
-    compile_to_script, decrystallize_check, StepClass, WorkflowDetector, WorkflowStep,
+    StepClass, WorkflowDetector, WorkflowStep, compile_to_script, decrystallize_check,
 };
 use everyaios_blueprint::spec::TaskSpec;
 use everyaios_blueprint::subagent::{
-    parent_view, DelegationPolicy, SubAgentError, SubAgentLimits, SubAgentResult, SubAgentSpec,
+    DelegationPolicy, SubAgentError, SubAgentLimits, SubAgentResult, SubAgentSpec, parent_view,
 };
 use everyaios_blueprint::{ScriptLanguage, TaskStatus};
 use everyaios_core::work_gateway::WorkGateway;

@@ -380,9 +380,10 @@ mod tests {
         // base_registry providers have no probe report → advertised only.
         let reg = base_registry();
         let inv = DiscoveryInventory::from_registry(&reg, 3);
-        assert!(inv
-            .cards
-            .iter()
-            .all(|c| !c.capabilities_verified && c.status == ManagedResource::Inventoried));
+        assert!(
+            inv.cards
+                .iter()
+                .all(|c| !c.capabilities_verified && c.status == ManagedResource::Inventoried)
+        );
     }
 }

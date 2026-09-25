@@ -19,20 +19,20 @@ pub mod pairing;
 pub mod transport;
 
 pub use browser::{
-    channel_candidates, default_profile_dir, detect_channel_from_path, discover_installed_browsers,
-    install_chrome_for_testing, locate_system_browser, probe_browser_version,
-    resolve_browser_binary, spawn_browser, BrowserCandidate, BrowserChannel, BrowserChild,
-    BrowserConfig, BrowserProfileMode, CandidateSource, LaunchOptions,
+    BrowserCandidate, BrowserChannel, BrowserChild, BrowserConfig, BrowserProfileMode,
+    CandidateSource, LaunchOptions, channel_candidates, default_profile_dir,
+    detect_channel_from_path, discover_installed_browsers, install_chrome_for_testing,
+    locate_system_browser, probe_browser_version, resolve_browser_binary, spawn_browser,
 };
 pub use discovery::{
-    assert_loopback, connect_to_browser, discover_electron_apps, electron_from_json,
+    ElectronApp, assert_loopback, connect_to_browser, discover_electron_apps, electron_from_json,
     fetch_targets_http, is_electron_version, probe_browser, probe_electron,
-    read_devtools_active_port, ElectronApp,
+    read_devtools_active_port,
 };
-pub use fingerprint::{defaults as default_fingerprints, FingerprintProfile, RotationSet};
+pub use fingerprint::{FingerprintProfile, RotationSet, defaults as default_fingerprints};
 pub use pairing::{
-    assert_attach_allowed, chrome_default_user_data_dirs, chrome_major_version,
-    is_default_chrome_profile, is_everyaios_isolated_profile, ProfilePairing, ProfilePairingStore,
+    ProfilePairing, ProfilePairingStore, assert_attach_allowed, chrome_default_user_data_dirs,
+    chrome_major_version, is_default_chrome_profile, is_everyaios_isolated_profile,
 };
 pub use transport::{AttachMode, CdpClient, CdpEvent, DEFAULT_CALL_TIMEOUT};
 
@@ -142,12 +142,16 @@ mod tests {
 
     #[test]
     fn error_variants_display() {
-        assert!(CdpError::BrowserNotFound("none".into())
-            .to_string()
-            .contains("browser not found"));
-        assert!(CdpError::Timeout("x".into())
-            .to_string()
-            .contains("timed out"));
+        assert!(
+            CdpError::BrowserNotFound("none".into())
+                .to_string()
+                .contains("browser not found")
+        );
+        assert!(
+            CdpError::Timeout("x".into())
+                .to_string()
+                .contains("timed out")
+        );
     }
 
     #[test]

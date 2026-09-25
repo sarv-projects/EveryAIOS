@@ -6,7 +6,7 @@
 //! queries that scale (the USN journal piece of G7 is the companion
 //! incremental scan; see `usn.rs`).
 
-use rusqlite::{params, Connection, Result};
+use rusqlite::{Connection, Result, params};
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -16,9 +16,14 @@ pub struct TrigramHit {
 }
 
 /// Trigram FTS index over filenames (basenames only — the substring surface).
-#[derive(Debug)]
 pub struct TrigramIndex {
-    conn: Connection,
+    backing: TrigramBacking,
+}
+
+enum TrigramBacking {
+    Memory(Connection),
+    /// P45.4 — file indexes keep four readers and one writer open.
+    Pooled(crate::pool::ConnectionPool),
 }
 
 impl TrigramIndex {
@@ -27,18 +32,38 @@ impl TrigramIndex {
         conn.execute_batch(
             "CREATE VIRTUAL TABLE filenames USING fts5(name, tokenize = 'trigram');",
         )?;
-        Ok(Self { conn })
+        Ok(Self {
+            backing: TrigramBacking::Memory(conn),
+        })
     }
 
     pub fn open(path: &Path) -> Result<Self> {
-        let conn = Connection::open(path)?;
-        // P45.1–.3 — WAL + synchronous=NORMAL + bounded WAL + mmap on the
-        // read-heavy trigram index. Vault never goes through here.
-        crate::pragmas::apply_read_heavy_index(&conn)?;
-        conn.execute_batch(
+        let pool = crate::pool::ConnectionPool::open(
+            &crate::pool::PathOrMemory::Path(path.to_path_buf()),
+            crate::pool::DEFAULT_READERS,
+        )
+        .map_err(|err| rusqlite::Error::InvalidParameterName(err.to_string()))?;
+        // The pool already applied the read-heavy pragmas. Create the table
+        // on the writer; readers see it through WAL.
+        pool.write().execute_batch(
             "CREATE VIRTUAL TABLE IF NOT EXISTS filenames USING fts5(name, tokenize = 'trigram');",
         )?;
-        Ok(Self { conn })
+        Ok(Self {
+            backing: TrigramBacking::Pooled(pool),
+        })
+    }
+
+    fn writer(&self) -> &Connection {
+        match &self.backing {
+            TrigramBacking::Memory(conn) => conn,
+            TrigramBacking::Pooled(pool) => pool.write(),
+        }
+    }
+
+    /// P45.3 — checkpoint when the user is idle or the host is on battery
+    /// and the WAL has at least one page.
+    pub fn maintain(&self, user_idle: bool) -> Result<bool> {
+        crate::pragmas::checkpoint_connection(self.writer(), user_idle)
     }
 
     pub fn insert(&mut self, path: &Path) -> Result<()> {
@@ -47,7 +72,7 @@ impl TrigramIndex {
             .map(|n| n.to_string_lossy().into_owned())
             .unwrap_or_default();
         if name.len() >= 3 {
-            self.conn.execute(
+            self.writer().execute(
                 "INSERT OR REPLACE INTO filenames(name) VALUES (?1)",
                 params![name],
             )?;
@@ -69,8 +94,17 @@ impl TrigramIndex {
             // (FTS5 trigram needs >= 3 chars) — still bounded + honest.
             return self.like_search(needle, limit);
         }
-        let mut stmt = self
-            .conn
+        let guard;
+        let conn = match &self.backing {
+            TrigramBacking::Memory(conn) => conn,
+            TrigramBacking::Pooled(pool) => {
+                guard = pool
+                    .read()
+                    .map_err(|err| rusqlite::Error::InvalidParameterName(err.to_string()))?;
+                guard.conn
+            }
+        };
+        let mut stmt = conn
             .prepare("SELECT name, bm25(filenames) AS b FROM filenames WHERE filenames MATCH ?1 ORDER BY b LIMIT ?2")?;
         // The trigram tokenizer accepts the literal substring quoted.
         let q = format!("\"{needle}\"");
@@ -84,9 +118,17 @@ impl TrigramIndex {
     }
 
     fn like_search(&self, needle: &str, limit: usize) -> Result<Vec<TrigramHit>> {
-        let mut stmt = self
-            .conn
-            .prepare("SELECT name FROM filenames WHERE name LIKE ?1 LIMIT ?2")?;
+        let guard;
+        let conn = match &self.backing {
+            TrigramBacking::Memory(conn) => conn,
+            TrigramBacking::Pooled(pool) => {
+                guard = pool
+                    .read()
+                    .map_err(|err| rusqlite::Error::InvalidParameterName(err.to_string()))?;
+                guard.conn
+            }
+        };
+        let mut stmt = conn.prepare("SELECT name FROM filenames WHERE name LIKE ?1 LIMIT ?2")?;
         let pat = format!("%{}%", needle.replace('%', "\\%"));
         let rows = stmt.query_map(params![pat, limit as i64], |r| {
             Ok(TrigramHit {
@@ -98,7 +140,7 @@ impl TrigramIndex {
     }
 
     pub fn len(&self) -> usize {
-        self.conn
+        self.writer()
             .query_row("SELECT COUNT(*) FROM filenames", [], |r| r.get(0))
             .unwrap_or(0)
     }
@@ -129,9 +171,10 @@ mod tests {
         idx.insert(Path::new("/tmp/notes.txt")).unwrap();
         idx.insert(Path::new("/tmp/budget.xlsx")).unwrap();
         let hits = idx.search("report", 10).unwrap();
-        assert!(hits
-            .iter()
-            .any(|h| h.path.ends_with("2024-report-final.pdf")));
+        assert!(
+            hits.iter()
+                .any(|h| h.path.ends_with("2024-report-final.pdf"))
+        );
         let hits = idx.search("2024", 10).unwrap();
         assert!(
             hits.iter()
@@ -155,5 +198,21 @@ mod tests {
         let mut idx = TrigramIndex::open_in_memory().unwrap();
         idx.insert(Path::new("/tmp/only.txt")).unwrap();
         assert!(idx.search("zzz", 10).unwrap().is_empty());
+    }
+
+    #[test]
+    fn file_index_uses_the_pool_and_can_checkpoint_when_idle() {
+        let dir = tmp();
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("names.sqlite");
+        let mut idx = TrigramIndex::open(&path).unwrap();
+        idx.insert(Path::new("/work/quarterly-report.pdf")).unwrap();
+        let hits = idx.search("report", 5).unwrap();
+        assert!(
+            hits.iter()
+                .any(|hit| hit.path.ends_with("quarterly-report.pdf"))
+        );
+        let _ = idx.maintain(true).unwrap();
+        fs::remove_dir_all(&dir).ok();
     }
 }

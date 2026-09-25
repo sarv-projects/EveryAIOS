@@ -11,11 +11,11 @@
 //! for the content quad, and dispatches `Input.*` events at the center.
 
 use crate::capture::CdpSession;
-use crate::humanize::{mouse_path, typing_delays, BehaviorProfile, XorShift};
-use crate::{diff_snapshots, A11yNode, Snapshot, SnapshotDiff, SnapshotEngine, SnapshotMode};
+use crate::humanize::{BehaviorProfile, XorShift, mouse_path, typing_delays};
+use crate::{A11yNode, Snapshot, SnapshotDiff, SnapshotEngine, SnapshotMode, diff_snapshots};
 use everyaios_cdp::CdpError;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -1536,9 +1536,10 @@ mod tests {
             text: "hi".into(),
         })
         .unwrap();
-        assert!(m
-            .responded_methods()
-            .contains(&"Input.insertText".to_string()));
+        assert!(
+            m.responded_methods()
+                .contains(&"Input.insertText".to_string())
+        );
     }
 
     #[test]
@@ -1598,9 +1599,10 @@ mod tests {
         let a = BrowserActions::new(&m, Some("sess-1"));
         let _ = a.navigate(NavigateAction::Back);
         // History index 0 → no navigation (guarded).
-        assert!(m
-            .responded_methods()
-            .contains(&"Page.getNavigationHistory".to_string()));
+        assert!(
+            m.responded_methods()
+                .contains(&"Page.getNavigationHistory".to_string())
+        );
     }
 
     #[test]
@@ -1618,12 +1620,14 @@ mod tests {
         let m = mock();
         let a = BrowserActions::new(&m, Some("sess-1"));
         assert!(a.js_click_handler(101).unwrap());
-        assert!(m
-            .responded_methods()
-            .contains(&"DOMDebugger.getEventListeners".to_string()));
-        assert!(m
-            .responded_methods()
-            .contains(&"DOM.resolveNode".to_string()));
+        assert!(
+            m.responded_methods()
+                .contains(&"DOMDebugger.getEventListeners".to_string())
+        );
+        assert!(
+            m.responded_methods()
+                .contains(&"DOM.resolveNode".to_string())
+        );
     }
 
     #[test]
@@ -1682,9 +1686,10 @@ mod tests {
         let m = mock();
         let a = BrowserActions::new(&m, Some("sess-1"));
         let _ = a.tabs().unwrap();
-        assert!(m
-            .responded_methods()
-            .contains(&"Target.getTargets".to_string()));
+        assert!(
+            m.responded_methods()
+                .contains(&"Target.getTargets".to_string())
+        );
     }
 
     #[test]
@@ -1692,9 +1697,10 @@ mod tests {
         let m = mock();
         let a = BrowserActions::new(&m, Some("sess-1"));
         a.close_tab("tab-42").unwrap();
-        assert!(m
-            .responded_methods()
-            .contains(&"Target.closeTarget".to_string()));
+        assert!(
+            m.responded_methods()
+                .contains(&"Target.closeTarget".to_string())
+        );
         assert!(m.calls().iter().any(|(_, mth)| mth == "Target.closeTarget"));
     }
 

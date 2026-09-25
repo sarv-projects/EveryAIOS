@@ -9,8 +9,8 @@
 //! coordinator sidecar calls — so they double as the "does it still work in
 //! the desktop runtime" retest.
 
-use crate::actr::{activation, recency, Memory};
-use crate::bm25::{run_signals_parallel, Bm25Doc, Bm25Index, Hit, SignalKind, SignalSource};
+use crate::actr::{Memory, activation, recency};
+use crate::bm25::{Bm25Doc, Bm25Index, Hit, SignalKind, SignalSource, run_signals_parallel};
 use crate::ghost::GhostIndex;
 use crate::graph::{EdgeType, GraphStore, NodeKind};
 use std::time::Instant;
@@ -46,11 +46,13 @@ fn smoke_all_algorithms() {
     );
     assert_eq!(crate::fusion::dedupe(&a).len(), 2);
     assert!(!crate::fusion::smart_snippets("the fox jumps", &["fox"], 4).is_empty());
-    assert!(crate::fusion::cap_text(
-        "x".repeat(10_000).as_str(),
-        crate::fusion::ContentType::Memory
-    )
-    .ends_with('…'));
+    assert!(
+        crate::fusion::cap_text(
+            "x".repeat(10_000).as_str(),
+            crate::fusion::ContentType::Memory
+        )
+        .ends_with('…')
+    );
     assert!(crate::fusion::budget_tokens(crate::fusion::ContentType::File) == 2000);
     assert!(!crate::fusion::merge_small_chunks(&["a".into(), "b".into()], 10, false).is_empty());
 
@@ -74,9 +76,10 @@ fn smoke_all_algorithms() {
     );
     c.push_turn(95);
     let no_summarizers: &[&crate::compaction::Summarizer] = &[];
-    assert!(c
-        .maybe_compact("x".repeat(400).as_str(), no_summarizers)
-        .is_some());
+    assert!(
+        c.maybe_compact("x".repeat(400).as_str(), no_summarizers)
+            .is_some()
+    );
 
     // 4. graph (Alg #6/#30)
     let mut g = crate::graph::GraphStore::new();

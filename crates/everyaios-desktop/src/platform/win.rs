@@ -22,17 +22,17 @@
 //! All COM/UIA code is behind `#[cfg(windows)]`; this module compiles but is
 //! never linked on non-Windows targets.
 
-use windows::core::Interface;
 use windows::Win32::Foundation::{BOOL, HWND, LPARAM, POINT, RECT, WPARAM};
 use windows::Win32::Graphics::Gdi::{
-    BitBlt, CreateCompatibleBitmap, CreateCompatibleDC, DeleteDC, DeleteObject, GetCurrentObject,
-    GetDC, GetDIBits, GetObjectW, GetWindowDC, ReleaseDC, SelectObject, BITMAP, BITMAPINFO,
-    BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS, HBITMAP, HDC, OBJ_BITMAP, SRCCOPY,
+    BI_RGB, BITMAP, BITMAPINFO, BITMAPINFOHEADER, BitBlt, CreateCompatibleBitmap,
+    CreateCompatibleDC, DIB_RGB_COLORS, DeleteDC, DeleteObject, GetCurrentObject, GetDC, GetDIBits,
+    GetObjectW, GetWindowDC, HBITMAP, HDC, OBJ_BITMAP, ReleaseDC, SRCCOPY, SelectObject,
 };
+use windows::core::Interface;
 // `ScreenToClient` is declared in the Gdi module by the windows-rs bindings.
-use windows::Win32::Storage::Xps::{PrintWindow, PRINT_WINDOW_FLAGS};
+use windows::Win32::Storage::Xps::{PRINT_WINDOW_FLAGS, PrintWindow};
 use windows::Win32::System::Com::{
-    CoCreateInstance, CoInitializeEx, CLSCTX_ALL, COINIT_MULTITHREADED,
+    CLSCTX_ALL, COINIT_MULTITHREADED, CoCreateInstance, CoInitializeEx,
 };
 use windows::Win32::UI::Accessibility::{
     CUIAutomation, IUIAutomation, IUIAutomationElement, IUIAutomationInvokePattern,
@@ -43,18 +43,18 @@ use windows::Win32::UI::Accessibility::{
     UIA_ValuePatternId,
 };
 use windows::Win32::UI::Input::KeyboardAndMouse::{
-    mouse_event, MapVirtualKeyA, SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT,
-    KEYEVENTF_EXTENDEDKEY, KEYEVENTF_KEYUP, KEYEVENTF_SCANCODE, MAPVK_VK_TO_VSC,
-    MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP, MOUSEEVENTF_WHEEL, VIRTUAL_KEY,
+    INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_EXTENDEDKEY, KEYEVENTF_KEYUP,
+    KEYEVENTF_SCANCODE, MAPVK_VK_TO_VSC, MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP,
+    MOUSEEVENTF_WHEEL, MapVirtualKeyA, SendInput, VIRTUAL_KEY, mouse_event,
 };
 use windows::Win32::UI::Shell::{
-    ShellExecuteExW, SEE_MASK_FLAG_NO_UI, SEE_MASK_NOCLOSEPROCESS, SHELLEXECUTEINFOW,
+    SEE_MASK_FLAG_NO_UI, SEE_MASK_NOCLOSEPROCESS, SHELLEXECUTEINFOW, ShellExecuteExW,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    ChildWindowFromPointEx, EnumWindows, GetClassNameW, GetForegroundWindow, GetWindowRect,
-    GetWindowTextW, GetWindowThreadProcessId, IsWindowVisible, PostMessageW, SetCursorPos,
-    SetForegroundWindow, ShowWindow, CWP_SKIPINVISIBLE, SW_RESTORE, SW_SHOWNOACTIVATE,
-    SW_SHOWNORMAL, WM_LBUTTONDOWN, WM_LBUTTONUP,
+    CWP_SKIPINVISIBLE, ChildWindowFromPointEx, EnumWindows, GetClassNameW, GetForegroundWindow,
+    GetWindowRect, GetWindowTextW, GetWindowThreadProcessId, IsWindowVisible, PostMessageW,
+    SW_RESTORE, SW_SHOWNOACTIVATE, SW_SHOWNORMAL, SetCursorPos, SetForegroundWindow, ShowWindow,
+    WM_LBUTTONDOWN, WM_LBUTTONUP,
 };
 
 /// `MK_LBUTTON` — the modifier key state a mouse-down message carries. The
@@ -62,10 +62,10 @@ use windows::Win32::UI::WindowsAndMessaging::{
 /// fixed by the Win32 API (1), so it is spelled once here with its name.
 const MK_LBUTTON: usize = 0x0001;
 
+use crate::DesktopError;
 use crate::launch;
 use crate::policy::InteractionMode;
 use crate::types::{ActKind, ReadNode, ReadResult, Region, SeeMethod, SeeResult, WindowInfo};
-use crate::DesktopError;
 
 pub struct WinBackend;
 
@@ -116,11 +116,7 @@ unsafe fn element_to_node(
         .CurrentAutomationId()
         .map(|b| {
             let s = b.to_string();
-            if s.is_empty() {
-                None
-            } else {
-                Some(s)
-            }
+            if s.is_empty() { None } else { Some(s) }
         })
         .unwrap_or(None);
     let mut rect: RECT = std::mem::zeroed();

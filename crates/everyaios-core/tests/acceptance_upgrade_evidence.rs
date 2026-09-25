@@ -11,7 +11,7 @@
 use anyhow::Result;
 
 use everyaios_core::store_schema::{
-    self, StorePolicy, StoreSchemaError, StoreSpec, MANIFEST_VERSION, STORES,
+    self, MANIFEST_VERSION, STORES, StorePolicy, StoreSchemaError, StoreSpec,
 };
 
 /// The durable stores a v1 upgrade must carry over. Derived from the boot
@@ -144,8 +144,8 @@ fn evidence_list_matches_the_boot_registry() {
 /// replay the NDJSON audit file into a chain and verify end-to-end.
 #[test]
 fn audit_chain_validates_after_upgrade() -> Result<()> {
-    use everyaios_audit::merkle::MerkleChain;
     use everyaios_audit::AuditEvent;
+    use everyaios_audit::merkle::MerkleChain;
     let dir = tempfile::tempdir()?;
     let mut chain = MerkleChain::new();
     for i in 0..5u64 {

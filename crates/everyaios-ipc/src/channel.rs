@@ -5,11 +5,11 @@
 //! must **block** (backpressure), never buffer unboundedly. This wraps
 //! `std::sync::mpsc::sync_channel` at the capacity the spec fixes (16).
 
+use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc::{
     self, Receiver, RecvError, SendError, SyncSender, TryRecvError, TrySendError,
 };
-use std::sync::Arc;
 
 /// Fixed capacity for the IPC notification/request channel (spec P0.5).
 pub const DEFAULT_CAPACITY: usize = 16;

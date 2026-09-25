@@ -72,40 +72,40 @@ pub mod xml;
 pub mod zip;
 
 pub use atomic::write_atomic;
-pub use conformance::{find_soffice, parts_diff, LibreOfficeOracle, PartsDiff};
+pub use conformance::{LibreOfficeOracle, PartsDiff, find_soffice, parts_diff};
 pub use docx::{DocxEngine, OfficeError};
-pub use legacy::{convert_to_modern, LegacyKind, LegacyOpen};
+pub use legacy::{LegacyKind, LegacyOpen, convert_to_modern};
 pub use pdf::pages::{
-    delete_pages, extract_pages, merge as merge_pdfs, page_count, reorder as reorder_pages,
-    rotate as rotate_pages, split as split_pdf, PageOpError,
+    PageOpError, delete_pages, extract_pages, merge as merge_pdfs, page_count,
+    reorder as reorder_pages, rotate as rotate_pages, split as split_pdf,
 };
-pub use pdf::{inspect, replace_text, PdfError, PdfInfo};
-pub use pptx::author::{
-    author_deck, speaker_notes as deck_speaker_notes, AuthorError, DeckBrief, DeckSlide,
-};
+pub use pdf::{PdfError, PdfInfo, inspect, replace_text};
 pub use pptx::PptxEngine;
+pub use pptx::author::{
+    AuthorError, DeckBrief, DeckSlide, author_deck, speaker_notes as deck_speaker_notes,
+};
 pub use rollback::Snapshot;
 
 // D-gaps (doc 63 §3) — the "perfectness" additions.
 pub use docx::citation::{
-    insert_citation_into_docx, render_bibliography, render_citation, render_reference, CslStyle,
-    Reference, ReferenceKind, ReferenceLibrary,
+    CslStyle, Reference, ReferenceKind, ReferenceLibrary, insert_citation_into_docx,
+    render_bibliography, render_citation, render_reference,
 };
 pub use docx::track::{
-    add_comment, emit_tracked_change, extract_comments, extract_tracked_changes,
-    render_comment_reference, render_del_run, render_ins_run, Comment, TrackAuthor, TrackError,
-    TrackedChange, TrackedChangeKind,
+    Comment, TrackAuthor, TrackError, TrackedChange, TrackedChangeKind, add_comment,
+    emit_tracked_change, extract_comments, extract_tracked_changes, render_comment_reference,
+    render_del_run, render_ins_run,
 };
 pub use pdf::annot::{add_highlight_annotation, add_text_annotation};
-pub use pptx::anim::{build_timing_xml, AnimError, AnimationEffect};
+pub use pptx::anim::{AnimError, AnimationEffect, build_timing_xml};
 pub use pptx::notes::{
-    build_speaker_notes, extract_notes_text, plan_rehearsal, validate_slides_notes_sync,
-    NotesError, RehearsalTiming, SpeakerNotesEntry,
+    NotesError, RehearsalTiming, SpeakerNotesEntry, build_speaker_notes, extract_notes_text,
+    plan_rehearsal, validate_slides_notes_sync,
 };
 pub use pptx::transition::{
-    extract_transition, set_transition, Transition, TransitionError, TransitionKind,
+    Transition, TransitionError, TransitionKind, extract_transition, set_transition,
 };
 pub use xlsx::chart::{
-    build_chart_part, chart_content_type_override, chart_rel_fragment, extract_chart_series,
-    ChartError, ChartKind, ChartSeries, ChartSeriesSpec,
+    ChartError, ChartKind, ChartSeries, ChartSeriesSpec, build_chart_part,
+    chart_content_type_override, chart_rel_fragment, extract_chart_series,
 };

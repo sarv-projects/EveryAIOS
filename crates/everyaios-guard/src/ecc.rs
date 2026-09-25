@@ -287,9 +287,11 @@ mod tests {
             ev("rewrite", false),
         ];
         let findings = session_scan(&policy, &events);
-        assert!(findings
-            .iter()
-            .any(|f| f.message.contains("runaway rewrite loop")));
+        assert!(
+            findings
+                .iter()
+                .any(|f| f.message.contains("runaway rewrite loop"))
+        );
     }
 
     #[test]
@@ -298,8 +300,10 @@ mod tests {
         let events = vec![ev("plan", true), ev("build", true), ev("estop", false)];
         let findings = session_scan(&policy, &events);
         assert!(findings.iter().any(|f| f.message.contains("estop")));
-        assert!(findings
-            .iter()
-            .any(|f| f.message.contains("no subsequent verify")));
+        assert!(
+            findings
+                .iter()
+                .any(|f| f.message.contains("no subsequent verify"))
+        );
     }
 }

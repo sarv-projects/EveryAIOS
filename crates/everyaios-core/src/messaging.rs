@@ -17,7 +17,7 @@ use std::collections::{HashMap, HashSet};
 pub trait HttpTransport {
     /// POST `body` to `url` with `content_type`; returns the response body.
     fn post(&mut self, url: &str, content_type: &str, body: &str)
-        -> Result<String, MessagingError>;
+    -> Result<String, MessagingError>;
 }
 
 /// `ureq`-backed transport — the production path (outbound network is the
@@ -181,6 +181,50 @@ impl Default for MessageDispatcher {
 impl MessageDispatcher {
     pub fn register(&mut self, adapter: Box<dyn MessageAdapter>) {
         self.adapters.push(adapter);
+    }
+
+    /// P51.20 — approve-then-read for a messaging thread. A conversation stays
+    /// unreadable until a ticket id is recorded for that exact id.
+    pub fn dispatch_approved<F>(
+        &mut self,
+        approved_threads: &std::collections::HashSet<String>,
+        mut handler: F,
+    ) -> (Vec<OutboundReply>, Vec<String>)
+    where
+        F: FnMut(&InboundMessage) -> String,
+    {
+        let mut replies = Vec::new();
+        let mut held = Vec::new();
+        for adapter in &mut self.adapters {
+            let inbound = match adapter.receive() {
+                Ok(m) => m,
+                Err(_) => continue,
+            };
+            for msg in self.dedupe.filter(inbound) {
+                let conversation = msg
+                    .conversation_id
+                    .clone()
+                    .unwrap_or_else(|| format!("{}:{}", msg.channel, msg.from));
+                if !approved_threads.contains(&conversation) {
+                    held.push(conversation);
+                    continue;
+                }
+                let text = handler(&msg);
+                self.memory
+                    .entry(conversation.clone())
+                    .or_default()
+                    .push(msg.text.clone());
+                let reply = OutboundReply {
+                    to: msg.from.clone(),
+                    text,
+                    conversation_id: conversation,
+                };
+                if adapter.send(&reply).is_ok() {
+                    replies.push(reply);
+                }
+            }
+        }
+        (replies, held)
     }
 
     /// Drain all adapters, dedupe, and route each message through a handler
@@ -498,6 +542,24 @@ mod tests {
         assert_eq!(replies.len(), 1);
         assert_eq!(replies[0].text, "echo: hello");
         assert_eq!(replies[0].to, "u1");
+    }
+
+    #[test]
+    fn thread_read_waits_for_approval() {
+        let mut stub = StubAdapter::new("slack");
+        stub.inbox.push(InboundMessage {
+            channel: "slack".into(),
+            from: "u1".into(),
+            text: "secret thread".into(),
+            message_id: "m2".into(),
+            conversation_id: Some("thread-9".into()),
+        });
+        let mut dispatcher = MessageDispatcher::new();
+        dispatcher.register(Box::new(stub));
+        let (replies, held) =
+            dispatcher.dispatch_approved(&std::collections::HashSet::new(), |_| "seen".into());
+        assert!(replies.is_empty());
+        assert_eq!(held, vec!["thread-9".to_string()]);
     }
 
     #[test]

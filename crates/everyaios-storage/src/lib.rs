@@ -39,21 +39,21 @@ pub mod walk;
 
 pub use checkpoint::{ChangeKind, CheckpointedFile, FsCheckpoint};
 pub use cleanup::{
-    propose_duplicate_cleanup, propose_large_files_cleanup, CleanupAction, CleanupKind,
+    CleanupAction, CleanupKind, propose_duplicate_cleanup, propose_large_files_cleanup,
 };
 pub use content::{
-    extract_text, strip_html, ContentHit, ContentIndex, NoOcr, OcrEngine, OcrError, TesseractCli,
+    ContentHit, ContentIndex, NoOcr, OcrEngine, OcrError, TesseractCli, extract_text, strip_html,
 };
-pub use dedup::{find_duplicates, DedupOptions, DupCandidate, DupGroup};
-pub use events::{watch_events, FileEvent};
-pub use finder::{find_large_files, FinderOptions, SortBy};
+pub use dedup::{DedupOptions, DupCandidate, DupGroup, find_duplicates};
+pub use events::{FileEvent, watch_events};
+pub use finder::{FinderOptions, SortBy, find_large_files};
 pub use health::{
-    check_health, drive_stats, health_from_stats, over_threshold, DriveStats, HealthStatus,
+    DriveStats, HealthStatus, check_health, drive_stats, health_from_stats, over_threshold,
 };
-pub use search::{watch, Debouncer, SearchHit, SearchIndex, WatchHandle};
+pub use search::{Debouncer, SearchHit, SearchIndex, WatchHandle, watch};
 pub use snapshot::{Snapshot, SnapshotStore};
-pub use treemap::{color_for, squarify, treemap_for_dir, TreemapRect};
-pub use walk::{build_arena, scan, Arena, FileNode, FileRecord, ScanOptions, ROOT_ID};
+pub use treemap::{TreemapRect, color_for, squarify, treemap_for_dir};
+pub use walk::{Arena, FileNode, FileRecord, ROOT_ID, ScanOptions, build_arena, scan};
 
 use thiserror::Error;
 

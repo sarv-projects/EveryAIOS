@@ -192,9 +192,10 @@ mod tests {
         assert_eq!(card.ticket_id, "t-1");
         assert_eq!(card.nonce, "nonce-1");
         assert_eq!(card.web_action.as_deref(), Some("sensitive_submit"));
-        assert!(card
-            .affected_paths
-            .contains(&"/tmp/office/report.docx".into()));
+        assert!(
+            card.affected_paths
+                .contains(&"/tmp/office/report.docx".into())
+        );
         let text = render_native_card(&card);
         // Every fact appears exactly once in the rendered card.
         assert!(text.contains("goal: convert report.docx → pdf"));

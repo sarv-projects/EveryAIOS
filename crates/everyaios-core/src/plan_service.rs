@@ -15,7 +15,7 @@
 use std::collections::HashMap;
 
 use everyaios_blueprint::iteration::{CircuitBreaker, IterationBudget, LoopDetector};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 /// The executor-facing pre-flight state: one breaker per active plan.
 #[derive(Debug, Default)]
@@ -148,7 +148,7 @@ fn parse_step_kind(params: &Value) -> Result<everyaios_blueprint::StepKind, Stri
 mod tests {
     use super::*;
     use everyaios_blueprint::{
-        CircuitBreak, InterruptReason, McqOption, Scope, SUBAGENT_MAX_ITERATIONS,
+        CircuitBreak, InterruptReason, McqOption, SUBAGENT_MAX_ITERATIONS, Scope,
     };
 
     fn params(value: serde_json::Value) -> Value {

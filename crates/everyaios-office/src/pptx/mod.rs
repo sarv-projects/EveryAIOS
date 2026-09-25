@@ -22,8 +22,8 @@ use crate::xml;
 use crate::zip::{ArchiveError, OoxmlArchive};
 
 use parts::{
-    PptxParts, Slide, CONTENT_TYPES, PRESENTATION, PRESENTATION_RELS, R_NS, SLIDE_CT,
-    SLIDE_REL_TYPE,
+    CONTENT_TYPES, PRESENTATION, PRESENTATION_RELS, PptxParts, R_NS, SLIDE_CT, SLIDE_REL_TYPE,
+    Slide,
 };
 use text::Shape;
 

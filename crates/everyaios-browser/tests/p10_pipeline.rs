@@ -9,8 +9,8 @@
 
 use everyaios_browser::ax::AxNode;
 use everyaios_browser::diff::{diff_snapshots, snapshot_lines};
-use everyaios_browser::protocol::{parse_action, ActionProtocol, ParsedAction};
-use everyaios_browser::tree::{build_tree, RefMinter, TreeOptions};
+use everyaios_browser::protocol::{ActionProtocol, ParsedAction, parse_action};
+use everyaios_browser::tree::{RefMinter, TreeOptions, build_tree};
 use everyaios_browser::{ActKind, Snapshot, SnapshotMode};
 
 /// A small page: root → [nav, main[heading, button, link], footer].

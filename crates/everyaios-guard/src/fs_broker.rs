@@ -9,7 +9,7 @@
 //! The message seam is a plain [`BrokerTransport`] so the same logic runs
 //! in-process (tests) or over `everyaios-ipc` (the runtime wiring).
 
-use crate::pathfloor::{canonicalize_no_follow, enforce_floor, FloorVerdict};
+use crate::pathfloor::{FloorVerdict, canonicalize_no_follow, enforce_floor};
 use crate::sandbox::{PathAccess, SandboxProfile};
 use serde::{Deserialize, Serialize};
 
@@ -73,7 +73,7 @@ impl BrokerHost {
             v => {
                 return BrokerResponse::Denied {
                     reason: format!("path floor refused: {v:?}"),
-                }
+                };
             }
         }
         // Then the profile's per-path access rule for the operation.

@@ -109,7 +109,7 @@ pub fn find_large_files(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::walk::{build_arena, scan, ScanOptions};
+    use crate::walk::{ScanOptions, build_arena, scan};
     use std::fs;
 
     fn tmpdir(tag: &str) -> std::path::PathBuf {

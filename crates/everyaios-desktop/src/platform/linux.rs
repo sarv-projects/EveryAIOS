@@ -17,17 +17,17 @@ use std::process::Command;
 use x11rb::connection::{Connection, RequestConnection};
 use x11rb::protocol::xproto::ConnectionExt;
 use x11rb::protocol::xproto::{
-    AtomEnum, ButtonPressEvent, ConfigureWindowAux, EventMask, ImageFormat, InputFocus, KeyButMask,
-    StackMode, Window, BUTTON_PRESS_EVENT, BUTTON_RELEASE_EVENT, KEY_PRESS_EVENT,
-    KEY_RELEASE_EVENT, MOTION_NOTIFY_EVENT,
+    AtomEnum, BUTTON_PRESS_EVENT, BUTTON_RELEASE_EVENT, ButtonPressEvent, ConfigureWindowAux,
+    EventMask, ImageFormat, InputFocus, KEY_PRESS_EVENT, KEY_RELEASE_EVENT, KeyButMask,
+    MOTION_NOTIFY_EVENT, StackMode, Window,
 };
 use x11rb::protocol::xtest;
 use x11rb::rust_connection::RustConnection;
 
+use crate::DesktopError;
 use crate::launch;
 use crate::policy::InteractionMode;
 use crate::types::{ActKind, ReadResult, Region, SeeMethod, SeeResult, WindowInfo};
-use crate::DesktopError;
 
 pub struct X11Backend {
     conn: RustConnection,
@@ -42,11 +42,7 @@ fn prop_string(conn: &RustConnection, window: Window, atom: u32) -> Option<Strin
         .ok()?;
     let bytes: Vec<u8> = reply.value8()?.collect();
     let text = String::from_utf8_lossy(&bytes).to_string();
-    if text.is_empty() {
-        None
-    } else {
-        Some(text)
-    }
+    if text.is_empty() { None } else { Some(text) }
 }
 
 impl X11Backend {
@@ -145,11 +141,7 @@ impl X11Backend {
             .reply()
             .ok()?;
         let id = reply.value32()?.next()?;
-        if id == 0 {
-            None
-        } else {
-            Some(u64::from(id))
-        }
+        if id == 0 { None } else { Some(u64::from(id)) }
     }
 
     /// P57.4 — hand the foreground back after an approved escalation. Raising +

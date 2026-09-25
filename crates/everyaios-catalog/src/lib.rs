@@ -30,35 +30,35 @@ pub use discovery::{
     DiscoveryInventory, ManagedResource, ResourceCard, ResourceCounts, ResourceKind,
 };
 pub use fetch::{
-    count_models, endpoint_probe_result, probe_models_endpoint, refresh_now, EndpointProbe,
-    HttpFetch, RefreshOutcome,
+    EndpointProbe, HttpFetch, RefreshOutcome, count_models, endpoint_probe_result,
+    probe_models_endpoint, refresh_now,
 };
 pub use gateway::{GatewayError, GatewayRouter, RouteResult, TaskHint};
 pub use live::{
-    apply_refresh, free_model_ids, is_free_model_id, is_stale, logo_url, refresh_interval_secs,
-    transport_from_npm, CatalogSnapshot, FetchOutcome, LiveModel, LiveProvider, Modalities,
-    ModelCost, ModelLimit, ModelProviderOverride, RefreshDecision, DEFAULT_REFRESH_SECS,
-    LOGO_URL_PREFIX, MAX_REFRESH_SECS, MIN_REFRESH_SECS, MODELS_DEV_API_URL,
+    CatalogSnapshot, DEFAULT_REFRESH_SECS, FetchOutcome, LOGO_URL_PREFIX, LiveModel, LiveProvider,
+    MAX_REFRESH_SECS, MIN_REFRESH_SECS, MODELS_DEV_API_URL, Modalities, ModelCost, ModelLimit,
+    ModelProviderOverride, RefreshDecision, apply_refresh, free_model_ids, is_free_model_id,
+    is_stale, logo_url, refresh_interval_secs, transport_from_npm,
 };
 pub use model::ModelEntry;
 pub use observations::{
-    apply_observation_health, apply_observations, health_of, ObservationStore, ProbePolicy,
-    ProviderObservation, ProviderObservationsFile, Reachability,
+    ObservationStore, ProbePolicy, ProviderObservation, ProviderObservationsFile, Reachability,
+    apply_observation_health, apply_observations, health_of,
 };
-pub use pricing::{cost_for, split_input, CostBreakdown};
+pub use pricing::{CostBreakdown, cost_for, split_input};
 pub use probe::{
-    trusted_capabilities, AdvertisedHardCaps, Capability, CapabilityVerdict, ProbeResult, Verdict,
-    VerificationReport,
+    AdvertisedHardCaps, Capability, CapabilityVerdict, ProbeResult, Verdict, VerificationReport,
+    trusted_capabilities,
 };
 pub use profiles::{
-    nvidia_nim_profile, opencode_overlay_profiles, ProfileFormat, ProfileModel, ProfileSource,
-    ProfileStore, ProviderProfile, ProviderProfilesFile,
+    ProfileFormat, ProfileModel, ProfileSource, ProfileStore, ProviderProfile,
+    ProviderProfilesFile, nvidia_nim_profile, opencode_overlay_profiles,
 };
 pub use provider::{
-    base_registry, normalize, AggregatorKind, Auth, DiscoverySource, ProviderRecord,
-    ProviderRegistry, Transport, ALIASES, OPENAI_COMPATIBLE_PROFILES,
+    ALIASES, AggregatorKind, Auth, DiscoverySource, OPENAI_COMPATIBLE_PROFILES, ProviderRecord,
+    ProviderRegistry, Transport, base_registry, normalize,
 };
-pub use routing::{rejection_reasons, RouteFilters};
+pub use routing::{RouteFilters, rejection_reasons};
 pub use routing_feed::{
     ExcludedProvider, Health, RankedProvider, RouteDecision, RouteRequirements, RoutingFeed,
 };
@@ -66,7 +66,7 @@ pub use store::{
     CatalogMeta, CatalogSettings, CatalogStore, META_FILE, SETTINGS_FILE, SNAPSHOT_FILE,
 };
 pub use sync::{
-    gate_passes, merge_refresh, refresh_plan, validate_vendored, GateFinding, RefreshReport,
-    Severity, SyncSpec, SYNC_MODULES,
+    GateFinding, RefreshReport, SYNC_MODULES, Severity, SyncSpec, gate_passes, merge_refresh,
+    refresh_plan, validate_vendored,
 };
-pub use tier::{validate_tiers, ProviderOverride, ResolvedModel};
+pub use tier::{ProviderOverride, ResolvedModel, validate_tiers};

@@ -4,7 +4,7 @@
 //! budget, and a scope-leakage floor rejects signals that would blow the
 //! window. Deterministic — the coordinator feeds it per-turn token counts.
 
-use crate::paging::{PagedMemory, CORE_BUDGET_TOKENS};
+use crate::paging::{CORE_BUDGET_TOKENS, PagedMemory};
 
 /// Planner budget knobs.
 #[derive(Debug, Clone, Copy, PartialEq)]

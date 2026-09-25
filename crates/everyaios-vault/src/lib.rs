@@ -23,8 +23,8 @@ pub mod session_budget;
 pub mod tier;
 
 pub use broker::{
-    assemble_tool_calls, credential_safe_url, extract_json_tool_calls, usage_tokens, Broker,
-    BrokerError, ChatStreamEvent, ModelsProbe, ProviderEndpoint, ToolCallDelta, WireTransport,
+    Broker, BrokerError, ChatStreamEvent, ModelsProbe, ProviderEndpoint, ToolCallDelta,
+    WireTransport, assemble_tool_calls, credential_safe_url, extract_json_tool_calls, usage_tokens,
 };
 pub use credential_broker::{
     AllowlistApprover, CredentialBroker, CredentialFillError, CredentialHandle, DenyAllApprover,
@@ -32,11 +32,11 @@ pub use credential_broker::{
 };
 pub use egress::{EgressFirewall, EgressPolicy, EgressVerdict};
 pub use keyring::{
-    KeyEntry, KeyInfo, KeyRing, KeyRingError, KeySpec, KeyStatus, RoutingPolicy, SelectedKey,
-    COOLDOWN_BASE_SECS, COOLDOWN_CAP_SECS, MAX_429_SWITCHES,
+    COOLDOWN_BASE_SECS, COOLDOWN_CAP_SECS, KeyEntry, KeyInfo, KeyRing, KeyRingError, KeySpec,
+    KeyStatus, MAX_429_SWITCHES, RoutingPolicy, SelectedKey,
 };
-pub use ledger::{default_pricing, Pricing, RecentUsage, SessionTotal, Usage, UsageRow};
-pub use local::{Grammar, LocalEndpoint, LocalRuntime, DEFAULT_NUM_CTX, MIN_WARN_NUM_CTX};
+pub use ledger::{Pricing, RecentUsage, SessionTotal, Usage, UsageRow, default_pricing};
+pub use local::{DEFAULT_NUM_CTX, Grammar, LocalEndpoint, LocalRuntime, MIN_WARN_NUM_CTX};
 pub use oauth::{
     DeviceCodeStart, DevicePoll, OAuthAccountInfo, OAuthError, OAuthManager, PkceStart,
 };
@@ -44,10 +44,10 @@ pub use session::{
     AuthHeader, CaptureInput, Cookie, SessionContext, SessionError, SessionRecord, SessionStatus,
     SessionUse, SessionVault, StorageItem, StorageKind, TrustLevel,
 };
-pub use session_budget::{SessionBudget, DEFAULT_SESSION_BUDGET_USD};
+pub use session_budget::{DEFAULT_SESSION_BUDGET_USD, SessionBudget};
 pub use tier::{
-    escalate_by_floor, mode_weights, parse_auto_model, score, shortest_path_chain, RoutingStrategy,
-    TaskClass, TierConfig, TierDecision, TierMode, TierRole,
+    RoutingStrategy, TaskClass, TierConfig, TierDecision, TierMode, TierRole, escalate_by_floor,
+    mode_weights, parse_auto_model, score, shortest_path_chain,
 };
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -831,7 +831,7 @@ pub enum VaultError {
     /// backwards (and stamp the version down), so the open refuses. The
     /// remedy is to upgrade the app, never to "just open it anyway".
     #[error(
-        "vault was written by a newer schema (db v{db}, app v{app}) — upgrade the app to open it (downgrade is refused)",
+        "vault was written by a newer schema (db v{db}, app v{app}) — upgrade the app to open it (downgrade is refused)"
     )]
     NewerSchema { db: i64, app: i64 },
 }
@@ -944,10 +944,12 @@ mod tests {
         assert_eq!(events[0].title, "Sprint Standup");
 
         vault.delete_ui_calendar_event("evt-1").unwrap();
-        assert!(vault
-            .list_ui_calendar_events(Some("cal-work"), 1500, 3000)
-            .unwrap()
-            .is_empty());
+        assert!(
+            vault
+                .list_ui_calendar_events(Some("cal-work"), 1500, 3000)
+                .unwrap()
+                .is_empty()
+        );
 
         vault.delete_ui_calendar("cal-work").unwrap();
         assert!(vault.list_ui_calendars().unwrap().is_empty());
@@ -1365,9 +1367,10 @@ mod tests {
         assert_eq!(rows[1].in_tokens, 104); // newest openai call
         assert_eq!(rows[0].provider, "deepseek");
         // Provider/model columns are present — the ring's durable key.
-        assert!(rows
-            .iter()
-            .all(|r| !r.provider.is_empty() && !r.model.is_empty()));
+        assert!(
+            rows.iter()
+                .all(|r| !r.provider.is_empty() && !r.model.is_empty())
+        );
 
         // Limit clamps: 0 → 1, huge → 500.
         assert_eq!(vault.recent_usage(0).unwrap().len(), 1);

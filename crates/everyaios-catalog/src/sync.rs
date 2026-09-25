@@ -352,10 +352,12 @@ mod tests {
         let fetched = vec![entry("bedrock/claude-x", 200_000, 1e-5, 1e-4)];
         let report = merge_refresh(&baseline, &fetched, &["anthropic/claude-opus-4-6"]);
         assert!(!report.accepted);
-        assert!(report
-            .findings
-            .iter()
-            .any(|f| f.message.contains("base_model")));
+        assert!(
+            report
+                .findings
+                .iter()
+                .any(|f| f.message.contains("base_model"))
+        );
         // the baseline is untouched on rejection
         assert_eq!(report.accepted_entries, baseline.len());
     }

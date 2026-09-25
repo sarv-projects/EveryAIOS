@@ -438,9 +438,11 @@ mod tests {
     #[test]
     fn explain_cost_guard_budgets_on_upper_bound() {
         let guard = ExplainCostGuard::new(50.0);
-        assert!(guard
-            .check("Seq Scan on t (cost=0.00..42.50 rows=10)")
-            .is_ok());
+        assert!(
+            guard
+                .check("Seq Scan on t (cost=0.00..42.50 rows=10)")
+                .is_ok()
+        );
         assert!(matches!(
             guard.check("Nested Loop (cost=10.00..99.00 rows=1000)"),
             Err(CostGuardError::OverBudget { .. })

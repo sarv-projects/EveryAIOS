@@ -102,9 +102,10 @@ fn trust_ladder_gates_injection() {
     // is denied (grant must be >= requested).
     sv.grant(&id, "agent-1", TrustLevel::ReadOnly).unwrap();
     assert!(sv.authorize(&id, "agent-1", TrustLevel::ReadOnly).unwrap());
-    assert!(!sv
-        .authorize(&id, "agent-1", TrustLevel::DriveAutonomous)
-        .unwrap());
+    assert!(
+        !sv.authorize(&id, "agent-1", TrustLevel::DriveAutonomous)
+            .unwrap()
+    );
     assert!(sv.inject(&id, "agent-1", TrustLevel::ReadOnly).is_ok());
     assert!(matches!(
         sv.inject(&id, "agent-1", TrustLevel::DriveAutonomous),
@@ -114,9 +115,10 @@ fn trust_ladder_gates_injection() {
     // Upgrading the grant unlocks the higher level.
     sv.grant(&id, "agent-1", TrustLevel::DriveAutonomous)
         .unwrap();
-    assert!(sv
-        .inject(&id, "agent-1", TrustLevel::DriveAutonomous)
-        .is_ok());
+    assert!(
+        sv.inject(&id, "agent-1", TrustLevel::DriveAutonomous)
+            .is_ok()
+    );
 }
 
 #[test]
@@ -217,9 +219,10 @@ fn usage_audit_records_capture_inject_and_deny() {
     assert!(actions.contains(&"deny"));
     assert!(actions.contains(&"inject"));
     // The deny row records the requesting agent.
-    assert!(rows
-        .iter()
-        .any(|r| r.action == "deny" && r.agent_session == "agent-1"));
+    assert!(
+        rows.iter()
+            .any(|r| r.action == "deny" && r.agent_session == "agent-1")
+    );
 }
 
 #[test]
@@ -229,9 +232,10 @@ fn revoke_locks_the_session() {
     let id = sv.capture("example.com", "work", input()).unwrap();
     sv.grant(&id, "agent-1", TrustLevel::DriveAutonomous)
         .unwrap();
-    assert!(sv
-        .inject(&id, "agent-1", TrustLevel::DriveAutonomous)
-        .is_ok());
+    assert!(
+        sv.inject(&id, "agent-1", TrustLevel::DriveAutonomous)
+            .is_ok()
+    );
 
     sv.revoke_agent(&id, "agent-1").unwrap();
     assert!(matches!(

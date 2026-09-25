@@ -200,7 +200,10 @@ Review diffs for correctness before merge.
     #[test]
     fn body_excludes_fences() {
         let (meta, body) = split_frontmatter(FULL).expect("split");
-        assert_eq!(meta, "name = \"code-reviewer\"\nmodel = \"sonnet-4.5\"\ntools = [\"bash\", \"edit\", \"grep\"]\npermissions = [\"read:workspace\", \"write:workspace/src\"]");
+        assert_eq!(
+            meta,
+            "name = \"code-reviewer\"\nmodel = \"sonnet-4.5\"\ntools = [\"bash\", \"edit\", \"grep\"]\npermissions = [\"read:workspace\", \"write:workspace/src\"]"
+        );
         assert!(!body.starts_with("---"));
         assert!(body.starts_with("# Code Reviewer"));
     }

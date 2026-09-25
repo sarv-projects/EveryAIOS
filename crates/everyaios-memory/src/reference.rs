@@ -113,10 +113,12 @@ mod tests {
         assert!(handle.preview_tokens() <= PREVIEW_BUDGET_TOKENS);
         // Head and tail are both preserved.
         assert!(handle.preview.starts_with("line of text"));
-        assert!(handle
-            .preview
-            .trim_end()
-            .ends_with("line of text that is fairly long"));
+        assert!(
+            handle
+                .preview
+                .trim_end()
+                .ends_with("line of text that is fairly long")
+        );
     }
 
     #[test]

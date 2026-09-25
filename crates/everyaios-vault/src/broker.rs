@@ -16,14 +16,14 @@ use std::collections::HashMap;
 use std::io::{BufRead, BufReader};
 use std::time::Duration;
 
-use crate::keyring::{
-    KeyRing, KeyRingError, KeyStatus, RoutingPolicy, SelectedKey, MAX_429_SWITCHES,
-};
-use crate::ledger::{default_pricing, Pricing, Usage, UsageRow};
-use crate::local::{self, LocalEndpoint};
-use crate::oauth::{is_oauth_provider, OAuthManager};
-use crate::session_budget::SessionBudget;
 use crate::Vault;
+use crate::keyring::{
+    KeyRing, KeyRingError, KeyStatus, MAX_429_SWITCHES, RoutingPolicy, SelectedKey,
+};
+use crate::ledger::{Pricing, Usage, UsageRow, default_pricing};
+use crate::local::{self, LocalEndpoint};
+use crate::oauth::{OAuthManager, is_oauth_provider};
+use crate::session_budget::SessionBudget;
 
 /// Default OpenAI-compatible base URLs per provider (override via
 /// `ProvidersFile.base_url`).
@@ -1013,11 +1013,7 @@ fn parse_retry_after(resp: &ureq::Response) -> Option<u64> {
 fn session_headers(session_id: &str) -> Vec<(&'static str, String)> {
     let sid = {
         let t = session_id.trim();
-        if t.is_empty() {
-            "everyaios-anon"
-        } else {
-            t
-        }
+        if t.is_empty() { "everyaios-anon" } else { t }
     };
     vec![
         ("X-Session-Id", sid.to_string()),

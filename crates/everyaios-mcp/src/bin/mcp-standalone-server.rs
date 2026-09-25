@@ -16,7 +16,7 @@
 //! proof with real external clients — e.g. the official MCP Inspector CLI
 //! (`npx @modelcontextprotocol/inspector --cli …`) — not execution.
 
-use everyaios_mcp::{all_tools, McpServer, ToolCallHandler};
+use everyaios_mcp::{McpServer, ToolCallHandler, all_tools};
 use serde_json::Value;
 use std::io;
 use std::net::TcpListener;

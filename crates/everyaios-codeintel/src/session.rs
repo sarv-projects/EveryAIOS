@@ -8,7 +8,7 @@
 //! stdio (the LSP wire protocol).
 
 use crate::lsp::{decode_messages, encode_message};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::collections::VecDeque;
 use std::io::{self, BufReader, Read, Write};
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
@@ -402,11 +402,13 @@ mod tests {
             Err(LspSessionError::IdMismatch { .. })
         ));
 
-        let mut t2 = MockTransport::new(vec![&json!({
-            "jsonrpc": "2.0", "id": 1,
-            "error": { "code": -32603, "message": "boom" }
-        })
-        .to_string()]);
+        let mut t2 = MockTransport::new(vec![
+            &json!({
+                "jsonrpc": "2.0", "id": 1,
+                "error": { "code": -32603, "message": "boom" }
+            })
+            .to_string(),
+        ]);
         let mut session2 = LspSession::new(&mut t2);
         assert!(matches!(
             session2.initialize("file:///w", "x"),

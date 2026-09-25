@@ -143,9 +143,10 @@ mod tests {
     #[test]
     fn validate_reports_unknown_agents() {
         let c = MoACatalog::builtin();
-        assert!(c
-            .validate("bounded", &["everyaios-inbuilt".into(), "claude".into()])
-            .is_ok());
+        assert!(
+            c.validate("bounded", &["everyaios-inbuilt".into(), "claude".into()])
+                .is_ok()
+        );
         let err = c
             .validate("bounded", &["everyaios-inbuilt".into()])
             .unwrap_err();

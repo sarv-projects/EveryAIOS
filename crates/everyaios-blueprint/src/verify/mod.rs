@@ -25,8 +25,8 @@ pub use manifest::{
     Budgets, Constraint, EvidenceRequirement, HashAlgorithm, OutcomeCheck, TaskManifest,
 };
 pub use status::{CompletionStatus, Score};
-pub use surface::{verify_surface, Surface, SurfaceCheck, SurfaceContext, SurfaceVerdict};
+pub use surface::{Surface, SurfaceCheck, SurfaceContext, SurfaceVerdict, verify_surface};
 pub use verifier::{
-    run_outcome_check, verify, verify_with_policy, OutcomeCheckResult, VerificationReport,
-    VerificationScore,
+    OutcomeCheckResult, VerificationReport, VerificationScore, run_outcome_check, verify,
+    verify_with_policy,
 };

@@ -1095,9 +1095,10 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec!["c"]
         );
-        assert!(dag
-            .apply_remaining_edit("a", Some("nope".into()), None)
-            .is_err());
+        assert!(
+            dag.apply_remaining_edit("a", Some("nope".into()), None)
+                .is_err()
+        );
         dag.apply_remaining_edit("c", Some("click Save".into()), Some("then halt".into()))
             .unwrap();
         assert_eq!(
@@ -1139,9 +1140,11 @@ mod tests {
         let scout = filter_tools_for_role(DelegationRole::Scout, &tools);
         assert!(scout.contains(&"file_ops.read".into()));
         assert!(scout.contains(&"search.query".into()));
-        assert!(!scout
-            .iter()
-            .any(|t| t.contains("write") || t == "desktop.act"));
+        assert!(
+            !scout
+                .iter()
+                .any(|t| t.contains("write") || t == "desktop.act")
+        );
         let worker = filter_tools_for_role(DelegationRole::Worker, &tools);
         assert!(worker.contains(&"file_ops.write".into()));
     }
@@ -1170,11 +1173,10 @@ mod tests {
             postconditions: vec!["file list returned".into()],
             ..Default::default()
         };
-        assert!(apply_five_part_brief(
-            &mut node,
-            FivePartBrief::from_parts("", "c", "i", "p", "o")
-        )
-        .is_err());
+        assert!(
+            apply_five_part_brief(&mut node, FivePartBrief::from_parts("", "c", "i", "p", "o"))
+                .is_err()
+        );
         apply_five_part_brief(&mut node, brief.clone()).unwrap();
         assert!(node.brief.as_ref().unwrap().is_complete());
     }
@@ -1315,22 +1317,26 @@ mod tests {
         assert_eq!(dag.nodes[0].status, CuaNodeStatus::Verified);
         assert_eq!(dag.nodes[1].id, "alt");
         assert_eq!(dag.nodes[1].status, CuaNodeStatus::Pending);
-        assert!(parse_remaining_nodes(&serde_json::json!([{
-            "id": "bad",
-            "name": "click",
-            "info": "",
-            "postconditions": []
-        }]))
-        .is_err());
-        assert!(parse_remaining_nodes(&serde_json::json!([{
-            "id": "skip",
-            "name": "click Save",
-            "info": "approve",
-            "postconditions": ["saved"],
-            "ticketId": "t-forged"
-        }]))
-        .unwrap_err()
-        .contains("Guard-2"));
+        assert!(
+            parse_remaining_nodes(&serde_json::json!([{
+                "id": "bad",
+                "name": "click",
+                "info": "",
+                "postconditions": []
+            }]))
+            .is_err()
+        );
+        assert!(
+            parse_remaining_nodes(&serde_json::json!([{
+                "id": "skip",
+                "name": "click Save",
+                "info": "approve",
+                "postconditions": ["saved"],
+                "ticketId": "t-forged"
+            }]))
+            .unwrap_err()
+            .contains("Guard-2")
+        );
         assert!(remaining_payload_skips_guard(&serde_json::json!({
             "id": "c",
             "skipGuard": true,

@@ -102,7 +102,7 @@ mod tests {
         assert!(s.tool_allowed("fs.read"));
         assert!(!s.tool_allowed("fs.remove")); // explicit deny wins
         assert!(!s.tool_allowed("shell")); // not in the allow subset
-                                           // Injected surface = intersection.
+        // Injected surface = intersection.
         let host = vec![
             "fs.read".to_string(),
             "fs.write".to_string(),

@@ -4,7 +4,7 @@
 //! bottom-left). Boundary: this marks regions; burning the removal into the
 //! content stream (glyph removal) is a later, audit-logged pass.
 
-use lopdf::{dictionary, Document, Object, ObjectId};
+use lopdf::{Document, Object, ObjectId, dictionary};
 
 use super::PdfError;
 

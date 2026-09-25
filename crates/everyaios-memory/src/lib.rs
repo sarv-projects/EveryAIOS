@@ -83,61 +83,62 @@ pub mod taste;
 pub mod usage;
 
 pub use actr::{
-    activation, derive_queries, forget_sweep, is_protected, keyword_hits, recall_score, recency,
-    Memory, RecallWeights, DEFAULT_IMPORTANCE_FLOOR,
+    DEFAULT_IMPORTANCE_FLOOR, Memory, RecallWeights, activation, derive_queries, forget_sweep,
+    is_protected, keyword_hits, recall_score, recency,
 };
 pub use avoid::{AvoidRule, AvoidanceStore};
 pub use bm25::{
-    fuse_signals, run_signals_parallel, tokenize, Bm25Doc, Bm25Index, Hit, SignalKind, SignalRank,
-    SignalSource,
+    Bm25Doc, Bm25Index, Hit, SignalKind, SignalRank, SignalSource, fuse_signals,
+    run_signals_parallel, tokenize,
 };
 pub use cache::{ResultCache, SemanticCache};
-pub use classify::{classify, parallel_groups, plan_execution, ExecutionPlan, Intent, IntentKind};
+pub use classify::{ExecutionPlan, Intent, IntentKind, classify, parallel_groups, plan_execution};
 pub use cognee::{CogneeMemory, RecallResult};
 pub use compaction::{
-    compact_with_fallback, decide_context_action, find_safe_split, persist_decision, prune_protect,
+    CacheBreak, CompactionConfig, CompactionCoordinator, CompactionEvent, ContextAction,
+    FallbackStep, PersistDecision, PrefixCache, Summarizer, compact_with_fallback,
+    decide_context_action, find_safe_split, persist_decision, prune_protect,
     run_compaction_lifecycle, should_snip, sliding_window, snip_anchor, summarize_or_passthrough,
-    truncate_with_marker, CacheBreak, CompactionConfig, CompactionCoordinator, CompactionEvent,
-    ContextAction, FallbackStep, PersistDecision, PrefixCache, Summarizer,
+    truncate_with_marker,
 };
 pub use embedding::{
-    cosine, dot, hamming, l2, quantize_binary, quantize_int8, BinaryVector, Embedder,
-    EmbeddingIndex, Int8Vector,
+    BinaryVector, Embedder, EmbeddingIndex, Int8Vector, cosine, dot, hamming, l2, quantize_binary,
+    quantize_int8,
 };
 pub use fsrs::{
-    simulate, Fsrs, FsrsError, ItemState, MemoryState, NextStates, Rating, SimulationConfig,
-    SimulationReport, DEFAULT_PARAMETERS, FSRS5_DEFAULT_DECAY, FSRS6_DEFAULT_DECAY,
+    DEFAULT_PARAMETERS, FSRS5_DEFAULT_DECAY, FSRS6_DEFAULT_DECAY, Fsrs, FsrsError, ItemState,
+    MemoryState, NextStates, Rating, SimulationConfig, SimulationReport, simulate,
 };
 pub use fusion::{
-    approx_tokens, budget_tokens, cap_text, dedupe, merge_small_chunks, rrf_fuse, smart_snippets,
-    ContentType, Signal,
+    ContentType, Signal, approx_tokens, budget_tokens, cap_text, dedupe, merge_small_chunks,
+    rrf_fuse, smart_snippets,
 };
 pub use ghost::{FsEvent, GhostIndex};
 pub use graph::OPEN;
 pub use graph::{
-    Edge, EdgeType, GraphBackend, GraphStore, Node, NodeKind, DEFAULT_MAX_DEPTH, DEFAULT_TOP_K,
+    DEFAULT_MAX_DEPTH, DEFAULT_TOP_K, Edge, EdgeType, GraphBackend, GraphStore, Node, NodeKind,
 };
-pub use janus::{ast_prune, dedup, regex_collapse, run_janus, PassResult};
+pub use janus::{PassResult, ast_prune, dedup, regex_collapse, run_janus};
 pub use journey::{Journey, JourneyEvent, JourneyKind};
 pub use lazy_graph::{
-    extract_concepts, lexical_similarity, LazyConceptGraph, LazyGraphRag, RelevanceAssessor,
-    RetrievalReport, RetrieveOptions, RetrievedChunk, SimilarityScorer,
+    LazyConceptGraph, LazyGraphRag, RelevanceAssessor, RetrievalReport, RetrieveOptions,
+    RetrievedChunk, SimilarityScorer, extract_concepts, lexical_similarity,
 };
-pub use paging::{MemoryEntry, PagedMemory, Surface, CORE_BUDGET_TOKENS};
+pub use paging::{CORE_BUDGET_TOKENS, MemoryEntry, PagedMemory, Surface};
 pub use passport::{ContextPassport, PassportEntry, PassportScope};
 pub use planner::{BudgetResult, ContextPlanner, PlannerConfig, PlannerDecision};
 pub use reference::{
-    bounded_preview, make_ref_handle, query_ref, RefHandle, RefKind, PREVIEW_BUDGET_TOKENS,
+    PREVIEW_BUDGET_TOKENS, RefHandle, RefKind, bounded_preview, make_ref_handle, query_ref,
 };
 pub use reinforce::{
-    extract_candidates, split_sentences, ReviewCandidate, ReviewCard, ReviewQueue,
+    ReviewCandidate, ReviewCard, ReviewQueue, extract_candidates, split_sentences,
 };
-pub use repair::{repair_tool_json, Repair};
-pub use rerank::{rerank, Candidate, LexicalReranker, RankedHit, Reranker};
-pub use rtk::{compress, kind_for, CommandKind, CompressedOutput};
+pub use repair::{Repair, repair_tool_json};
+pub use rerank::{Candidate, LexicalReranker, RankedHit, Reranker, rerank};
+pub use rtk::{CommandKind, CompressedOutput, compress, kind_for};
 pub use saved::{MemoryObservation, ObservationSource, SavedVsDiscovered};
 pub use summary::{
-    answer_over_summaries, index_summaries, summarize_directory, summarize_file, FileSummary,
+    FileSummary, answer_over_summaries, index_summaries, summarize_directory, summarize_file,
 };
 pub use taste::{TasteRule, TasteStore};
 pub use usage::{AgentSessionMetrics, UsageLedger, UsageObservations, UsageRecord, UsageSource};

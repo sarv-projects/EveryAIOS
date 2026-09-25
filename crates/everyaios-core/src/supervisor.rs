@@ -13,9 +13,9 @@ use std::collections::VecDeque;
 use std::io::{self, Read};
 use std::path::PathBuf;
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::mpsc::Sender;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::mpsc::Sender;
 use std::time::{Duration, Instant};
 
 /// Supervisor states reflecting the lifecycle of the managed child process.
@@ -119,6 +119,11 @@ pub struct ProcessSupervisor {
     /// `SidecarLink`. `None` for the headless coordinator binary (which has no
     /// shell to wire a link to and pumps stdout for the watchdog instead).
     pub link_tx: Option<Sender<(ChildStdin, ChildStdout)>>,
+    /// P45.8 — set by the shell when the next turn needs the sidecar.
+    /// The supervisor parks on idle-exit (code 75) until this flips.
+    pub resume: Arc<AtomicBool>,
+    /// True while the child is down after an idle exit.
+    pub parked: Arc<AtomicBool>,
 }
 
 impl ProcessSupervisor {
@@ -143,6 +148,8 @@ impl ProcessSupervisor {
             last_activity_ms: Arc::new(AtomicU64::new(0)),
             readers: Vec::new(),
             link_tx,
+            resume: Arc::new(AtomicBool::new(false)),
+            parked: Arc::new(AtomicBool::new(false)),
             #[cfg(target_os = "windows")]
             job_handle: None,
         }
@@ -175,7 +182,11 @@ impl ProcessSupervisor {
         let mut cmd = Command::new(&self.binary_path);
         cmd.stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::piped());
+            .stderr(Stdio::piped())
+            // The coordinator exits 75 after 60s with no turn. This process
+            // treats that as a park, not a crash.
+            .env("EVERYAIOS_SIDECAR_IDLE_EXIT", "1");
+        self.parked.store(false, Ordering::Release);
 
         // Platform-specific pre_exec for orphan prevention.
         #[cfg(target_os = "linux")]
@@ -437,6 +448,25 @@ impl ProcessSupervisor {
                         self.restart_count = 0;
                         self.spawn()?;
                         eprintln!("[supervisor] state: {}", self.state);
+                    }
+                    75 => {
+                        // P45.8 — idle exit. Stay in this loop, do not count a
+                        // crash, and spawn again when the shell sets `resume`.
+                        eprintln!(
+                            "[supervisor] child idle-exited (code 75) — parked until the next turn"
+                        );
+                        self.state = SupervisorState::Stopped;
+                        self.parked.store(true, Ordering::Release);
+                        loop {
+                            if self.resume.swap(false, Ordering::AcqRel) {
+                                self.parked.store(false, Ordering::Release);
+                                self.restart_count = 0;
+                                self.spawn()?;
+                                eprintln!("[supervisor] state: {}", self.state);
+                                break;
+                            }
+                            std::thread::sleep(POLL_INTERVAL);
+                        }
                     }
                     71 => {
                         // Heap pressure exit (EX_OSERR).

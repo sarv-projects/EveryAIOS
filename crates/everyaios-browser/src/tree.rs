@@ -6,8 +6,8 @@
 //! caps 1..=100), and mints stable `[ref=eN]` handles scoped to
 //! (document_id, url) — refs never leak across navigations (ARCH/08 §8.3).
 
-use crate::ax::{is_heading, is_interactive, AxNode};
 use crate::A11yNode;
+use crate::ax::{AxNode, is_heading, is_interactive};
 use std::collections::HashMap;
 
 /// Default max depth for the tree render.

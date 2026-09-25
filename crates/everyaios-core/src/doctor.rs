@@ -356,6 +356,25 @@ pub fn run_doctor(version: &str, probe: &dyn DoctorProbe) -> DoctorReport {
         )),
     }
 
+    // P54.8 — detection notes for the Windows shells the profile registry
+    // already knows. This is doctor text, not a second terminal product.
+    // Status stays Ok: the note is documentation, and a missing shell is not
+    // a broken subsystem.
+    checks.push(Check::ok(
+        "Windows shells",
+        "Cmder, Cygwin, and MSYS2 are detected at their default install paths and withheld until the user confirms (those paths are world-writable). Git Bash is detected from git.exe on PATH, Program Files, and scoop.",
+    ));
+    checks.push(Check {
+        name: "Git Bash history".into(),
+        status: Status::Ok,
+        detail: "Git Bash does not flush history until the shell exits. Set PROMPT_COMMAND='history -a' so the terminal history picker sees commands as they run."
+            .into(),
+        hint: Some(
+            "Detection lives in the terminal profile registry. This line does not install or wrap those shells."
+                .into(),
+        ),
+    });
+
     // Browser engine crate is compiled in (always true in a real build); this
     // line reports the *engine* readiness separate from a live CDP session.
     checks.push(Check::ok(
@@ -599,8 +618,23 @@ mod tests {
         assert_eq!(r.overall, Status::Ok);
         assert_eq!(r.exit_code(), 0);
         // Core + Vault + Database + Disk + Chrome + Local + Credentials + MCP
-        // + Sidecar + Platform + Browser
-        assert_eq!(r.checks.len(), 11);
+        // + Sidecar + Platform + Windows shells + Git Bash history + Browser
+        assert_eq!(r.checks.len(), 13);
+        let shells = r
+            .checks
+            .iter()
+            .find(|c| c.name == "Windows shells")
+            .unwrap();
+        assert!(shells.detail.contains("Cmder"));
+        assert!(shells.detail.contains("Cygwin"));
+        assert!(shells.detail.contains("MSYS2"));
+        assert!(shells.detail.contains("Git Bash"));
+        let history = r
+            .checks
+            .iter()
+            .find(|c| c.name == "Git Bash history")
+            .unwrap();
+        assert!(history.detail.contains("PROMPT_COMMAND='history -a'"));
         assert!(r.checks.iter().all(|c| c.status == Status::Ok));
     }
 
@@ -631,11 +665,13 @@ mod tests {
             let r = run_doctor("v", &probe);
             let platform = r.checks.iter().find(|c| c.name == "Platform").unwrap();
             assert_eq!(platform.status, Status::Warn, "os={os}");
-            assert!(platform
-                .hint
-                .as_deref()
-                .unwrap()
-                .contains("SUPPORT-MATRIX.md"));
+            assert!(
+                platform
+                    .hint
+                    .as_deref()
+                    .unwrap()
+                    .contains("SUPPORT-MATRIX.md")
+            );
             assert_eq!(r.overall, Status::Warn);
         }
     }

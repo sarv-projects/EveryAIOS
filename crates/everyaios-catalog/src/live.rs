@@ -37,7 +37,7 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 
 use crate::provider::Transport;
-use crate::sync::{gate_passes, GateFinding, Severity};
+use crate::sync::{GateFinding, Severity, gate_passes};
 
 /// The one URL that serves the full catalog as JSON.
 pub const MODELS_DEV_API_URL: &str = "https://models.dev/api.json";

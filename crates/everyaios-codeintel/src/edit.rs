@@ -65,11 +65,7 @@ pub fn parse_verify(new_content: &str) -> Option<()> {
             _ => {}
         }
     }
-    if stack.is_empty() {
-        Some(())
-    } else {
-        None
-    }
+    if stack.is_empty() { Some(()) } else { None }
 }
 
 /// Replace a symbol's body between `region` lines with `new_body`, then

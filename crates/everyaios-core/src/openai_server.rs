@@ -33,7 +33,7 @@ use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 /// Max request body (2 MiB) — a chat request with a large context still fits;
 /// anything larger is refused, not buffered.
@@ -476,7 +476,7 @@ pub fn handle_request(
                         400,
                         &format!("invalid request body: {e}"),
                         "invalid_request_error",
-                    )
+                    );
                 }
             };
             if req.messages.is_empty() {
@@ -1110,7 +1110,9 @@ mod tests {
         let reqbody = r#"{"model":"everyaios-auto","messages":[{"role":"user","content":"ping"}]}"#;
         let request = format!(
             "POST /v1/chat/completions HTTP/1.1\r\nHost: 127.0.0.1\r\nAuthorization: Bearer {}\r\nContent-Length: {}\r\n\r\n{}",
-            token, reqbody.len(), reqbody
+            token,
+            reqbody.len(),
+            reqbody
         );
         s.write_all(request.as_bytes()).unwrap();
         let mut resp = String::new();
@@ -1132,7 +1134,9 @@ mod tests {
         let reqbody = r#"{"model":"m","messages":[{"role":"user","content":"go"}],"stream":true}"#;
         let request = format!(
             "POST /v1/chat/completions HTTP/1.1\r\nHost: 127.0.0.1\r\nAuthorization: Bearer {}\r\nContent-Length: {}\r\n\r\n{}",
-            token, reqbody.len(), reqbody
+            token,
+            reqbody.len(),
+            reqbody
         );
         s.write_all(request.as_bytes()).unwrap();
         let mut resp = String::new();

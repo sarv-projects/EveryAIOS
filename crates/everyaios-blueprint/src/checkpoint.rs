@@ -459,12 +459,16 @@ mod tests {
         assert_eq!(rows.len(), 2);
         assert_eq!((rows[0].step, rows[1].step), (1, 2));
         // Other works are filtered out; missing dir is empty, not an error.
-        assert!(Blueprint::list_step_checkpoints(&dir, "ex:9")
-            .unwrap()
-            .is_empty());
-        assert!(Blueprint::list_step_checkpoints(&dir.join("nope"), "ex:3")
-            .unwrap()
-            .is_empty());
+        assert!(
+            Blueprint::list_step_checkpoints(&dir, "ex:9")
+                .unwrap()
+                .is_empty()
+        );
+        assert!(
+            Blueprint::list_step_checkpoints(&dir.join("nope"), "ex:3")
+                .unwrap()
+                .is_empty()
+        );
         // No leftover temp files.
         assert!(!dir.join("bp.json.tmp").exists());
         // Fail closed on bad inputs.

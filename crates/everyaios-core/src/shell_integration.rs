@@ -286,13 +286,13 @@ fn osc_end(seq: &[u8]) -> Option<OscEnd> {
                 return Some(OscEnd {
                     body_end: i,
                     total_len: i + 1,
-                })
+                });
             }
             0x1b if seq.get(i + 1) == Some(&b'\\') => {
                 return Some(OscEnd {
                     body_end: i,
                     total_len: i + 2,
-                })
+                });
             }
             0x1b => return None, // malformed — never treat as complete
             _ => i += 1,

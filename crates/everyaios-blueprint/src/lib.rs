@@ -75,52 +75,52 @@ pub use checkpoint::{
     BlueprintRegistry, Checkpoint, CheckpointError, RegistryError, StepCheckpoint,
 };
 pub use crystallize::{
-    compile_to_script, decrystallize_check, signature as workflow_signature, CompiledSkill, Drift,
-    ScriptLanguage, SkillRegistry, StepClass, Workflow, WorkflowDetector, WorkflowStep,
+    CompiledSkill, Drift, ScriptLanguage, SkillRegistry, StepClass, Workflow, WorkflowDetector,
+    WorkflowStep, compile_to_script, decrystallize_check, signature as workflow_signature,
 };
 pub use frontmatter::{
-    parse_frontmatter, AgentConfig, ApprovalMode, FrontmatterError, PermissionMode,
+    AgentConfig, ApprovalMode, FrontmatterError, PermissionMode, parse_frontmatter,
 };
 pub use iteration::{
     BudgetError, CircuitBreak, CircuitBreaker, InterruptReason, IterationBudget, LoopDetector,
-    LoopVerdict, McqOption, Scope, StepKind, TimeoutPolicy, PARENT_MAX_ITERATIONS,
-    SUBAGENT_MAX_ITERATIONS, SUBAGENT_TIMEOUT_CUSTOM_SECS, SUBAGENT_TIMEOUT_GLOBAL_SECS,
+    LoopVerdict, McqOption, PARENT_MAX_ITERATIONS, SUBAGENT_MAX_ITERATIONS,
+    SUBAGENT_TIMEOUT_CUSTOM_SECS, SUBAGENT_TIMEOUT_GLOBAL_SECS, Scope, StepKind, TimeoutPolicy,
 };
 pub use kanban::{Column, Dispatcher, KanbanBoard, KanbanTask};
 pub use learn::{
-    derive_name, evidence_sha256, learn_and_save, learn_from_evidence, LearnDraft, LearnGate,
-    LearnRequest,
+    LearnDraft, LearnGate, LearnRequest, derive_name, evidence_sha256, learn_and_save,
+    learn_from_evidence,
 };
 pub use loop_pattern::{Condition, LoopPattern, LoopPatternRegistry, LoopSnapshot};
 pub use md::{BlueprintDoc, MdError};
 pub use persona::{
-    load_persona, render_persona, Persona, PersonaConfig, PersonaError, TonePreset, CORE_RULES,
+    CORE_RULES, Persona, PersonaConfig, PersonaError, TonePreset, load_persona, render_persona,
 };
-pub use plan_cache::{signature, PlanCache, PlanCacheError, PlanEntry, DEFAULT_SIMILARITY};
+pub use plan_cache::{DEFAULT_SIMILARITY, PlanCache, PlanCacheError, PlanEntry, signature};
 pub use plugin::{
-    dogfood_rule, first_party_catalog, ApprovalRequest, CapabilityList, Contributes, FileBackend,
-    HostFacades, LlmBackend, PluginEntry, PluginError, PluginManifest, PluginRegistry, PluginState,
-    Slot, TrustFlagsDecl, ABI_VERSION,
+    ABI_VERSION, ApprovalRequest, CapabilityList, Contributes, FileBackend, HostFacades,
+    LlmBackend, PluginEntry, PluginError, PluginManifest, PluginRegistry, PluginState, Slot,
+    TrustFlagsDecl, dogfood_rule, first_party_catalog,
 };
 pub use skill_store::{
-    grow_from_task, grow_from_task_checked, taste_skill, validate_grown_skill, ScoredSkill, Skill,
-    SkillError, SkillIndex, SkillManifest, SkillReference, SkillScript, SkillStore,
-    MAX_ACTIVE_SKILLS, SKILL_MAX_LINES,
+    MAX_ACTIVE_SKILLS, SKILL_MAX_LINES, ScoredSkill, Skill, SkillError, SkillIndex, SkillManifest,
+    SkillReference, SkillScript, SkillStore, grow_from_task, grow_from_task_checked, taste_skill,
+    validate_grown_skill,
 };
 pub use skills_index::{
+    ComposeOutcome, IndexEntry, InvokeKind, RejectionReason, SelectionEvidence, SkillsIndexFile,
     compose_stack, compose_stack_for, may_model_auto_invoke, may_user_slash_invoke, model_warm_set,
-    user_slash_catalog, ComposeOutcome, IndexEntry, InvokeKind, RejectionReason, SelectionEvidence,
-    SkillsIndexFile,
+    user_slash_catalog,
 };
 pub use spec::{SpecError, TaskSpec};
 pub use subagent::{
-    derive_child_permissions, parent_view, validate_message_endpoints, AgentMessage,
-    AgentMessageKind, DelegationGauge, DelegationPolicy, SubAgentError, SubAgentLimits,
-    SubAgentResult, SubAgentSpec, DELEGATE_BLOCKED_TOOLS, ROOT_AGENT,
+    AgentMessage, AgentMessageKind, DELEGATE_BLOCKED_TOOLS, DelegationGauge, DelegationPolicy,
+    ROOT_AGENT, SubAgentError, SubAgentLimits, SubAgentResult, SubAgentSpec,
+    derive_child_permissions, parent_view, validate_message_endpoints,
 };
 pub use supply_chain::{
-    digest as manifest_digest, hmac_sha256, ManifestBody, QuarantineEntry, SignedManifest,
-    SupplyChainPolicy, SupplyVerdict,
+    ManifestBody, QuarantineEntry, SignedManifest, SupplyChainPolicy, SupplyVerdict,
+    digest as manifest_digest, hmac_sha256,
 };
 pub use topology::{AgentRole, MultiAgentPlan, Topology};
 pub mod worktree;

@@ -191,11 +191,7 @@ fn cosine(a: &HashMap<String, u32>, b: &HashMap<String, u32>) -> f64 {
         nb += vb * vb;
     }
     let denom = (na * nb).sqrt();
-    if denom == 0.0 {
-        0.0
-    } else {
-        dot / denom
-    }
+    if denom == 0.0 { 0.0 } else { dot / denom }
 }
 
 #[cfg(test)]
@@ -229,21 +225,27 @@ mod tests {
     fn unrelated_goal_misses_cache() {
         let mut cache = PlanCache::new(1);
         cache.store(bp("audit q3 expenses"), 1);
-        assert!(cache
-            .lookup("rename all photos by date", DEFAULT_SIMILARITY, 1)
-            .is_none());
+        assert!(
+            cache
+                .lookup("rename all photos by date", DEFAULT_SIMILARITY, 1)
+                .is_none()
+        );
     }
 
     #[test]
     fn version_invalidation_blocks_stale_plans() {
         let mut cache = PlanCache::new(1);
         cache.store(bp("audit q3 expenses"), 1);
-        assert!(cache
-            .lookup("audit q3 expenses", DEFAULT_SIMILARITY, 2)
-            .is_none());
-        assert!(cache
-            .lookup("audit q3 expenses", DEFAULT_SIMILARITY, 1)
-            .is_some());
+        assert!(
+            cache
+                .lookup("audit q3 expenses", DEFAULT_SIMILARITY, 2)
+                .is_none()
+        );
+        assert!(
+            cache
+                .lookup("audit q3 expenses", DEFAULT_SIMILARITY, 1)
+                .is_some()
+        );
     }
 
     #[test]
@@ -268,19 +270,25 @@ mod tests {
 
         let back = PlanCache::load(&path).unwrap();
         assert_eq!(back.version(), 7);
-        assert!(back
-            .lookup("audit q3 expenses", DEFAULT_SIMILARITY, 1)
-            .is_some());
+        assert!(
+            back.lookup("audit q3 expenses", DEFAULT_SIMILARITY, 1)
+                .is_some()
+        );
         std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]
     fn default_path_honors_home_override() {
-        std::env::set_var("EVERYAIOS_HOME", "/tmp/everyaios-test-home");
+        // Edition 2024 marks process-environment mutation unsafe.
+        unsafe {
+            std::env::set_var("EVERYAIOS_HOME", "/tmp/everyaios-test-home");
+        }
         assert_eq!(
             PlanCache::default_path(),
             PathBuf::from("/tmp/everyaios-test-home/plans.db")
         );
-        std::env::remove_var("EVERYAIOS_HOME");
+        unsafe {
+            std::env::remove_var("EVERYAIOS_HOME");
+        }
     }
 }

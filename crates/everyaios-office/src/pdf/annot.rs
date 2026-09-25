@@ -2,7 +2,7 @@
 //! highlights (`/Highlight`). Form-fill already ships `/AP` regeneration as
 //! later work; this adds the note + highlight annotation pass.
 
-use lopdf::{dictionary, Document, Object, ObjectId};
+use lopdf::{Document, Object, ObjectId, dictionary};
 
 use super::PdfError;
 
@@ -113,7 +113,7 @@ pub fn add_highlight_annotation(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use lopdf::{dictionary, Document, Object};
+    use lopdf::{Document, Object, dictionary};
 
     fn one_page_pdf() -> Vec<u8> {
         let mut doc = Document::with_version("1.5");

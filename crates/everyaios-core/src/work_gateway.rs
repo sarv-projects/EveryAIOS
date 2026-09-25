@@ -8,8 +8,8 @@
 use everyaios_blueprint::DelegationGauge;
 pub use everyaios_types::AutonomyLevel;
 use everyaios_types::{
-    AgentBinding, BindingLifecycle, BindingUsage, EffectUncertainty, IdempotencyClass, RiskLevel,
-    SessionKind, WaitCondition, WorkId, WorkState, CANONICAL_SCHEMA_VERSION,
+    AgentBinding, BindingLifecycle, BindingUsage, CANONICAL_SCHEMA_VERSION, EffectUncertainty,
+    IdempotencyClass, RiskLevel, SessionKind, WaitCondition, WorkId, WorkState,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -77,9 +77,15 @@ pub struct WorkProvenance {
     pub automation_id: Option<String>,
     #[serde(alias = "revision_id", skip_serializing_if = "Option::is_none")]
     pub revision_id: Option<String>,
-    #[serde(alias = "automation_generation", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        alias = "automation_generation",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub automation_generation: Option<u64>,
-    #[serde(alias = "trigger_occurrence_id", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        alias = "trigger_occurrence_id",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub trigger_occurrence_id: Option<String>,
     #[serde(alias = "payload_digest", skip_serializing_if = "Option::is_none")]
     pub payload_digest: Option<String>,
@@ -314,7 +320,11 @@ pub enum DomainEvent {
         #[serde(default, alias = "sessionId")]
         session_id: Option<String>,
         /// P69.D14 — the delegating Work when this is a subagent child.
-        #[serde(default, alias = "parentWorkId", skip_serializing_if = "Option::is_none")]
+        #[serde(
+            default,
+            alias = "parentWorkId",
+            skip_serializing_if = "Option::is_none"
+        )]
         parent_work_id: Option<String>,
         /// The owning Session kind. Rows written before this field existed use
         /// the explicit `Interactive` migration default; they are not inferred
@@ -328,7 +338,11 @@ pub enum DomainEvent {
         /// Optional initial state for a migrated/imported Work. Normal Work
         /// creation leaves it absent and starts at `Created`/`Ready` through
         /// the subsequent Run events.
-        #[serde(default, alias = "initialState", skip_serializing_if = "Option::is_none")]
+        #[serde(
+            default,
+            alias = "initialState",
+            skip_serializing_if = "Option::is_none"
+        )]
         initial_state: Option<WorkState>,
         /// A deterministic first Run, when the creator admits one atomically.
         #[serde(default, alias = "runId", skip_serializing_if = "Option::is_none")]
@@ -389,7 +403,11 @@ pub enum DomainEvent {
         args_hash: Option<String>,
         #[serde(default, alias = "riskTier", skip_serializing_if = "Option::is_none")]
         risk_tier: Option<String>,
-        #[serde(default, alias = "requestedAtMs", skip_serializing_if = "Option::is_none")]
+        #[serde(
+            default,
+            alias = "requestedAtMs",
+            skip_serializing_if = "Option::is_none"
+        )]
         requested_at_ms: Option<u64>,
     },
     ApprovalResolved {
@@ -402,11 +420,19 @@ pub enum DomainEvent {
     },
     EffectAttempted {
         effect_id: String,
-        #[serde(default, alias = "capabilityGrantId", skip_serializing_if = "Option::is_none")]
+        #[serde(
+            default,
+            alias = "capabilityGrantId",
+            skip_serializing_if = "Option::is_none"
+        )]
         capability_grant_id: Option<String>,
         /// The capability's declared retry contract. Legacy attempts without
         /// this field are treated as unknown/unsafe for recovery purposes.
-        #[serde(default, alias = "idempotencyClass", skip_serializing_if = "Option::is_none")]
+        #[serde(
+            default,
+            alias = "idempotencyClass",
+            skip_serializing_if = "Option::is_none"
+        )]
         idempotency_class: Option<IdempotencyClass>,
     },
     EffectObserved {
@@ -424,7 +450,11 @@ pub enum DomainEvent {
         effect_id: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         reason: Option<String>,
-        #[serde(default, alias = "idempotencyClass", skip_serializing_if = "Option::is_none")]
+        #[serde(
+            default,
+            alias = "idempotencyClass",
+            skip_serializing_if = "Option::is_none"
+        )]
         idempotency_class: Option<IdempotencyClass>,
     },
     /// Explicit reconciliation evidence for an uncertain effect. The outcome
@@ -557,14 +587,59 @@ fn presence_projection(state: WorkState, wait: Option<&WaitCondition>) -> WorkPr
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case", tag = "kind", content = "data")]
 pub enum OperationalEvent {
-    ToolRequested { tool_id: String },
-    ToolStarted { tool_id: String },
-    ToolCompleted { tool_id: String },
-    ToolFailed { tool_id: String, error: String },
-    NodeConnected { node_id: String },
-    NodeDisconnected { node_id: String },
-    SessionAttached { client_id: String },
-    SessionDetached { client_id: String },
+    ToolRequested {
+        tool_id: String,
+    },
+    ToolStarted {
+        tool_id: String,
+    },
+    ToolCompleted {
+        tool_id: String,
+    },
+    ToolFailed {
+        tool_id: String,
+        error: String,
+    },
+    NodeConnected {
+        node_id: String,
+    },
+    NodeDisconnected {
+        node_id: String,
+    },
+    SessionAttached {
+        client_id: String,
+    },
+    SessionDetached {
+        client_id: String,
+    },
+    /// P51.14 — one writer touched a workspace file. A second distinct writer
+    /// on the same path is followed by [`OperationalEvent::WriteConflict`].
+    FileTouched {
+        path: String,
+        #[serde(alias = "writerId")]
+        writer_id: String,
+    },
+    /// P51.14 — a test the agent ran, with its pass/fail result.
+    TestRan {
+        name: String,
+        passed: bool,
+    },
+    /// P51.14 — two or more writers have touched the same path.
+    WriteConflict {
+        path: String,
+        writers: Vec<String>,
+    },
+    /// P51.14 — one agent handed the job to another. `summary` is the
+    /// artifact body the user can open; it is not a second event log.
+    HandoffRecorded {
+        #[serde(alias = "artifactId")]
+        artifact_id: String,
+        #[serde(alias = "fromAgent")]
+        from_agent: String,
+        #[serde(alias = "toAgent")]
+        to_agent: String,
+        summary: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -740,8 +815,10 @@ impl EffectProjection {
     }
 
     pub fn requires_reconciliation(&self) -> bool {
-        matches!(self.uncertainty, EffectUncertainty::UnknownOutcome | EffectUncertainty::Partial)
-            || self.state == "uncertain"
+        matches!(
+            self.uncertainty,
+            EffectUncertainty::UnknownOutcome | EffectUncertainty::Partial
+        ) || self.state == "uncertain"
     }
 }
 
@@ -1172,8 +1249,10 @@ impl WorkGateway {
         if work_id.is_empty() {
             return Err("work journal event has an empty work id".into());
         }
-        if !matches!(&event.event, WorkEvent::Domain(DomainEvent::WorkCreated { .. }))
-            && !self.works.contains_key(&work_id)
+        if !matches!(
+            &event.event,
+            WorkEvent::Domain(DomainEvent::WorkCreated { .. })
+        ) && !self.works.contains_key(&work_id)
         {
             return Err(format!(
                 "work journal event {} precedes WorkCreated for `{work_id}`",
@@ -1257,10 +1336,7 @@ impl WorkGateway {
                 self.note_run_reference(&work_id, run_id);
                 self.set_run_state(&work_id, run_id, state, wait.clone())?;
             }
-            WorkEvent::Domain(DomainEvent::RunCheckpointed {
-                run_id,
-                checkpoint,
-            }) => {
+            WorkEvent::Domain(DomainEvent::RunCheckpointed { run_id, checkpoint }) => {
                 self.note_run_reference(&work_id, run_id);
                 self.set_run_state(&work_id, run_id, WorkState::Checkpointed, None)?;
                 let metadata = self
@@ -1371,16 +1447,11 @@ impl WorkGateway {
                     "requestedAtMs": requested_at_ms,
                     "runId": run_id,
                 });
-                let pending = self
-                    .pending_approvals
-                    .entry(work_id.clone())
-                    .or_default();
+                let pending = self.pending_approvals.entry(work_id.clone()).or_default();
                 if pending.values().any(|value| {
                     value.get("runId").and_then(Value::as_str) == Some(run_id.as_str())
                 }) {
-                    return Err(format!(
-                        "Run `{run_id}` already has a pending approval"
-                    ));
+                    return Err(format!("Run `{run_id}` already has a pending approval"));
                 }
                 if let Some(existing) = pending.get(ticket_id) {
                     if existing != &value {
@@ -1422,7 +1493,10 @@ impl WorkGateway {
             WorkEvent::Domain(DomainEvent::EffectObserved { effect_id, outcome }) => {
                 self.apply_effect_observed(&work_id, effect_id, outcome, event.sequence)?;
             }
-            WorkEvent::Domain(DomainEvent::EffectVerified { effect_id, verified }) => {
+            WorkEvent::Domain(DomainEvent::EffectVerified {
+                effect_id,
+                verified,
+            }) => {
                 self.apply_effect_verified(&work_id, effect_id, *verified, event.sequence)?;
             }
             WorkEvent::Domain(DomainEvent::EffectUncertain {
@@ -1845,7 +1919,12 @@ impl WorkGateway {
             .get_mut(work_id)
             .and_then(|effects| effects.get_mut(effect_id))
             .expect("checked above");
-        effect.state = if retry_safe { "retry_safe" } else { "reconciled" }.into();
+        effect.state = if retry_safe {
+            "retry_safe"
+        } else {
+            "reconciled"
+        }
+        .into();
         effect.uncertainty = EffectUncertainty::None;
         effect.reason = Some(outcome.to_string());
         effect.last_sequence = sequence;
@@ -1853,9 +1932,11 @@ impl WorkGateway {
     }
 
     fn has_unresolved_uncertain_effect(&self, work_id: &str) -> bool {
-        self.effect_projections
-            .get(work_id)
-            .is_some_and(|effects| effects.values().any(EffectProjection::requires_reconciliation))
+        self.effect_projections.get(work_id).is_some_and(|effects| {
+            effects
+                .values()
+                .any(EffectProjection::requires_reconciliation)
+        })
     }
 
     /// Resolve the Run owner of an approval event while replaying.  New rows
@@ -1893,27 +1974,32 @@ impl WorkGateway {
                 return Err(format!("automation Work `{work_id}` has no owning Session"));
             }
             if let Some(parent) = &address.parent_work_id {
-                let parent_address = self
-                    .works
-                    .get(parent)
-                    .ok_or_else(|| format!("Work `{work_id}` references unknown parent `{parent}`"))?;
+                let parent_address = self.works.get(parent).ok_or_else(|| {
+                    format!("Work `{work_id}` references unknown parent `{parent}`")
+                })?;
                 if parent_address.session_id != address.session_id
                     || parent_address.session_kind != address.session_kind
                 {
-                    return Err(format!("Work `{work_id}` does not inherit its parent Session scope"));
+                    return Err(format!(
+                        "Work `{work_id}` does not inherit its parent Session scope"
+                    ));
                 }
             }
             let runs = self.run_ids.get(work_id).map(Vec::as_slice).unwrap_or(&[]);
             if let Some(current) = &address.current_run_id {
                 if !runs.iter().any(|run| run == current) {
-                    return Err(format!("Work `{work_id}` points at an unjournaled Run `{current}`"));
+                    return Err(format!(
+                        "Work `{work_id}` points at an unjournaled Run `{current}`"
+                    ));
                 }
             }
             if let Some(binding_id) = self.active_binding_ids.get(work_id) {
                 if address.binding_id.as_deref() != Some(binding_id.as_str())
                     || !self.agent_bindings.contains_key(binding_id)
                 {
-                    return Err(format!("Work `{work_id}` has an invalid active binding pointer"));
+                    return Err(format!(
+                        "Work `{work_id}` has an invalid active binding pointer"
+                    ));
                 }
             }
             for binding in self
@@ -1957,10 +2043,14 @@ impl WorkGateway {
         }
         for (work_id, pending) in &self.pending_approvals {
             if !self.works.contains_key(work_id) {
-                return Err(format!("pending approval references unknown Work `{work_id}`"));
+                return Err(format!(
+                    "pending approval references unknown Work `{work_id}`"
+                ));
             }
             if pending.is_empty() {
-                return Err(format!("Work `{work_id}` has an empty pending-approval projection"));
+                return Err(format!(
+                    "Work `{work_id}` has an empty pending-approval projection"
+                ));
             }
             for (ticket_id, value) in pending {
                 if value.get("ticketId").and_then(Value::as_str) != Some(ticket_id.as_str()) {
@@ -1986,12 +2076,9 @@ impl WorkGateway {
                         "pending approval `{ticket_id}` has an invalid requestedAtMs"
                     ));
                 }
-                let run_id = value
-                    .get("runId")
-                    .and_then(Value::as_str)
-                    .ok_or_else(|| {
-                        format!("Work `{work_id}` pending approval `{ticket_id}` has no Run owner")
-                    })?;
+                let run_id = value.get("runId").and_then(Value::as_str).ok_or_else(|| {
+                    format!("Work `{work_id}` pending approval `{ticket_id}` has no Run owner")
+                })?;
                 if !self
                     .run_ids
                     .get(work_id)
@@ -2010,7 +2097,9 @@ impl WorkGateway {
         }
         for (work_id, effects) in &self.effect_projections {
             if !self.works.contains_key(work_id) {
-                return Err(format!("effect projection references unknown Work `{work_id}`"));
+                return Err(format!(
+                    "effect projection references unknown Work `{work_id}`"
+                ));
             }
             for effect in effects.values() {
                 if effect.effect_id.is_empty() {
@@ -2084,7 +2173,9 @@ impl WorkGateway {
             if existing.session_id != address.session_id
                 || existing.session_kind != address.session_kind
             {
-                return Err(format!("Work `{id}` already exists with a different Session owner/kind"));
+                return Err(format!(
+                    "Work `{id}` already exists with a different Session owner/kind"
+                ));
             }
             return Ok(existing.clone());
         }
@@ -2154,7 +2245,9 @@ impl WorkGateway {
                 || existing.session_id != parent.session_id
                 || existing.session_kind != parent.session_kind
             {
-                return Err(format!("child Work `{id}` already exists with a different owner"));
+                return Err(format!(
+                    "child Work `{id}` already exists with a different owner"
+                ));
             }
             return Ok(existing.clone());
         }
@@ -2456,7 +2549,10 @@ impl WorkGateway {
         }
         let mut run = metadata.as_object().cloned().unwrap_or_default();
         run.insert("runId".into(), Value::String(execution_id.to_string()));
-        run.insert("executionId".into(), Value::String(execution_id.to_string()));
+        run.insert(
+            "executionId".into(),
+            Value::String(execution_id.to_string()),
+        );
         if !run.contains_key("sessionId") {
             if let Some(session_id) = &address.session_id {
                 run.insert("sessionId".into(), Value::String(session_id.clone()));
@@ -2476,7 +2572,10 @@ impl WorkGateway {
             for (key, value) in [
                 ("automationId", &address.provenance.automation_id),
                 ("revisionId", &address.provenance.revision_id),
-                ("triggerOccurrenceId", &address.provenance.trigger_occurrence_id),
+                (
+                    "triggerOccurrenceId",
+                    &address.provenance.trigger_occurrence_id,
+                ),
                 ("sourceSessionId", &address.provenance.source_session_id),
             ] {
                 if let Some(value) = value {
@@ -2496,12 +2595,21 @@ impl WorkGateway {
                         .find(|binding| binding.work_id.as_str() == work_id)
                 })
             {
-                context.insert("bindingId".into(), Value::String(binding.binding_id.as_str().into()));
-                context.insert("agentId".into(), Value::String(binding.agent_id.as_str().into()));
+                context.insert(
+                    "bindingId".into(),
+                    Value::String(binding.binding_id.as_str().into()),
+                );
+                context.insert(
+                    "agentId".into(),
+                    Value::String(binding.agent_id.as_str().into()),
+                );
                 if let Some(provider) = &binding.provider_session_id {
                     context.insert("providerSessionId".into(), Value::String(provider.clone()));
                 }
-                run.insert("bindingId".into(), Value::String(binding.binding_id.as_str().into()));
+                run.insert(
+                    "bindingId".into(),
+                    Value::String(binding.binding_id.as_str().into()),
+                );
             }
             if !context.is_empty() {
                 run.insert(
@@ -2545,10 +2653,14 @@ impl WorkGateway {
     }
 
     fn work_objective(&self, work_id: &str) -> Option<String> {
-        self.events(work_id).iter().find_map(|envelope| match &envelope.event {
-            WorkEvent::Domain(DomainEvent::WorkCreated { objective, .. }) => Some(objective.clone()),
-            _ => None,
-        })
+        self.events(work_id)
+            .iter()
+            .find_map(|envelope| match &envelope.event {
+                WorkEvent::Domain(DomainEvent::WorkCreated { objective, .. }) => {
+                    Some(objective.clone())
+                }
+                _ => None,
+            })
     }
 
     fn inferred_trigger(&self, work_id: &str) -> &'static str {
@@ -2574,10 +2686,7 @@ impl WorkGateway {
         self.execution_ids.get(work_id).map(String::as_str)
     }
     pub fn execution_ids(&self, work_id: &str) -> Vec<String> {
-        self.run_ids
-            .get(work_id)
-            .cloned()
-            .unwrap_or_default()
+        self.run_ids.get(work_id).cloned().unwrap_or_default()
     }
     pub fn run_state(&self, work_id: &str, run_id: &str) -> Option<WorkState> {
         self.run_states
@@ -2813,10 +2922,7 @@ impl WorkGateway {
             }),
             None,
         )?;
-        self.ptys
-            .get_mut(pty_id)
-            .ok_or("unknown pty")?
-            .state = "exited".into();
+        self.ptys.get_mut(pty_id).ok_or("unknown pty")?.state = "exited".into();
         Ok(envelope)
     }
     pub fn snapshot_terminal(&self, pty_id: &str) -> Option<PtySession> {
@@ -3018,7 +3124,6 @@ impl WorkGateway {
             }),
             None,
         )
-
     }
     pub fn attach_agent_session(
         &mut self,
@@ -3083,7 +3188,6 @@ impl WorkGateway {
             }),
             None,
         )
-
     }
     pub fn checkpoint_agent_session(
         &mut self,
@@ -3436,8 +3540,9 @@ impl WorkGateway {
                 serde_json::to_value(self.get_work(&s("workId"))).map_err(|e| e.to_string())
             }
             "work/list" => serde_json::to_value(self.list_work()).map_err(|e| e.to_string()),
-            "work/snapshot" => serde_json::to_value(self.snapshot(&s("workId")))
-                .map_err(|e| e.to_string()),
+            "work/snapshot" => {
+                serde_json::to_value(self.snapshot(&s("workId"))).map_err(|e| e.to_string())
+            }
             "work/events" => serde_json::to_value(self.replay_from(
                 &s("workId"),
                 p.get("fromSequence").and_then(Value::as_u64).unwrap_or(0),
@@ -3462,7 +3567,9 @@ impl WorkGateway {
             }
             "work/node_register" => {
                 let node: ExecutionNode = serde_json::from_value(
-                    p.get("node").cloned().ok_or("work/node_register requires node")?,
+                    p.get("node")
+                        .cloned()
+                        .ok_or("work/node_register requires node")?,
                 )
                 .map_err(|e| e.to_string())?;
                 self.register_node(node)?;
@@ -3634,8 +3741,8 @@ impl WorkGateway {
             // ---- P49.14 — steering ----
             "work/steer" => {
                 if let Some(raw) = p.get("instruction").filter(|value| value.is_object()) {
-                    let instruction: SteeringInstruction = serde_json::from_value(raw.clone())
-                        .map_err(|e| e.to_string())?;
+                    let instruction: SteeringInstruction =
+                        serde_json::from_value(raw.clone()).map_err(|e| e.to_string())?;
                     self.queue_steering(instruction)?;
                     Ok(serde_json::json!({"queued": true}))
                 } else {
@@ -3702,8 +3809,9 @@ impl WorkGateway {
                 Ok(Value::String(path.display().to_string()))
             }
             "work/attachment_expire" => Ok(Value::Bool(self.expire_attachment(&s("attachmentId")))),
-            "work/presence" => serde_json::to_value(self.presence(&s("workId")))
-                .map_err(|e| e.to_string()),
+            "work/presence" => {
+                serde_json::to_value(self.presence(&s("workId"))).map_err(|e| e.to_string())
+            }
             "work/thought" => {
                 let work_id = s("workId");
                 let text = s("text");
@@ -3899,19 +4007,13 @@ impl WorkGateway {
     /// Return unresolved approval requests owned by one Run.  The Work
     /// projection may contain historical Runs, so callers must not use the
     /// Work's current pointer as an implicit ownership check.
-    pub fn pending_approvals_for_run(
-        &self,
-        work_id: &str,
-        run_id: &str,
-    ) -> Vec<(&str, &Value)> {
+    pub fn pending_approvals_for_run(&self, work_id: &str, run_id: &str) -> Vec<(&str, &Value)> {
         self.pending_approvals
             .get(work_id)
             .map(|pending| {
                 pending
                     .iter()
-                    .filter(|(_, value)| {
-                        value.get("runId").and_then(Value::as_str) == Some(run_id)
-                    })
+                    .filter(|(_, value)| value.get("runId").and_then(Value::as_str) == Some(run_id))
                     .map(|(ticket, value)| (ticket.as_str(), value))
                     .collect()
             })
@@ -3940,10 +4042,14 @@ impl WorkGateway {
             .cloned()
             .ok_or_else(|| format!("approval ticket `{ticket_id}` is not pending"))?;
         if pending.get("ticketId").and_then(Value::as_str) != Some(ticket_id) {
-            return Err(format!("approval ticket `{ticket_id}` has mismatched metadata"));
+            return Err(format!(
+                "approval ticket `{ticket_id}` has mismatched metadata"
+            ));
         }
         if pending.get("runId").and_then(Value::as_str) != Some(run_id) {
-            return Err(format!("approval ticket `{ticket_id}` belongs to another Run"));
+            return Err(format!(
+                "approval ticket `{ticket_id}` belongs to another Run"
+            ));
         }
         if self.run_state(work_id, run_id) != Some(WorkState::WaitingApproval) {
             return Err(format!(
@@ -4005,14 +4111,7 @@ impl WorkGateway {
         detail: &str,
         capability_grant_id: Option<&str>,
     ) -> Result<(), String> {
-        self.record_effect_with_class(
-            work_id,
-            effect_id,
-            phase,
-            detail,
-            capability_grant_id,
-            None,
-        )
+        self.record_effect_with_class(work_id, effect_id, phase, detail, capability_grant_id, None)
     }
 
     /// Record an effect boundary with its declared idempotency class. A missing
@@ -4034,9 +4133,7 @@ impl WorkGateway {
             let Some(existing) = self.effect_status(work_id, effect_id) else {
                 return Err(format!("effect `{effect_id}` has no durable attempt"));
             };
-            if matches!(phase, "observed")
-                && existing.state == "uncertain"
-            {
+            if matches!(phase, "observed") && existing.state == "uncertain" {
                 return Err(format!(
                     "effect `{effect_id}` is uncertain; use explicit reconciliation before observing a retry"
                 ));
@@ -4152,7 +4249,9 @@ impl WorkGateway {
             .map(|effect| effect.effect_id.clone())
             .collect();
         ids.into_iter()
-            .map(|effect_id| self.reconcile_uncertain_effect(work_id, &effect_id, outcome, retry_safe))
+            .map(|effect_id| {
+                self.reconcile_uncertain_effect(work_id, &effect_id, outcome, retry_safe)
+            })
             .collect()
     }
 
@@ -4173,6 +4272,110 @@ impl WorkGateway {
         if let Some(p) = self.presence.get_mut(work_id) {
             p.current_surface = Some(text.into());
         }
+        Ok(())
+    }
+
+    fn writers_for_path(&self, work_id: &str, path: &str) -> Vec<String> {
+        let mut writers = Vec::new();
+        let Some(events) = self.events.get(work_id) else {
+            return writers;
+        };
+        for envelope in events {
+            if let WorkEvent::Operational(OperationalEvent::FileTouched {
+                path: touched,
+                writer_id,
+            }) = &envelope.event
+            {
+                if touched == path && !writers.iter().any(|known| known == writer_id) {
+                    writers.push(writer_id.clone());
+                }
+            }
+        }
+        writers
+    }
+
+    /// P51.14 — record a file touch. Returns whether this touch raised a
+    /// write-conflict flag (a different writer already touched `path`).
+    pub fn record_file_touch(
+        &mut self,
+        work_id: &str,
+        path: &str,
+        writer_id: &str,
+    ) -> Result<bool, String> {
+        let path = path.trim();
+        let writer_id = writer_id.trim();
+        if path.is_empty() || writer_id.is_empty() {
+            return Err("file touch requires a path and a writer".into());
+        }
+        let mut writers = self.writers_for_path(work_id, path);
+        self.append(
+            work_id,
+            WorkEvent::Operational(OperationalEvent::FileTouched {
+                path: path.into(),
+                writer_id: writer_id.into(),
+            }),
+            None,
+        )?;
+        if !writers.iter().any(|known| known == writer_id) {
+            writers.push(writer_id.to_string());
+        }
+        let conflict = writers.len() > 1;
+        if conflict {
+            self.append(
+                work_id,
+                WorkEvent::Operational(OperationalEvent::WriteConflict {
+                    path: path.into(),
+                    writers,
+                }),
+                None,
+            )?;
+        }
+        Ok(conflict)
+    }
+
+    /// P51.14 — record a test the agent ran.
+    pub fn record_test(&mut self, work_id: &str, name: &str, passed: bool) -> Result<(), String> {
+        let name = name.trim();
+        if name.is_empty() {
+            return Err("test record requires a name".into());
+        }
+        self.append(
+            work_id,
+            WorkEvent::Operational(OperationalEvent::TestRan {
+                name: name.into(),
+                passed,
+            }),
+            None,
+        )?;
+        Ok(())
+    }
+
+    /// P51.14 — record a handoff the user can open. The summary is the
+    /// artifact body; the id is stable for the card.
+    pub fn record_handoff(
+        &mut self,
+        work_id: &str,
+        artifact_id: &str,
+        from_agent: &str,
+        to_agent: &str,
+        summary: &str,
+    ) -> Result<(), String> {
+        let artifact_id = artifact_id.trim();
+        let from_agent = from_agent.trim();
+        let to_agent = to_agent.trim();
+        if artifact_id.is_empty() || from_agent.is_empty() || to_agent.is_empty() {
+            return Err("handoff requires an artifact id and both agents".into());
+        }
+        self.append(
+            work_id,
+            WorkEvent::Operational(OperationalEvent::HandoffRecorded {
+                artifact_id: artifact_id.into(),
+                from_agent: from_agent.into(),
+                to_agent: to_agent.into(),
+                summary: summary.into(),
+            }),
+            None,
+        )?;
         Ok(())
     }
 
@@ -4992,6 +5195,26 @@ mod tests {
         assert!(e[0].event.semantic());
     }
     #[test]
+    fn file_touch_by_a_second_writer_raises_a_conflict_and_handoff_is_an_event() {
+        let mut g = gateway();
+        assert!(!g.record_file_touch("w1", "src/a.rs", "agent-a").unwrap());
+        assert!(g.record_file_touch("w1", "src/a.rs", "agent-b").unwrap());
+        g.record_test("w1", "cargo test", false).unwrap();
+        g.record_handoff("w1", "handoff-1", "agent-a", "agent-b", "finish the tests")
+            .unwrap();
+        let events = g.events("w1");
+        assert!(events.iter().any(|envelope| matches!(
+            &envelope.event,
+            WorkEvent::Operational(OperationalEvent::WriteConflict { path, writers })
+                if path == "src/a.rs" && writers.len() == 2
+        )));
+        assert!(events.iter().any(|envelope| matches!(
+            &envelope.event,
+            WorkEvent::Operational(OperationalEvent::HandoffRecorded { artifact_id, .. })
+                if artifact_id == "handoff-1"
+        )));
+    }
+    #[test]
     fn client_binding_is_ephemeral_and_requires_auth() {
         let mut g = gateway();
         let c = ClientSession {
@@ -5124,12 +5347,16 @@ mod tests {
     fn default_journal_path_uses_everyaios_home() {
         let home = std::env::temp_dir().join(format!("everyaios-home-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&home);
-        std::env::set_var("EVERYAIOS_HOME", &home);
+        unsafe {
+            std::env::set_var("EVERYAIOS_HOME", &home);
+        }
         let mut gateway = WorkGateway::open_default().unwrap();
         assert!(gateway.get_work("missing").is_none());
         gateway.create_work("persisted", None, None, "test");
         assert!(home.join("work").join("events.jsonl").exists());
-        std::env::remove_var("EVERYAIOS_HOME");
+        unsafe {
+            std::env::remove_var("EVERYAIOS_HOME");
+        }
         let _ = std::fs::remove_dir_all(home);
     }
 
@@ -5330,9 +5557,10 @@ mod tests {
             g.presence("w1").unwrap().state,
             Some(WorkPresenceState::Completed)
         );
-        assert!(g
-            .record_execution_transition("w1", "other", WorkState::Running)
-            .is_err());
+        assert!(
+            g.record_execution_transition("w1", "other", WorkState::Running)
+                .is_err()
+        );
     }
 
     #[test]
@@ -5395,15 +5623,16 @@ mod tests {
         let mut g = gateway();
         // ADR-0006 §4 — no Work outside the scope chain (**I4**): a trigger
         // that has not created its Session cannot mint its Work.
-        assert!(g
-            .create_work_in_session(
+        assert!(
+            g.create_work_in_session(
                 "w-auto",
                 None,
                 None,
                 SessionKind::Automation,
                 "no session yet"
             )
-            .is_err());
+            .is_err()
+        );
         // The trigger creates the Session (its id), then the Work — kind is a
         // record property carried on the address, never inferred.
         let address = g
@@ -5775,9 +6004,11 @@ mod p49_runtime_tests {
         assert!(ContextReleasePolicy::Approval.decide(true, true).is_ok());
         // Redacted / ReferenceOnly may auto-release externally.
         assert!(ContextReleasePolicy::Redacted.decide(true, false).is_ok());
-        assert!(ContextReleasePolicy::ReferenceOnly
-            .decide(true, false)
-            .is_ok());
+        assert!(
+            ContextReleasePolicy::ReferenceOnly
+                .decide(true, false)
+                .is_ok()
+        );
         assert!(ContextReleasePolicy::Redacted.auto_releasable_externally());
         assert!(!ContextReleasePolicy::Approval.auto_releasable_externally());
     }
@@ -5913,9 +6144,10 @@ mod p49_runtime_tests {
     fn p49_14_steering_requires_an_attached_authenticated_client() {
         let mut gw = gw_with_work("w-steer");
         // No client attached → the constraint is refused (no forged gestures).
-        assert!(gw
-            .interrupt_current_step("w-steer", "ghost", "stop")
-            .is_err());
+        assert!(
+            gw.interrupt_current_step("w-steer", "ghost", "stop")
+                .is_err()
+        );
         gw.connect_client("c1", "desktop", "w-steer", true).unwrap();
         let ev = gw.interrupt_current_step("w-steer", "c1", "stop").unwrap();
         assert!(ev.event.semantic());
@@ -5958,15 +6190,16 @@ mod p49_runtime_tests {
             vec!["gmail.send".to_string()]
         );
         // Un-brokered capability is refused.
-        assert!(gw
-            .broker()
-            .authorize(&BrokerRequest {
-                capability_id: "shell".into(),
-                work_id: "w-brk".into(),
-                run_id: "r1".into(),
-                consumer: "agent".into(),
-            })
-            .is_err());
+        assert!(
+            gw.broker()
+                .authorize(&BrokerRequest {
+                    capability_id: "shell".into(),
+                    work_id: "w-brk".into(),
+                    run_id: "r1".into(),
+                    consumer: "agent".into(),
+                })
+                .is_err()
+        );
         let grant = gw
             .broker()
             .authorize(&BrokerRequest {
@@ -6031,9 +6264,10 @@ mod p49_runtime_tests {
             retention: "work".into(),
         };
         // A missing source is refused.
-        assert!(gw
-            .create_attachment(attachment.clone(), dir.join("nope"))
-            .is_err());
+        assert!(
+            gw.create_attachment(attachment.clone(), dir.join("nope"))
+                .is_err()
+        );
         gw.create_attachment(attachment, file).unwrap();
         assert_eq!(gw.attachments_for("w-att").len(), 1);
         assert!(gw.resolve_attachment("a1", "agent").is_ok());

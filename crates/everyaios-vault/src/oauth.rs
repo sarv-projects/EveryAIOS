@@ -35,8 +35,8 @@ use rusqlite::{Connection, OptionalExtension};
 use sha2::{Digest, Sha256};
 use zeroize::Zeroize;
 
-use crate::keyring::{KeyRing, KeyRingError, KeySpec, KeyStatus};
 use crate::Vault;
+use crate::keyring::{KeyRing, KeyRingError, KeySpec, KeyStatus};
 
 /// Feature flag: OAuth subscription linking is OFF unless this env var is set
 /// (any value, e.g. `EVERYAIOS_OAUTH=1`).

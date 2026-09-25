@@ -6,7 +6,7 @@
 
 use crate::corpus::RetrievalCase;
 use crate::retrieval::{
-    score_retrieval, RetrievalDocument, RetrievalQuestion, RetrievalResult, RetrievalScores,
+    RetrievalDocument, RetrievalQuestion, RetrievalResult, RetrievalScores, score_retrieval,
 };
 use crate::runner::{Agent, Fixture, RunOutcome, SandboxRunner};
 use crate::status::CompletionStatus;
@@ -145,8 +145,8 @@ mod tests {
     use super::*;
     use crate::corpus::{builtin_fixtures, builtin_retrieval_cases};
     use crate::manifest::{Budgets, Constraint, EvidenceRequirement, OutcomeCheck, TaskManifest};
-    use crate::runner::{apply_filesystem_fault, Fixture};
-    use crate::suite::{builtin_suite, FaultKind, TaskCategory};
+    use crate::runner::{Fixture, apply_filesystem_fault};
+    use crate::suite::{FaultKind, TaskCategory, builtin_suite};
     use std::sync::atomic::{AtomicU32, Ordering};
 
     static DIR_SEQ: AtomicU32 = AtomicU32::new(0);
@@ -300,10 +300,12 @@ mod tests {
         let report = run_retrieval_batch(&cases, &mut empty);
         assert_eq!(report.total_cases, 3);
         // An empty result is never verified-complete on the chain.
-        assert!(report
-            .case_scores
-            .iter()
-            .all(|(_, s)| s.evidence_recall == 0.0));
+        assert!(
+            report
+                .case_scores
+                .iter()
+                .all(|(_, s)| s.evidence_recall == 0.0)
+        );
         assert_eq!(report.totals.evidence_recall, 0.0);
     }
 }

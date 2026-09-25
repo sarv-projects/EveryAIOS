@@ -6,8 +6,8 @@
 //! [`CancellationToken`] the owning turn flips on teardown, and an abortable
 //! fuse that checks it between signals and between documents.
 
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 /// Cooperative cancel flag. Cheap to construct, cheap to check.
 #[derive(Debug, Clone, Default)]

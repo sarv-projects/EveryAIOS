@@ -572,10 +572,11 @@ mod tests {
         let card = WeatherWidget::card(&snap);
         assert_eq!(card.kind, "weather");
         assert!(card.title.contains("London"));
-        assert!(card
-            .rows
-            .iter()
-            .any(|(l, v, u)| l == "temperature" && v == "17.5" && u.as_deref() == Some("°C")));
+        assert!(
+            card.rows
+                .iter()
+                .any(|(l, v, u)| l == "temperature" && v == "17.5" && u.as_deref() == Some("°C"))
+        );
     }
 
     #[test]
@@ -604,9 +605,10 @@ mod tests {
         let card = StockWidget::card(&q);
         assert_eq!(card.kind, "stock");
         assert!(card.title.contains("AAPL"));
-        assert!(card
-            .rows
-            .iter()
-            .any(|(l, v, u)| l == "change" && v == "+1.25%" && u.is_none()));
+        assert!(
+            card.rows
+                .iter()
+                .any(|(l, v, u)| l == "change" && v == "+1.25%" && u.is_none())
+        );
     }
 }

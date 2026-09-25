@@ -5,7 +5,7 @@
 //! "finished" claim**; the verifier ([`crate::verify`]) proves the state.
 
 use crate::spec::TaskSpec;
-use crate::verify::{verify, OutcomeCheck, TaskManifest, VerificationReport};
+use crate::verify::{OutcomeCheck, TaskManifest, VerificationReport, verify};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use thiserror::Error;

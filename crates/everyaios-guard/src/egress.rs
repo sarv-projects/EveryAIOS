@@ -3,7 +3,7 @@
 //! DENY). Unifies URL floors + connectivity modes.
 
 use crate::netfloor::{self, NetPolicy};
-use crate::urlfloor::{check_url_with_policy, UrlVerdict};
+use crate::urlfloor::{UrlVerdict, check_url_with_policy};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]

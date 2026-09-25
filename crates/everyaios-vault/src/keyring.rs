@@ -1003,9 +1003,10 @@ mod tests {
         let _ = ring.add_key(filtered).unwrap();
 
         // `select` cannot use this key without a model…
-        assert!(ring
-            .select("probe-b", "", "s", RoutingPolicy::Priority)
-            .is_err());
+        assert!(
+            ring.select("probe-b", "", "s", RoutingPolicy::Priority)
+                .is_err()
+        );
         // …but a probe has no model to filter on, so it still gets the key.
         // Skipping it would make the most carefully-configured providers the
         // only ones that can never be observed.
@@ -1023,9 +1024,10 @@ mod tests {
         let mut capped = spec("probe-c", "capped", "sk-capped");
         capped.daily_token_cap = Some(0);
         let _ = ring.add_key(capped).unwrap();
-        assert!(ring
-            .select("probe-c", "m", "s", RoutingPolicy::Priority)
-            .is_err());
+        assert!(
+            ring.select("probe-c", "m", "s", RoutingPolicy::Priority)
+                .is_err()
+        );
         assert_eq!(
             ring.reveal_for_metadata_probe("probe-c").unwrap().as_str(),
             "sk-capped"
@@ -1114,7 +1116,7 @@ mod tests {
         let _ = ring.add_key(spec("anthropic", "prod-3", "sk-c")).unwrap();
         let providers = ring.providers_with_keys().unwrap();
         assert_eq!(providers, vec!["anthropic", "openai"]); // distinct + sorted, no secrets
-                                                            // Deleting the last key of a provider removes it from the set.
+        // Deleting the last key of a provider removes it from the set.
         ring.delete_key("anthropic", "prod-3").unwrap();
         assert_eq!(ring.providers_with_keys().unwrap(), vec!["openai"]);
     }

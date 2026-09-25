@@ -4,8 +4,8 @@
 //! signature verifies against a trusted key; a bad bundle is rejected
 //! outright — a signed manifest is the *only* way a tool gains capability.
 
-use base64::engine::general_purpose::STANDARD as B64;
 use base64::Engine;
+use base64::engine::general_purpose::STANDARD as B64;
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 use serde::{Deserialize, Serialize};
 

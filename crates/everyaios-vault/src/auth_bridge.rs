@@ -16,8 +16,8 @@ use base64::Engine as _;
 use rand::RngCore;
 use sha2::{Digest, Sha256};
 
-use crate::keyring::{KeyRing, KeySpec, KeyStatus};
 use crate::Vault;
+use crate::keyring::{KeyRing, KeySpec, KeyStatus};
 
 /// Connector providers the Auth Bridge knows out of the box. Each is a
 /// public PKCE client (no secret by design — doc 13 §5.5).
@@ -352,9 +352,11 @@ mod tests {
             .unwrap();
         assert!(bridge.is_connected(GMAIL, "me@gmail.com"));
         // Re-completing with the same state must fail (single-use state).
-        assert!(bridge
-            .complete_pkce(GMAIL, "auth-code", &start.state, "me@gmail.com")
-            .is_err());
+        assert!(
+            bridge
+                .complete_pkce(GMAIL, "auth-code", &start.state, "me@gmail.com")
+                .is_err()
+        );
     }
 
     #[test]
@@ -367,8 +369,10 @@ mod tests {
     fn state_mismatch_is_rejected_before_network() {
         let mut bridge = AuthBridge::new(vault());
         let _ = bridge.start_pkce(GMAIL).unwrap();
-        assert!(bridge
-            .complete_pkce(GMAIL, "code", "wrong-state", "a")
-            .is_err());
+        assert!(
+            bridge
+                .complete_pkce(GMAIL, "code", "wrong-state", "a")
+                .is_err()
+        );
     }
 }

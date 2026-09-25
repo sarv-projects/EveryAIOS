@@ -21,11 +21,11 @@
 //! provider turns) and the Windows worktree paths remain open — see TODO
 //! P64.5/P64.6.
 
-use everyaios_core::execution::{discover_shadow_checks, ShadowCheck};
+use everyaios_core::execution::{ShadowCheck, discover_shadow_checks};
 use everyaios_core::tools::EditError;
 use everyaios_core::{
-    apply_edit_ladder, decide_shadow_preflight, run_shadow_command, truncate_to_50k, EditStrategy,
-    LexicalShapeSource, P64_MAX_EDIT_BYTES,
+    EditStrategy, LexicalShapeSource, P64_MAX_EDIT_BYTES, apply_edit_ladder,
+    decide_shadow_preflight, run_shadow_command, truncate_to_50k,
 };
 
 const SHAPE: LexicalShapeSource = LexicalShapeSource;

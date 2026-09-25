@@ -142,9 +142,10 @@ mod tests {
             &[lab_entry, missing, dangling, ok],
             &["anthropic/claude-opus-4-6"],
         );
-        assert!(v
-            .iter()
-            .any(|s| s.contains("bedrock/claude-opus-4-6") && s.contains("no base_model")));
+        assert!(
+            v.iter()
+                .any(|s| s.contains("bedrock/claude-opus-4-6") && s.contains("no base_model"))
+        );
         assert!(v.iter().any(|s| s.contains("ghost/x")));
     }
 }

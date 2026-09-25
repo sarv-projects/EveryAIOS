@@ -310,10 +310,12 @@ mod tests {
     fn traceparent_rejects_garbage() {
         assert!(TraceContext::parse_traceparent("").is_none());
         assert!(TraceContext::parse_traceparent("01-abc-def-01").is_none());
-        assert!(TraceContext::parse_traceparent(
-            "00-00000000000000000000000000000000-abcdefabcdefabcd-01"
-        )
-        .is_none()); // invalid trace id (all zeros)
+        assert!(
+            TraceContext::parse_traceparent(
+                "00-00000000000000000000000000000000-abcdefabcdefabcd-01"
+            )
+            .is_none()
+        ); // invalid trace id (all zeros)
         assert!(TraceContext::parse_traceparent("00-ff".repeat(20).as_str()).is_none());
     }
 

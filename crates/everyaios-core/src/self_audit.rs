@@ -269,11 +269,13 @@ mod tests {
         // zero evidence the score must stay low and the summary must say so.
         assert!(report.overall < 0.25, "overall = {}", report.overall);
         assert!(report.summary.contains("missing evidence"));
-        assert!(report
-            .dimension(AuditDimension::ChangeValidation)
-            .unwrap()
-            .missing_evidence
-            .contains(&"verify".to_string()));
+        assert!(
+            report
+                .dimension(AuditDimension::ChangeValidation)
+                .unwrap()
+                .missing_evidence
+                .contains(&"verify".to_string())
+        );
     }
 
     #[test]

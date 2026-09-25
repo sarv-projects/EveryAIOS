@@ -114,7 +114,9 @@ pub enum SkillError {
     Exists(String),
     #[error("invalid skill name `{0}` (must be [a-z0-9-]+)")]
     InvalidName(String),
-    #[error("skill `{name}` is {lines} lines — over the {max}-line budget; split it into focused skills")]
+    #[error(
+        "skill `{name}` is {lines} lines — over the {max}-line budget; split it into focused skills"
+    )]
     TooLong {
         name: String,
         lines: usize,
@@ -706,6 +708,24 @@ pub fn taste_skill() -> Skill {
 /// versioned skill with ownership markers. Deterministic — the task name,
 /// the solution summary, and the next version are inputs, and the skill is
 /// written through the store (so it survives the restart).
+/// Skills that passed the verify gate and may be named in a warm set.
+/// A failed gate contributes nothing. The names are references, not the
+/// skill body.
+pub fn warm_set_after_validated_run(
+    store: &SkillStore,
+    task_name: &str,
+    solution: &str,
+    author: &str,
+    version: &str,
+    tests_passed: bool,
+) -> Result<Vec<String>, SkillError> {
+    if !tests_passed {
+        return Ok(Vec::new());
+    }
+    let skill = grow_from_task_checked(store, task_name, solution, author, version, true)?;
+    Ok(vec![skill.manifest.name])
+}
+
 pub fn grow_from_task(
     store: &SkillStore,
     task_name: &str,
@@ -1136,10 +1156,12 @@ mod tests {
             grow_from_task(&store, "Fix N+1 query bug", "solution…", "agent-a", "1.0.0").unwrap();
         assert_eq!(first.manifest.name, "fix-n-1-query-bug");
         assert_eq!(first.manifest.version, "1.0.0");
-        assert!(first
-            .manifest
-            .triggers
-            .contains(&"fix n+1 query bug".to_string()));
+        assert!(
+            first
+                .manifest
+                .triggers
+                .contains(&"fix n+1 query bug".to_string())
+        );
 
         // Growing again bumps the patch version (ownership marker).
         let second = grow_from_task(
@@ -1175,6 +1197,33 @@ mod tests {
         let err = grow_from_task_checked(&store, "Big task", &big, "a", "1.0.0", true).unwrap_err();
         assert!(matches!(err, SkillError::TooLong { .. }));
         assert!(!dir.join("big-task").exists());
+    }
+
+    #[test]
+    fn warm_set_is_empty_when_the_run_did_not_verify() {
+        let dir = tmpdir();
+        let store = SkillStore::new(&dir);
+        let names = warm_set_after_validated_run(
+            &store,
+            "PDF Triage",
+            "split then name",
+            "tester",
+            "0.1.0",
+            false,
+        )
+        .unwrap();
+        assert!(names.is_empty());
+        assert!(store.load("pdf-triage").is_err());
+        let names = warm_set_after_validated_run(
+            &store,
+            "PDF Triage",
+            "split then name",
+            "tester",
+            "0.1.0",
+            true,
+        )
+        .unwrap();
+        assert_eq!(names, vec!["pdf-triage".to_string()]);
     }
 
     #[test]

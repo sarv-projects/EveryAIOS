@@ -3,7 +3,7 @@
 //! exact target text + matched pattern indices, so the decision package can
 //! show *what* tripped the guard.
 
-use crate::blocklist::{blocklist_for, category_of, BlocklistCategory};
+use crate::blocklist::{BlocklistCategory, blocklist_for, category_of};
 use regex::RegexSet;
 use std::sync::OnceLock;
 

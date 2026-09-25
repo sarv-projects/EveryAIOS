@@ -73,11 +73,7 @@ impl CatalogMeta {
     /// `If-None-Match` value, or `None` when nothing is stored yet.
     pub fn if_none_match(&self) -> Option<&str> {
         let e = self.etag.trim();
-        if e.is_empty() {
-            None
-        } else {
-            Some(e)
-        }
+        if e.is_empty() { None } else { Some(e) }
     }
 }
 

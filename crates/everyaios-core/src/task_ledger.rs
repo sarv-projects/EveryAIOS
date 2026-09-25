@@ -758,7 +758,7 @@ mod tests {
         let stale = l.enqueue(TaskKind::Cli, "orphan", None::<String>);
         l.start(&stale).unwrap();
         c.set(1_180_000 + 6 * 60_000); // 6 min after the stale start
-                                       // the live task heartbeats right before the reap — fresh turn, kept
+        // the live task heartbeats right before the reap — fresh turn, kept
         l.heartbeat(&live).unwrap();
         let lost = l.reap_lost(c.cur());
         assert!(lost.contains(&stale));

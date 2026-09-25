@@ -559,10 +559,11 @@ mod tests {
             requests: std::sync::Mutex::new(Vec::new()),
         };
         let mut c = GraphConnector::new(t, NoRefresh, "Bearer tok".into());
-        assert!(c
-            .list_calendar_events("2026-08-01T00:00:00Z", "2026-09-01T00:00:00Z")
-            .unwrap()
-            .is_empty());
+        assert!(
+            c.list_calendar_events("2026-08-01T00:00:00Z", "2026-09-01T00:00:00Z")
+                .unwrap()
+                .is_empty()
+        );
         assert!(c.list_drive_children().unwrap().is_empty());
         assert!(c.list_chats().unwrap().is_empty());
     }

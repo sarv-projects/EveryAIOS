@@ -80,6 +80,28 @@ pub fn all_approved(combo: &Combo) -> bool {
     combo.grants.iter().all(|g| g.granted)
 }
 
+/// A saved bundle of steps. One click runs the list only after every
+/// read scope the bundle names has been approved. The click does not
+/// bypass Guard: an unapproved scope returns [`ReadVerdict::NeedsTicket`]
+/// and runs nothing.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StepBundle {
+    pub name: String,
+    pub steps: Vec<String>,
+    pub read_scopes: Vec<String>,
+}
+
+/// Run a saved combo. Returns the steps in order when every read scope is
+/// granted. Otherwise returns the first scope that still needs a ticket.
+pub fn run_saved_combo(bundle: &StepBundle, combo: &Combo) -> Result<Vec<String>, String> {
+    for scope in &bundle.read_scopes {
+        if request_read(combo, scope) != ReadVerdict::Allow {
+            return Err(scope.clone());
+        }
+    }
+    Ok(bundle.steps.clone())
+}
+
 /// Approve-then-read: [`ReadVerdict::Allow`] iff `scope` is granted,
 /// otherwise [`ReadVerdict::NeedsTicket`].
 pub fn request_read(combo: &Combo, scope: &str) -> ReadVerdict {
@@ -127,5 +149,21 @@ mod tests {
         let c = combo();
         assert_eq!(request_read(&c, "scope:read"), ReadVerdict::NeedsTicket);
         assert_eq!(request_read(&c, "scope:unknown"), ReadVerdict::NeedsTicket);
+    }
+
+    #[test]
+    fn saved_combo_runs_only_after_its_read_scopes_are_approved() {
+        let mut c = combo();
+        let bundle = StepBundle {
+            name: "read-thread".into(),
+            steps: vec!["open thread".into(), "summarize".into()],
+            read_scopes: vec!["scope:read".into()],
+        };
+        assert!(run_saved_combo(&bundle, &c).is_err());
+        approve_scope(&mut c, "scope:read", "tkt-1");
+        assert_eq!(
+            run_saved_combo(&bundle, &c).unwrap(),
+            vec!["open thread".to_string(), "summarize".to_string()]
+        );
     }
 }
