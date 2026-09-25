@@ -37,14 +37,16 @@ Think of it as a home base for everything AI. Chat with any model you want. Put 
 >
 > Nothing about your agent changes. It simply gets more to work with — and you get to watch all of it.
 
+> **Current status (2026-09-25).** The window opens. A vault that already exists asks you to unlock it. A new home asks for a passphrase, then a welcome card. Install comes from the ACP registry. Sign-in or setup appears only after that agent says which methods it accepts. An empty method list shows neither. The agent's model and login stay with the agent. EveryAIOS keys are for EveryAIOS tools and connectors. A chat with no Ready agent says nothing can answer. Files, automations, a real spreadsheet edit, and hiring a second agent are not a finished path. Windows acceptance for ConPTY, Office, browser, restart, and a clean install has not been run. The sections below are the product contract, not a claim that each one already works.
+
 ---
 
 ## What can you actually do with it?
 
-Here is what EveryAIOS puts in your hands on day one.
+Here is the product contract. It is not a claim that each item already works on day one.
 
-**Work with any AI model**
-Switch between OpenAI, Anthropic, Google Gemini, DeepSeek, Qwen, Llama and anything OpenAI-compatible — mid-conversation. Or go fully offline with local models like Ollama, LM Studio, vLLM or Apple MLX. Your keys stay on your machine, encrypted.
+**Work with the model your agent already uses**
+The selected agent keeps its own model list and its own sign-in. Codex, Claude Code, and Antigravity sign in to an account. OpenCode, Cline, and Pi can point at many providers inside their own setup. EveryAIOS does not pick that model and does not store that secret. Keys EveryAIOS itself holds are for its tools and connectors, and those stay encrypted on the machine.
 
 **Bring your own coding agent**
 Already using Claude Code, OpenAI Codex, Aider, Cline or another coding CLI? EveryAIOS hosts them natively and leaves them alone — their own prompts, tools, models and reasoning stay intact. You get a far better cockpit around them, and the option to run several at once, each in its own Git worktree so their edits never collide.

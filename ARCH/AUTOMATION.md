@@ -84,12 +84,29 @@ Every Work created by an automation records `automation_id` · `automation_revis
 > must identify one trigger admission durably; both must be stamped on the Work created by that occurrence.
 > They are fields/provenance on existing records, not new canonical primitives.
 >
-> **Current gap (2026-09-24):** `everyaios-core/src/automation_runtime.rs:150`–`193` implements
-> `compile_work` and its provenance fields, but `src-tauri/src/scheduler_fire.rs:177`–`210` creates the
-> automation Work/Run directly and does not call that factory. `scheduler_service.rs:743`–`754` records
-> `mark_fired` as a job timestamp and advances the schedule; it is not yet the durable occurrence identity
-> required above. The compiler and its focused tests are **implemented — unverified**, not production
-> provenance evidence.
+> **Status (corrected 2026-09-24 against source).** The earlier note that
+> `src-tauri/src/scheduler_fire.rs:177`–`210` "creates the automation Work/Run directly and does not call
+> that factory" **no longer describes the code.** The live firing path now imports and calls the factory:
+> `use everyaios_core::automation_runtime::{WorkSpec, compile_work};` (`scheduler_fire.rs:13`), the call at
+> `:125`, an explicit post-condition at `:132`–`134` refusing a spec whose `provenance.revision_id` /
+> `trigger_occurrence_id` disagree with the admitted occurrence, occurrence-derived ids
+> (`automation_work_id` / `automation_run_id`, `:225`–`226`), and Work creation through
+> `gateway.create_work_in_session` (`:265`). The file's own doc comment at `:122` exists to stop the bypass
+> recurring. `automation_runtime.rs` remains the compiler seam with the required provenance fields.
+>
+> What is **not** yet closed is the qualification, not the wiring: `scheduler_service.rs` records
+> `mark_fired` as a job timestamp rather than the durable occurrence identity required above, and no live
+> acceptance run has demonstrated occurrence→Work provenance on a real install. Both the compiler and the
+> production firing path are therefore **implemented — unverified**, and this row cannot be qualified until
+> the occurrence record and its admission states are exercised live.
+>
+> **Do not "fix" this path to satisfy `check-arch-invariants.mjs`.** That gate's `E4-WORK-CREATION` rule is a
+> text-level regex on the `WorkCreated` variant name, so it also fires on lines that merely *match* on
+> replayed events. The three hits it reports in this area — `scheduler_fire.rs:257`, `execution.rs:393` and
+> `execution.rs:528` — are read-only pattern matches over `gateway.events(...)` / replayed envelopes
+> (an objective comparison, a `created.len() != 1` validation, and a legacy `run_id` reconstruction), not
+> appends. An append is a violation; a match is not. Any correction here must be made to the gate's
+> calibration, never by rewriting a correct read into a different shape to silence a regex.
 
 ## 4. Triggers and occurrences
 
@@ -144,11 +161,15 @@ The factory's obligations:
 It must **not** execute effects, hold execution state, or retry effects. Those belong to the Work kernel
 (`WORK.md` §2) and to `RECOVERY.md`.
 
-> **Current-code note (`P71.3c` + ADR-0007, 2026-09-24):** `everyaios-core/src/automation_runtime.rs`
-> is now the compiler seam and exposes `compile_work` with the required provenance fields. The remaining
-> v1 gap is the production firing path: `src-tauri/src/scheduler_fire.rs` still constructs Work/Run and
-> invokes the bound ACP turn directly. That path must call the factory and carry the durable occurrence
-> through Work, Run, and recovery before the automation row can be qualified.
+> **Current-code note (`P71.3c` + ADR-0007, corrected 2026-09-24):** `everyaios-core/src/
+> automation_runtime.rs` is the compiler seam and exposes `compile_work` with the required provenance
+> fields, **and the production firing path calls it** — `src-tauri/src/scheduler_fire.rs` imports
+> `compile_work` (`:13`), invokes it (`:125`), refuses a provenance mismatch (`:132`–`134`), and creates
+> the Work through `gateway.create_work_in_session` with occurrence-derived ids (`:225`–`226`, `:265`).
+> The factory's obligations 1–3 and 5 in this section are therefore satisfied on the live path. What still
+> blocks qualification is obligation 4 plus durable occurrence identity: admission states
+> (`pending`/`uncertain`/`cancelled`) and the occurrence record itself are not yet exercised live, so the
+> automation row stays **implemented — unverified**.
 
 ---
 

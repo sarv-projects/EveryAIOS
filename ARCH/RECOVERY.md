@@ -165,12 +165,19 @@ receipt persistence must be on the production path, not only in isolated kernel 
 replays from the last acknowledged Work event sequence and re-attaches the existing binding; it does not
 create a replacement Work.
 
-**Current limitation (2026-09-24):** `crates/everyaios-core/src/work_gateway.rs` opens and replays a
-durable Work journal and rebuilds binding projections, but `crates/everyaios-core/src/chat.rs:1127`–`1154`
-constructs a fresh `ExecutionKernel::new()` in the live relay. Full cross-surface replay, production
-recovery wiring, and durable per-effect receipt attachment are therefore **implemented — unverified /
-open**, not a qualified v1 claim. The exact qualification rule is in
-[`ADR/0007`](ADR/0007-windows-first-v1-qualification.md).
+**Current limitation (corrected 2026-09-24 against source):** `crates/everyaios-core/src/work_gateway.rs`
+opens and replays a durable Work journal and rebuilds binding projections. The earlier note that
+`chat.rs:1127`–`1154` "constructs a fresh `ExecutionKernel::new()`" **no longer describes the code**: the
+live relay instead recovers through
+`ExecutionKernel::recover_from_work_gateway_with_checkpoint(&work_gateway, Some(&checkpoint_path))`
+(`crates/everyaios-core/src/chat.rs:1140`), under the in-file rule that *"the journal is authoritative. An
+ExecutionKernel snapshot is only a cache and is accepted solely after its identities/states validate
+against the replayed Work events."* There is no `ExecutionKernel::new()` call in `chat.rs`.
+
+What remains **implemented — unverified / open** is the qualification itself, not the wiring: full
+cross-surface replay, production recovery on a real install, and durable per-effect receipt attachment
+have not been demonstrated end to end, and §6.1's lease/generation recovery matrix is still pending. The
+exact qualification rule is in [`ADR/0007`](ADR/0007-windows-first-v1-qualification.md).
 
 ---
 

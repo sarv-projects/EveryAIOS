@@ -1,5 +1,39 @@
 # CURRENT RUN STATE — Task Handover & Checkpoint
 
+## v1 Push, Session 3 — 2026-09-25 (chat bar, right rail, v1 audit, CI remediation)
+
+### Reconciliation note (read this first)
+The background board may show `exp-8`, `des-5`, `des-6` as "unreconciled / evidence unreadable". **All three DID return terminal results in-conversation and their work is reviewed, verified, and committed.** `task_result` cannot confirm termination (status-API limitation `client.session.status is not a function`), not missing work. Commit map:
+- exp-8 (v1 audit) → `da0a103`, `09017a3`, `b9c4402`, `d5b5a63`
+- des-6 (chat bar + web search) → `fa380c4`
+- des-5 (right rail run surface) → `638ac78`
+- fix-14 (session_load consumer) → **still running** at handover.
+
+### What shipped
+- **Chat bar** (`fa380c4`): retired `externalChief`; send refuses with a named reason instead of dropping a turn (4 refusal reasons, no transcript/queue mutation on refuse); every readout now sources or says "not reported" (context% was computed against a hard-coded 128,000 window — that fabrication is gone); web-search control off by default, shows the real local-first cascade, "not reported" for which backend answered; P52.8 queue/steer not regressed. 498/0 UI tests, tsc 0.
+- **Right rail** (`638ac78`): one `run` view aggregating identity, usage, ordered trace, artifacts, inventory, outcome — with progress/trajectory/diff/artifact/tool-output kept as drill-downs. 40-step trace = 1 tab stop (APG listbox), live-region announcements, honest filter empty-state, `uncertain` never rendered as done/failed. 73/0 view tests.
+- **Vocabulary** (`4594563`): 5 user-visible "Session" strings in `acp.ts`/`bridge.ts` reworded to chat vocabulary; `check-vocabulary.mjs` now PASS (was failing).
+- **Citations** (`02b3541`): the citation anchor no longer does a bare `target=_blank` webview navigation; it calls `store.openInBrowser` → `browser_navigate` (Guard/netfloor-mediated, app profile). **Security-relevant** — the anchor bypassed the netfloor path.
+- **ACP v2 gate** (`40519d6`): `E3-ACP-V2` asserts the `protocolVersion` comparison + `ProtocolMismatch` refusal exist; verified it fires by temporarily removing the check.
+- **Release docs** (`b9c4402`): `CODEBASE-MAP.md` regenerated; `release-qualify.mjs` E3 now PASS → **3 PASS / 4 RUNNABLE / 5 BLOCKED** (matches what docs claim).
+- **v1 doc truth** (`da0a103`): SUPPORT-MATRIX/ADR-0007/DESKTOP/CORE stale "not wired / not implemented" claims corrected against verified source (empty mcpServers, direct scheduler Work creation, fresh ExecutionKernel, WGC "not implemented"). `d5b5a63` corrected a false audit finding (P71.11: the v2 refusal already existed; only the gate was missing).
+
+### Process failure to not repeat
+`40519d6` used `git add <file>` on `scripts/check-arch-invariants.mjs`, which was already dirty from earlier work — the commit swept in ~100 lines of unreviewed changes beyond the intended gate. Verify `git diff --cached` content per hunk, not just `git diff --check`, before every commit.
+
+### Known gaps (honest, other lanes or host-blocked)
+- Context window has no backend command (meter shows "Not reported"); no `showItemInFolder`; per-backend search state/result count need a new Rust command (`search_report`-style projection over the cascade); `search_instances_apply` remains Settings-owned; wording duplication between composer and `bridge.ts` (needs a shared `agentSendBlockerFor`).
+- `lib/work.ts` approval rows render "Done" (no awaited state) — flagged, not fixed.
+- P71.10 lease/projection types exist (3,877 lines) with ZERO live consumers. P71.12 `session_load` wiring in flight. Windows-host rows (P66/P68/P70.E5-E9) cannot close on Linux.
+- TODO census: **1677 = 1303 done + 374 open**. Rising count = honest tracking, not regression.
+
+### Next Exact Steps
+1. Reconcile fix-14 (`session_load`) when it lands; verify with real test counts.
+2. Next buildable v1 rows: P52-R2 managed-Ollama spawner (unblocks the casual "Set up a local runtime" path), P52-R3/R4 wiring, the `search_report` Rust command, `lib/work.ts` awaited state, shared `agentSendBlockerFor`.
+3. Keep CI green per commit; `release-qualify.mjs` must stay at ≥ the recorded state.
+
+---
+
 ## Local-Runtime Handoff Plane — ALL LANES LANDED (2026-09-25, final)
 
 ### Reconciliation note
