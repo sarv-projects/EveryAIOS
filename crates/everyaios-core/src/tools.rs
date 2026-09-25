@@ -16,18 +16,17 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
-use everyaios_audit::{merkle::MerkleChain, AuditEvent};
+use everyaios_audit::{AuditEvent, merkle::MerkleChain};
 use everyaios_guard::CapabilityBroker;
 use everyaios_guard::{
-    bind_exec_bytes, bind_path, bind_url, open_parent_dir,
-    pathfloor::{enforce_floor, FloorVerdict},
-    reverify_exec, reverify_path, reverify_url, scan_all, urlfloor, ConnectivityMode,
-    DecisionPackage, EgressEngine, EgressVerdict, NetPolicy, Operation, ResourceBinding, RiskLevel,
-    RiskTier,
+    ConnectivityMode, DecisionPackage, EgressEngine, EgressVerdict, NetPolicy, Operation,
+    ResourceBinding, RiskLevel, RiskTier, bind_exec_bytes, bind_path, bind_url, open_parent_dir,
+    pathfloor::{FloorVerdict, enforce_floor},
+    reverify_exec, reverify_path, reverify_url, scan_all, urlfloor,
 };
-use everyaios_mcp::{all_tools, ArgDef, ArgKind, ExternalTool, ToolDef, ToolKind};
+use everyaios_mcp::{ArgDef, ArgKind, ExternalTool, ToolDef, ToolKind, all_tools};
 use serde::Serialize;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 use sha2::{Digest, Sha256};
 
 use crate::guard_service::{GuardDecision, GuardService};
@@ -1316,6 +1315,41 @@ impl ToolService {
         })
     }
 
+    /// P64.5 — build the Merkle `tool.exec` audit payload for a committed
+    /// call. When the dispatch result names the ladder rung that spliced the
+    /// file (`strategy: exact|structured|fuzzy` from `file_ops.edit`), the
+    /// rung is copied onto the durable row so the timeline shows *how* the
+    /// edit landed; results without a rung audit exactly as before.
+    fn tool_exec_audit_payload(
+        tool_id: &str,
+        args_hash: &str,
+        ticket_id: &str,
+        result_hash: &str,
+        ok: bool,
+        duration_ms: u64,
+        idempotency_key: &str,
+        uncertain: bool,
+        result: &Value,
+    ) -> Value {
+        let mut payload = json!({
+            "toolId": tool_id,
+            "argsHash": args_hash,
+            "ticketId": ticket_id,
+            "resultHash": result_hash,
+            "ok": ok,
+            "durationMs": duration_ms,
+            "idempotencyKey": idempotency_key,
+            "state": if uncertain { "uncertain" } else if ok { "ok" } else { "failed" },
+        });
+        if let (Some(map), Some(strategy)) = (
+            payload.as_object_mut(),
+            result.get("strategy").and_then(Value::as_str),
+        ) {
+            map.insert("strategy".into(), json!(strategy));
+        }
+        payload
+    }
+
     fn commit(&mut self, params: &Value) -> Result<Value, String> {
         let started = Instant::now();
         let tool_id = str_param(params, "toolId").ok_or("tool/commit requires toolId")?;
@@ -1386,16 +1420,17 @@ impl ToolService {
         let result_hash = canonical_args_hash(&result);
         let uncertain = !ok && !spec.read_only;
 
-        let payload = json!({
-            "toolId": spec.id,
-            "argsHash": hash,
-            "ticketId": ticket_id,
-            "resultHash": result_hash,
-            "ok": ok,
-            "durationMs": duration_ms,
-            "idempotencyKey": idem,
-            "state": if uncertain { "uncertain" } else if ok { "ok" } else { "failed" },
-        });
+        let payload = Self::tool_exec_audit_payload(
+            &spec.id,
+            &hash,
+            ticket_id,
+            &result_hash,
+            ok,
+            duration_ms,
+            &idem,
+            uncertain,
+            &result,
+        );
         let seq = (self.audit.len() as u64) + 1;
         let event = AuditEvent {
             seq,
@@ -1548,7 +1583,7 @@ impl ToolService {
             "delegate.status" => backend.status(args),
             "delegate.cancel" => backend.cancel(args),
             _ => {
-                return json!({"ok": false, "error": format!("unknown delegation façade: {facade}")})
+                return json!({"ok": false, "error": format!("unknown delegation façade: {facade}")});
             }
         };
         match result {
@@ -1806,7 +1841,19 @@ impl ToolService {
         }
     }
 
-    /// P64.5 — run the edit ladder against a floored absolute path.
+    /// P64.5/P64.6 — run the edit ladder against a floored absolute path,
+    /// with the risk-gated shadow preflight (SPEC I15) before commit.
+    ///
+    /// The splice's own risk is derived first ([`derive_edit_risk`]: a
+    /// declaration-count or bracket-balance delta ⇒ structural; an explicit
+    /// caller flag can only raise the gate via `derived || explicit`, never
+    /// silence it). When [`crate::execution::decide_shadow_preflight`] fires,
+    /// the computed post-state is staged into an isolated shadow tree and the
+    /// project's own declared typecheck runs *before* the atomic rename: a
+    /// failing verdict refuses the write (`refused: true`) and nothing lands.
+    /// An unrunnable preflight (no discoverable check, unstageable candidate)
+    /// is no-evidence, never a block — the write proceeds marked
+    /// `verified: false`, and no receipt is left for rollback to trust.
     fn dispatch_edit(&mut self, abs: &Path, args: &Value) -> Value {
         let old = match args.get("old").and_then(Value::as_str) {
             Some(o) => o,
@@ -1824,23 +1871,113 @@ impl ToolService {
             return json!({"ok": false, "error": format!("file over the {} byte edit cap; use bounded-window reads", P64_MAX_EDIT_BYTES * 8)});
         }
         let shape = LexicalShapeSource;
-        match apply_edit_ladder(&content, old, new, &shape) {
-            Ok((updated, strategy)) => {
-                self.snapshot_file("", abs);
-                let tmp = abs.with_extension("tmp-everyaios");
-                match fs::write(&tmp, &updated).and_then(|_| fs::rename(&tmp, abs)) {
-                    Ok(()) => json!({
-                        "ok": true,
-                        "path": abs.display().to_string(),
-                        "strategy": strategy.as_str(),
-                    }),
-                    Err(e) => {
-                        let _ = fs::remove_file(&tmp);
-                        json!({"ok": false, "error": e.to_string()})
-                    }
-                }
+        let (updated, strategy) = match apply_edit_ladder(&content, old, new, &shape) {
+            Ok(ok) => ok,
+            Err(e) => return json!({"ok": false, "error": e.to_string(), "refused": true}),
+        };
+        // P64.6 — the gate sees the computed post-state before anything lands.
+        let structural = derive_edit_risk(&content, &updated).structural
+            || args
+                .get("structural")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+        let destructive = args
+            .get("destructive")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+        let decision = crate::execution::decide_shadow_preflight(1, structural, destructive);
+        let preflight = self.preflight_candidate(abs, &updated, &decision);
+        if preflight.blocks() {
+            return json!({
+                "ok": false,
+                "refused": true,
+                "error": preflight.refusal(),
+                "strategy": strategy.as_str(),
+                "structural": structural,
+                "preflight": preflight.report(),
+            });
+        }
+        self.snapshot_file("", abs);
+        let tmp = abs.with_extension("tmp-everyaios");
+        match fs::write(&tmp, &updated).and_then(|_| fs::rename(&tmp, abs)) {
+            Ok(()) => json!({
+                "ok": true,
+                "path": abs.display().to_string(),
+                "strategy": strategy.as_str(),
+                "structural": structural,
+                "preflight": preflight.report(),
+            }),
+            Err(e) => {
+                let _ = fs::remove_file(&tmp);
+                json!({"ok": false, "error": e.to_string()})
             }
-            Err(e) => json!({"ok": false, "error": e.to_string(), "refused": true}),
+        }
+    }
+
+    /// P64.6 — stage one edit candidate into an isolated shadow tree and run
+    /// the workspace's declared typecheck there. The live root is never
+    /// touched; cleanup always runs and a cleanup failure is reported in the
+    /// output, never a verdict upgrade.
+    fn preflight_candidate(
+        &self,
+        abs: &Path,
+        updated: &str,
+        decision: &crate::execution::PreflightDecision,
+    ) -> EditPreflight {
+        if !decision.needs_preflight {
+            return EditPreflight::Skipped(decision.reason);
+        }
+        let checks = crate::execution::discover_shadow_checks(&self.workspace);
+        if checks.is_empty() {
+            return EditPreflight::Unverifiable(format!(
+                "{} — but no typecheck command was discovered in {}",
+                decision.reason,
+                self.workspace.display()
+            ));
+        }
+        let rel = match abs.strip_prefix(&self.workspace) {
+            Ok(rel) => rel.to_string_lossy().into_owned(),
+            Err(_) => {
+                return EditPreflight::Unverifiable(format!(
+                    "{} — but the edited file is outside the workspace floor",
+                    decision.reason
+                ));
+            }
+        };
+        if rel.contains("..") {
+            return EditPreflight::Unverifiable(format!(
+                "{} — but the staged path escapes the shadow tree",
+                decision.reason
+            ));
+        }
+        let candidate = vec![crate::execution::ShadowCandidateFile::new(
+            rel,
+            updated.to_string(),
+        )];
+        let (shadow_root, cleanup) =
+            match crate::execution::stage_shadow_tree(&self.workspace, &candidate) {
+                Ok(staged) => staged,
+                Err(err) => {
+                    return EditPreflight::Unverifiable(format!(
+                        "{} — but the shadow tree could not be staged: {err}",
+                        decision.reason
+                    ));
+                }
+            };
+        let results = crate::execution::run_shadow_checks(&shadow_root, &checks);
+        let passed = results.len() == checks.len() && results.iter().all(|r| r.success);
+        let mut output = String::new();
+        for (check, result) in checks.iter().zip(results.iter()) {
+            output.push_str(&format!("$ {}\n{}\n", check.label, result.preview));
+        }
+        if let Err(err) = cleanup.cleanup() {
+            output.push_str(&format!("\n(shadow cleanup: {err})"));
+        }
+        let (preview, _, _) = crate::execution::truncate_to_50k(&output);
+        if passed {
+            EditPreflight::Passed(decision.reason)
+        } else {
+            EditPreflight::Failed(decision.reason, preview)
         }
     }
 
@@ -2434,7 +2571,7 @@ impl ToolService {
                                 }
                             }
                             _ => {
-                                return json!({"ok": false, "error": format!("unknown pdf page op: {op}")})
+                                return json!({"ok": false, "error": format!("unknown pdf page op: {op}")});
                             }
                         };
                         match result {
@@ -2718,7 +2855,10 @@ impl std::fmt::Display for EditError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             EditError::NotFound => {
-                write!(f, "edit refused: no occurrence found (0 matches); provide more context")
+                write!(
+                    f,
+                    "edit refused: no occurrence found (0 matches); provide more context"
+                )
             }
             EditError::Ambiguous { count } => write!(
                 f,
@@ -2726,7 +2866,10 @@ impl std::fmt::Display for EditError {
             ),
             EditError::EmptyOld => write!(f, "edit refused: `old` must not be empty"),
             EditError::PayloadTooLarge { bytes, cap } => {
-                write!(f, "edit refused: payload {bytes} bytes over the {cap} byte cap")
+                write!(
+                    f,
+                    "edit refused: payload {bytes} bytes over the {cap} byte cap"
+                )
             }
             EditError::ShapeChanged { before, after } => write!(
                 f,
@@ -3014,6 +3157,102 @@ pub fn apply_edit_ladder(
         return Ok(ok);
     }
     Err(first_err)
+}
+
+/// P64.6 — the risk an in-place splice derives by itself (SPEC I15).
+///
+/// `structural` fires when the declaration count (the [`LexicalShapeSource`]
+/// symbol multiset) changes or the bracket balance shifts across the splice —
+/// exactly the edits whose breakage a typecheck can catch. `destructive` is
+/// never derived from an in-place splice: deletion-shaped edits arrive
+/// through `file_ops.delete`, and an explicit caller flag can only raise the
+/// gate (`derived || explicit`), never silence a derived risk.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct EditRisk {
+    pub structural: bool,
+}
+
+pub fn derive_edit_risk(before: &str, after: &str) -> EditRisk {
+    let shape = LexicalShapeSource;
+    let structural = shape.symbols(before).len() != shape.symbols(after).len()
+        || bracket_balance(before) != bracket_balance(after);
+    EditRisk { structural }
+}
+
+/// P64.6 — net bracket balance per kind (`{}`, `()`, `[]`). A splice that
+/// opens or closes a scope changes the vector; pure renames leave it alone.
+fn bracket_balance(content: &str) -> (i64, i64, i64) {
+    let mut brace = 0i64;
+    let mut paren = 0i64;
+    let mut bracket = 0i64;
+    for c in content.chars() {
+        match c {
+            '{' => brace += 1,
+            '}' => brace -= 1,
+            '(' => paren += 1,
+            ')' => paren -= 1,
+            '[' => bracket += 1,
+            ']' => bracket -= 1,
+            _ => {}
+        }
+    }
+    (brace, paren, bracket)
+}
+
+/// P64.6 — the pre-commit shadow verdict for one staged edit candidate.
+///
+/// Only [`EditPreflight::Failed`] blocks the write. Every other outcome is
+/// either the gate not firing ([`EditPreflight::Skipped`]) or an unrunnable
+/// preflight with no evidence either way ([`EditPreflight::Unverifiable`]) —
+/// both proceed, honestly marked, and neither leaves a receipt behind.
+enum EditPreflight {
+    Skipped(&'static str),
+    Unverifiable(String),
+    Passed(&'static str),
+    Failed(&'static str, String),
+}
+
+impl EditPreflight {
+    fn blocks(&self) -> bool {
+        matches!(self, EditPreflight::Failed(..))
+    }
+
+    fn refusal(&self) -> String {
+        match self {
+            EditPreflight::Failed(reason, output) => {
+                format!("shadow preflight failed ({reason}) — refusing before commit:\n{output}")
+            }
+            _ => "shadow preflight did not block".to_string(),
+        }
+    }
+
+    fn report(&self) -> Value {
+        match self {
+            EditPreflight::Skipped(reason) => json!({
+                "needsPreflight": false,
+                "verified": false,
+                "reason": reason,
+            }),
+            EditPreflight::Unverifiable(reason) => json!({
+                "needsPreflight": true,
+                "verified": false,
+                "reason": reason,
+            }),
+            EditPreflight::Passed(reason) => json!({
+                "needsPreflight": true,
+                "verified": true,
+                "passed": true,
+                "reason": reason,
+            }),
+            EditPreflight::Failed(reason, output) => json!({
+                "needsPreflight": true,
+                "verified": true,
+                "passed": false,
+                "reason": reason,
+                "output": output,
+            }),
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -3310,7 +3549,7 @@ mod tests {
     }
 
     fn attach_counting_terminal(service: &mut ToolService, terminal: &Arc<CountingTerminal>) {
-        let backend: Arc<dyn TerminalExecutor> = Arc::clone(terminal);
+        let backend = Arc::clone(terminal);
         service.attach_terminal(backend);
     }
 
@@ -3898,7 +4137,8 @@ mod tests {
             })
             .collect::<Vec<_>>();
         let backend = Arc::new(CountingExternal::default());
-        s.attach_external_server("mcp:test", &tools, Arc::clone(&backend));
+        let owned = Arc::clone(&backend);
+        s.attach_external_server("mcp:test", &tools, owned);
         let args = json!({"value": 1});
         let pre = approved_preflight(&mut s, &guard, "custom.write", args.clone());
         let err = s
@@ -4213,10 +4453,12 @@ mod tests {
         let out = s.dispatch(&spec, &json!({"query": "everyaios"}));
         assert_eq!(out["ok"], true, "{out}");
         assert_eq!(out["count"], 1);
-        assert!(out["results"][0]["url"]
-            .as_str()
-            .unwrap()
-            .contains("everyaios"));
+        assert!(
+            out["results"][0]["url"]
+                .as_str()
+                .unwrap()
+                .contains("everyaios")
+        );
     }
 
     #[test]
@@ -4298,10 +4540,12 @@ mod tests {
             &json!({"kind": "click", "target": "Save"}),
         );
         assert_eq!(no_desktop["ok"], false);
-        assert!(no_desktop["error"]
-            .as_str()
-            .unwrap()
-            .contains("not attached"));
+        assert!(
+            no_desktop["error"]
+                .as_str()
+                .unwrap()
+                .contains("not attached")
+        );
 
         s.attach_desktop(Arc::new(FakeDesktop));
         let windows = s.dispatch(
@@ -4759,6 +5003,233 @@ mod tests {
                 assert!(out.contains(part), "{id}");
             }
         }
+    }
+
+    /// P64.5 — the rung reaches the durable row: a dispatch result that
+    /// names its strategy audits it on the Merkle `tool.exec` payload, and a
+    /// result without one audits exactly as before.
+    #[test]
+    fn p64_audit_payload_carries_the_edit_rung() {
+        let with_rung = ToolService::tool_exec_audit_payload(
+            "file_ops.edit",
+            "h",
+            "t",
+            "r",
+            true,
+            1,
+            "k",
+            false,
+            &json!({"ok": true, "strategy": "structured"}),
+        );
+        assert_eq!(with_rung["strategy"], "structured");
+        assert_eq!(with_rung["state"], "ok");
+        let without_rung = ToolService::tool_exec_audit_payload(
+            "file_ops.read",
+            "h",
+            "t",
+            "r",
+            true,
+            1,
+            "k",
+            false,
+            &json!({"ok": true}),
+        );
+        assert!(without_rung.get("strategy").is_none());
+    }
+
+    /// P64.5 — the rung rides the live ticketed path end to end
+    /// (`tool/exec` → approve → `tool/commit`): the commit receipt names the
+    /// rung alongside the ticket and audit seq, and an ambiguous match
+    /// refuses through the same path rather than guessing.
+    #[test]
+    fn p64_edit_rung_rides_the_ticketed_commit_path() {
+        let dir = tempfile();
+        let guard = Arc::new(Mutex::new(GuardService::new()));
+        let mut s = ToolService::new(Arc::clone(&guard), dir.clone());
+        fs::write(dir.join("note.txt"), "hello world\n").unwrap();
+        let args = json!({"path": "note.txt", "old": "world", "new": "rust"});
+        let pre = approved_preflight(&mut s, &guard, "file_ops.edit", args.clone());
+        let ticket = pre["ticketId"].as_str().unwrap().to_string();
+        let out = s
+            .handle(
+                "tool/commit",
+                &json!({
+                    "toolId": "file_ops.edit",
+                    "ticketId": ticket,
+                    "argsHash": pre["argsHash"],
+                    "args": args
+                }),
+            )
+            .unwrap();
+        assert_eq!(out["ok"], true, "{out}");
+        assert_eq!(out["strategy"], "exact", "{out}");
+        assert_eq!(out["ticketId"], ticket);
+        assert!(out["auditSeq"].as_u64().is_some());
+        assert_eq!(
+            fs::read_to_string(dir.join("note.txt")).unwrap(),
+            "hello rust\n"
+        );
+
+        // Ambiguous through the same ticketed path: 0/2+ refuses, never guesses.
+        let dir2 = tempfile();
+        let guard2 = Arc::new(Mutex::new(GuardService::new()));
+        let mut s2 = ToolService::new(Arc::clone(&guard2), dir2.clone());
+        fs::write(dir2.join("dup.txt"), "alpha\nbeta\nalpha\n").unwrap();
+        let args2 = json!({"path": "dup.txt", "old": "alpha", "new": "omega"});
+        let pre2 = approved_preflight(&mut s2, &guard2, "file_ops.edit", args2.clone());
+        let out2 = s2
+            .handle(
+                "tool/commit",
+                &json!({
+                    "toolId": "file_ops.edit",
+                    "ticketId": pre2["ticketId"],
+                    "argsHash": pre2["argsHash"],
+                    "args": args2
+                }),
+            )
+            .unwrap();
+        assert_eq!(out2["ok"], false, "{out2}");
+        assert_eq!(out2["refused"], true, "{out2}");
+        assert_eq!(
+            fs::read_to_string(dir2.join("dup.txt")).unwrap(),
+            "alpha\nbeta\nalpha\n"
+        );
+    }
+
+    /// P64.6 — the splice derives its own risk: a declaration-count or
+    /// bracket-balance delta is structural; a pure rename is not; and
+    /// `destructive` is never derived from an in-place splice.
+    #[test]
+    fn p64_derive_edit_risk_units() {
+        let before = "fn alpha() {\n}\n";
+        // Pure rename: same shape, same balance.
+        assert!(!derive_edit_risk(before, "fn beta() {\n}\n").structural);
+        // Added declaration: symbol count changes.
+        assert!(derive_edit_risk(before, "fn alpha() {\n}\nfn beta() {\n}\n").structural);
+        // Removed declaration.
+        assert!(derive_edit_risk(before, "").structural);
+        // Bracket shift with no new declaration.
+        assert!(derive_edit_risk("let x = f(1);\n", "let x = f(1;\n").structural);
+        // Plain prose: no shape, no brackets.
+        assert!(!derive_edit_risk("hello\n", "hi\n").structural);
+    }
+
+    fn p64_edit_spec(s: &ToolService) -> RegisteredTool {
+        s.registry.get("file_ops.edit").unwrap().clone()
+    }
+
+    /// P64.6 — the gate's acceptance case: a structural edit whose staged
+    /// candidate breaks the project's declared typecheck is refused *before*
+    /// commit — the live file is byte-identical and no temp artifact remains.
+    #[test]
+    fn p64_structural_edit_fails_preflight_before_commit() {
+        let dir = tempfile();
+        std::fs::write(
+            dir.join("package.json"),
+            "{\"scripts\": {\"typecheck\": \"exit 1\"}}",
+        )
+        .unwrap();
+        let before = "fn alpha() {\n}\n";
+        std::fs::write(dir.join("a.rs"), before).unwrap();
+        let mut s = svc(&dir);
+        let spec = p64_edit_spec(&s);
+        let out = s.dispatch(
+            &spec,
+            &json!({
+                "path": "a.rs",
+                "old": "fn alpha() {\n}",
+                "new": "fn alpha() {\n}\nfn beta() {\n}",
+            }),
+        );
+        assert_eq!(out["ok"], false, "{out}");
+        assert_eq!(out["refused"], true, "{out}");
+        assert_eq!(out["structural"], true, "{out}");
+        assert_eq!(out["preflight"]["needsPreflight"], true, "{out}");
+        assert_eq!(out["preflight"]["verified"], true, "{out}");
+        assert_eq!(out["preflight"]["passed"], false, "{out}");
+        assert_eq!(std::fs::read_to_string(dir.join("a.rs")).unwrap(), before);
+        assert!(std::fs::read_dir(&dir).unwrap().all(|e| {
+            !e.unwrap()
+                .file_name()
+                .to_string_lossy()
+                .contains("tmp-everyaios")
+        }));
+    }
+
+    /// P64.6 — a structural edit whose candidate passes the shadow check
+    /// lands with the verified verdict on the result.
+    #[test]
+    fn p64_structural_edit_passes_preflight_then_commits() {
+        let dir = tempfile();
+        std::fs::write(
+            dir.join("package.json"),
+            "{\"scripts\": {\"typecheck\": \"exit 0\"}}",
+        )
+        .unwrap();
+        std::fs::write(dir.join("a.rs"), "fn alpha() {\n}\n").unwrap();
+        let mut s = svc(&dir);
+        let spec = p64_edit_spec(&s);
+        let out = s.dispatch(
+            &spec,
+            &json!({
+                "path": "a.rs",
+                "old": "fn alpha() {\n}",
+                "new": "fn alpha() {\n}\nfn beta() {\n}",
+            }),
+        );
+        assert_eq!(out["ok"], true, "{out}");
+        assert_eq!(out["structural"], true, "{out}");
+        assert_eq!(out["preflight"]["verified"], true, "{out}");
+        assert_eq!(out["preflight"]["passed"], true, "{out}");
+        assert!(
+            std::fs::read_to_string(dir.join("a.rs"))
+                .unwrap()
+                .contains("fn beta()")
+        );
+    }
+
+    /// P64.6 — a small local-write never earns a preflight: it lands even in
+    /// a tree whose typecheck is broken, and says the gate did not fire. An
+    /// explicit caller flag can still raise the gate (`derived || explicit`)
+    /// but an unrunnable preflight never blocks.
+    #[test]
+    fn p64_small_write_skips_preflight_and_flag_only_raises() {
+        let dir = tempfile();
+        // A manifest-bearing tree that cannot typecheck (same shape as the
+        // execution-seam acceptance case).
+        std::fs::write(dir.join("Cargo.toml"), "[package]\nname = \"broken\"\n").unwrap();
+        std::fs::write(dir.join("note.txt"), "hello\n").unwrap();
+        let mut s = svc(&dir);
+        let spec = p64_edit_spec(&s);
+        let out = s.dispatch(
+            &spec,
+            &json!({"path": "note.txt", "old": "hello", "new": "hi"}),
+        );
+        assert_eq!(out["ok"], true, "{out}");
+        assert_eq!(out["structural"], false, "{out}");
+        assert_eq!(out["preflight"]["needsPreflight"], false, "{out}");
+        assert_eq!(
+            std::fs::read_to_string(dir.join("note.txt")).unwrap(),
+            "hi\n"
+        );
+
+        // Explicit flag raises the gate on the same small edit; with no
+        // runnable check it proceeds marked unverified — never blocked.
+        let bare = tempfile();
+        std::fs::write(bare.join("note.txt"), "hello\n").unwrap();
+        let mut sb = svc(&bare);
+        let specb = p64_edit_spec(&sb);
+        let raised = sb.dispatch(
+            &specb,
+            &json!({"path": "note.txt", "old": "hello", "new": "hi", "structural": true}),
+        );
+        assert_eq!(raised["ok"], true, "{raised}");
+        assert_eq!(raised["preflight"]["needsPreflight"], true, "{raised}");
+        assert_eq!(raised["preflight"]["verified"], false, "{raised}");
+        assert_eq!(
+            std::fs::read_to_string(bare.join("note.txt")).unwrap(),
+            "hi\n"
+        );
     }
 
     #[test]

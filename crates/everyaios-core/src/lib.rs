@@ -18,6 +18,7 @@ use std::path::PathBuf;
 #[path = "kernel_budget.rs"]
 pub mod kernel_budget;
 
+pub mod acpx;
 pub mod adapter;
 pub mod agui;
 pub mod ai_marker;
@@ -35,6 +36,7 @@ pub mod cua;
 pub mod decline;
 pub mod diagnose;
 pub mod distill;
+pub mod dns_cache;
 pub mod doctor;
 pub mod email;
 pub mod eval_service;
@@ -52,8 +54,8 @@ pub mod inventory;
 pub mod local;
 pub mod watcher_glue;
 pub use connectors::{
-    attach_scopes, GraphConnector, ReadFirstPolicy, SendAction, SendApproval, WorkspaceConnector,
-    SCOPE_MANIFEST,
+    GraphConnector, ReadFirstPolicy, SCOPE_MANIFEST, SendAction, SendApproval, WorkspaceConnector,
+    attach_scopes,
 };
 pub mod memory_service;
 pub mod messaging;
@@ -95,6 +97,7 @@ pub mod version;
 pub mod voice;
 pub mod widgets;
 pub mod work_gateway;
+pub mod workbench;
 pub mod worker_pool;
 pub mod worktree_cap;
 pub mod worktrees;
@@ -102,46 +105,46 @@ pub mod wsl;
 
 pub use git_queue::{GitOperationQueue, GitQueueError};
 pub use governor::{
-    check_subagent_admission, effective_subagent_tools, ConcurrencyGovernor, FleetTaskKind,
-    FleetTaskStatus, GovernorConfig, SubagentTask, DEFAULT_DENY_TASK_TOOLS, DELEGATE_BLOCKED_TOOLS,
-    P64_MAX_CONCURRENT, P64_MAX_DEPTH, P64_MAX_TOTAL,
+    ConcurrencyGovernor, DEFAULT_DENY_TASK_TOOLS, DELEGATE_BLOCKED_TOOLS, FleetTaskKind,
+    FleetTaskStatus, GovernorConfig, P64_MAX_CONCURRENT, P64_MAX_DEPTH, P64_MAX_TOTAL,
+    SubagentTask, check_subagent_admission, effective_subagent_tools,
 };
 pub use worktrees::{
-    validate_task_id, WorktreeError, WorktreeLease, WorktreeManager, BLACKBOARD_FINDINGS,
-    BLACKBOARD_PLAN, BLACKBOARD_RECEIPTS, MAX_RECEIPT_BYTES,
+    BLACKBOARD_FINDINGS, BLACKBOARD_PLAN, BLACKBOARD_RECEIPTS, MAX_RECEIPT_BYTES, WorktreeError,
+    WorktreeLease, WorktreeManager, validate_task_id,
 };
 
-pub use adapter::{exact_command_consent, is_install_script, Stage0Adapter};
+pub use adapter::{Stage0Adapter, exact_command_consent, is_install_script};
 pub use automation_runtime::{
-    compile_work, validate_step, AutomationError, AutomationProvenance, CompiledCapabilityRequest,
-    CompiledStep, WorkSpec,
+    AutomationError, AutomationProvenance, CompiledCapabilityRequest, CompiledStep, WorkSpec,
+    compile_work, validate_step,
 };
-pub use blueprint::{load_all as load_blueprints, load_blueprint, AgentBlueprint, BlueprintError};
-pub use capability_manifest::{generate_manifest, CapabilityManifest};
+pub use blueprint::{AgentBlueprint, BlueprintError, load_all as load_blueprints, load_blueprint};
+pub use capability_manifest::{CapabilityManifest, generate_manifest};
 pub use challenge::{
-    create_task, parse_grounding_choice, poll_task, solve_captcha, ByoProvider, ByoSolverError,
-    ChallengeHandler, ChallengeKind, ChallengeResolution, GroundingChoice, GroundingOption,
-    HumanChallenge, SolverHttp, UreqHttp, VisualGroundingRequest,
+    ByoProvider, ByoSolverError, ChallengeHandler, ChallengeKind, ChallengeResolution,
+    GroundingChoice, GroundingOption, HumanChallenge, SolverHttp, UreqHttp, VisualGroundingRequest,
+    create_task, parse_grounding_choice, poll_task, solve_captcha,
 };
 pub use chat::{ChatRelay, ChatRelayError, ChatWireEvent};
 pub use config::SubagentPolicy;
 pub use config::{Config, ConfigError};
 pub use cua::{
-    append_replan_log, apply_delegation_act, apply_fabric, apply_five_part_brief,
-    apply_manager_replan, apply_mechanical_verify, apply_node_stop, bind_runtime,
-    classify_harness_model_case, cua_skill_from_verified, cua_skill_to_blueprint, delegation_step,
-    fabric_is_perception, fabric_letter, filter_tools_for_role, fuse_perception, load_dag,
-    mechanical_verify, node_contract_legal, parse_remaining_nodes, persist_cua_skill, persist_dag,
-    pick_combo, refuse_cli_named_subagent, remaining_payload_skips_guard, route_work_surface,
-    screen_text_is_untrusted, split_primary_spend, stop_is_blocked, verifier_accepts_worker_claim,
-    vision_gate, ComputerUseDag, CuaNode, CuaNodeStatus, CuaSkillDraft, DelegationOutcome,
-    DelegationRole, EvidenceKind, FivePartBrief, HarnessModelCase, ManagerReplanReason,
-    ManagerReplanResult, MechanicalEvidence, MechanicalVerdict, ModelTier, PerceptionLayers,
-    PrimarySpend, RuntimeBinding, RuntimePlane, SceneGraph, VisionGateError, WorkSurface,
-    CLOSE_READ_MAX, CUA_REQUIRES_VISION, FAILED_RECLAIM_AFTER, IDENTICAL_FAIL_HALT,
-    PRIMARY_SPEND_WARN, RUNTIME_PLANES, SCOUT_ALLOWED_TOOLS,
+    CLOSE_READ_MAX, CUA_REQUIRES_VISION, ComputerUseDag, CuaNode, CuaNodeStatus, CuaSkillDraft,
+    DelegationOutcome, DelegationRole, EvidenceKind, FAILED_RECLAIM_AFTER, FivePartBrief,
+    HarnessModelCase, IDENTICAL_FAIL_HALT, ManagerReplanReason, ManagerReplanResult,
+    MechanicalEvidence, MechanicalVerdict, ModelTier, PRIMARY_SPEND_WARN, PerceptionLayers,
+    PrimarySpend, RUNTIME_PLANES, RuntimeBinding, RuntimePlane, SCOUT_ALLOWED_TOOLS, SceneGraph,
+    VisionGateError, WorkSurface, append_replan_log, apply_delegation_act, apply_fabric,
+    apply_five_part_brief, apply_manager_replan, apply_mechanical_verify, apply_node_stop,
+    bind_runtime, classify_harness_model_case, cua_skill_from_verified, cua_skill_to_blueprint,
+    delegation_step, fabric_is_perception, fabric_letter, filter_tools_for_role, fuse_perception,
+    load_dag, mechanical_verify, node_contract_legal, parse_remaining_nodes, persist_cua_skill,
+    persist_dag, pick_combo, refuse_cli_named_subagent, remaining_payload_skips_guard,
+    route_work_surface, screen_text_is_untrusted, split_primary_spend, stop_is_blocked,
+    verifier_accepts_worker_claim, vision_gate,
 };
-pub use doctor::{run_doctor, Check, DoctorProbe, DoctorReport, LiveProbe, Status as DoctorStatus};
+pub use doctor::{Check, DoctorProbe, DoctorReport, LiveProbe, Status as DoctorStatus, run_doctor};
 pub use eval_service::EvalService;
 pub use everyaios_mcp::ExternalTool;
 // P71.4 — the usage ledger's observation model, re-exported so the shell can
@@ -153,25 +156,25 @@ pub use everyaios_memory::{UsageObservations, UsageSource};
 // `ExecutionKernel`/`ExecutionPhase`/`ExecutionTrigger` are the kernel's own
 // machinery names, not a second word for the Work record.
 pub use execution::{
-    auto_checkpoint_kernel, check_restore_fence, commit_workspace_snapshot,
-    decide_shadow_preflight, parse_shadow_candidate, plan_subagent_worktree, run_shadow_command,
-    should_restore_without_replay, spawn_shadow_command_tracked, truncate_to_50k, ExecutionKernel,
-    ExecutionPhase, ExecutionTrigger, ForkLineage, PendingApproval, PreflightDecision,
-    ProjectedMessage, RepairClassification, RepairPlanItem, RuntimeManifest, ShadowCandidateFile,
-    ShadowCheckOutput, StepCheckpointMeta, SubagentProvision, Work, P64_MAX_OUTPUT_BYTES,
-    P64_MAX_SUBAGENT_DEPTH,
+    ExecutionKernel, ExecutionPhase, ExecutionTrigger, ForkLineage, P64_MAX_OUTPUT_BYTES,
+    P64_MAX_SUBAGENT_DEPTH, PendingApproval, PreflightDecision, ProjectedMessage,
+    RepairClassification, RepairPlanItem, RuntimeManifest, ShadowCandidateFile, ShadowCheckOutput,
+    StepCheckpointMeta, SubagentProvision, Work, auto_checkpoint_kernel, check_restore_fence,
+    commit_workspace_snapshot, decide_shadow_preflight, parse_shadow_candidate,
+    plan_subagent_worktree, run_shadow_command, should_restore_without_replay,
+    spawn_shadow_command_tracked, truncate_to_50k,
 };
 pub use export::{
-    render_json_export, render_markdown_export, wipe_facts, wipe_messages, ExportMessage,
-    MemoryMirror, ObsidianNote, WipeScope,
+    ExportMessage, MemoryMirror, ObsidianNote, WipeScope, render_json_export,
+    render_markdown_export, wipe_facts, wipe_messages,
 };
 pub use file_undo::restore_file_to_bytes;
 pub use guard_service::{
     AskReason, BlockExplanation, GuardDecision, GuardLifecycle, GuardService, PendingGuardCard,
 };
 pub use hwfit::{
-    detect as detect_hardware, recommend, score_model, GpuClass, HardwareProfile,
-    LocalModelCandidate, ModelFit,
+    GpuClass, HardwareProfile, LocalModelCandidate, ModelFit, detect as detect_hardware, recommend,
+    score_model,
 };
 pub use local::{LocalConfig, LocalError, LocalManager, LocalModelInfo};
 pub use memory_service::{FactStatus, MemoryService, StoredFact};
@@ -182,38 +185,38 @@ pub use openai_server::{
 };
 pub use plan_service::PlanService;
 pub use provider_ref::{
-    classify_category, ingest_provider_reference, parse_provider_reference, AuthClass,
-    IngestReport, ProviderEntry,
+    AuthClass, IngestReport, ProviderEntry, classify_category, ingest_provider_reference,
+    parse_provider_reference,
 };
 pub use providers::{KeyPool, ProviderConfig, ProviderKey, ProvidersError, ProvidersFile};
 pub use reader::{
-    extract_text, ReaderChunk, ReaderDocument, ReaderError, ReaderFormat, ReaderHit, ReaderIndex,
+    ReaderChunk, ReaderDocument, ReaderError, ReaderFormat, ReaderHit, ReaderIndex, extract_text,
 };
-pub use rss_measure::{measure_self, measure_tree, snapshot, RssSnapshot};
+pub use rss_measure::{RssSnapshot, measure_self, measure_tree, snapshot};
 pub use scheduler_service::{CronCheck, SchedulerService};
 pub use sidecar_link::{Inbound, LinkError, SidecarLink, WriterHandle};
 pub use supervisor::{ProcessSupervisor, SupervisorError, SupervisorState};
 pub use sync::{
-    export_bundle, import_bundle, open, reconcile, resolve_conflicts, seal, AeadBox, ChaChaBox,
-    ConflictPolicy, KeyExchange, KeyPair, ResolvedDiff, SharedSession, SyncConflict, SyncDiff,
-    SyncEnvelope, SyncError, SyncHello, SyncItem, SyncScope, SyncSession, SyncSet, SyncTransport,
-    SYNC_MAGIC, SYNC_VERSION,
+    AeadBox, ChaChaBox, ConflictPolicy, KeyExchange, KeyPair, ResolvedDiff, SYNC_MAGIC,
+    SYNC_VERSION, SharedSession, SyncConflict, SyncDiff, SyncEnvelope, SyncError, SyncHello,
+    SyncItem, SyncScope, SyncSession, SyncSet, SyncTransport, export_bundle, import_bundle, open,
+    reconcile, resolve_conflicts, seal,
 };
 pub use task_ledger::{
-    DeliveryState, FileStore, InMemoryStore, TaskKind, TaskLedger, TaskRecord, TaskStatus,
-    TaskStore, DEFAULT_LOST_GRACE_MS, RETENTION_MS,
+    DEFAULT_LOST_GRACE_MS, DeliveryState, FileStore, InMemoryStore, RETENTION_MS, TaskKind,
+    TaskLedger, TaskRecord, TaskStatus, TaskStore,
 };
 pub use telemetry::{Telemetry, TelemetryEventKind, TelemetryMode, TelemetrySample};
 pub use tools::{
-    apply_edit_ladder, apply_exact_once, apply_fuzzy_edit, apply_structured_edit,
-    canonical_args_hash, count_occurrences, find_facade, is_facade, BrowserBackend,
-    EditShapeSource, EditStrategy, ExternalToolBackend, FacadeRoute, LexicalShapeSource,
-    RegisteredTool, TerminalExecutor, TerminalRun, ToolFamily, ToolRegistry, ToolService,
-    EDIT_TOOL_ID, FACADE_ROUTES, P64_MAX_EDIT_BYTES,
+    BrowserBackend, EDIT_TOOL_ID, EditShapeSource, EditStrategy, ExternalToolBackend,
+    FACADE_ROUTES, FacadeRoute, LexicalShapeSource, P64_MAX_EDIT_BYTES, RegisteredTool,
+    TerminalExecutor, TerminalRun, ToolFamily, ToolRegistry, ToolService, apply_edit_ladder,
+    apply_exact_once, apply_fuzzy_edit, apply_structured_edit, canonical_args_hash,
+    count_occurrences, find_facade, is_facade,
 };
 pub use vault_key::{
-    gate_mode, keyfile_path, needs_passphrase_gate, resolve_vault_key, setup_vault_passphrase,
-    unlock_vault_passphrase, ResolvedVaultKey, VaultKeyError, VaultKeyOrigin,
+    ResolvedVaultKey, VaultKeyError, VaultKeyOrigin, gate_mode, keyfile_path,
+    needs_passphrase_gate, resolve_vault_key, setup_vault_passphrase, unlock_vault_passphrase,
 };
 pub use widgets::{
     LookupWidget, MathWidget, StockQuote, StockWidget, WeatherSnapshot, WeatherWidget, WidgetCard,
@@ -228,10 +231,14 @@ pub use work_gateway::{
     SteeringInstruction, TrustedGestureAttestation, WorkAddress, WorkEvent, WorkEventEnvelope,
     WorkGateway, WorkGatewaySnapshot, WorkPresence, WorkPresenceState, WorktreeBinding,
 };
+pub use workbench::{
+    AcquiredLease, LeaseError, LeaseHandle, ProjectionInput, RebuildReport, ReconcileOutcome,
+    TakeoverOutcome, WorkRunLeaseCoordinator,
+};
 pub use wsl::{
+    ExecEnvironment, WSL_LEGACY_PREFIX, WSL_UNC_PREFIX, WslFrame, WslPath, WslRunner,
     detect_environment, detect_environment_from_env, translate_linux_to_windows,
-    translate_windows_drive_to_linux, translate_windows_to_linux, ExecEnvironment, WslFrame,
-    WslPath, WslRunner, WSL_LEGACY_PREFIX, WSL_UNC_PREFIX,
+    translate_windows_drive_to_linux, translate_windows_to_linux,
 };
 
 /// Default data directory: `~/.everyaios` (overridable via `EVERYAIOS_HOME`).
@@ -346,8 +353,10 @@ mod tests {
     fn boot_reports_ready() {
         let dir = std::env::temp_dir().join(format!("everyaios-core-boot-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
-        std::env::set_var("EVERYAIOS_HOME", &dir);
-        std::env::set_var("EVERYAIOS_VAULT_KEY", "test-key");
+        unsafe {
+            std::env::set_var("EVERYAIOS_HOME", &dir);
+            std::env::set_var("EVERYAIOS_VAULT_KEY", "test-key");
+        }
 
         let vault = dir.join("vault.db");
         let out = boot(&["--vault".into(), vault.to_string_lossy().into()]).expect("boot ok");
@@ -355,8 +364,10 @@ mod tests {
         assert!(out.contains("retention_days=7"));
 
         let _ = std::fs::remove_dir_all(&dir);
-        std::env::remove_var("EVERYAIOS_HOME");
-        std::env::remove_var("EVERYAIOS_VAULT_KEY");
+        unsafe {
+            std::env::remove_var("EVERYAIOS_HOME");
+            std::env::remove_var("EVERYAIOS_VAULT_KEY");
+        }
     }
 
     /// P39.5 — lazy-load enforcement (R6 fix #2): cold boot must not
@@ -370,8 +381,10 @@ mod tests {
     fn boot_does_not_initialize_heavy_subsystems() {
         let dir = std::env::temp_dir().join(format!("everyaios-core-lazy-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
-        std::env::set_var("EVERYAIOS_HOME", &dir);
-        std::env::set_var("EVERYAIOS_VAULT_KEY", "test-key");
+        unsafe {
+            std::env::set_var("EVERYAIOS_HOME", &dir);
+            std::env::set_var("EVERYAIOS_VAULT_KEY", "test-key");
+        }
 
         let vault = dir.join("vault.db");
         let out = boot(&["--vault".into(), vault.to_string_lossy().into()]).expect("boot ok");
@@ -391,7 +404,9 @@ mod tests {
         }
 
         let _ = std::fs::remove_dir_all(&dir);
-        std::env::remove_var("EVERYAIOS_HOME");
-        std::env::remove_var("EVERYAIOS_VAULT_KEY");
+        unsafe {
+            std::env::remove_var("EVERYAIOS_HOME");
+            std::env::remove_var("EVERYAIOS_VAULT_KEY");
+        }
     }
 }

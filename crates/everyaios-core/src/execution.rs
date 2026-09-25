@@ -5,7 +5,7 @@
 //! replay / handoff / audit / receipt share one unit.
 
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -414,8 +414,13 @@ impl ExecutionKernel {
                 continue;
             }
             for run_id in run_ids {
-                let recovered = Self::recover_one_run(address, events, gateway, &run_id, &mut report)?;
-                if kernel.executions.insert(run_id.clone(), recovered).is_some() {
+                let recovered =
+                    Self::recover_one_run(address, events, gateway, &run_id, &mut report)?;
+                if kernel
+                    .executions
+                    .insert(run_id.clone(), recovered)
+                    .is_some()
+                {
                     return Err(format!("duplicate recovered Run `{run_id}`"));
                 }
                 kernel.counter = kernel.counter.max(parse_ex_counter(&run_id));
@@ -427,13 +432,20 @@ impl ExecutionKernel {
             if let Some(run_id) = gateway.execution_id(address.work_id.as_str()) {
                 let recovered_state = kernel
                     .get(run_id)
-                    .ok_or_else(|| format!("Work `{}` points at missing Run `{run_id}`", address.work_id))?
+                    .ok_or_else(|| {
+                        format!(
+                            "Work `{}` points at missing Run `{run_id}`",
+                            address.work_id
+                        )
+                    })?
                     .state;
                 if let Some(projected) = gateway
                     .presence(address.work_id.as_str())
                     .and_then(|presence| presence.work_state)
                 {
-                    if crate::execution::ExecutionPhase::from_work_state(projected) != recovered_state {
+                    if crate::execution::ExecutionPhase::from_work_state(projected)
+                        != recovered_state
+                    {
                         return Err(format!(
                             "Work `{}` presence state disagrees with Run `{run_id}`",
                             address.work_id
@@ -484,22 +496,30 @@ impl ExecutionKernel {
             .unwrap_or_default();
         let context_snapshot = metadata_value_as_string(&metadata, "contextSnapshot");
         if !address.provenance.is_legacy() && context_snapshot.trim_start().starts_with('{') {
-            let context: Value = serde_json::from_str(&context_snapshot)
-                .map_err(|error| format!("Run `{run_id}` has corrupt provenance context: {error}"))?;
+            let context: Value = serde_json::from_str(&context_snapshot).map_err(|error| {
+                format!("Run `{run_id}` has corrupt provenance context: {error}")
+            })?;
             let matches_field = |field: &str, expected: Option<&str>| {
-                expected.is_none_or(|value| context.get(field).and_then(Value::as_str) == Some(value))
+                expected
+                    .is_none_or(|value| context.get(field).and_then(Value::as_str) == Some(value))
             };
             if !matches_field("automationId", address.provenance.automation_id.as_deref())
                 || !matches_field("revisionId", address.provenance.revision_id.as_deref())
-                || !matches_field("triggerOccurrenceId", address.provenance.trigger_occurrence_id.as_deref())
+                || !matches_field(
+                    "triggerOccurrenceId",
+                    address.provenance.trigger_occurrence_id.as_deref(),
+                )
                 || address
                     .provenance
                     .automation_generation
                     .is_some_and(|generation| {
-                        context.get("automationGeneration").and_then(Value::as_u64) != Some(generation)
+                        context.get("automationGeneration").and_then(Value::as_u64)
+                            != Some(generation)
                     })
             {
-                return Err(format!("Run `{run_id}` context provenance conflicts with Work"));
+                return Err(format!(
+                    "Run `{run_id}` context provenance conflicts with Work"
+                ));
             }
         }
 
@@ -536,9 +556,7 @@ impl ExecutionKernel {
                         .or_else(|| {
                             patch
                                 .get("run")
-                                .and_then(|run| {
-                                    run.get("runId").or_else(|| run.get("executionId"))
-                                })
+                                .and_then(|run| run.get("runId").or_else(|| run.get("executionId")))
                                 .and_then(Value::as_str)
                         })
                     {
@@ -576,13 +594,15 @@ impl ExecutionKernel {
                     WorkEvent::Domain(DomainEvent::RunQueued { .. }) => ExecutionPhase::Ready,
                     WorkEvent::Domain(DomainEvent::RunStarted { .. }) => ExecutionPhase::Running,
                     WorkEvent::Domain(DomainEvent::RunWaiting { reason, .. }) => {
-                        let state = everyaios_types::WorkState::try_parse(reason)
-                            .ok_or_else(|| {
+                        let state =
+                            everyaios_types::WorkState::try_parse(reason).ok_or_else(|| {
                                 format!("unknown Work state `{reason}` in Run `{run_id}`")
                             })?;
                         ExecutionPhase::from_work_state(state)
                     }
-                    WorkEvent::Domain(DomainEvent::RunCheckpointed { checkpoint: value, .. }) => {
+                    WorkEvent::Domain(DomainEvent::RunCheckpointed {
+                        checkpoint: value, ..
+                    }) => {
                         checkpoint = checkpoint.max(*value);
                         ExecutionPhase::Checkpointed
                     }
@@ -590,9 +610,13 @@ impl ExecutionKernel {
                     WorkEvent::Domain(DomainEvent::RunInterrupted { .. }) => {
                         ExecutionPhase::Recoverable
                     }
-                    WorkEvent::Domain(DomainEvent::RunCompleted { .. }) => ExecutionPhase::Completed,
+                    WorkEvent::Domain(DomainEvent::RunCompleted { .. }) => {
+                        ExecutionPhase::Completed
+                    }
                     WorkEvent::Domain(DomainEvent::RunFailed { .. }) => ExecutionPhase::Failed,
-                    WorkEvent::Domain(DomainEvent::RunCancelled { .. }) => ExecutionPhase::Cancelled,
+                    WorkEvent::Domain(DomainEvent::RunCancelled { .. }) => {
+                        ExecutionPhase::Cancelled
+                    }
                     _ => continue,
                 };
                 if let Some((ticket_id, expected)) = approval_resolution.take() {
@@ -736,7 +760,8 @@ impl ExecutionKernel {
                 "Run `{run_id}` pending-approval projection disagrees with the Work journal"
             ));
         }
-        if state.is_terminal() && gateway.has_unresolved_uncertain_effects(address.work_id.as_str()) {
+        if state.is_terminal() && gateway.has_unresolved_uncertain_effects(address.work_id.as_str())
+        {
             return Err(format!(
                 "terminal Run `{run_id}` still has an unresolved uncertain effect"
             ));
@@ -749,11 +774,14 @@ impl ExecutionKernel {
             .collect();
         report.uncertain_effects.extend(uncertain);
         if address.provenance.is_legacy() {
-            report.legacy_works.push(address.work_id.as_str().to_string());
+            report
+                .legacy_works
+                .push(address.work_id.as_str().to_string());
         }
 
         let mut work = Work::new(run_id.to_string(), trigger, session_id, objective);
-        work.parent_id = metadata_string(&metadata, "parentId").or_else(|| address.parent_work_id.clone());
+        work.parent_id =
+            metadata_string(&metadata, "parentId").or_else(|| address.parent_work_id.clone());
         work.workspace = metadata_string(&metadata, "workspace").unwrap_or_default();
         work.plan = metadata_string(&metadata, "plan");
         work.policy_snapshot = metadata_string(&metadata, "policySnapshot").unwrap_or_default();
@@ -773,7 +801,11 @@ impl ExecutionKernel {
         work.receipt = recovered_receipt(gateway, address.work_id.as_str());
         work.idempotency_key = metadata_string(&metadata, "idempotencyKey")
             .unwrap_or_else(|| format!("exec:{run_id}"));
-        work.created_at_ms = if created_at_ms == 0 { now_ms() } else { created_at_ms };
+        work.created_at_ms = if created_at_ms == 0 {
+            now_ms()
+        } else {
+            created_at_ms
+        };
         work.config_hash = metadata_string(&metadata, "configHash").unwrap_or_default();
         work.journal_sequence = journal_sequence;
         if let Some(manifest) = metadata.get("runtimeManifest") {
@@ -809,7 +841,10 @@ impl ExecutionKernel {
     fn validate(&self) -> Result<(), String> {
         for (id, work) in &self.executions {
             if work.id != *id {
-                return Err(format!("execution map key `{id}` disagrees with Work id `{}`", work.id));
+                return Err(format!(
+                    "execution map key `{id}` disagrees with Work id `{}`",
+                    work.id
+                ));
             }
             if work.id.trim().is_empty() || work.session_id.trim().is_empty() {
                 return Err(format!("execution `{id}` is missing durable identity"));
@@ -824,7 +859,9 @@ impl ExecutionKernel {
     fn validate_checkpoint_cache(&self, cached: &Self) -> Result<(), String> {
         for (id, cached_work) in &cached.executions {
             let Some(journal_work) = self.executions.get(id) else {
-                return Err(format!("checkpoint contains Run `{id}` absent from Work journal"));
+                return Err(format!(
+                    "checkpoint contains Run `{id}` absent from Work journal"
+                ));
             };
             if cached_work.session_id != journal_work.session_id
                 || cached_work.trigger != journal_work.trigger
@@ -835,7 +872,9 @@ impl ExecutionKernel {
                 || cached_work.pending_approval != journal_work.pending_approval
                 || cached_work.approval_refs != journal_work.approval_refs
             {
-                return Err(format!("checkpoint identity/effect mismatch for Run `{id}`"));
+                return Err(format!(
+                    "checkpoint identity/effect mismatch for Run `{id}`"
+                ));
             }
             if cached_work.checkpoint > journal_work.checkpoint {
                 return Err(format!("checkpoint is ahead of the journal for Run `{id}`"));
@@ -849,7 +888,9 @@ impl ExecutionKernel {
                 return Err(format!("checkpoint state mismatch for Run `{id}`"));
             }
             if cached_work.journal_sequence > journal_work.journal_sequence {
-                return Err(format!("checkpoint sequence is ahead of the journal for Run `{id}`"));
+                return Err(format!(
+                    "checkpoint sequence is ahead of the journal for Run `{id}`"
+                ));
             }
         }
         Ok(())
@@ -1076,8 +1117,8 @@ impl ExecutionKernel {
             }
             Err(e) => return Err(format!("read checkpoint: {e}")),
         };
-        let kernel: Self = serde_json::from_str(&data)
-            .map_err(|e| format!("parse checkpoint: {e}"))?;
+        let kernel: Self =
+            serde_json::from_str(&data).map_err(|e| format!("parse checkpoint: {e}"))?;
         kernel.validate()?;
         Ok(kernel)
     }
@@ -1997,7 +2038,10 @@ fn metadata_trigger(metadata: &Value, address: &WorkAddress) -> ExecutionTrigger
         Some("chat") | None => {
             if address.parent_work_id.is_some() {
                 ExecutionTrigger::Subagent
-            } else if matches!(address.session_kind, everyaios_types::SessionKind::Automation) {
+            } else if matches!(
+                address.session_kind,
+                everyaios_types::SessionKind::Automation
+            ) {
                 ExecutionTrigger::Scheduler
             } else {
                 ExecutionTrigger::Chat
@@ -2044,7 +2088,11 @@ fn phase_transition_legal(previous: ExecutionPhase, next: ExecutionPhase) -> boo
 
 fn recovered_receipt(gateway: &WorkGateway, work_id: &str) -> Option<Value> {
     let effects = gateway.effect_statuses(work_id);
-    if effects.is_empty() || effects.iter().any(|effect| effect.requires_reconciliation()) {
+    if effects.is_empty()
+        || effects
+            .iter()
+            .any(|effect| effect.requires_reconciliation())
+    {
         return None;
     }
     Some(json!({
@@ -2426,7 +2474,7 @@ pub fn parse_shadow_candidate(params: &Value) -> Result<Vec<ShadowCandidateFile>
 }
 
 /// P64.6 — cleanup handle for a staged shadow tree.
-enum ShadowCleanup {
+pub(crate) enum ShadowCleanup {
     Worktree {
         repo: std::path::PathBuf,
         path: std::path::PathBuf,
@@ -2436,7 +2484,7 @@ enum ShadowCleanup {
 }
 
 impl ShadowCleanup {
-    fn cleanup(self) -> Result<(), String> {
+    pub(crate) fn cleanup(self) -> Result<(), String> {
         match self {
             ShadowCleanup::None => Ok(()),
             ShadowCleanup::TempDir(dir) => {
@@ -2469,7 +2517,11 @@ impl ShadowCleanup {
 /// `git worktree add --detach` (cheap full tree), a non-git root gets a
 /// bounded temp overlay (candidate files + manifest copies so discovery
 /// still fires), and an empty candidate reuses `root` as-is.
-fn stage_shadow_tree(
+///
+/// `pub(crate)` so the live `file_ops.edit` commit path stages the same
+/// shadow the `execution/preflight` RPC checks — one staging rule, two
+/// callers, never a second implementation.
+pub(crate) fn stage_shadow_tree(
     root: &std::path::Path,
     candidate: &[ShadowCandidateFile],
 ) -> Result<(std::path::PathBuf, ShadowCleanup), String> {
@@ -2960,15 +3012,16 @@ mod tests {
             "t".into(),
         );
         // Cannot record in non-WaitingApproval state.
-        assert!(ex
-            .record_pending_approval(PendingApproval {
+        assert!(
+            ex.record_pending_approval(PendingApproval {
                 ticket_id: "t1".into(),
                 tool_id: "browser.act".into(),
                 args_hash: "h1".into(),
                 requested_at_ms: 100,
                 risk_tier: "R2".into(),
             })
-            .is_err());
+            .is_err()
+        );
         ex.state = ExecutionPhase::WaitingApproval;
         ex.record_pending_approval(PendingApproval {
             ticket_id: "t1".into(),
@@ -3214,9 +3267,10 @@ mod tests {
         assert_eq!(ex.trigger, ExecutionTrigger::Subagent);
         assert_eq!(ex.capability_scope, vec!["read".to_string()]);
         // Depth 3 is refused (no recursive spawn).
-        assert!(k
-            .begin_subagent("s", "too deep", None, 3, &granted, &[], String::new())
-            .is_err());
+        assert!(
+            k.begin_subagent("s", "too deep", None, 3, &granted, &[], String::new())
+                .is_err()
+        );
     }
 
     #[test]
@@ -3294,15 +3348,18 @@ mod tests {
             .record_verified_edit(&ex.id, "exact", "a.txt", "t1", 7)
             .unwrap();
         assert_eq!(r["strategy"], "exact");
-        assert!(k
-            .record_verified_edit(&ex.id, "nope", "a.txt", "t1", 7)
-            .is_err());
-        assert!(k
-            .record_verified_edit(&ex.id, "exact", "", "t1", 7)
-            .is_err());
-        assert!(k
-            .record_verified_edit(&ex.id, "exact", "a.txt", "", 7)
-            .is_err());
+        assert!(
+            k.record_verified_edit(&ex.id, "nope", "a.txt", "t1", 7)
+                .is_err()
+        );
+        assert!(
+            k.record_verified_edit(&ex.id, "exact", "", "t1", 7)
+                .is_err()
+        );
+        assert!(
+            k.record_verified_edit(&ex.id, "exact", "a.txt", "", 7)
+                .is_err()
+        );
         let p = k.record_preflight(&ex.id, true, "ok").unwrap();
         assert_eq!(p["passed"], true);
         // IPC arms reachable without unwrap on missing fields.
@@ -3345,14 +3402,16 @@ mod tests {
         let ok_params = json!({"candidateFiles": [{"path": "src/a.rs", "content": "ok"}]});
         assert_eq!(parse_shadow_candidate(&ok_params).unwrap().len(), 1);
         assert!(parse_shadow_candidate(&json!({})).unwrap().is_empty());
-        assert!(parse_shadow_candidate(
-            &json!({"candidateFiles": [{"path": "../evil", "content": "x"}]})
-        )
-        .is_err());
-        assert!(parse_shadow_candidate(
-            &json!({"candidateFiles": [{"path": "/abs", "content": "x"}]})
-        )
-        .is_err());
+        assert!(
+            parse_shadow_candidate(
+                &json!({"candidateFiles": [{"path": "../evil", "content": "x"}]})
+            )
+            .is_err()
+        );
+        assert!(
+            parse_shadow_candidate(&json!({"candidateFiles": [{"path": "/abs", "content": "x"}]}))
+                .is_err()
+        );
         assert!(parse_shadow_candidate(&json!({"candidateFiles": "nope"})).is_err());
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -3554,12 +3613,13 @@ mod tests {
         assert_eq!(v["trigger"], "subagent");
         assert_eq!(v["provision"]["branch"], "subtask/task-9");
         // Depth-exceeded fails closed through the IPC arm (no unwrap).
-        assert!(k
-            .handle(
+        assert!(
+            k.handle(
                 "execution/begin_subagent",
                 &json!({"sessionId": "s", "objective": "x", "taskId": "t", "depth": 9})
             )
-            .is_err());
+            .is_err()
+        );
     }
 
     #[test]
@@ -3600,8 +3660,8 @@ mod tests {
 
         // Fail-closed: an outcome naming an agent or Run outside the fan-out
         // is refused rather than silently attributed.
-        assert!(k
-            .handle(
+        assert!(
+            k.handle(
                 "execution/multirun",
                 &json!({
                     "id": "mr-2",
@@ -3610,9 +3670,10 @@ mod tests {
                     "outcomes": [{"agentId": "stranger", "output": "x", "score": 1.0}]
                 }),
             )
-            .is_err());
-        assert!(k
-            .handle(
+            .is_err()
+        );
+        assert!(
+            k.handle(
                 "execution/multirun",
                 &json!({
                     "id": "mr-3",
@@ -3623,7 +3684,8 @@ mod tests {
                     ]
                 }),
             )
-            .is_err());
+            .is_err()
+        );
     }
 
     #[test]

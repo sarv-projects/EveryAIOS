@@ -22,7 +22,7 @@ use std::io::{Read, Write};
 use std::sync::{Arc, Mutex};
 
 use everyaios_guard::CapabilityBroker;
-use everyaios_vault::{Vault, DEFAULT_SESSION_BUDGET_USD};
+use everyaios_vault::{DEFAULT_SESSION_BUDGET_USD, Vault};
 use serde_json::Value;
 
 use crate::eval_service::EvalService;
@@ -644,6 +644,11 @@ fn subagent_rpc(
                 &spec.tools,
             );
             spec.depth = gauge.child_depth;
+            // P64.4 — the execution binding the child's executor starts from:
+            // the spec-only starting prompt (fresh context — the parent's
+            // transcript is never handed down). The isolated workspace address
+            // is planned below, against the minted child Work.
+            let starting_prompt = spec.starting_prompt();
             // P69.D14 — the child Work itself. The caller (the turn loop) names
             // the parent Work it is already inside, so the delegation lands in
             // the one Work graph with a parent link, its own Run and an
@@ -670,6 +675,24 @@ fn subagent_rpc(
                 }
                 None => None,
             };
+            // P64.4 — the isolated workspace address (worktree segment +
+            // 3-file blackboard paths) planned against the minted child Work
+            // (EXTERNAL-AGENTS §3.1 step 3). The plan is advisory — the actual
+            // `git worktree add` runs at execution — so an unmappable task id
+            // soft-fails the provision (named, null) rather than failing an
+            // admitted spawn.
+            let (provision, provision_error): (serde_json::Value, serde_json::Value) = match child
+                .as_ref()
+            {
+                Some(c) => match crate::execution::plan_subagent_worktree(&task_id, &c.work_id) {
+                    Ok(p) => (
+                        serde_json::to_value(&p).unwrap_or(serde_json::Value::Null),
+                        serde_json::Value::Null,
+                    ),
+                    Err(e) => (serde_json::Value::Null, serde_json::json!(e)),
+                },
+                None => (serde_json::Value::Null, serde_json::Value::Null),
+            };
             Ok(serde_json::json!({
                 "task_id": task_id,
                 "summary": "",
@@ -682,6 +705,9 @@ fn subagent_rpc(
                 "tools": spec.tools,
                 "depth": spec.depth,
                 "accountedFrom": accounted_from,
+                "startingPrompt": starting_prompt,
+                "provision": provision,
+                "provisionError": provision_error,
                 "workId": child.as_ref().map(|c| c.work_id.clone()),
                 "runId": child.as_ref().map(|c| c.run_id.clone()),
                 "agentSessionId": child.as_ref().map(|c| c.agent_session_id.clone()),
@@ -1136,12 +1162,11 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
         let checkpoint_path = crate::default_data_dir()
             .join("work")
             .join("execution-kernel.checkpoint.json");
-        let recovered_executions =
-            ExecutionKernel::recover_from_work_gateway_with_checkpoint(
-                &work_gateway,
-                Some(&checkpoint_path),
-            )
-            .map_err(ChatRelayError::Recovery)?;
+        let recovered_executions = ExecutionKernel::recover_from_work_gateway_with_checkpoint(
+            &work_gateway,
+            Some(&checkpoint_path),
+        )
+        .map_err(ChatRelayError::Recovery)?;
         let work_gateway = Arc::new(Mutex::new(work_gateway));
         // P71.3f — one readiness handle shared by the delegation seam and the
         // relay's own gates. The shell mounts the facts (`mount_readiness`);
@@ -1376,584 +1401,632 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
         let readiness = Arc::clone(&self.readiness);
         let agui = self.agui.clone();
 
-        std::thread::spawn(move || loop {
-            let inbound = receiver.lock().unwrap_or_else(|e| e.into_inner()).recv();
-            let Ok(inbound) = inbound else {
-                break; // reader thread gone — sidecar is dead
-            };
-            match inbound {
-                Inbound::Request { id, method, params } => match method.as_str() {
-                    // ARCH/05 durable-observation seam: the coordinator
-                    // hydrates its RouteDecision ring at boot from the vault's
-                    // `token_usage` ledger (provider/model/cost per completed
-                    // call) so routing survives restarts. Wrapped: vault read
-                    // is a small indexed query on the consumer loop.
-                    "usage/recent" => {
-                        let v = vault.lock().unwrap_or_else(|e| e.into_inner());
-                        let limit = params.get("limit").and_then(|x| x.as_u64()).unwrap_or(100);
-                        match v.recent_usage(limit) {
-                            Ok(rows) => {
-                                let _ = writer.reply(
-                                    id,
-                                    serde_json::to_value(rows)
-                                        .unwrap_or_else(|_| serde_json::json!([])),
-                                );
-                            }
-                            Err(e) => {
-                                let _ = writer.reply_error(id, &e.to_string());
+        std::thread::spawn(move || {
+            loop {
+                let inbound = receiver.lock().unwrap_or_else(|e| e.into_inner()).recv();
+                let Ok(inbound) = inbound else {
+                    break; // reader thread gone — sidecar is dead
+                };
+                match inbound {
+                    Inbound::Request { id, method, params } => match method.as_str() {
+                        // ARCH/05 durable-observation seam: the coordinator
+                        // hydrates its RouteDecision ring at boot from the vault's
+                        // `token_usage` ledger (provider/model/cost per completed
+                        // call) so routing survives restarts. Wrapped: vault read
+                        // is a small indexed query on the consumer loop.
+                        "usage/recent" => {
+                            let v = vault.lock().unwrap_or_else(|e| e.into_inner());
+                            let limit = params.get("limit").and_then(|x| x.as_u64()).unwrap_or(100);
+                            match v.recent_usage(limit) {
+                                Ok(rows) => {
+                                    let _ = writer.reply(
+                                        id,
+                                        serde_json::to_value(rows)
+                                            .unwrap_or_else(|_| serde_json::json!([])),
+                                    );
+                                }
+                                Err(e) => {
+                                    let _ = writer.reply_error(id, &e.to_string());
+                                }
                             }
                         }
-                    }
-                    // P71.3f — one readiness read for every caller: the picker
-                    // façade, the trigger plane's doctor and the sidecar's own
-                    // gates all ask this. Served from the shell's mounted
-                    // source; unmounted ⇒ `unknown`, never a guessed `ready`.
-                    "agent/readiness" => {
-                        let agent_id = params
-                            .get("agentId")
-                            .and_then(serde_json::Value::as_str)
-                            .unwrap_or("");
-                        let state = crate::tools::read_agent_readiness(&readiness, agent_id);
-                        let _ = writer.reply(
-                            id,
-                            serde_json::json!({
-                                "agentId": agent_id,
-                                "readiness": state.as_str(),
-                                "ready": state.is_ready(),
-                                "installed": state.is_installed(),
-                                "launchable": state.is_launchable(),
-                                "needsAuth": state.needs_auth(),
-                                "canDelegate": state.can_delegate(),
-                                "reason": state.summary(),
-                            }),
-                        );
-                    }
-                    // P5.1/P5.3/P5.4/P5.9: memory + usage dispatch. Runs on
-                    // the consumer loop (fast, deterministic, no I/O) so the
-                    // reply is synchronous and the sidecar can await it.
-                    method if method.starts_with("memory/") || method == "usage/snapshot" => {
-                        let mut svc = memory.lock().unwrap_or_else(|e| e.into_inner());
-                        let is_mutation = matches!(
-                            method,
-                            "memory/write"
-                                | "memory/forget"
-                                | "memory/ghost"
-                                | "memory/ghost_batch"
-                                | "memory/consolidate"
-                                | "memory/tick"
-                                | "memory/scope"
-                                | "memory/assess"
-                                | "memory/load"
-                        );
-                        match svc.handle(method, &params) {
-                            Ok(mut out) => {
-                                if is_mutation {
-                                    persist_memory(&svc);
-                                }
-                                // P51.28 — learnedSkills on memory/plan is the
-                                // model warm set (disable-model-invocation omitted).
-                                if method == "memory/plan" {
-                                    let store =
-                                        skill_store.lock().unwrap_or_else(|e| e.into_inner());
-                                    if let Ok(skills) = store.scan() {
-                                        if let Some(obj) = out.as_object_mut() {
-                                            obj.insert(
-                                                "learnedSkills".into(),
-                                                serde_json::json!(
-                                                    everyaios_blueprint::model_warm_set(&skills)
-                                                ),
-                                            );
+                        // P71.3f — one readiness read for every caller: the picker
+                        // façade, the trigger plane's doctor and the sidecar's own
+                        // gates all ask this. Served from the shell's mounted
+                        // source; unmounted ⇒ `unknown`, never a guessed `ready`.
+                        "agent/readiness" => {
+                            let agent_id = params
+                                .get("agentId")
+                                .and_then(serde_json::Value::as_str)
+                                .unwrap_or("");
+                            let state = crate::tools::read_agent_readiness(&readiness, agent_id);
+                            let _ = writer.reply(
+                                id,
+                                serde_json::json!({
+                                    "agentId": agent_id,
+                                    "readiness": state.as_str(),
+                                    "ready": state.is_ready(),
+                                    "installed": state.is_installed(),
+                                    "launchable": state.is_launchable(),
+                                    "needsAuth": state.needs_auth(),
+                                    "canDelegate": state.can_delegate(),
+                                    "reason": state.summary(),
+                                }),
+                            );
+                        }
+                        // P5.1/P5.3/P5.4/P5.9: memory + usage dispatch. Runs on
+                        // the consumer loop (fast, deterministic, no I/O) so the
+                        // reply is synchronous and the sidecar can await it.
+                        method if method.starts_with("memory/") || method == "usage/snapshot" => {
+                            let mut svc = memory.lock().unwrap_or_else(|e| e.into_inner());
+                            let is_mutation = matches!(
+                                method,
+                                "memory/write"
+                                    | "memory/forget"
+                                    | "memory/ghost"
+                                    | "memory/ghost_batch"
+                                    | "memory/consolidate"
+                                    | "memory/tick"
+                                    | "memory/scope"
+                                    | "memory/assess"
+                                    | "memory/load"
+                            );
+                            match svc.handle(method, &params) {
+                                Ok(mut out) => {
+                                    if is_mutation {
+                                        persist_memory(&svc);
+                                    }
+                                    // P51.28 — learnedSkills on memory/plan is the
+                                    // model warm set (disable-model-invocation omitted).
+                                    if method == "memory/plan" {
+                                        let store =
+                                            skill_store.lock().unwrap_or_else(|e| e.into_inner());
+                                        if let Ok(skills) = store.scan() {
+                                            if let Some(obj) = out.as_object_mut() {
+                                                obj.insert(
+                                                    "learnedSkills".into(),
+                                                    serde_json::json!(
+                                                        everyaios_blueprint::model_warm_set(
+                                                            &skills
+                                                        )
+                                                    ),
+                                                );
+                                            }
                                         }
                                     }
+                                    let _ = writer.reply(id, out);
                                 }
-                                let _ = writer.reply(id, out);
-                            }
-                            Err(e) => {
-                                let _ = writer.reply_error(id, &e);
-                            }
-                        }
-                    }
-                    // P43 (B7 v3.53): detached-work task ledger dispatch. The
-                    // coordinator + Tauri shell drive the same Rust-owned
-                    // state machine (tasks/list, start, complete, cancel,
-                    // retry, reap, prune) — completion wakes watchers
-                    // (push-driven, never polled).
-                    method if method.starts_with("tasks/") => {
-                        let mut svc = tasks.lock().unwrap_or_else(|e| e.into_inner());
-                        match svc.handle(method, &params) {
-                            Ok(out) => {
-                                let _ = writer.reply(id, out);
-                            }
-                            Err(e) => {
-                                let _ = writer.reply_error(id, &e);
-                            }
-                        }
-                    }
-                    // P7.5/J21: Guard-2 pre-flight + executor call-sites. The
-                    // sidecar drives the *restricted* surface (`handle_sidecar`):
-                    // it can evaluate + use tickets + read, but never
-                    // approve/reject/reset/estop/profile (human-only).
-                    method if method.starts_with("guard/") => {
-                        let mut svc = guard.lock().unwrap_or_else(|e| e.into_inner());
-                        match svc.handle_sidecar(method, &params) {
-                            Ok(out) => {
-                                let _ = writer.reply(id, out);
-                            }
-                            Err(e) => {
-                                let _ = writer.reply_error(id, &e);
-                            }
-                        }
-                    }
-                    // P6.3 Stage-0: per-plan circuit-breaker stepping. The
-                    // coordinator proposes each step; Rust disposes (the
-                    // breaker state lives here). Trips come back as
-                    // `{ok:false, interrupt}` and become chat/interrupt.
-                    method if method.starts_with("plan/") => {
-                        let mut svc = plan.lock().unwrap_or_else(|e| e.into_inner());
-                        match svc.handle(method, &params) {
-                            Ok(out) => {
-                                if method == "plan/begin" {
-                                    if let Some(pid) = params.get("planId").and_then(|v| v.as_str())
-                                    {
-                                        let mut k =
-                                            executions.lock().unwrap_or_else(|e| e.into_inner());
-                                        let ex = k.begin(
-                                            crate::execution::ExecutionTrigger::Plan,
-                                            pid,
-                                            pid,
-                                            None,
-                                            String::new(),
-                                            format!(r#"{{"planId":"{pid}"}}"#),
-                                            vec![],
-                                        );
-                                        k.alias(&format!("plan:{pid}"), &ex.id);
-                                        let _ = k.transition(
-                                            &ex.id,
-                                            crate::execution::ExecutionPhase::Running,
-                                        );
-                                    }
+                                Err(e) => {
+                                    let _ = writer.reply_error(id, &e);
                                 }
-                                if method == "plan/end" {
-                                    if let Some(pid) = params.get("planId").and_then(|v| v.as_str())
-                                    {
-                                        let mut k =
-                                            executions.lock().unwrap_or_else(|e| e.into_inner());
-                                        if let Some(id) =
-                                            k.by_alias(&format!("plan:{pid}")).map(|e| e.id.clone())
+                            }
+                        }
+                        // P43 (B7 v3.53): detached-work task ledger dispatch. The
+                        // coordinator + Tauri shell drive the same Rust-owned
+                        // state machine (tasks/list, start, complete, cancel,
+                        // retry, reap, prune) — completion wakes watchers
+                        // (push-driven, never polled).
+                        method if method.starts_with("tasks/") => {
+                            let mut svc = tasks.lock().unwrap_or_else(|e| e.into_inner());
+                            match svc.handle(method, &params) {
+                                Ok(out) => {
+                                    let _ = writer.reply(id, out);
+                                }
+                                Err(e) => {
+                                    let _ = writer.reply_error(id, &e);
+                                }
+                            }
+                        }
+                        // P7.5/J21: Guard-2 pre-flight + executor call-sites. The
+                        // sidecar drives the *restricted* surface (`handle_sidecar`):
+                        // it can evaluate + use tickets + read, but never
+                        // approve/reject/reset/estop/profile (human-only).
+                        method if method.starts_with("guard/") => {
+                            let mut svc = guard.lock().unwrap_or_else(|e| e.into_inner());
+                            match svc.handle_sidecar(method, &params) {
+                                Ok(out) => {
+                                    let _ = writer.reply(id, out);
+                                }
+                                Err(e) => {
+                                    let _ = writer.reply_error(id, &e);
+                                }
+                            }
+                        }
+                        // P6.3 Stage-0: per-plan circuit-breaker stepping. The
+                        // coordinator proposes each step; Rust disposes (the
+                        // breaker state lives here). Trips come back as
+                        // `{ok:false, interrupt}` and become chat/interrupt.
+                        method if method.starts_with("plan/") => {
+                            let mut svc = plan.lock().unwrap_or_else(|e| e.into_inner());
+                            match svc.handle(method, &params) {
+                                Ok(out) => {
+                                    if method == "plan/begin" {
+                                        if let Some(pid) =
+                                            params.get("planId").and_then(|v| v.as_str())
                                         {
-                                            let _ = k.transition(
-                                                &id,
-                                                crate::execution::ExecutionPhase::Verifying,
-                                            );
-                                            let _ = k.transition(
-                                                &id,
-                                                crate::execution::ExecutionPhase::Completed,
-                                            );
-                                        }
-                                    }
-                                }
-                                let _ = writer.reply(id, out);
-                            }
-                            Err(e) => {
-                                let _ = writer.reply_error(id, &e);
-                            }
-                        }
-                    }
-                    // P6.4 (B7) / P71.3d — scheduled-task dispatch over the
-                    // **trigger plane**. The coordinator ticks
-                    // `scheduler/due`, records firings (`mark_fired`) and
-                    // fires events + webhooks; Rust owns the trigger registry
-                    // only. Execution is the Work kernel's business (the run
-                    // lifecycle mirrors below keep their ExecutionLedger
-                    // presence via `scheduler/due` + `scheduler/mark_fired`).
-                    method if method.starts_with("scheduler/") => {
-                        let mut svc = scheduler.lock().unwrap_or_else(|e| e.into_inner());
-                        match svc.handle(method, &params) {
-                            Ok(out) => {
-                                // A trigger firing becomes an ExecutionLedger
-                                // run (alias `job:<id>`) when the host starts
-                                // executing it; `mark_fired` closes it.
-                                if method == "scheduler/due" {
-                                    if let Some(jobs) = out.get("due").and_then(|v| v.as_array()) {
-                                        for jid in jobs.iter().filter_map(|v| v.as_str()) {
                                             let mut k = executions
                                                 .lock()
                                                 .unwrap_or_else(|e| e.into_inner());
-                                            if k.by_alias(&format!("job:{jid}")).is_some() {
-                                                continue; // already in flight
-                                            }
-                                            let ex = k.begin_named(
-                                                format!("sched-{jid}"),
-                                                crate::execution::ExecutionTrigger::Scheduler,
-                                                jid,
-                                                jid,
+                                            let ex = k.begin(
+                                                crate::execution::ExecutionTrigger::Plan,
+                                                pid,
+                                                pid,
                                                 None,
                                                 String::new(),
-                                                format!(r#"{{"jobId":"{jid}"}}"#),
+                                                format!(r#"{{"planId":"{pid}"}}"#),
                                                 vec![],
                                             );
-                                            k.alias(&format!("job:{jid}"), &ex.id);
+                                            k.alias(&format!("plan:{pid}"), &ex.id);
                                             let _ = k.transition(
                                                 &ex.id,
                                                 crate::execution::ExecutionPhase::Running,
                                             );
                                         }
                                     }
-                                }
-                                if method == "scheduler/mark_fired" {
-                                    if let Some(jid) = params.get("id").and_then(|v| v.as_str()) {
-                                        let mut k =
-                                            executions.lock().unwrap_or_else(|e| e.into_inner());
-                                        if let Some(eid) =
-                                            k.by_alias(&format!("job:{jid}")).map(|e| e.id.clone())
+                                    if method == "plan/end" {
+                                        if let Some(pid) =
+                                            params.get("planId").and_then(|v| v.as_str())
                                         {
-                                            let _ = k.transition(
-                                                &eid,
-                                                crate::execution::ExecutionPhase::Verifying,
-                                            );
-                                            let _ = k.transition(
-                                                &eid,
-                                                crate::execution::ExecutionPhase::Completed,
-                                            );
+                                            let mut k = executions
+                                                .lock()
+                                                .unwrap_or_else(|e| e.into_inner());
+                                            if let Some(id) = k
+                                                .by_alias(&format!("plan:{pid}"))
+                                                .map(|e| e.id.clone())
+                                            {
+                                                let _ = k.transition(
+                                                    &id,
+                                                    crate::execution::ExecutionPhase::Verifying,
+                                                );
+                                                let _ = k.transition(
+                                                    &id,
+                                                    crate::execution::ExecutionPhase::Completed,
+                                                );
+                                            }
                                         }
                                     }
+                                    let _ = writer.reply(id, out);
                                 }
-                                let _ = writer.reply(id, out);
-                            }
-                            Err(e) => {
-                                let _ = writer.reply_error(id, &e);
-                            }
-                        }
-                    }
-                    method if method.starts_with("tool/") => {
-                        let mut svc = tools.lock().unwrap_or_else(|e| e.into_inner());
-                        let effect_id = params
-                            .get("effectId")
-                            .and_then(|v| v.as_str())
-                            .or_else(|| params.get("ticketId").and_then(|v| v.as_str()))
-                            .unwrap_or("")
-                            .to_string();
-                        let work_id = params.get("workId").and_then(|v| v.as_str());
-                        let grant_id = params.get("capabilityGrantId").and_then(|v| v.as_str());
-                        if method == "tool/commit" && !effect_id.is_empty() {
-                            if let Some(work_id) = work_id {
-                                if let Err(error) = work_gateway
-                                    .lock()
-                                    .unwrap_or_else(|e| e.into_inner())
-                                    .record_effect_with_grant(
-                                        work_id,
-                                        &effect_id,
-                                        "attempted",
-                                        "",
-                                        grant_id,
-                                    )
-                                {
-                                    let _ = writer.reply_error(id, &error);
-                                    continue;
+                                Err(e) => {
+                                    let _ = writer.reply_error(id, &e);
                                 }
                             }
                         }
-                        let result = svc.handle(method, &params);
-                        let mut event_error = None;
-                        if method == "tool/commit" && !effect_id.is_empty() {
-                            if let Some(work_id) = work_id {
-                                let mut gateway =
-                                    work_gateway.lock().unwrap_or_else(|e| e.into_inner());
-                                let record = match &result {
-                                    Ok(out) => {
-                                        let ok = out
-                                            .get("ok")
-                                            .and_then(|v| v.as_bool())
-                                            .unwrap_or(false);
-                                        let outcome = out
-                                            .get("state")
-                                            .and_then(|v| v.as_str())
-                                            .unwrap_or(if ok { "ok" } else { "failed" });
-                                        gateway
+                        // P6.4 (B7) / P71.3d — scheduled-task dispatch over the
+                        // **trigger plane**. The coordinator ticks
+                        // `scheduler/due`, records firings (`mark_fired`) and
+                        // fires events + webhooks; Rust owns the trigger registry
+                        // only. Execution is the Work kernel's business (the run
+                        // lifecycle mirrors below keep their ExecutionLedger
+                        // presence via `scheduler/due` + `scheduler/mark_fired`).
+                        method if method.starts_with("scheduler/") => {
+                            let mut svc = scheduler.lock().unwrap_or_else(|e| e.into_inner());
+                            match svc.handle(method, &params) {
+                                Ok(out) => {
+                                    // A trigger firing becomes an ExecutionLedger
+                                    // run (alias `job:<id>`) when the host starts
+                                    // executing it; `mark_fired` closes it.
+                                    if method == "scheduler/due" {
+                                        if let Some(jobs) =
+                                            out.get("due").and_then(|v| v.as_array())
+                                        {
+                                            for jid in jobs.iter().filter_map(|v| v.as_str()) {
+                                                let mut k = executions
+                                                    .lock()
+                                                    .unwrap_or_else(|e| e.into_inner());
+                                                if k.by_alias(&format!("job:{jid}")).is_some() {
+                                                    continue; // already in flight
+                                                }
+                                                let ex = k.begin_named(
+                                                    format!("sched-{jid}"),
+                                                    crate::execution::ExecutionTrigger::Scheduler,
+                                                    jid,
+                                                    jid,
+                                                    None,
+                                                    String::new(),
+                                                    format!(r#"{{"jobId":"{jid}"}}"#),
+                                                    vec![],
+                                                );
+                                                k.alias(&format!("job:{jid}"), &ex.id);
+                                                let _ = k.transition(
+                                                    &ex.id,
+                                                    crate::execution::ExecutionPhase::Running,
+                                                );
+                                            }
+                                        }
+                                    }
+                                    if method == "scheduler/mark_fired" {
+                                        if let Some(jid) = params.get("id").and_then(|v| v.as_str())
+                                        {
+                                            let mut k = executions
+                                                .lock()
+                                                .unwrap_or_else(|e| e.into_inner());
+                                            if let Some(eid) = k
+                                                .by_alias(&format!("job:{jid}"))
+                                                .map(|e| e.id.clone())
+                                            {
+                                                let _ = k.transition(
+                                                    &eid,
+                                                    crate::execution::ExecutionPhase::Verifying,
+                                                );
+                                                let _ = k.transition(
+                                                    &eid,
+                                                    crate::execution::ExecutionPhase::Completed,
+                                                );
+                                            }
+                                        }
+                                    }
+                                    let _ = writer.reply(id, out);
+                                }
+                                Err(e) => {
+                                    let _ = writer.reply_error(id, &e);
+                                }
+                            }
+                        }
+                        method if method.starts_with("tool/") => {
+                            let mut svc = tools.lock().unwrap_or_else(|e| e.into_inner());
+                            let effect_id = params
+                                .get("effectId")
+                                .and_then(|v| v.as_str())
+                                .or_else(|| params.get("ticketId").and_then(|v| v.as_str()))
+                                .unwrap_or("")
+                                .to_string();
+                            let work_id = params.get("workId").and_then(|v| v.as_str());
+                            let grant_id = params.get("capabilityGrantId").and_then(|v| v.as_str());
+                            if method == "tool/commit" && !effect_id.is_empty() {
+                                if let Some(work_id) = work_id {
+                                    if let Err(error) = work_gateway
+                                        .lock()
+                                        .unwrap_or_else(|e| e.into_inner())
+                                        .record_effect_with_grant(
+                                            work_id,
+                                            &effect_id,
+                                            "attempted",
+                                            "",
+                                            grant_id,
+                                        )
+                                    {
+                                        let _ = writer.reply_error(id, &error);
+                                        continue;
+                                    }
+                                }
+                            }
+                            let result = svc.handle(method, &params);
+                            let mut event_error = None;
+                            if method == "tool/commit" && !effect_id.is_empty() {
+                                if let Some(work_id) = work_id {
+                                    let mut gateway =
+                                        work_gateway.lock().unwrap_or_else(|e| e.into_inner());
+                                    let record = match &result {
+                                        Ok(out) => {
+                                            let ok = out
+                                                .get("ok")
+                                                .and_then(|v| v.as_bool())
+                                                .unwrap_or(false);
+                                            let outcome = out
+                                                .get("state")
+                                                .and_then(|v| v.as_str())
+                                                .unwrap_or(if ok { "ok" } else { "failed" });
+                                            gateway
+                                                .record_effect(
+                                                    work_id, &effect_id, "observed", outcome,
+                                                )
+                                                .and_then(|_| {
+                                                    gateway.record_effect(
+                                                        work_id,
+                                                        &effect_id,
+                                                        "verified",
+                                                        if ok { "true" } else { "false" },
+                                                    )
+                                                })
+                                        }
+                                        Err(error) => gateway
                                             .record_effect(
                                                 work_id,
                                                 &effect_id,
                                                 "observed",
-                                                outcome,
+                                                error.as_str(),
                                             )
                                             .and_then(|_| {
                                                 gateway.record_effect(
-                                                    work_id,
-                                                    &effect_id,
-                                                    "verified",
-                                                    if ok { "true" } else { "false" },
+                                                    work_id, &effect_id, "verified", "false",
                                                 )
-                                            })
-                                    }
-                                    Err(error) => gateway
-                                        .record_effect(
-                                            work_id,
-                                            &effect_id,
-                                            "observed",
-                                            error.as_str(),
-                                        )
-                                        .and_then(|_| {
-                                            gateway.record_effect(
-                                                work_id,
-                                                &effect_id,
-                                                "verified",
-                                                "false",
-                                            )
-                                        }),
-                                };
-                                if let Err(error) = record {
-                                    event_error = Some(error);
-                                }
-                            }
-                        }
-                        if let Some(error) = event_error {
-                            let _ = writer.reply_error(id, &error);
-                            continue;
-                        }
-                        match result {
-                            Ok(out) => {
-                                let _ = writer.reply(id, out);
-                            }
-                            Err(e) => {
-                                let _ = writer.reply_error(id, &e);
-                            }
-                        }
-                    }
-                    method if method.starts_with("eval/") => {
-                        let mut svc = evals.lock().unwrap_or_else(|e| e.into_inner());
-                        match svc.handle(method, &params) {
-                            Ok(out) => {
-                                let _ = writer.reply(id, out);
-                            }
-                            Err(e) => {
-                                let _ = writer.reply_error(id, &e);
-                            }
-                        }
-                    }
-                    method if method.starts_with("execution/") => {
-                        // P64.6 — resolve the shadow-preflight root before the
-                        // kernel sees the request. The coordinator sends `.`
-                        // (it has no workspace), and the kernel has none either,
-                        // so this arm — holding both the kernel and the tool
-                        // service — is where `.` becomes the floored workspace.
-                        let rooted: Option<Value> = if method == "execution/preflight" {
-                            let workspace = {
-                                let svc = tools.lock().unwrap_or_else(|e| e.into_inner());
-                                svc.workspace().to_path_buf()
-                            };
-                            Some(with_preflight_root(&params, &workspace))
-                        } else {
-                            None
-                        };
-                        // Validate the kernel edge before either owner mutates;
-                        // this keeps a refused Work transition from advancing a
-                        // cache that the journal would reject.
-                        if method == "execution/transition" {
-                            if let (Some(execution_id), Some(state)) = (
-                                params.get("id").and_then(Value::as_str),
-                                params
-                                    .get("wait")
-                                    .filter(|value| !value.is_null())
-                                    .and_then(|value| {
-                                        serde_json::from_value::<everyaios_types::WaitCondition>(
-                                            value.clone(),
-                                        )
-                                        .ok()
-                                    })
-                                    .map(|wait| wait.work_state())
-                                    .or_else(|| {
-                                        params
-                                            .get("state")
-                                            .and_then(Value::as_str)
-                                            .and_then(everyaios_types::WorkState::try_parse)
-                                    })
-                                    .map(crate::execution::ExecutionPhase::from_work_state),
-                            ) {
-                                let check = executions.lock().unwrap_or_else(|e| e.into_inner());
-                                if let Err(error) = check.validate_transition(execution_id, state) {
-                                    let _ = writer.reply_error(id, &error);
-                                    continue;
-                                }
-                            }
-                        }
-                        let mut transition_committed = false;
-                        if method == "execution/transition" {
-                            if let (Some(work_id), Some(execution_id), Some(state)) = (
-                                params.get("workId").and_then(Value::as_str),
-                                params.get("id").and_then(Value::as_str),
-                                params.get("state").and_then(Value::as_str),
-                            ) {
-                                if let Some(parsed) = everyaios_types::WorkState::try_parse(state) {
-                                    let wait = params
-                                        .get("wait")
-                                        .filter(|value| !value.is_null())
-                                        .and_then(|value| {
-                                            serde_json::from_value::<everyaios_types::WaitCondition>(
-                                                value.clone(),
-                                            )
-                                            .ok()
-                                        });
-                                    let outcome = {
-                                        let mut gateway = work_gateway
-                                            .lock()
-                                            .unwrap_or_else(|e| e.into_inner());
-                                        match wait {
-                                            Some(condition) => gateway.record_wait(
-                                                work_id,
-                                                execution_id,
-                                                &condition,
-                                            ),
-                                            None => gateway.record_execution_transition(
-                                                work_id,
-                                                execution_id,
-                                                parsed,
-                                            ),
-                                        }
+                                            }),
                                     };
-                                    if let Err(error) = outcome {
-                                        let _ = writer.reply_error(id, &error);
-                                        continue;
-                                    }
-                                    transition_committed = true;
-                                }
-                            }
-                        }
-                        // Approval facts are owned by the Work journal.  The
-                        // in-memory ExecutionKernel is only its validated
-                        // projection, so journal-first is required here rather
-                        // than a post-hoc best-effort annotation.
-                        let mut execution_params = params.clone();
-                        if method == "execution/record_approval" {
-                            let Some(work_id) = params.get("workId").and_then(Value::as_str) else {
-                                let _ = writer.reply_error(
-                                    id,
-                                    "execution/record_approval requires workId for durable recovery",
-                                );
-                                continue;
-                            };
-                            let Some(execution_id) = params.get("id").and_then(Value::as_str) else {
-                                let _ = writer.reply_error(id, "execution/record_approval requires id");
-                                continue;
-                            };
-                            let Some(ticket_id) = params.get("ticketId").and_then(Value::as_str) else {
-                                let _ = writer.reply_error(id, "execution/record_approval requires ticketId");
-                                continue;
-                            };
-                            {
-                                let check = executions.lock().unwrap_or_else(|e| e.into_inner());
-                                if let Err(error) =
-                                    check.validate_pending_approval_request(execution_id, ticket_id)
-                                {
-                                    let _ = writer.reply_error(id, &error);
-                                    continue;
-                                }
-                            }
-                            let requested_at_ms = execution_params
-                                .get("requestedAtMs")
-                                .and_then(Value::as_u64)
-                                .unwrap_or_else(|| {
-                                    std::time::SystemTime::now()
-                                        .duration_since(std::time::UNIX_EPOCH)
-                                        .map(|duration| duration.as_millis() as u64)
-                                        .unwrap_or_default()
-                                });
-                            if let Some(object) = execution_params.as_object_mut() {
-                                object.insert(
-                                    "requestedAtMs".into(),
-                                    serde_json::Value::from(requested_at_ms),
-                                );
-                            }
-                            let outcome = {
-                                let mut gateway =
-                                    work_gateway.lock().unwrap_or_else(|e| e.into_inner());
-                                gateway.record_pending_approval_for_run(
-                                    work_id,
-                                    execution_id,
-                                    ticket_id,
-                                    execution_params.get("toolId").and_then(Value::as_str).unwrap_or(""),
-                                    execution_params.get("argsHash").and_then(Value::as_str).unwrap_or(""),
-                                    execution_params.get("riskTier").and_then(Value::as_str).unwrap_or("R1"),
-                                    requested_at_ms,
-                                )
-                            };
-                            if let Err(error) = outcome {
-                                let _ = writer.reply_error(id, &error);
-                                continue;
-                            }
-                        }
-                        if method == "execution/resolve_approval" {
-                            let Some(work_id) = params.get("workId").and_then(Value::as_str) else {
-                                let _ = writer.reply_error(
-                                    id,
-                                    "execution/resolve_approval requires workId for durable recovery",
-                                );
-                                continue;
-                            };
-                            let Some(execution_id) = params.get("id").and_then(Value::as_str) else {
-                                let _ = writer.reply_error(id, "execution/resolve_approval requires id");
-                                continue;
-                            };
-                            let Some(ticket_id) = params.get("ticketId").and_then(Value::as_str) else {
-                                let _ = writer.reply_error(id, "execution/resolve_approval requires ticketId");
-                                continue;
-                            };
-                            let Some(approved) = params.get("approved").and_then(Value::as_bool) else {
-                                let _ = writer.reply_error(
-                                    id,
-                                    "execution/resolve_approval requires approved (bool)",
-                                );
-                                continue;
-                            };
-                            {
-                                let check = executions.lock().unwrap_or_else(|e| e.into_inner());
-                                if let Err(error) =
-                                    check.validate_pending_approval_resolution(execution_id, ticket_id)
-                                {
-                                    let _ = writer.reply_error(id, &error);
-                                    continue;
-                                }
-                            }
-                            let outcome = {
-                                let mut gateway =
-                                    work_gateway.lock().unwrap_or_else(|e| e.into_inner());
-                                gateway.resolve_pending_approval_for_run(
-                                    work_id,
-                                    execution_id,
-                                    ticket_id,
-                                    approved,
-                                )
-                            };
-                            if let Err(error) = outcome {
-                                let _ = writer.reply_error(id, &error);
-                                continue;
-                            }
-                        }
-                        let result = {
-                            let mut svc = executions.lock().unwrap_or_else(|e| e.into_inner());
-                            svc.handle(method, rooted.as_ref().unwrap_or(&execution_params))
-                        };
-                        let mut event_error: Option<String> = None;
-                        if let Ok(out) = &result {
-                            if method == "execution/attach_receipt" {
-                                if let (Some(work_id), Some(receipt_id)) = (
-                                    params.get("workId").and_then(|v| v.as_str()),
-                                    params.get("receiptId").and_then(|v| v.as_str()),
-                                ) {
-                                    if let Err(error) = work_gateway
-                                        .lock()
-                                        .unwrap_or_else(|e| e.into_inner())
-                                        .record_artifact(work_id, receipt_id, true)
-                                    {
+                                    if let Err(error) = record {
                                         event_error = Some(error);
                                     }
                                 }
                             }
-                            if event_error.is_none() && method == "execution/begin" {
-                                if let (Some(work_id), Some(execution_id)) = (
-                                    params.get("workId").and_then(|v| v.as_str()),
-                                    out.get("id").and_then(|v| v.as_str()),
+                            if let Some(error) = event_error {
+                                let _ = writer.reply_error(id, &error);
+                                continue;
+                            }
+                            match result {
+                                Ok(out) => {
+                                    let _ = writer.reply(id, out);
+                                }
+                                Err(e) => {
+                                    let _ = writer.reply_error(id, &e);
+                                }
+                            }
+                        }
+                        method if method.starts_with("eval/") => {
+                            let mut svc = evals.lock().unwrap_or_else(|e| e.into_inner());
+                            match svc.handle(method, &params) {
+                                Ok(out) => {
+                                    let _ = writer.reply(id, out);
+                                }
+                                Err(e) => {
+                                    let _ = writer.reply_error(id, &e);
+                                }
+                            }
+                        }
+                        method if method.starts_with("execution/") => {
+                            // P64.6 — resolve the shadow-preflight root before the
+                            // kernel sees the request. The coordinator sends `.`
+                            // (it has no workspace), and the kernel has none either,
+                            // so this arm — holding both the kernel and the tool
+                            // service — is where `.` becomes the floored workspace.
+                            let rooted: Option<Value> = if method == "execution/preflight" {
+                                let workspace = {
+                                    let svc = tools.lock().unwrap_or_else(|e| e.into_inner());
+                                    svc.workspace().to_path_buf()
+                                };
+                                Some(with_preflight_root(&params, &workspace))
+                            } else {
+                                None
+                            };
+                            // Validate the kernel edge before either owner mutates;
+                            // this keeps a refused Work transition from advancing a
+                            // cache that the journal would reject.
+                            if method == "execution/transition" {
+                                if let (Some(execution_id), Some(state)) =
+                                    (
+                                        params.get("id").and_then(Value::as_str),
+                                        params
+                                            .get("wait")
+                                            .filter(|value| !value.is_null())
+                                            .and_then(|value| {
+                                                serde_json::from_value::<
+                                                    everyaios_types::WaitCondition,
+                                                >(
+                                                    value.clone()
+                                                )
+                                                .ok()
+                                            })
+                                            .map(|wait| wait.work_state())
+                                            .or_else(|| {
+                                                params
+                                                    .get("state")
+                                                    .and_then(Value::as_str)
+                                                    .and_then(everyaios_types::WorkState::try_parse)
+                                            })
+                                            .map(crate::execution::ExecutionPhase::from_work_state),
+                                    )
+                                {
+                                    let check =
+                                        executions.lock().unwrap_or_else(|e| e.into_inner());
+                                    if let Err(error) =
+                                        check.validate_transition(execution_id, state)
+                                    {
+                                        let _ = writer.reply_error(id, &error);
+                                        continue;
+                                    }
+                                }
+                            }
+                            let mut transition_committed = false;
+                            if method == "execution/transition" {
+                                if let (Some(work_id), Some(execution_id), Some(state)) = (
+                                    params.get("workId").and_then(Value::as_str),
+                                    params.get("id").and_then(Value::as_str),
+                                    params.get("state").and_then(Value::as_str),
                                 ) {
-                                    if let Err(error) = work_gateway
+                                    if let Some(parsed) =
+                                        everyaios_types::WorkState::try_parse(state)
+                                    {
+                                        let wait = params
+                                            .get("wait")
+                                            .filter(|value| !value.is_null())
+                                            .and_then(|value| {
+                                                serde_json::from_value::<
+                                                    everyaios_types::WaitCondition,
+                                                >(
+                                                    value.clone()
+                                                )
+                                                .ok()
+                                            });
+                                        let outcome = {
+                                            let mut gateway = work_gateway
+                                                .lock()
+                                                .unwrap_or_else(|e| e.into_inner());
+                                            match wait {
+                                                Some(condition) => gateway.record_wait(
+                                                    work_id,
+                                                    execution_id,
+                                                    &condition,
+                                                ),
+                                                None => gateway.record_execution_transition(
+                                                    work_id,
+                                                    execution_id,
+                                                    parsed,
+                                                ),
+                                            }
+                                        };
+                                        if let Err(error) = outcome {
+                                            let _ = writer.reply_error(id, &error);
+                                            continue;
+                                        }
+                                        transition_committed = true;
+                                    }
+                                }
+                            }
+                            // Approval facts are owned by the Work journal.  The
+                            // in-memory ExecutionKernel is only its validated
+                            // projection, so journal-first is required here rather
+                            // than a post-hoc best-effort annotation.
+                            let mut execution_params = params.clone();
+                            if method == "execution/record_approval" {
+                                let Some(work_id) = params.get("workId").and_then(Value::as_str)
+                                else {
+                                    let _ = writer.reply_error(
+                                    id,
+                                    "execution/record_approval requires workId for durable recovery",
+                                );
+                                    continue;
+                                };
+                                let Some(execution_id) = params.get("id").and_then(Value::as_str)
+                                else {
+                                    let _ = writer
+                                        .reply_error(id, "execution/record_approval requires id");
+                                    continue;
+                                };
+                                let Some(ticket_id) =
+                                    params.get("ticketId").and_then(Value::as_str)
+                                else {
+                                    let _ = writer.reply_error(
+                                        id,
+                                        "execution/record_approval requires ticketId",
+                                    );
+                                    continue;
+                                };
+                                {
+                                    let check =
+                                        executions.lock().unwrap_or_else(|e| e.into_inner());
+                                    if let Err(error) = check
+                                        .validate_pending_approval_request(execution_id, ticket_id)
+                                    {
+                                        let _ = writer.reply_error(id, &error);
+                                        continue;
+                                    }
+                                }
+                                let requested_at_ms = execution_params
+                                    .get("requestedAtMs")
+                                    .and_then(Value::as_u64)
+                                    .unwrap_or_else(|| {
+                                        std::time::SystemTime::now()
+                                            .duration_since(std::time::UNIX_EPOCH)
+                                            .map(|duration| duration.as_millis() as u64)
+                                            .unwrap_or_default()
+                                    });
+                                if let Some(object) = execution_params.as_object_mut() {
+                                    object.insert(
+                                        "requestedAtMs".into(),
+                                        serde_json::Value::from(requested_at_ms),
+                                    );
+                                }
+                                let outcome = {
+                                    let mut gateway =
+                                        work_gateway.lock().unwrap_or_else(|e| e.into_inner());
+                                    gateway.record_pending_approval_for_run(
+                                        work_id,
+                                        execution_id,
+                                        ticket_id,
+                                        execution_params
+                                            .get("toolId")
+                                            .and_then(Value::as_str)
+                                            .unwrap_or(""),
+                                        execution_params
+                                            .get("argsHash")
+                                            .and_then(Value::as_str)
+                                            .unwrap_or(""),
+                                        execution_params
+                                            .get("riskTier")
+                                            .and_then(Value::as_str)
+                                            .unwrap_or("R1"),
+                                        requested_at_ms,
+                                    )
+                                };
+                                if let Err(error) = outcome {
+                                    let _ = writer.reply_error(id, &error);
+                                    continue;
+                                }
+                            }
+                            if method == "execution/resolve_approval" {
+                                let Some(work_id) = params.get("workId").and_then(Value::as_str)
+                                else {
+                                    let _ = writer.reply_error(
+                                    id,
+                                    "execution/resolve_approval requires workId for durable recovery",
+                                );
+                                    continue;
+                                };
+                                let Some(execution_id) = params.get("id").and_then(Value::as_str)
+                                else {
+                                    let _ = writer
+                                        .reply_error(id, "execution/resolve_approval requires id");
+                                    continue;
+                                };
+                                let Some(ticket_id) =
+                                    params.get("ticketId").and_then(Value::as_str)
+                                else {
+                                    let _ = writer.reply_error(
+                                        id,
+                                        "execution/resolve_approval requires ticketId",
+                                    );
+                                    continue;
+                                };
+                                let Some(approved) =
+                                    params.get("approved").and_then(Value::as_bool)
+                                else {
+                                    let _ = writer.reply_error(
+                                        id,
+                                        "execution/resolve_approval requires approved (bool)",
+                                    );
+                                    continue;
+                                };
+                                {
+                                    let check =
+                                        executions.lock().unwrap_or_else(|e| e.into_inner());
+                                    if let Err(error) = check.validate_pending_approval_resolution(
+                                        execution_id,
+                                        ticket_id,
+                                    ) {
+                                        let _ = writer.reply_error(id, &error);
+                                        continue;
+                                    }
+                                }
+                                let outcome = {
+                                    let mut gateway =
+                                        work_gateway.lock().unwrap_or_else(|e| e.into_inner());
+                                    gateway.resolve_pending_approval_for_run(
+                                        work_id,
+                                        execution_id,
+                                        ticket_id,
+                                        approved,
+                                    )
+                                };
+                                if let Err(error) = outcome {
+                                    let _ = writer.reply_error(id, &error);
+                                    continue;
+                                }
+                            }
+                            let result = {
+                                let mut svc = executions.lock().unwrap_or_else(|e| e.into_inner());
+                                svc.handle(method, rooted.as_ref().unwrap_or(&execution_params))
+                            };
+                            let mut event_error: Option<String> = None;
+                            if let Ok(out) = &result {
+                                if method == "execution/attach_receipt" {
+                                    if let (Some(work_id), Some(receipt_id)) = (
+                                        params.get("workId").and_then(|v| v.as_str()),
+                                        params.get("receiptId").and_then(|v| v.as_str()),
+                                    ) {
+                                        if let Err(error) = work_gateway
+                                            .lock()
+                                            .unwrap_or_else(|e| e.into_inner())
+                                            .record_artifact(work_id, receipt_id, true)
+                                        {
+                                            event_error = Some(error);
+                                        }
+                                    }
+                                }
+                                if event_error.is_none() && method == "execution/begin" {
+                                    if let (Some(work_id), Some(execution_id)) = (
+                                        params.get("workId").and_then(|v| v.as_str()),
+                                        out.get("id").and_then(|v| v.as_str()),
+                                    ) {
+                                        if let Err(error) = work_gateway
                                         .lock()
                                         .unwrap_or_else(|e| e.into_inner())
                                         .bind_execution_with_metadata(
@@ -1972,713 +2045,726 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
                                     {
                                         event_error = Some(error);
                                     }
+                                    }
                                 }
-                            }
-                            if event_error.is_none()
-                                && !transition_committed
-                                && method == "execution/transition"
-                            {
-                                // P71.3g — the wire state is the canonical
-                                // `WorkState` spelling; an unknown spelling is
-                                // refused (never silently coerced into a made-up
-                                // state), and a supplied wait condition parks the
-                                // run with its reason attached.
-                                if let (Some(work_id), Some(execution_id), Some(state)) = (
-                                    params.get("workId").and_then(|v| v.as_str()),
-                                    params.get("id").and_then(|v| v.as_str()),
-                                    params.get("state").and_then(|v| v.as_str()),
-                                ) {
-                                    match everyaios_types::WorkState::try_parse(state) {
-                                        Some(parsed) => {
-                                            let mut gw = work_gateway
-                                                .lock()
-                                                .unwrap_or_else(|e| e.into_inner());
-                                            let wait = params
-                                                .get("wait")
-                                                .filter(|v| !v.is_null())
-                                                .and_then(|v| {
-                                                    serde_json::from_value::<
-                                                        everyaios_types::WaitCondition,
-                                                    >(
-                                                        v.clone()
-                                                    )
-                                                    .ok()
-                                                });
-                                            let outcome = match wait {
-                                                Some(condition) => gw.record_wait(
-                                                    work_id,
-                                                    execution_id,
-                                                    &condition,
-                                                ),
-                                                None => gw.record_execution_transition(
-                                                    work_id,
-                                                    execution_id,
-                                                    parsed,
-                                                ),
-                                            };
-                                            if let Err(error) = outcome {
-                                                event_error = Some(error);
+                                if event_error.is_none()
+                                    && !transition_committed
+                                    && method == "execution/transition"
+                                {
+                                    // P71.3g — the wire state is the canonical
+                                    // `WorkState` spelling; an unknown spelling is
+                                    // refused (never silently coerced into a made-up
+                                    // state), and a supplied wait condition parks the
+                                    // run with its reason attached.
+                                    if let (Some(work_id), Some(execution_id), Some(state)) = (
+                                        params.get("workId").and_then(|v| v.as_str()),
+                                        params.get("id").and_then(|v| v.as_str()),
+                                        params.get("state").and_then(|v| v.as_str()),
+                                    ) {
+                                        match everyaios_types::WorkState::try_parse(state) {
+                                            Some(parsed) => {
+                                                let mut gw = work_gateway
+                                                    .lock()
+                                                    .unwrap_or_else(|e| e.into_inner());
+                                                let wait = params
+                                                    .get("wait")
+                                                    .filter(|v| !v.is_null())
+                                                    .and_then(|v| {
+                                                        serde_json::from_value::<
+                                                            everyaios_types::WaitCondition,
+                                                        >(
+                                                            v.clone()
+                                                        )
+                                                        .ok()
+                                                    });
+                                                let outcome = match wait {
+                                                    Some(condition) => gw.record_wait(
+                                                        work_id,
+                                                        execution_id,
+                                                        &condition,
+                                                    ),
+                                                    None => gw.record_execution_transition(
+                                                        work_id,
+                                                        execution_id,
+                                                        parsed,
+                                                    ),
+                                                };
+                                                if let Err(error) = outcome {
+                                                    event_error = Some(error);
+                                                }
                                             }
-                                        }
-                                        None => {
-                                            event_error = Some(format!(
-                                                "execution/transition: unknown state {state:?} \
+                                            None => {
+                                                event_error = Some(format!(
+                                                    "execution/transition: unknown state {state:?} \
                                                  (expected a canonical WorkState spelling)"
-                                            ));
+                                                ));
+                                            }
                                         }
                                     }
                                 }
                             }
-                        }
-                        if let Some(error) = event_error {
-                            let _ = writer.reply_error(id, &error);
-                            continue;
-                        }
-                        match result {
-                            Ok(out) => {
-                                let _ = writer.reply(id, out);
+                            if let Some(error) = event_error {
+                                let _ = writer.reply_error(id, &error);
+                                continue;
                             }
-                            Err(e) => {
-                                let _ = writer.reply_error(id, &e);
+                            match result {
+                                Ok(out) => {
+                                    let _ = writer.reply(id, out);
+                                }
+                                Err(e) => {
+                                    let _ = writer.reply_error(id, &e);
+                                }
                             }
                         }
-                    }
-                    "capability/allow" => {
-                        let run_id = params.get("runId").and_then(|v| v.as_str()).unwrap_or("");
-                        let scopes = params
-                            .get("capabilities")
-                            .and_then(|v| v.as_array())
-                            .map(|items| {
-                                items
-                                    .iter()
-                                    .filter_map(|v| v.as_str().map(str::to_string))
-                                    .collect::<Vec<_>>()
-                            })
-                            .unwrap_or_default();
-                        if run_id.is_empty() || scopes.is_empty() {
-                            let _ = writer.reply_error(id, "runId and capabilities are required");
-                        } else {
-                            capabilities
-                                .lock()
-                                .unwrap_or_else(|e| e.into_inner())
-                                .allow_for_run(run_id, scopes);
-                            let _ = writer.reply(id, serde_json::json!({ "ok": true }));
+                        "capability/allow" => {
+                            let run_id = params.get("runId").and_then(|v| v.as_str()).unwrap_or("");
+                            let scopes = params
+                                .get("capabilities")
+                                .and_then(|v| v.as_array())
+                                .map(|items| {
+                                    items
+                                        .iter()
+                                        .filter_map(|v| v.as_str().map(str::to_string))
+                                        .collect::<Vec<_>>()
+                                })
+                                .unwrap_or_default();
+                            if run_id.is_empty() || scopes.is_empty() {
+                                let _ =
+                                    writer.reply_error(id, "runId and capabilities are required");
+                            } else {
+                                capabilities
+                                    .lock()
+                                    .unwrap_or_else(|e| e.into_inner())
+                                    .allow_for_run(run_id, scopes);
+                                let _ = writer.reply(id, serde_json::json!({ "ok": true }));
+                            }
                         }
-                    }
-                    "capability/authorize" => {
-                        let request: Result<everyaios_guard::CapabilityRequest, _> =
-                            serde_json::from_value(params.clone());
-                        let ttl = params
-                            .get("ttlMs")
-                            .and_then(|v| v.as_u64())
-                            .unwrap_or(60_000);
-                        match request {
-                            Ok(request) => match capabilities
-                                .lock()
-                                .unwrap_or_else(|e| e.into_inner())
-                                .authorize(request, ttl)
-                            {
-                                Ok(grant) => {
-                                    let _ = writer.reply(
+                        "capability/authorize" => {
+                            let request: Result<everyaios_guard::CapabilityRequest, _> =
+                                serde_json::from_value(params.clone());
+                            let ttl = params
+                                .get("ttlMs")
+                                .and_then(|v| v.as_u64())
+                                .unwrap_or(60_000);
+                            match request {
+                                Ok(request) => match capabilities
+                                    .lock()
+                                    .unwrap_or_else(|e| e.into_inner())
+                                    .authorize(request, ttl)
+                                {
+                                    Ok(grant) => {
+                                        let _ = writer.reply(
+                                            id,
+                                            serde_json::to_value(grant)
+                                                .unwrap_or_else(|_| serde_json::json!({})),
+                                        );
+                                    }
+                                    Err(e) => {
+                                        let _ = writer.reply_error(id, &e.to_string());
+                                    }
+                                },
+                                Err(e) => {
+                                    let _ = writer.reply_error(
                                         id,
-                                        serde_json::to_value(grant)
-                                            .unwrap_or_else(|_| serde_json::json!({})),
+                                        &format!("invalid capability request: {e}"),
                                     );
+                                }
+                            }
+                        }
+                        "capability/revoke" => {
+                            let grant_id =
+                                params.get("grantId").and_then(|v| v.as_str()).unwrap_or("");
+                            let revoked = capabilities
+                                .lock()
+                                .unwrap_or_else(|e| e.into_inner())
+                                .revoke(grant_id);
+                            let _ = writer.reply(id, serde_json::json!({ "revoked": revoked }));
+                        }
+                        "capability/manifest" => {
+                            let commit =
+                                params.get("commit").and_then(|c| c.as_str()).unwrap_or("");
+                            let man = crate::capability_manifest::generate_manifest(commit);
+                            match serde_json::to_value(&man) {
+                                Ok(v) => {
+                                    let _ = writer.reply(id, v);
                                 }
                                 Err(e) => {
                                     let _ = writer.reply_error(id, &e.to_string());
                                 }
-                            },
-                            Err(e) => {
-                                let _ = writer
-                                    .reply_error(id, &format!("invalid capability request: {e}"));
                             }
                         }
-                    }
-                    "capability/revoke" => {
-                        let grant_id = params.get("grantId").and_then(|v| v.as_str()).unwrap_or("");
-                        let revoked = capabilities
-                            .lock()
-                            .unwrap_or_else(|e| e.into_inner())
-                            .revoke(grant_id);
-                        let _ = writer.reply(id, serde_json::json!({ "revoked": revoked }));
-                    }
-                    "capability/manifest" => {
-                        let commit = params.get("commit").and_then(|c| c.as_str()).unwrap_or("");
-                        let man = crate::capability_manifest::generate_manifest(commit);
-                        match serde_json::to_value(&man) {
-                            Ok(v) => {
-                                let _ = writer.reply(id, v);
-                            }
-                            Err(e) => {
-                                let _ = writer.reply_error(id, &e.to_string());
-                            }
-                        }
-                    }
-                    method if method.starts_with("egress/") => {
-                        let mut eng = egress.lock().unwrap_or_else(|e| e.into_inner());
-                        match method {
-                            "egress/mode" => {
-                                if let Some(m) = params.get("mode").and_then(|v| v.as_str()) {
-                                    let mode = match m {
-                                        "offline" => everyaios_guard::ConnectivityMode::Offline,
-                                        "local" => everyaios_guard::ConnectivityMode::Local,
-                                        "byok" => everyaios_guard::ConnectivityMode::Byok,
-                                        _ => everyaios_guard::ConnectivityMode::ThirdParty,
-                                    };
-                                    eng.set_mode(mode);
+                        method if method.starts_with("egress/") => {
+                            let mut eng = egress.lock().unwrap_or_else(|e| e.into_inner());
+                            match method {
+                                "egress/mode" => {
+                                    if let Some(m) = params.get("mode").and_then(|v| v.as_str()) {
+                                        let mode = match m {
+                                            "offline" => everyaios_guard::ConnectivityMode::Offline,
+                                            "local" => everyaios_guard::ConnectivityMode::Local,
+                                            "byok" => everyaios_guard::ConnectivityMode::Byok,
+                                            _ => everyaios_guard::ConnectivityMode::ThirdParty,
+                                        };
+                                        eng.set_mode(mode);
+                                    }
+                                    let _ = writer.reply(id, serde_json::json!({ "ok": true }));
                                 }
-                                let _ = writer.reply(id, serde_json::json!({ "ok": true }));
-                            }
-                            "egress/check" => {
-                                let dest = params
-                                    .get("destination")
-                                    .and_then(|v| v.as_str())
-                                    .unwrap_or("");
-                                let kind = params
-                                    .get("kind")
-                                    .and_then(|v| v.as_str())
-                                    .unwrap_or("network");
-                                let plan = eng.plan(dest, kind, None, "check", &[]);
-                                let _ = writer.reply(
-                                    id,
-                                    serde_json::to_value(plan).unwrap_or(serde_json::json!({})),
-                                );
-                            }
-                            "egress/inventory" => {
-                                let _ = writer
-                                    .reply(id, serde_json::json!({ "inventory": eng.inventory() }));
-                            }
-                            _ => {
-                                let _ = writer.reply_error(id, "method not found");
-                            }
-                        }
-                    }
-                    // P49.10–12: session-runtime lifecycle. The agent loop
-                    // drives PtySession / WorktreeBinding / AgentSession as
-                    // first-class tools; the gateway owns the durable state +
-                    // WorkEvent fan-out (survives client disconnect). This is
-                    // the sole `work/*` arm: WorkGateway::handle_rpc also owns
-                    // the legacy method vocabulary, so newer methods cannot
-                    // be shadowed by a partial helper.
-                    method if method.starts_with("work/") => {
-                        let mut gw = work_gateway.lock().unwrap_or_else(|e| e.into_inner());
-                        match gw.handle_rpc(method, &params) {
-                            Ok(out) => {
-                                let _ = writer.reply(id, out);
-                            }
-                            Err(e) => {
-                                let _ = writer.reply_error(id, &e);
+                                "egress/check" => {
+                                    let dest = params
+                                        .get("destination")
+                                        .and_then(|v| v.as_str())
+                                        .unwrap_or("");
+                                    let kind = params
+                                        .get("kind")
+                                        .and_then(|v| v.as_str())
+                                        .unwrap_or("network");
+                                    let plan = eng.plan(dest, kind, None, "check", &[]);
+                                    let _ = writer.reply(
+                                        id,
+                                        serde_json::to_value(plan).unwrap_or(serde_json::json!({})),
+                                    );
+                                }
+                                "egress/inventory" => {
+                                    let _ = writer.reply(
+                                        id,
+                                        serde_json::json!({ "inventory": eng.inventory() }),
+                                    );
+                                }
+                                _ => {
+                                    let _ = writer.reply_error(id, "method not found");
+                                }
                             }
                         }
-                    }
-                    // P64.8 — skill distillation. Was `method not found`, so the
-                    // coordinator's "best-effort" catch swallowed it and nothing
-                    // was ever distilled.
-                    method if method.starts_with("skill/") => {
-                        let store = skill_store.lock().unwrap_or_else(|e| e.into_inner());
-                        match skill_rpc(method, &params, &store) {
-                            Ok(out) => {
-                                let _ = writer.reply(id, out);
-                            }
-                            Err(e) => {
-                                let _ = writer.reply_error(id, &e);
-                            }
-                        }
-                    }
-                    // P64.4 — sub-agent spawn admission. Was `method not found`,
-                    // which made `dispatchSubAgent` throw "native runtime not
-                    // wired" on every delegation.
-                    method if method.starts_with("subagent/") => {
-                        // P71.3f — the readiness gate reads the same mounted
-                        // source the delegation seam and the turn gate use. An
-                        // unnamed member is `Unknown`, never a built-in
-                        // fallback (ADR-0005).
-                        let agent_id = params
-                            .get("agentId")
-                            .and_then(serde_json::Value::as_str)
-                            .or_else(|| params.get("harness").and_then(serde_json::Value::as_str))
-                            .unwrap_or("");
-                        let member = member_readiness(&readiness, agent_id);
-                        match subagent_rpc(method, &params, &delegation, &work_gateway, member) {
-                            Ok(out) => {
-                                let _ = writer.reply(id, out);
-                            }
-                            Err(e) => {
-                                let _ = writer.reply_error(id, &e);
+                        // P49.10–12: session-runtime lifecycle. The agent loop
+                        // drives PtySession / WorktreeBinding / AgentSession as
+                        // first-class tools; the gateway owns the durable state +
+                        // WorkEvent fan-out (survives client disconnect). This is
+                        // the sole `work/*` arm: WorkGateway::handle_rpc also owns
+                        // the legacy method vocabulary, so newer methods cannot
+                        // be shadowed by a partial helper.
+                        method if method.starts_with("work/") => {
+                            let mut gw = work_gateway.lock().unwrap_or_else(|e| e.into_inner());
+                            match gw.handle_rpc(method, &params) {
+                                Ok(out) => {
+                                    let _ = writer.reply(id, out);
+                                }
+                                Err(e) => {
+                                    let _ = writer.reply_error(id, &e);
+                                }
                             }
                         }
-                    }
-                    // P64.3 — the repo-map façade the coordinator drives with
-                    // `codeintel/repomap`. While this arm was missing the
-                    // request fell through to `method not found`, and because
-                    // the coordinator treats the map as best-effort the failure
-                    // was silent: the repo map was never injected in production.
-                    method if method.starts_with("codeintel/") => {
-                        let workspace = {
-                            let svc = tools.lock().unwrap_or_else(|e| e.into_inner());
-                            svc.workspace().to_path_buf()
-                        };
-                        match codeintel_rpc(method, &params, &workspace) {
-                            Ok(out) => {
-                                let _ = writer.reply(id, out);
-                            }
-                            Err(e) => {
-                                let _ = writer.reply_error(id, &e);
+                        // P64.8 — skill distillation. Was `method not found`, so the
+                        // coordinator's "best-effort" catch swallowed it and nothing
+                        // was ever distilled.
+                        method if method.starts_with("skill/") => {
+                            let store = skill_store.lock().unwrap_or_else(|e| e.into_inner());
+                            match skill_rpc(method, &params, &store) {
+                                Ok(out) => {
+                                    let _ = writer.reply(id, out);
+                                }
+                                Err(e) => {
+                                    let _ = writer.reply_error(id, &e);
+                                }
                             }
                         }
-                    }
-                    // P54.5 — the read-only view of the one PTY plane. The
-                    // privileged shell path is `script.run` on `tool/exec` →
-                    // `tool/commit` (Guard-2 ticketed); this arm deliberately
-                    // has no run method, so it cannot become a second path to a
-                    // privileged effect.
-                    method if method.starts_with("terminal/") => {
-                        let slot = terminal_plane.lock().unwrap_or_else(|e| e.into_inner());
-                        let plane: Option<&dyn crate::terminal::TerminalPlaneObserver> =
-                            slot.as_deref();
-                        match terminal_rpc(method, &params, plane) {
-                            Ok(out) => {
-                                let _ = writer.reply(id, out);
-                            }
-                            Err(e) => {
-                                let _ = writer.reply_error(id, &e);
-                            }
-                        }
-                    }
-                    _ => {
-                        let _ = writer.reply_error(id, &format!("method not found: {method}"));
-                    }
-                },
-                Inbound::Notification { method, params } => {
-                    let stream_id = params
-                        .get("streamId")
-                        .and_then(|s| s.as_str())
-                        .unwrap_or("")
-                        .to_string();
-                    // The coordinator carries the originating session on the
-                    // event. The stream registry is the compatibility path
-                    // for older sidecars and for events emitted immediately
-                    // after the Rust request is acknowledged. Never infer a
-                    // session from the UI's active tab.
-                    let event_session_id = params
-                        .get("sessionId")
-                        .and_then(|s| s.as_str())
-                        .map(str::to_string)
-                        .or_else(|| {
-                            sessions
-                                .lock()
-                                .unwrap_or_else(|e| e.into_inner())
-                                .get(&stream_id)
-                                .cloned()
-                        })
-                        .unwrap_or_default();
-                    match method.as_str() {
-                        "chat/ttft" => emit(
-                            &on_event,
-                            ChatWireEvent::Ttft {
-                                session_id: event_session_id.clone(),
-                                latency_ms: params
-                                    .get("latencyMs")
-                                    .and_then(|v| v.as_u64())
-                                    .unwrap_or(0),
-                                stream_id,
-                                metadata: event_metadata(&params),
-                            },
-                        ),
-                        "chat/batch" => emit(
-                            &on_event,
-                            ChatWireEvent::Batch {
-                                session_id: event_session_id.clone(),
-                                text: params
-                                    .get("text")
-                                    .and_then(|t| t.as_str())
-                                    .unwrap_or("")
-                                    .to_string(),
-                                token_count: params
-                                    .get("tokenCount")
-                                    .and_then(|t| t.as_u64())
-                                    .unwrap_or(0),
-                                stream_id,
-                                metadata: event_metadata(&params),
-                            },
-                        ),
-                        "chat/reasoning" => emit(
-                            &on_event,
-                            ChatWireEvent::Reasoning {
-                                session_id: event_session_id.clone(),
-                                text: params
-                                    .get("text")
-                                    .and_then(|t| t.as_str())
-                                    .unwrap_or("")
-                                    .to_string(),
-                                stream_id,
-                                metadata: event_metadata(&params),
-                            },
-                        ),
-                        "chat/stage" => emit(
-                            &on_event,
-                            ChatWireEvent::Stage {
-                                session_id: event_session_id.clone(),
-                                stage: params
-                                    .get("stage")
-                                    .and_then(|s| s.as_str())
-                                    .unwrap_or("")
-                                    .to_string(),
-                                stream_id,
-                                metadata: event_metadata(&params),
-                            },
-                        ),
-                        "chat/tool_call" => emit(
-                            &on_event,
-                            ChatWireEvent::ToolCall {
-                                session_id: event_session_id.clone(),
-                                tool_id: params
-                                    .get("toolId")
-                                    .and_then(|t| t.as_str())
-                                    .unwrap_or("")
-                                    .to_string(),
-                                args: params.get("args").cloned(),
-                                risk: params
-                                    .get("risk")
-                                    .and_then(|r| r.as_str())
-                                    .map(str::to_string),
-                                stream_id,
-                                metadata: event_metadata(&params),
-                            },
-                        ),
-                        // P11.5.11 — AG-UI live transport: forward the raw
-                        // encoded envelope line to the UI (`agui-event` emit).
-                        "agui/event" => {
-                            if let Some(line) = params.get("line").and_then(|l| l.as_str()) {
-                                agui.forward(line);
-                            } else if let Some(raw) = params.get("envelope") {
-                                agui.forward(&serde_json::to_string(raw).unwrap_or_default());
+                        // P64.4 — sub-agent spawn admission. Was `method not found`,
+                        // which made `dispatchSubAgent` throw "native runtime not
+                        // wired" on every delegation.
+                        method if method.starts_with("subagent/") => {
+                            // P71.3f — the readiness gate reads the same mounted
+                            // source the delegation seam and the turn gate use. An
+                            // unnamed member is `Unknown`, never a built-in
+                            // fallback (ADR-0005).
+                            let agent_id = params
+                                .get("agentId")
+                                .and_then(serde_json::Value::as_str)
+                                .or_else(|| {
+                                    params.get("harness").and_then(serde_json::Value::as_str)
+                                })
+                                .unwrap_or("");
+                            let member = member_readiness(&readiness, agent_id);
+                            match subagent_rpc(method, &params, &delegation, &work_gateway, member)
+                            {
+                                Ok(out) => {
+                                    let _ = writer.reply(id, out);
+                                }
+                                Err(e) => {
+                                    let _ = writer.reply_error(id, &e);
+                                }
                             }
                         }
-                        "chat/verification" => emit(
-                            &on_event,
-                            ChatWireEvent::Verification {
-                                stream_id,
-                                session_id: event_session_id.clone(),
-                                task_id: params
-                                    .get("taskId")
-                                    .and_then(|t| t.as_str())
-                                    .unwrap_or("")
-                                    .to_string(),
-                                checks: params
-                                    .get("checks")
-                                    .and_then(|c| c.as_array())
-                                    .map(|arr| {
-                                        arr.iter()
-                                            .filter_map(|v| v.as_str().map(str::to_string))
-                                            .collect()
-                                    })
-                                    .unwrap_or_default(),
-                                report: params
-                                    .get("report")
-                                    .and_then(|r| r.as_str())
-                                    .unwrap_or("")
-                                    .to_string(),
-                                passed: params.get("passed").and_then(|p| p.as_bool()),
-                                metadata: event_metadata(&params),
-                            },
-                        ),
-                        "chat/tool_result" => emit(
-                            &on_event,
-                            ChatWireEvent::ToolResult {
-                                session_id: event_session_id.clone(),
-                                tool_id: params
-                                    .get("toolId")
-                                    .and_then(|t| t.as_str())
-                                    .unwrap_or("")
-                                    .to_string(),
-                                result: params.get("result").cloned(),
-                                error: params
-                                    .get("error")
-                                    .and_then(|e| e.as_str())
-                                    .map(str::to_string)
-                                    .or_else(|| {
-                                        params.get("result").and_then(|r| {
-                                            r.get("error")
-                                                .and_then(|e| e.as_str())
-                                                .map(str::to_string)
-                                        })
-                                    }),
-                                stream_id,
-                                metadata: event_metadata(&params),
-                            },
-                        ),
-                        "chat/done" => {
-                            // Check the post-turn ledger before publishing a
-                            // successful terminal event. Budget enforcement is
-                            // terminal: the UI must never briefly mark a run
-                            // completed and then replace it with a kill card.
-                            let spent = if event_session_id.is_empty() {
-                                0.0
-                            } else {
-                                vault
+                        // P64.3 — the repo-map façade the coordinator drives with
+                        // `codeintel/repomap`. While this arm was missing the
+                        // request fell through to `method not found`, and because
+                        // the coordinator treats the map as best-effort the failure
+                        // was silent: the repo map was never injected in production.
+                        method if method.starts_with("codeintel/") => {
+                            let workspace = {
+                                let svc = tools.lock().unwrap_or_else(|e| e.into_inner());
+                                svc.workspace().to_path_buf()
+                            };
+                            match codeintel_rpc(method, &params, &workspace) {
+                                Ok(out) => {
+                                    let _ = writer.reply(id, out);
+                                }
+                                Err(e) => {
+                                    let _ = writer.reply_error(id, &e);
+                                }
+                            }
+                        }
+                        // P54.5 — the read-only view of the one PTY plane. The
+                        // privileged shell path is `script.run` on `tool/exec` →
+                        // `tool/commit` (Guard-2 ticketed); this arm deliberately
+                        // has no run method, so it cannot become a second path to a
+                        // privileged effect.
+                        method if method.starts_with("terminal/") => {
+                            let slot = terminal_plane.lock().unwrap_or_else(|e| e.into_inner());
+                            let plane: Option<&dyn crate::terminal::TerminalPlaneObserver> =
+                                slot.as_deref();
+                            match terminal_rpc(method, &params, plane) {
+                                Ok(out) => {
+                                    let _ = writer.reply(id, out);
+                                }
+                                Err(e) => {
+                                    let _ = writer.reply_error(id, &e);
+                                }
+                            }
+                        }
+                        _ => {
+                            let _ = writer.reply_error(id, &format!("method not found: {method}"));
+                        }
+                    },
+                    Inbound::Notification { method, params } => {
+                        let stream_id = params
+                            .get("streamId")
+                            .and_then(|s| s.as_str())
+                            .unwrap_or("")
+                            .to_string();
+                        // The coordinator carries the originating session on the
+                        // event. The stream registry is the compatibility path
+                        // for older sidecars and for events emitted immediately
+                        // after the Rust request is acknowledged. Never infer a
+                        // session from the UI's active tab.
+                        let event_session_id = params
+                            .get("sessionId")
+                            .and_then(|s| s.as_str())
+                            .map(str::to_string)
+                            .or_else(|| {
+                                sessions
                                     .lock()
                                     .unwrap_or_else(|e| e.into_inner())
-                                    .session_spend(&event_session_id)
-                                    .unwrap_or(0.0)
-                            };
-                            if !event_session_id.is_empty() && spent >= DEFAULT_SESSION_BUDGET_USD {
+                                    .get(&stream_id)
+                                    .cloned()
+                            })
+                            .unwrap_or_default();
+                        match method.as_str() {
+                            "chat/ttft" => emit(
+                                &on_event,
+                                ChatWireEvent::Ttft {
+                                    session_id: event_session_id.clone(),
+                                    latency_ms: params
+                                        .get("latencyMs")
+                                        .and_then(|v| v.as_u64())
+                                        .unwrap_or(0),
+                                    stream_id,
+                                    metadata: event_metadata(&params),
+                                },
+                            ),
+                            "chat/batch" => emit(
+                                &on_event,
+                                ChatWireEvent::Batch {
+                                    session_id: event_session_id.clone(),
+                                    text: params
+                                        .get("text")
+                                        .and_then(|t| t.as_str())
+                                        .unwrap_or("")
+                                        .to_string(),
+                                    token_count: params
+                                        .get("tokenCount")
+                                        .and_then(|t| t.as_u64())
+                                        .unwrap_or(0),
+                                    stream_id,
+                                    metadata: event_metadata(&params),
+                                },
+                            ),
+                            "chat/reasoning" => emit(
+                                &on_event,
+                                ChatWireEvent::Reasoning {
+                                    session_id: event_session_id.clone(),
+                                    text: params
+                                        .get("text")
+                                        .and_then(|t| t.as_str())
+                                        .unwrap_or("")
+                                        .to_string(),
+                                    stream_id,
+                                    metadata: event_metadata(&params),
+                                },
+                            ),
+                            "chat/stage" => emit(
+                                &on_event,
+                                ChatWireEvent::Stage {
+                                    session_id: event_session_id.clone(),
+                                    stage: params
+                                        .get("stage")
+                                        .and_then(|s| s.as_str())
+                                        .unwrap_or("")
+                                        .to_string(),
+                                    stream_id,
+                                    metadata: event_metadata(&params),
+                                },
+                            ),
+                            "chat/tool_call" => emit(
+                                &on_event,
+                                ChatWireEvent::ToolCall {
+                                    session_id: event_session_id.clone(),
+                                    tool_id: params
+                                        .get("toolId")
+                                        .and_then(|t| t.as_str())
+                                        .unwrap_or("")
+                                        .to_string(),
+                                    args: params.get("args").cloned(),
+                                    risk: params
+                                        .get("risk")
+                                        .and_then(|r| r.as_str())
+                                        .map(str::to_string),
+                                    stream_id,
+                                    metadata: event_metadata(&params),
+                                },
+                            ),
+                            // P11.5.11 — AG-UI live transport: forward the raw
+                            // encoded envelope line to the UI (`agui-event` emit).
+                            "agui/event" => {
+                                if let Some(line) = params.get("line").and_then(|l| l.as_str()) {
+                                    agui.forward(line);
+                                } else if let Some(raw) = params.get("envelope") {
+                                    agui.forward(&serde_json::to_string(raw).unwrap_or_default());
+                                }
+                            }
+                            "chat/verification" => emit(
+                                &on_event,
+                                ChatWireEvent::Verification {
+                                    stream_id,
+                                    session_id: event_session_id.clone(),
+                                    task_id: params
+                                        .get("taskId")
+                                        .and_then(|t| t.as_str())
+                                        .unwrap_or("")
+                                        .to_string(),
+                                    checks: params
+                                        .get("checks")
+                                        .and_then(|c| c.as_array())
+                                        .map(|arr| {
+                                            arr.iter()
+                                                .filter_map(|v| v.as_str().map(str::to_string))
+                                                .collect()
+                                        })
+                                        .unwrap_or_default(),
+                                    report: params
+                                        .get("report")
+                                        .and_then(|r| r.as_str())
+                                        .unwrap_or("")
+                                        .to_string(),
+                                    passed: params.get("passed").and_then(|p| p.as_bool()),
+                                    metadata: event_metadata(&params),
+                                },
+                            ),
+                            "chat/tool_result" => emit(
+                                &on_event,
+                                ChatWireEvent::ToolResult {
+                                    session_id: event_session_id.clone(),
+                                    tool_id: params
+                                        .get("toolId")
+                                        .and_then(|t| t.as_str())
+                                        .unwrap_or("")
+                                        .to_string(),
+                                    result: params.get("result").cloned(),
+                                    error: params
+                                        .get("error")
+                                        .and_then(|e| e.as_str())
+                                        .map(str::to_string)
+                                        .or_else(|| {
+                                            params.get("result").and_then(|r| {
+                                                r.get("error")
+                                                    .and_then(|e| e.as_str())
+                                                    .map(str::to_string)
+                                            })
+                                        }),
+                                    stream_id,
+                                    metadata: event_metadata(&params),
+                                },
+                            ),
+                            "chat/done" => {
+                                // Check the post-turn ledger before publishing a
+                                // successful terminal event. Budget enforcement is
+                                // terminal: the UI must never briefly mark a run
+                                // completed and then replace it with a kill card.
+                                let spent = if event_session_id.is_empty() {
+                                    0.0
+                                } else {
+                                    vault
+                                        .lock()
+                                        .unwrap_or_else(|e| e.into_inner())
+                                        .session_spend(&event_session_id)
+                                        .unwrap_or(0.0)
+                                };
+                                if !event_session_id.is_empty()
+                                    && spent >= DEFAULT_SESSION_BUDGET_USD
+                                {
+                                    emit(
+                                        &on_event,
+                                        ChatWireEvent::BudgetExceeded {
+                                            stream_id: stream_id.clone(),
+                                            session_id: event_session_id.clone(),
+                                            limit: DEFAULT_SESSION_BUDGET_USD,
+                                            spent,
+                                            metadata: event_metadata(&params),
+                                        },
+                                    );
+                                } else {
+                                    emit(
+                                        &on_event,
+                                        ChatWireEvent::Done {
+                                            session_id: event_session_id.clone(),
+                                            turn_id: params
+                                                .get("turnId")
+                                                .and_then(|t| t.as_str())
+                                                .unwrap_or("")
+                                                .to_string(),
+                                            full_text: params
+                                                .get("fullText")
+                                                .and_then(|t| t.as_str())
+                                                .unwrap_or("")
+                                                .to_string(),
+                                            total_tokens: params
+                                                .get("totalTokens")
+                                                .and_then(|t| t.as_u64())
+                                                .unwrap_or(0),
+                                            stream_id: stream_id.clone(),
+                                            metadata: event_metadata(&params),
+                                        },
+                                    );
+                                }
+                            }
+                            "chat/error" => emit(
+                                &on_event,
+                                ChatWireEvent::Error {
+                                    session_id: event_session_id.clone(),
+                                    code: params
+                                        .get("code")
+                                        .and_then(|c| c.as_str())
+                                        .unwrap_or("engine")
+                                        .to_string(),
+                                    message: params
+                                        .get("message")
+                                        .and_then(|m| m.as_str())
+                                        .unwrap_or("")
+                                        .to_string(),
+                                    tool_id: params
+                                        .get("toolId")
+                                        .and_then(|t| t.as_str())
+                                        .map(str::to_string),
+                                    retryable: params.get("retryable").and_then(|r| r.as_bool()),
+                                    args: params.get("args").cloned(),
+                                    stream_id,
+                                    metadata: event_metadata(&params),
+                                },
+                            ),
+                            "chat/cancelled" => emit(
+                                &on_event,
+                                ChatWireEvent::Cancelled {
+                                    stream_id,
+                                    session_id: event_session_id,
+                                    metadata: event_metadata(&params),
+                                },
+                            ),
+                            // Stage-0 (P6.3): a plan executor circuit-break trip.
+                            // The coordinator emits the full MCQ card payload;
+                            // Rust relays it to the UI verbatim.
+                            "chat/interrupt" => {
+                                let plan_id = params
+                                    .get("planId")
+                                    .and_then(|s| s.as_str())
+                                    .unwrap_or("")
+                                    .to_string();
+                                let break_id = params
+                                    .get("breakId")
+                                    .and_then(|s| s.as_str())
+                                    .unwrap_or("")
+                                    .to_string();
+                                let title = params
+                                    .get("title")
+                                    .and_then(|s| s.as_str())
+                                    .unwrap_or("Agent needs a decision")
+                                    .to_string();
+                                let description = params
+                                    .get("description")
+                                    .and_then(|s| s.as_str())
+                                    .unwrap_or("")
+                                    .to_string();
+                                let options = params
+                                    .get("options")
+                                    .and_then(|v| v.as_array())
+                                    .map(|a| {
+                                        a.iter()
+                                            .filter_map(|o| o.as_str().map(str::to_string))
+                                            .collect()
+                                    })
+                                    .unwrap_or_default();
                                 emit(
                                     &on_event,
-                                    ChatWireEvent::BudgetExceeded {
+                                    ChatWireEvent::Interrupt {
                                         stream_id: stream_id.clone(),
                                         session_id: event_session_id.clone(),
-                                        limit: DEFAULT_SESSION_BUDGET_USD,
-                                        spent,
-                                        metadata: event_metadata(&params),
-                                    },
-                                );
-                            } else {
-                                emit(
-                                    &on_event,
-                                    ChatWireEvent::Done {
-                                        session_id: event_session_id.clone(),
-                                        turn_id: params
-                                            .get("turnId")
-                                            .and_then(|t| t.as_str())
-                                            .unwrap_or("")
-                                            .to_string(),
-                                        full_text: params
-                                            .get("fullText")
-                                            .and_then(|t| t.as_str())
-                                            .unwrap_or("")
-                                            .to_string(),
-                                        total_tokens: params
-                                            .get("totalTokens")
-                                            .and_then(|t| t.as_u64())
-                                            .unwrap_or(0),
-                                        stream_id: stream_id.clone(),
+                                        plan_id,
+                                        break_id,
+                                        title,
+                                        description,
+                                        options,
                                         metadata: event_metadata(&params),
                                     },
                                 );
                             }
-                        }
-                        "chat/error" => emit(
-                            &on_event,
-                            ChatWireEvent::Error {
-                                session_id: event_session_id.clone(),
-                                code: params
-                                    .get("code")
-                                    .and_then(|c| c.as_str())
-                                    .unwrap_or("engine")
-                                    .to_string(),
-                                message: params
-                                    .get("message")
-                                    .and_then(|m| m.as_str())
-                                    .unwrap_or("")
-                                    .to_string(),
-                                tool_id: params
-                                    .get("toolId")
-                                    .and_then(|t| t.as_str())
-                                    .map(str::to_string),
-                                retryable: params.get("retryable").and_then(|r| r.as_bool()),
-                                args: params.get("args").cloned(),
-                                stream_id,
-                                metadata: event_metadata(&params),
-                            },
-                        ),
-                        "chat/cancelled" => emit(
-                            &on_event,
-                            ChatWireEvent::Cancelled {
-                                stream_id,
-                                session_id: event_session_id,
-                                metadata: event_metadata(&params),
-                            },
-                        ),
-                        // Stage-0 (P6.3): a plan executor circuit-break trip.
-                        // The coordinator emits the full MCQ card payload;
-                        // Rust relays it to the UI verbatim.
-                        "chat/interrupt" => {
-                            let plan_id = params
-                                .get("planId")
-                                .and_then(|s| s.as_str())
-                                .unwrap_or("")
-                                .to_string();
-                            let break_id = params
-                                .get("breakId")
-                                .and_then(|s| s.as_str())
-                                .unwrap_or("")
-                                .to_string();
-                            let title = params
-                                .get("title")
-                                .and_then(|s| s.as_str())
-                                .unwrap_or("Agent needs a decision")
-                                .to_string();
-                            let description = params
-                                .get("description")
-                                .and_then(|s| s.as_str())
-                                .unwrap_or("")
-                                .to_string();
-                            let options = params
-                                .get("options")
-                                .and_then(|v| v.as_array())
-                                .map(|a| {
-                                    a.iter()
-                                        .filter_map(|o| o.as_str().map(str::to_string))
-                                        .collect()
-                                })
-                                .unwrap_or_default();
-                            emit(
+                            "chat/plan_done" => {
+                                emit(
+                                    &on_event,
+                                    ChatWireEvent::PlanDone {
+                                        session_id: event_session_id.clone(),
+                                        plan_id: params
+                                            .get("planId")
+                                            .and_then(|s| s.as_str())
+                                            .unwrap_or("")
+                                            .to_string(),
+                                        tasks_done: params
+                                            .get("tasksDone")
+                                            .and_then(|v| v.as_u64())
+                                            .unwrap_or(0)
+                                            as u32,
+                                        error: params
+                                            .get("error")
+                                            .and_then(|s| s.as_str())
+                                            .map(str::to_string),
+                                        stream_id,
+                                        metadata: event_metadata(&params),
+                                    },
+                                );
+                            }
+                            "chat/plan_start" => emit(
                                 &on_event,
-                                ChatWireEvent::Interrupt {
-                                    stream_id: stream_id.clone(),
-                                    session_id: event_session_id.clone(),
-                                    plan_id,
-                                    break_id,
-                                    title,
-                                    description,
-                                    options,
-                                    metadata: event_metadata(&params),
-                                },
-                            );
-                        }
-                        "chat/plan_done" => {
-                            emit(
-                                &on_event,
-                                ChatWireEvent::PlanDone {
+                                ChatWireEvent::PlanStart {
                                     session_id: event_session_id.clone(),
                                     plan_id: params
                                         .get("planId")
                                         .and_then(|s| s.as_str())
                                         .unwrap_or("")
                                         .to_string(),
-                                    tasks_done: params
-                                        .get("tasksDone")
-                                        .and_then(|v| v.as_u64())
-                                        .unwrap_or(0)
+                                    tasks: params.get("tasks").and_then(|v| v.as_u64()).unwrap_or(0)
                                         as u32,
-                                    error: params
-                                        .get("error")
-                                        .and_then(|s| s.as_str())
-                                        .map(str::to_string),
                                     stream_id,
                                     metadata: event_metadata(&params),
                                 },
-                            );
+                            ),
+                            "chat/plan_step" => emit(
+                                &on_event,
+                                ChatWireEvent::PlanStep {
+                                    session_id: event_session_id.clone(),
+                                    plan_id: params
+                                        .get("planId")
+                                        .and_then(|s| s.as_str())
+                                        .unwrap_or("")
+                                        .to_string(),
+                                    task_id: params
+                                        .get("taskId")
+                                        .and_then(|s| s.as_str())
+                                        .unwrap_or("")
+                                        .to_string(),
+                                    status: params
+                                        .get("status")
+                                        .and_then(|s| s.as_str())
+                                        .unwrap_or("")
+                                        .to_string(),
+                                    stream_id,
+                                    metadata: event_metadata(&params),
+                                },
+                            ),
+                            "chat/memory_extracted" => emit(
+                                &on_event,
+                                ChatWireEvent::MemoryExtracted {
+                                    session_id: event_session_id.clone(),
+                                    facts: params
+                                        .get("facts")
+                                        .and_then(|v| v.as_array())
+                                        .map(|a| {
+                                            a.iter()
+                                                .filter_map(|v| v.as_str().map(str::to_string))
+                                                .collect()
+                                        })
+                                        .unwrap_or_default(),
+                                    stream_id,
+                                    metadata: event_metadata(&params),
+                                },
+                            ),
+                            "chat/citations" => emit(
+                                &on_event,
+                                ChatWireEvent::Citations {
+                                    session_id: event_session_id.clone(),
+                                    citations: params
+                                        .get("citations")
+                                        .and_then(|c| c.as_array())
+                                        .cloned()
+                                        .unwrap_or_default(),
+                                    stream_id,
+                                    metadata: event_metadata(&params),
+                                },
+                            ),
+                            "chat/walkthrough" => emit(
+                                &on_event,
+                                ChatWireEvent::Walkthrough {
+                                    session_id: event_session_id.clone(),
+                                    stops: params
+                                        .get("stops")
+                                        .and_then(|c| c.as_array())
+                                        .cloned()
+                                        .unwrap_or_default(),
+                                    stream_id,
+                                    metadata: event_metadata(&params),
+                                },
+                            ),
+                            "chat/monitor" => emit(
+                                &on_event,
+                                ChatWireEvent::Monitor {
+                                    session_id: event_session_id.clone(),
+                                    job_id: params
+                                        .get("jobId")
+                                        .and_then(|s| s.as_str())
+                                        .unwrap_or("")
+                                        .to_string(),
+                                    changed: params
+                                        .get("changed")
+                                        .and_then(|v| v.as_bool())
+                                        .unwrap_or(false),
+                                    notified: params
+                                        .get("notified")
+                                        .and_then(|v| v.as_bool())
+                                        .unwrap_or(false),
+                                    stopped: params
+                                        .get("stopped")
+                                        .and_then(|v| v.as_bool())
+                                        .unwrap_or(false),
+                                    current: params
+                                        .get("current")
+                                        .and_then(|s| s.as_str())
+                                        .unwrap_or("")
+                                        .to_string(),
+                                    notifications: params
+                                        .get("notifications")
+                                        .and_then(|v| v.as_u64())
+                                        .unwrap_or(0)
+                                        as u32,
+                                    stream_id,
+                                    metadata: event_metadata(&params),
+                                },
+                            ),
+                            _ => {}
                         }
-                        "chat/plan_start" => emit(
-                            &on_event,
-                            ChatWireEvent::PlanStart {
-                                session_id: event_session_id.clone(),
-                                plan_id: params
-                                    .get("planId")
-                                    .and_then(|s| s.as_str())
-                                    .unwrap_or("")
-                                    .to_string(),
-                                tasks: params.get("tasks").and_then(|v| v.as_u64()).unwrap_or(0)
-                                    as u32,
-                                stream_id,
-                                metadata: event_metadata(&params),
-                            },
-                        ),
-                        "chat/plan_step" => emit(
-                            &on_event,
-                            ChatWireEvent::PlanStep {
-                                session_id: event_session_id.clone(),
-                                plan_id: params
-                                    .get("planId")
-                                    .and_then(|s| s.as_str())
-                                    .unwrap_or("")
-                                    .to_string(),
-                                task_id: params
-                                    .get("taskId")
-                                    .and_then(|s| s.as_str())
-                                    .unwrap_or("")
-                                    .to_string(),
-                                status: params
-                                    .get("status")
-                                    .and_then(|s| s.as_str())
-                                    .unwrap_or("")
-                                    .to_string(),
-                                stream_id,
-                                metadata: event_metadata(&params),
-                            },
-                        ),
-                        "chat/memory_extracted" => emit(
-                            &on_event,
-                            ChatWireEvent::MemoryExtracted {
-                                session_id: event_session_id.clone(),
-                                facts: params
-                                    .get("facts")
-                                    .and_then(|v| v.as_array())
-                                    .map(|a| {
-                                        a.iter()
-                                            .filter_map(|v| v.as_str().map(str::to_string))
-                                            .collect()
-                                    })
-                                    .unwrap_or_default(),
-                                stream_id,
-                                metadata: event_metadata(&params),
-                            },
-                        ),
-                        "chat/citations" => emit(
-                            &on_event,
-                            ChatWireEvent::Citations {
-                                session_id: event_session_id.clone(),
-                                citations: params
-                                    .get("citations")
-                                    .and_then(|c| c.as_array())
-                                    .cloned()
-                                    .unwrap_or_default(),
-                                stream_id,
-                                metadata: event_metadata(&params),
-                            },
-                        ),
-                        "chat/walkthrough" => emit(
-                            &on_event,
-                            ChatWireEvent::Walkthrough {
-                                session_id: event_session_id.clone(),
-                                stops: params
-                                    .get("stops")
-                                    .and_then(|c| c.as_array())
-                                    .cloned()
-                                    .unwrap_or_default(),
-                                stream_id,
-                                metadata: event_metadata(&params),
-                            },
-                        ),
-                        "chat/monitor" => emit(
-                            &on_event,
-                            ChatWireEvent::Monitor {
-                                session_id: event_session_id.clone(),
-                                job_id: params
-                                    .get("jobId")
-                                    .and_then(|s| s.as_str())
-                                    .unwrap_or("")
-                                    .to_string(),
-                                changed: params
-                                    .get("changed")
-                                    .and_then(|v| v.as_bool())
-                                    .unwrap_or(false),
-                                notified: params
-                                    .get("notified")
-                                    .and_then(|v| v.as_bool())
-                                    .unwrap_or(false),
-                                stopped: params
-                                    .get("stopped")
-                                    .and_then(|v| v.as_bool())
-                                    .unwrap_or(false),
-                                current: params
-                                    .get("current")
-                                    .and_then(|s| s.as_str())
-                                    .unwrap_or("")
-                                    .to_string(),
-                                notifications: params
-                                    .get("notifications")
-                                    .and_then(|v| v.as_u64())
-                                    .unwrap_or(0)
-                                    as u32,
-                                stream_id,
-                                metadata: event_metadata(&params),
-                            },
-                        ),
-                        _ => {}
                     }
                 }
             }
@@ -2725,8 +2811,10 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
                 "Work `{work_id}` disappeared during recovery"
             )));
         };
-        if matches!(address.session_kind, everyaios_types::SessionKind::Automation)
-            && address.provenance.is_legacy()
+        if matches!(
+            address.session_kind,
+            everyaios_types::SessionKind::Automation
+        ) && address.provenance.is_legacy()
         {
             return Err(ChatRelayError::Recovery(format!(
                 "automation Work `{work_id}` has only legacy provenance; reconcile its admission before prompting"
@@ -2865,9 +2953,10 @@ mod tests {
         for key in ["symbol", "kind", "file", "line", "rank"] {
             assert!(first.get(key).is_some(), "missing {key} in the wire row");
         }
-        assert!(tags
-            .iter()
-            .any(|t| t.get("symbol").and_then(|s| s.as_str()) == Some("alpha")));
+        assert!(
+            tags.iter()
+                .any(|t| t.get("symbol").and_then(|s| s.as_str()) == Some("alpha"))
+        );
 
         // The old failure mode was a silent `method not found`; an unknown
         // method must still be an error rather than an empty tag list.
@@ -2883,12 +2972,14 @@ mod tests {
         let (dir, _vault) = temp_vault("skill-rpc");
         let store = everyaios_blueprint::SkillStore::new(dir.join("skills"));
         assert!(super::skill_rpc("skill/grow", &serde_json::json!({}), &store).is_err());
-        assert!(super::skill_rpc(
-            "skill/grow",
-            &serde_json::json!({ "taskName": "   " }),
-            &store
-        )
-        .is_err());
+        assert!(
+            super::skill_rpc(
+                "skill/grow",
+                &serde_json::json!({ "taskName": "   " }),
+                &store
+            )
+            .is_err()
+        );
         assert!(super::skill_rpc("skill/nope", &serde_json::json!({}), &store).is_err());
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -3016,17 +3107,19 @@ mod tests {
 
         // A duplicate task id is refused from the graph (deterministic child
         // Work id), not silently accepted.
-        assert!(super::subagent_rpc(
-            "subagent/spawn",
-            &serde_json::json!({
-                "spec": { "id": "t1", "goal": "again", "context": [], "acceptance": [] },
-                "workId": "w-parent",
-            }),
-            &policy,
-            &gw,
-            everyaios_types::AgentReadiness::Ready,
-        )
-        .is_err());
+        assert!(
+            super::subagent_rpc(
+                "subagent/spawn",
+                &serde_json::json!({
+                    "spec": { "id": "t1", "goal": "again", "context": [], "acceptance": [] },
+                    "workId": "w-parent",
+                }),
+                &policy,
+                &gw,
+                everyaios_types::AgentReadiness::Ready,
+            )
+            .is_err()
+        );
         // Completion closes the child's own timeline (terminal Run event +
         // ephemeral session termination) and reports a summary-only result.
         let done = super::subagent_rpc(
@@ -3054,14 +3147,16 @@ mod tests {
             assert_eq!((gauge.active, gauge.total), (0, 1));
         }
         // Closing a task the graph never saw is an error, not a summary.
-        assert!(super::subagent_rpc(
-            "subagent/complete",
-            &serde_json::json!({ "taskId": "ghost", "workId": "w-parent" }),
-            &policy,
-            &gw,
-            everyaios_types::AgentReadiness::Ready,
-        )
-        .is_err());
+        assert!(
+            super::subagent_rpc(
+                "subagent/complete",
+                &serde_json::json!({ "taskId": "ghost", "workId": "w-parent" }),
+                &policy,
+                &gw,
+                everyaios_types::AgentReadiness::Ready,
+            )
+            .is_err()
+        );
         // A spawn that names no parent Work is admitted policy-only, and says so.
         let loose = super::subagent_rpc(
             "subagent/spawn",
@@ -3077,22 +3172,99 @@ mod tests {
         assert_eq!(loose["accountedFrom"], "policy_only");
         assert!(loose["workId"].is_null());
         // A spec-less call is a refusal, and unknown methods stay errors.
-        assert!(super::subagent_rpc(
+        assert!(
+            super::subagent_rpc(
+                "subagent/spawn",
+                &serde_json::json!({}),
+                &policy,
+                &gw,
+                everyaios_types::AgentReadiness::Ready,
+            )
+            .is_err()
+        );
+        assert!(
+            super::subagent_rpc(
+                "subagent/nope",
+                &serde_json::json!({}),
+                &policy,
+                &gw,
+                everyaios_types::AgentReadiness::Ready,
+            )
+            .is_err()
+        );
+    }
+
+    /// P64.4 — the spawn reply carries the execution binding: the spec-only
+    /// starting prompt (fresh context) plus the isolated workspace provision
+    /// planned against the minted child Work. A policy-only spawn (no parent
+    /// Work) still starts spec-only but names no workspace.
+    #[test]
+    fn subagent_spawn_reply_carries_spec_only_start_and_worktree_provision() {
+        let policy = everyaios_blueprint::DelegationPolicy::new(
+            everyaios_blueprint::SubAgentLimits::default(),
+        );
+        let gw = Arc::new(Mutex::new(crate::work_gateway::WorkGateway::new()));
+        gw.lock()
+            .unwrap()
+            .create_work("w-parent", None, Some("s-1".into()), "parent objective");
+        let out = super::subagent_rpc(
             "subagent/spawn",
-            &serde_json::json!({}),
+            &serde_json::json!({
+                "spec": { "id": "t9", "goal": "write the health endpoint", "context": [], "acceptance": [] },
+                "model": "m",
+                "harness": "claude-code",
+                "workId": "w-parent",
+            }),
             &policy,
             &gw,
             everyaios_types::AgentReadiness::Ready,
         )
-        .is_err());
-        assert!(super::subagent_rpc(
-            "subagent/nope",
-            &serde_json::json!({}),
+        .expect("an in-limits spawn is admitted");
+        // Fresh context: the child's start is its spec only — the goal is in,
+        // the parent's objective and history are not.
+        let prompt = out["startingPrompt"].as_str().unwrap().to_string();
+        assert!(
+            prompt.contains("write the health endpoint"),
+            "got: {prompt}"
+        );
+        assert!(
+            !prompt.contains("parent objective"),
+            "the parent transcript must never be handed down, got: {prompt}"
+        );
+        // Worktree isolation address: segment + branch + 3-file blackboard.
+        assert!(out["provisionError"].is_null());
+        assert_eq!(
+            out["provision"]["worktree_segment"],
+            ".everyaios/worktrees/task-t9"
+        );
+        assert_eq!(out["provision"]["branch"], "subtask/t9");
+        assert_eq!(
+            out["provision"]["plan_file"],
+            ".everyaios/worktrees/task-t9/.everyaios/task_plan.md"
+        );
+        assert_eq!(
+            out["provision"]["findings_file"],
+            ".everyaios/worktrees/task-t9/.everyaios/findings.md"
+        );
+        assert_eq!(
+            out["provision"]["receipts_dir"],
+            ".everyaios/worktrees/task-t9/.everyaios/receipts"
+        );
+        // Policy-only: spec-only start, but no workspace address without a
+        // child Work.
+        let loose = super::subagent_rpc(
+            "subagent/spawn",
+            &serde_json::json!({
+                "spec": { "id": "t10", "goal": "loose", "context": [], "acceptance": [] },
+                "depth": 1,
+            }),
             &policy,
             &gw,
             everyaios_types::AgentReadiness::Ready,
         )
-        .is_err());
+        .expect("a parentless spawn is admitted policy-only");
+        assert!(loose["startingPrompt"].as_str().unwrap().contains("loose"));
+        assert!(loose["provision"].is_null());
     }
 
     #[test]
@@ -3157,9 +3329,11 @@ mod tests {
             .collect();
         assert!(granted.contains(&"file_ops.read"));
         assert!(granted.contains(&"search.query"));
-        assert!(!granted
-            .iter()
-            .any(|t| *t == "file_ops.write" || *t == "desktop.act"));
+        assert!(
+            !granted
+                .iter()
+                .any(|t| *t == "file_ops.write" || *t == "desktop.act")
+        );
         assert_eq!(out["planes"], 5);
         assert_eq!(out["harness"], "claude-code");
         assert_eq!(out["binding"]["model"], "m");
@@ -3338,9 +3512,10 @@ mod tests {
         let evs = events.lock().unwrap_or_else(|x| x.into_inner());
         assert!(matches!(evs[0], ChatWireEvent::Batch { ref text, .. } if text == "hi"));
         assert!(matches!(evs[1], ChatWireEvent::Done { ref turn_id, .. } if turn_id == "s1:1"));
-        assert!(!evs
-            .iter()
-            .any(|e| matches!(e, ChatWireEvent::BudgetExceeded { .. })));
+        assert!(
+            !evs.iter()
+                .any(|e| matches!(e, ChatWireEvent::BudgetExceeded { .. }))
+        );
         drop(evs);
         side.join().unwrap();
     }
@@ -3713,11 +3888,12 @@ mod tests {
         // P64.8 — distillation really reached the (temp) store.
         assert!(grown.get("error").is_none(), "skill/grow: {grown}");
         assert_eq!(grown["result"]["ok"], serde_json::json!(true));
-        assert!(dir
-            .join("skills")
-            .join("frame-dispatch-probe")
-            .join("SKILL.md")
-            .exists());
+        assert!(
+            dir.join("skills")
+                .join("frame-dispatch-probe")
+                .join("SKILL.md")
+                .exists()
+        );
 
         // P64.4 — an admission reported as running, never a fabricated done.
         assert!(spawned.get("error").is_none(), "subagent/spawn: {spawned}");
@@ -4019,8 +4195,14 @@ mod tests {
         relay.spawn();
 
         let response = side.join().unwrap();
-        assert!(response.get("error").is_none(), "work/agent_spawn: {response}");
-        assert_eq!(response["result"]["workId"], serde_json::json!("relay-work"));
+        assert!(
+            response.get("error").is_none(),
+            "work/agent_spawn: {response}"
+        );
+        assert_eq!(
+            response["result"]["workId"],
+            serde_json::json!("relay-work")
+        );
         assert!(response["result"]["sequence"].as_u64().is_some());
 
         let _ = std::fs::remove_dir_all(dir);

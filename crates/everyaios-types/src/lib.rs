@@ -17,6 +17,9 @@
 
 use serde::{Deserialize, Serialize};
 
+pub mod plane;
+pub mod workbench;
+
 // ────────────────────────────────────────────────────────────────────────
 // ID newtypes — opaque, serializable, displayable, comparable.
 // Use these on any cross-crate wire boundary so a `WorkId` can never be
@@ -63,6 +66,13 @@ macro_rules! id_newtype {
 id_newtype!(
     /// The durable unit of work (the product name for the `Execution` hub).
     WorkId
+);
+id_newtype!(
+    /// P71.10 (ADR-0008) — a Work/Run-owned resource lease. Opaque and
+    /// non-secret: safe to correlate in a projection or audit row. The
+    /// capability/bearer proving possession stays in the Rust-private owner
+    /// and never appears beside this id on any wire boundary.
+    LeaseId
 );
 id_newtype!(
     /// A workspace / project root identity.
@@ -353,7 +363,10 @@ impl WorkState {
         match self {
             Created => matches!(next, Planning | Ready | Cancelled),
             Planning => matches!(next, Ready | Failed | Cancelled),
-            Ready => matches!(next, Running | WaitingTool | WaitingApproval | WaitingUser | Cancelled),
+            Ready => matches!(
+                next,
+                Running | WaitingTool | WaitingApproval | WaitingUser | Cancelled
+            ),
             Running => matches!(
                 next,
                 WaitingTool
@@ -369,7 +382,14 @@ impl WorkState {
             ),
             WaitingTool | WaitingApproval | WaitingUser => matches!(
                 next,
-                Running | Failed | Cancelled | Paused | Recoverable | WaitingTool | WaitingApproval | WaitingUser
+                Running
+                    | Failed
+                    | Cancelled
+                    | Paused
+                    | Recoverable
+                    | WaitingTool
+                    | WaitingApproval
+                    | WaitingUser
             ),
             Checkpointed => matches!(next, Running | Failed | Cancelled | Paused | Recoverable),
             Verifying => matches!(next, Completed | Failed | Cancelled | Recoverable),
