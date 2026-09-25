@@ -15,7 +15,7 @@ never contains them by design, and neither should your report.
 
 We aim to acknowledge within 3 working days. This is a v1-stage project: there
 is no bug-bounty programme, and no version is under long-term support yet
-(`docs/release/patch-policy.md`).
+(`docs/release/rollout-and-hotfix.md` §G3).
 
 ## The model (summary — the authority is `ARCH/CORE.md`)
 
