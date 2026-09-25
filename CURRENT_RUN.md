@@ -1,6 +1,19 @@
 # CURRENT RUN STATE — Task Handover & Checkpoint
 
-## Local-Runtime Handoff Plane Handover — 2026-09-25 (in progress)
+## Local-Runtime Handoff Plane Handover — 2026-09-25 (in progress, updated after CI triage)
+
+### CI triage since the last update
+- `7f6e775` (runtime retirement) CI was red. Root causes found and fixed: (a) **fix-13's Tauri code did not compile** — it reported success without running any validation; 6 errors (E0505 borrow/move in `runtime_cmds.rs`, plus E0308/E0596) and a warning that CI's `-D warnings` would make fatal. fix-13 was revived with an explicit instruction to run `cargo check`, `cargo test --lib`, `ipc-parity`, and package-scoped `cargo fmt` itself and report real counts; managed-Ollama start stays an honest documented refusal (no fake ownership). (b) `everyaios-guard` had 9 `collapsible_if` clippy errors unrelated to this work — swept into `79d1183` by the tree-wide rustfmt from the pre-existing dirty tree. Fixed directly in `permissions.rs`/`egress.rs`/`prescan.rs`; `cargo clippy -p everyaios-guard` clean, 198 tests pass, committed `7ead9ad`. (c) 3 pre-existing UI type errors (agent-model-picker `AuthMethod`, settings-sections-studio `domains?`, progress-view `failed` status) fixed directly, committed `82a443f`. (d) `CODEBASE-MAP.md` regenerated after ARCH/16, committed `66b681f`.
+- Local verification at commit `7f6e775`: `cargo check --workspace --all-features` PASS and `cargo fmt --all --check` PASS in a detached worktree — the crates tree itself was sound; the red was the Tauri lane plus the two unrelated issues above.
+
+### Still in flight
+- fix-13 `ses_f271bc85cffeZJ0izuJQYVmg32` — Tauri: `runtime_cmds.rs` (inventory/models/start/stop), `ManagedServeRegistry` in `AppState` (fixes the RAII child-kill defect at `model_cmds.rs:502`), `acp_config_options`/`acp_set_session_config_option` returning `requested`/refusing unadvertised ids, discovery honesty (`capabilities_verified: false`, `lifecycle: observed`).
+- des-4 `ses_f272b24c3ffebueLa6tv7K7a2p` — UI: `model-routing.ts` deletion, `localRuntime` state removal, Runtimes/Library/Explore/Hardware panel, agent-handoff card, new `local-models-panel.dom.test.tsx` (file already present in the worktree). One known open item I sent it: `ui/src/lib/local-models.ts:378` null-vs-undefined type error.
+
+### Untracked files that predate this work and must NOT be committed blind
+`.playwright-mcp/`, `scripts/windows-acceptance.mjs`, `src-tauri/src/channel_b.rs`, `ui/src/lib/{agent-card,display-number,acp-auth-label}*`, `ui/src/lib/settings-acceptance*`. Decide each explicitly (wire or exclude) in the integration pass.
+
+## Local-Runtime Handoff Plane Handover — 2026-09-25 (earlier checkpoint)
 
 ### Active Goal
 - Conform local-model handling to ADR-0005: **EveryAIOS owns the environment; the external agent owns the engine.** EveryAIOS may observe/connect to local inference runtimes and provision+start one as a Managed resource; it is never the inference engine, never a model router, never a second AgentBinding, and never shows a model list as if it were the agent's. macOS/MLX deferred (v1 = Windows + WSL2).
