@@ -784,8 +784,8 @@ complete function accounting for the file. `refs` is the cross-file `stem::` ref
 | `crates/everyaios-storage/` | 19 | 4,339 | 219 | 57 |
 | `crates/everyaios-types/` | 3 | 3,672 | 137 | 26 |
 | `crates/everyaios-vault/` | 15 | 10,749 | 411 | 148 |
-| `src-tauri/` | 53 | 24,047 | 850 | 101 |
-| **TOTAL** | **516** | **232,055** | **9895** | **2983** |
+| `src-tauri/` | 53 | 24,355 | 859 | 106 |
+| **TOTAL** | **516** | **232,363** | **9904** | **2988** |
 
 ### 9.1 `crates/everyaios-acp/`
 
@@ -4009,12 +4009,12 @@ complete function accounting for the file. `refs` is the cross-file `stem::` ref
 #### `src-tauri/build.rs` — 4 lines · 0 tests · refs 0
 - `fns` (1): main:1
 
-#### `src-tauri/src/acp_cmds.rs` — 4,100 lines · 21 tests · refs 44
+#### `src-tauri/src/acp_cmds.rs` — 4,404 lines · 26 tests · refs 46
 
 > F12 / J17 — the **ACP harness bridge** commands (doc 45 §1, doc 57 §2).
 
-**`enum`** (1): `AcpIdentityError`:317 · **`fn`** (43): `chief_default_get`:56, `chief_default_set`:76, `agent_readiness`:135, `agent_readiness_with_live`:169, `agents_doctor_check`:194, `agent_installed`:252, `launch_registry`:274, `application_session_id`:498, `work_id`:502, `binding_id`:506, `acp_agents`:585, `acp_registry_refresh`:618, `acp_registry_status`:632, `acp_registry_install_plan`:647, `spawn_registry_refresh_job`:685, `resolve_wsl_spawn`:842, `runtime_location_json`:853, `runtime_location_for`:937, `acp_install_status`:953, `acp_install_request`:1028, `acp_install_await`:1160, `acp_install_commit`:1187, `acp_install`:1235, `acp_agent_import`:1246, `acp_agent_verify`:1299, `acp_launch`:1452, `acp_authenticate`:1613, `chief_subagents`:1832, `chief_subagent_set_note`:1862, `chief_subagent_set_enabled`:1883, `chief_subagent_set_policy`:1905, `chief_subagent_mix`:1990, `acp_session_commands`:2002, `acp_config_options`:2182, `acp_set_session_config_option`:2201, `acp_session_config_options`:2255, `acp_session_set_config_option`:2269, `acp_tool_log`:2310, `acp_prompt`:2763, `acp_cancel`:3327, `cancel_acp_for_session`:3378, `acp_shutdown`:3408, `acp_sessions`:3431 · **`struct`** (5): `ShellAgentReadiness`:186, `AcpCanonicalOwner`:307, `AcpSessionSlot`:423, `AcpHandle`:456, `AcpHandleInfo`:514
-- `fns` (107): chief_default_get:56, chief_default_set:76, install_outcome_usable:98, resolve_native_binary:116, live_facts:123, agent_readiness:135, agent_readiness_with_live:169, agents_doctor_check:194, readiness:237, agent_installed:252, launch_registry:274, fmt:355, new:429, lock:437, cancellation_handle:441, clone:447, application_session_id:498, work_id:502, binding_id:506, from:545, acp_agents:585, acp_registry_refresh:618, acp_registry_status:632, acp_registry_install_plan:647, registry_client:661, spawn_registry_refresh_job:685, now_ms:703, installer:712, resolve_spec:718, resolve_on_path:747, discover_windows_app_path:770, discover_windows_app_path:803, discover_wsl_path:811, discover_wsl_path:836, resolve_wsl_spawn:842, runtime_location_json:853, runtime_location_for:937, acp_install_status:953, acp_install_request:1028, acp_install_await:1160, acp_install_commit:1187, acp_install:1235, acp_agent_import:1246, acp_agent_verify:1299, channel_b_servers:1426, acp_launch:1452, acp_authenticate:1613, build_acp_prompt_with_passport:1670, append_acp_tool_log:1754, chief_subagents:1832, chief_subagent_set_note:1862, chief_subagent_set_enabled:1883, chief_subagent_set_policy:1905, chief_subagent_mix:1990, acp_session_commands:2002, runtime_control_wire:2016, resolve_acp_config_target:2033, live_config_options:2102, config_options_projection:2107, native_only_config_request_projection:2126, config_option_request_projection:2144, acp_config_options:2182, acp_set_session_config_option:2201, acp_session_config_options:2255, acp_session_set_config_option:2269, acp_tool_log:2310, canonical_work_id:2345, canonical_binding_id:2349, relay_planes:2358, prepare_acp_turn:2381, transition_acp_run:2698, record_acp_binding_usage:2732, acp_prompt:2763, validate_cancel_owner:3234, request_acp_cancellation:3279, cancel_acp_targets_for_session:3297, acp_cancel:3327, cancel_acp_for_session:3378, acp_shutdown:3408, acp_sessions:3431, read_workspace_resource:3442, is_brokered_op:3478, map_tool_call:3488, hash_tool_args:3503, install_args_hash:3516, url_host:3526, agent_without_advertised_config_options_is_native_only_and_unchanged:3535, missing_application_or_provider_identity_fails_closed:3559, canonical_owner_keeps_provider_ids_separate_for_shared_agent:3588, existing_active_run_is_resolved_instead_of_replaced:3636, binding_and_run_replay_from_the_work_journal:3690, owner_validation_rejects_a_handle_from_another_session:3746, session_scoped_cancellation_leaves_other_session_handles_alone:3772, delete_tool_maps_to_high_risk_delete:3812, read_tool_maps_to_low_risk_write:3825, file_and_terminal_ops_are_brokered:3839, args_hash_is_stable_for_same_input:3848, install_args_hash_is_deterministic_and_scoped:3859, url_host_extracts_authority:3875, registry_has_no_builtin_and_lists_launch_agents:3884, resolve_on_path_finds_real_binaries_and_misses_absences:3893, stale_managed_install_is_not_occupancy:3908, package_manager_install_requires_manager_readiness:3934, path_discovery_reports_installed_with_kind_path:3949, live_acp_registry_refresh_drives_the_shell_launch_registry:3990, test_user_path_import_and_verification:4056, test_wsl_spawn_resolution:4093
+**`enum`** (2): `AcpIdentityError`:317, `AcpSessionLoadRefusal`:2324 · **`fn`** (44): `chief_default_get`:56, `chief_default_set`:76, `agent_readiness`:135, `agent_readiness_with_live`:169, `agents_doctor_check`:194, `agent_installed`:252, `launch_registry`:274, `application_session_id`:498, `work_id`:502, `binding_id`:506, `acp_agents`:585, `acp_registry_refresh`:618, `acp_registry_status`:632, `acp_registry_install_plan`:647, `spawn_registry_refresh_job`:685, `resolve_wsl_spawn`:842, `runtime_location_json`:853, `runtime_location_for`:937, `acp_install_status`:953, `acp_install_request`:1028, `acp_install_await`:1160, `acp_install_commit`:1187, `acp_install`:1235, `acp_agent_import`:1246, `acp_agent_verify`:1299, `acp_launch`:1452, `acp_authenticate`:1613, `chief_subagents`:1832, `chief_subagent_set_note`:1862, `chief_subagent_set_enabled`:1883, `chief_subagent_set_policy`:1905, `chief_subagent_mix`:1990, `acp_session_commands`:2002, `acp_config_options`:2182, `acp_set_session_config_option`:2201, `acp_session_config_options`:2255, `acp_session_set_config_option`:2269, `acp_session_load`:2442, `acp_tool_log`:2509, `acp_prompt`:2962, `acp_cancel`:3526, `cancel_acp_for_session`:3577, `acp_shutdown`:3607, `acp_sessions`:3630 · **`struct`** (5): `ShellAgentReadiness`:186, `AcpCanonicalOwner`:307, `AcpSessionSlot`:423, `AcpHandle`:456, `AcpHandleInfo`:514
+- `fns` (116): chief_default_get:56, chief_default_set:76, install_outcome_usable:98, resolve_native_binary:116, live_facts:123, agent_readiness:135, agent_readiness_with_live:169, agents_doctor_check:194, readiness:237, agent_installed:252, launch_registry:274, fmt:355, new:429, lock:437, cancellation_handle:441, clone:447, application_session_id:498, work_id:502, binding_id:506, from:545, acp_agents:585, acp_registry_refresh:618, acp_registry_status:632, acp_registry_install_plan:647, registry_client:661, spawn_registry_refresh_job:685, now_ms:703, installer:712, resolve_spec:718, resolve_on_path:747, discover_windows_app_path:770, discover_windows_app_path:803, discover_wsl_path:811, discover_wsl_path:836, resolve_wsl_spawn:842, runtime_location_json:853, runtime_location_for:937, acp_install_status:953, acp_install_request:1028, acp_install_await:1160, acp_install_commit:1187, acp_install:1235, acp_agent_import:1246, acp_agent_verify:1299, channel_b_servers:1426, acp_launch:1452, acp_authenticate:1613, build_acp_prompt_with_passport:1670, append_acp_tool_log:1754, chief_subagents:1832, chief_subagent_set_note:1862, chief_subagent_set_enabled:1883, chief_subagent_set_policy:1905, chief_subagent_mix:1990, acp_session_commands:2002, runtime_control_wire:2016, resolve_acp_config_target:2033, live_config_options:2102, config_options_projection:2107, native_only_config_request_projection:2126, config_option_request_projection:2144, acp_config_options:2182, acp_set_session_config_option:2201, acp_session_config_options:2255, acp_session_set_config_option:2269, decide:2342, fmt:2364, recorded_binding_provider_session_id:2400, acp_session_load:2442, acp_tool_log:2509, canonical_work_id:2544, canonical_binding_id:2548, relay_planes:2557, prepare_acp_turn:2580, transition_acp_run:2897, record_acp_binding_usage:2931, acp_prompt:2962, validate_cancel_owner:3433, request_acp_cancellation:3478, cancel_acp_targets_for_session:3496, acp_cancel:3526, cancel_acp_for_session:3577, acp_shutdown:3607, acp_sessions:3630, read_workspace_resource:3641, is_brokered_op:3677, map_tool_call:3687, hash_tool_args:3702, install_args_hash:3715, url_host:3725, session_load_refuses_an_agent_that_did_not_negotiate_load_session:3736, session_load_refuses_rather_than_inventing_a_provider_session_id:3752, session_load_refusal_names_the_adr_0007_v1_policy:3766, every_session_load_refusal_is_plain_language:3781, recorded_provider_session_id_comes_from_the_canonical_binding:3801, agent_without_advertised_config_options_is_native_only_and_unchanged:3839, missing_application_or_provider_identity_fails_closed:3863, canonical_owner_keeps_provider_ids_separate_for_shared_agent:3892, existing_active_run_is_resolved_instead_of_replaced:3940, binding_and_run_replay_from_the_work_journal:3994, owner_validation_rejects_a_handle_from_another_session:4050, session_scoped_cancellation_leaves_other_session_handles_alone:4076, delete_tool_maps_to_high_risk_delete:4116, read_tool_maps_to_low_risk_write:4129, file_and_terminal_ops_are_brokered:4143, args_hash_is_stable_for_same_input:4152, install_args_hash_is_deterministic_and_scoped:4163, url_host_extracts_authority:4179, registry_has_no_builtin_and_lists_launch_agents:4188, resolve_on_path_finds_real_binaries_and_misses_absences:4197, stale_managed_install_is_not_occupancy:4212, package_manager_install_requires_manager_readiness:4238, path_discovery_reports_installed_with_kind_path:4253, live_acp_registry_refresh_drives_the_shell_launch_registry:4294, test_user_path_import_and_verification:4360, test_wsl_spawn_resolution:4397
 
 #### `src-tauri/src/agent_backend_cmds.rs` — 703 lines · 5 tests · refs 8
 
@@ -4079,7 +4079,7 @@ complete function accounting for the file. `refs` is the cross-file `stem::` ref
 **`fn`** (4): `repomap_build`:19, `file_outline`:45, `model_aliases_resolve`:75, `ai_markers_scan`:94 · **`struct`** (1): `OutlineEntry`:35
 - `fns` (5): repomap_build:19, file_outline:45, model_aliases_resolve:75, ai_markers_scan:94, _ext_counts:129
 
-#### `src-tauri/src/commands.rs` — 480 lines · 0 tests · refs 1
+#### `src-tauri/src/commands.rs` — 484 lines · 0 tests · refs 1
 
 > Tauri command surface (Fix 1d). The single list of every `#[tauri::command]` registered on the shell's IPC handler. `lib.rs` now only calls `commands::handler()` here instead of owning a 180-line inline list. Each fam...
 
@@ -4363,7 +4363,7 @@ complete function accounting for the file. `refs` is the cross-file `stem::` ref
 
 ## 10. TypeScript / TSX — per-area, per-file LLD
 
-**Every tracked `.ts`/`.tsx` file is enumerated below** (629 of them). `exports:` lists every exported
+**Every tracked `.ts`/`.tsx` file is enumerated below** (645 of them). `exports:` lists every exported
 declaration and re-export. `fns:` lists **every named function** — declarations, class and object-literal
 methods, constructors, get/set accessors, and function/arrow expressions bound to a name — as `name:line`,
 parsed with the TypeScript compiler. `anon:` counts the
@@ -4386,7 +4386,7 @@ population. `wiring:` is the §11 verdict.
 | `packages/core-security` | 5 | 556 | 24 | 28 | 10 | 23 | 0 |
 | `packages/core-tools` | 6 | 349 | 9 | 6 | 21 | 3 | 0 |
 | `ui` | 1 | 198 | 7 | 0 | 0 | 0 | 0 |
-| `ui/src` | 286 | 70,122 | 2053 | 3928 | 1277 | 540 | 169 |
+| `ui/src` | 302 | 76,172 | 2199 | 4271 | 1358 | 670 | 172 |
 
 ### 10.1 `ARCH/archive`
 
@@ -5809,15 +5809,20 @@ population. `wiring:` is the §11 verdict.
 - `fns` (1): respondMcq:129
 - `anon` (14): function/arrow expressions with no binding name
 
-#### `ui/src/components/chat/chat-composer.tsx` — 944 lines · 0 tests · REACHABLE · imported by 2
+#### `ui/src/components/chat/chat-composer.tsx` — 980 lines · 0 tests · REACHABLE · imported by 2
 - `exports` (6): re-export splitAtRefs, type SendGateCode, interface SendGate, interface SendGateInput, function composerSendState, function ChatComposer
-- `fns` (15): composerSendState:119, HintPopover:165, HintRow:178, WorkModeChip:200, AutonomyChip:223, SimpleAutonomyDial:263, IconBtn:300, StatusRow:341, ChatComposer:410, onWebStatus:485, pickFile:554, onFileChosen:556, withDirective:594, send:600, openSearchSettings:703
-- `anon` (65): function/arrow expressions with no binding name
+- `fns` (14): composerSendState:119, HintPopover:165, HintRow:178, WorkModeChip:200, AutonomyChip:223, SimpleAutonomyDial:263, IconBtn:300, StatusRow:341, ChatComposer:418, pickFile:571, onFileChosen:573, withDirective:611, send:617, openSearchSettings:720
+- `anon` (69): function/arrow expressions with no binding name
 
 #### `ui/src/components/chat/chat-panel.tsx` — 1,229 lines · 0 tests · REACHABLE · imported by 1
 - `exports` (1): function ChatPanel
 - `fns` (16): StatusBadge:122, deriveNowDoing:137, transcriptMarkdown:159, ChatPanel:163, cancelLiveStream:181, onTogglePause:193, onStopAll:203, onMenuAction:218, onKey:315, handleViewportScroll:350, stepMatch:389, AgentSendBlockerBanner:880, NoAgentCard:922, EmptyState:1001, InlineWorkStream:1150, shortWorkId:1226
 - `anon` (88): function/arrow expressions with no binding name
+
+#### `ui/src/components/chat/composer-telemetry.tsx` — 218 lines · 0 tests · REACHABLE · imported by 1
+- `exports` (7): type TelemetryTone, interface TelemetryReadout, const NOT_REPORTED, function tokenReadout, function costTelemetry, function contextTelemetry, function ComposerTelemetry
+- `fns` (6): tokenReadout:49, costTelemetry:76, contextTelemetry:114, compact:124, Slot:130, ComposerTelemetry:168
+- `anon` (6): function/arrow expressions with no binding name
 
 #### `ui/src/components/chat/mcq-interrupt-card.tsx` — 399 lines · 0 tests · REACHABLE · imported by 1
 - `exports` (3): interface ConsentSummary, function consentSummary, function McqInterruptCard
@@ -5863,6 +5868,11 @@ population. `wiring:` is the §11 verdict.
 - `exports` (1): function TurnCheckpoint
 - `fns` (3): TurnCheckpoint:57, onKey:132, doRestore:151
 - `anon` (23): function/arrow expressions with no binding name
+
+#### `ui/src/components/chat/web-search-control.tsx` — 343 lines · 0 tests · REACHABLE · imported by 1
+- `exports` (1): function WebSearchControl
+- `fns` (3): WebSearchControl:56, onKey:144, SearchStateLine:319
+- `anon` (19): function/arrow expressions with no binding name
 
 #### `ui/src/components/nps-prompt.tsx` — 77 lines · 0 tests · REACHABLE · imported by 1
 - `exports` (1): function NpsPrompt
@@ -6068,10 +6078,10 @@ population. `wiring:` is the §11 verdict.
 - `fns` (13): readyAgent:28, resetState:40, shellHandlers:64, acp_install_status:66, chief_default_set:67, setInputValue:72, value:83, addEventListener:87, removeEventListener:88, dispatchEvent:89, vault_setup:170, DrawerHarness:245, TabsHarness:273
 - `anon` (35): function/arrow expressions with no binding name
 
-#### `ui/src/components/shell/right-rail.tsx` — 1,096 lines · 0 tests · REACHABLE · imported by 1
+#### `ui/src/components/shell/right-rail.tsx` — 1,107 lines · 0 tests · REACHABLE · imported by 1
 - `exports` (6): const NARROW_RIGHT_TABS, type NarrowRightTab, function narrowTabForView, function NarrowRightTabBar, function ActivityRail, function RightViewport
-- `fns` (28): narrowTabForView:117, NarrowRightTabBar:123, onKeyDown:133, ViewportContent:239, renderView:253, ActivityRail:287, handleClick:309, RightViewport:533, newUntitledFile:588, exportWorkLog:615, action:647, action:654, action:664, action:669, action:676, action:688, action:692, action:700, action:704, action:713, action:723, action:730, action:737, action:747, action:754, chooseNarrowTab:760, onMove:782, onUp:789
-- `anon` (80): function/arrow expressions with no binding name
+- `fns` (29): narrowTabForView:122, NarrowRightTabBar:128, onKeyDown:138, ViewportContent:245, renderView:259, ActivityRail:294, handleClick:316, RightViewport:540, newUntitledFile:595, exportWorkLog:622, action:654, action:661, action:671, action:676, action:683, action:695, action:699, action:708, action:711, action:715, action:724, action:734, action:741, action:748, action:758, action:765, chooseNarrowTab:771, onMove:793, onUp:800
+- `anon` (81): function/arrow expressions with no binding name
 
 #### `ui/src/components/shell/runtime-status-banner.tsx` — 68 lines · 0 tests · REACHABLE · imported by 1
 - `exports` (1): function RuntimeStatusBanner
@@ -6444,6 +6454,58 @@ population. `wiring:` is the §11 verdict.
 - `fns` (10): fmtTime:52, iconFor:63, summarizeWorkEvent:82, buildEvents:88, AgentCardBoard:138, CuaDagBoard:169, load:175, edit:192, WalkthroughBoard:261, ProgressView:285
 - `anon` (27): function/arrow expressions with no binding name
 
+#### `ui/src/components/views/run-artifacts.tsx` — 282 lines · 0 tests · UNREACHED · imported by 1
+- `exports` (3): interface ProducedFile, function collectProducedFiles, function RunArtifacts
+- `fns` (5): collectProducedFiles:55, push:62, probeKey:98, RunArtifacts:103, open:173
+- `anon` (14): function/arrow expressions with no binding name
+
+#### `ui/src/components/views/run-header.tsx` — 198 lines · 0 tests · UNREACHED · imported by 1
+- `exports` (1): function RunHeader
+- `fns` (3): RunHeader:30, copyPath:59, shortId:195
+- `anon` (16): function/arrow expressions with no binding name
+
+#### `ui/src/components/views/run-inventory.tsx` — 237 lines · 0 tests · UNREACHED · imported by 1
+- `exports` (2): function RunFolderFiles, function RunMcpServers
+- `fns` (2): RunFolderFiles:33, RunMcpServers:137
+- `anon` (13): function/arrow expressions with no binding name
+
+#### `ui/src/components/views/run-outcome.tsx` — 183 lines · 0 tests · UNREACHED · imported by 1
+- `exports` (1): function RunOutcomeStrip
+- `fns` (1): RunOutcomeStrip:27
+- `anon` (7): function/arrow expressions with no binding name
+
+#### `ui/src/components/views/run-projection.test.tsx` — 718 lines · 55 tests · TEST · imported by 0
+- `fns` (3): envelope:32, cardFrom:50, step:557
+- `anon` (70): function/arrow expressions with no binding name
+
+#### `ui/src/components/views/run-projection.tsx` — 904 lines · 0 tests · TEST-ONLY · imported by 8
+- `exports` (35): function formatTokens, function formatBytes, function formatDuration, function formatClock, type RunStepStatus, const RUN_STATUS_LABEL, interface RunStep, type RunStepLink, function runStepLink, type RunFilter, const RUN_FILTERS, function runFilterOf, function runSearchText, function filterRunSteps, function effectOutcomeStatus, function isUnfinishedOperation, function runStepStatus, interface RunDuration, function resolveRunDurations, function runStepDuration, function buildRunTrace, function countRunSteps, function chatStateLabel, function chatStateTone, function contextOccupancy, function runCardStateLabel, interface RunOutcome, function runOutcome, type ArtifactKind, function artifactKind, function artifactKindLabel, function ArtifactKindIcon, function resolveRunPath, function splitRunPath, function shortenPath
+- `fns` (30): formatTokens:34, formatBytes:42, formatDuration:56, formatClock:69, runStepLink:136, runFilterOf:173, runSearchText:193, filterRunSteps:209, effectOutcomeStatus:252, bodyOf:262, isUnfinishedOperation:276, isOpen:297, runStepStatus:395, timingAnchor:441, timingStart:464, resolveRunDurations:495, runStepDuration:521, buildRunTrace:533, countRunSteps:576, chatStateLabel:593, chatStateTone:623, contextOccupancy:650, runCardStateLabel:682, runOutcome:705, artifactKind:829, artifactKindLabel:861, ArtifactKindIcon:866, resolveRunPath:880, splitRunPath:890, shortenPath:899
+- `anon` (13): function/arrow expressions with no binding name
+
+#### `ui/src/components/views/run-section.tsx` — 111 lines · 0 tests · UNREACHED · imported by 3
+- `exports` (2): function RunSection, function RunFact
+- `fns` (2): RunSection:15, RunFact:91
+
+#### `ui/src/components/views/run-trace.tsx` — 472 lines · 0 tests · UNREACHED · imported by 1
+- `exports` (1): function RunTrace
+- `fns` (6): ToneIcon:63, statusFace:91, RunTrace:131, onListKeyDown:152, plural:173, TraceRow:333
+- `anon` (11): function/arrow expressions with no binding name
+
+#### `ui/src/components/views/run-usage.tsx` — 231 lines · 0 tests · TEST-ONLY · imported by 2
+- `exports` (3): interface RunUsage, function projectRunUsage, function RunUsageSection
+- `fns` (2): projectRunUsage:59, RunUsageSection:99
+- `anon` (4): function/arrow expressions with no binding name
+
+#### `ui/src/components/views/run-view.dom.test.tsx` — 792 lines · 40 tests · TEST · imported by 0
+- `fns` (39): envelope:57, setState:72, chat:77, usage_snapshot:125, usage_snapshot:151, usage_snapshot:163, usage_snapshot:178, usage_snapshot:208, usage_snapshot:220, usage_snapshot:231, usage_snapshot:243, usage_snapshot:265, usage_snapshot:293, usage_snapshot:311, withArtifact:321, usage_snapshot:337, fs_list_dir:338, usage_snapshot:389, fs_list_dir:391, usage_snapshot:411, fs_list_dir:412, usage_snapshot:434, usage_snapshot:462, usage_snapshot:471, fs_list_dir:472, usage_snapshot:497, mcp_servers:498, usage_snapshot:517, usage_snapshot:528, usage_snapshot:556, usage_snapshot:570, usage_snapshot:591, usage_snapshot:651, usage_snapshot:671, usage_snapshot:687, usage_snapshot:704, usage_snapshot:727, usage_snapshot:738, usage_snapshot:772
+- `anon` (66): function/arrow expressions with no binding name
+
+#### `ui/src/components/views/run-view.tsx` — 245 lines · 0 tests · NOT IMPORTED · imported by 0
+- `exports` (1): function RunView
+- `fns` (6): RunView:53, isOpen:88, toggle:89, setAll:93, DrillButton:215, traceMeta:236
+- `anon` (27): function/arrow expressions with no binding name
+
 #### `ui/src/components/views/shell-view.tsx` — 1,098 lines · 0 tests · REACHABLE · imported by 2
 - `exports` (1): function ShellView
 - `fns` (11): ShellView:104, provideLinks:202, activate:225, disposer:267, scanLine:298, closeTab:536, unsplit:603, onKey:626, loadHistory:640, focusTab:656, focusPane:669
@@ -6480,7 +6542,7 @@ population. `wiring:` is the §11 verdict.
 - `fns` (10): genId:30, addToRemoveQueue:61, reducer:77, dispatch:136, toast:145, update:148, dismiss:153, onOpenChange:161, useToast:174, dismiss:190
 - `anon` (8): function/arrow expressions with no binding name
 
-#### `ui/src/lib/acp.ts` — 833 lines · 0 tests · REACHABLE · imported by 15
+#### `ui/src/lib/acp.ts` — 833 lines · 0 tests · REACHABLE · imported by 17
 - `exports` (68): type AuthMode, type HarnessProtocol, interface AuthMethod, function authMethodLabel, interface HarnessManifest, type GovernanceClass, interface GovernanceInfo, function governanceLabel, interface AcpConfigOptionValue, interface AcpConfigOption, interface AcpHandleInfo, interface AcpHandleRecord, function acpHandleKey, type AcpHandleIdentity, function parseAcpHandleKey, function acpHandleRecordFromLaunch, function findAcpHandleRecord, interface AvailableCommand, interface AcpPromptUpdate, interface AcpPromptResult, type RuntimeLocation, interface InstallState, interface InstallRequest, interface AuthenticateResult, function acpIdFor, function isRetiredBinding, function currentBinding, interface AgentDirectoryEntry, type AgentReadiness, function isAgentInstalled, function isAgentReady, function readinessLabel, function canAgentDelegate, interface AgentDirectorySnapshot, function agentDirectoryList, function acpAgents, function acpInstallStatus, function acpInstallRequest, function acpInstallCommit, function acpInstallAwait, function acpLaunch, function acpAuthenticate, function acpPrompt, function acpSessionCommands, function acpSessionConfigOptions, function acpSessionSetConfigOption, interface AcpToolLogEntry, function acpToolLog, interface SubagentRow, function chiefSubagents, function chiefSubagentSetNote, function chiefSubagentSetEnabled, function chiefSubagentMix, function acpRegistryRefresh, function acpCancel, function acpCancel, function acpCancel, function acpShutdown, function acpSessions, function chiefDefaultGet, interface SubagentProfile, function chiefSubagentSetPolicy, function chiefDefaultSet, type AgentLifecycleState, interface AgentVerificationResult, function acpAgentImport, function acpAgentVerify, function getAgentLifecycleState
 - `fns` (43): authMethodLabel:43, governanceLabel:74, acpHandleKey:151, parseAcpHandleKey:168, acpHandleRecordFromLaunch:183, findAcpHandleRecord:206, acpIdFor:349, isRetiredBinding:362, currentBinding:367, isAgentInstalled:417, isAgentReady:430, readinessLabel:442, canAgentDelegate:471, agentDirectoryList:487, acpAgents:491, acpInstallStatus:496, acpInstallRequest:502, acpInstallCommit:508, acpInstallAwait:518, acpLaunch:529, acpAuthenticate:539, acpPrompt:547, acpSessionCommands:576, acpSessionConfigOptions:581, acpSessionSetConfigOption:588, acpToolLog:615, chiefSubagents:631, chiefSubagentSetNote:637, chiefSubagentSetEnabled:642, chiefSubagentMix:647, acpRegistryRefresh:653, cancelOwnedAcpTurn:661, acpCancel:683, acpCancel:684, acpCancel:685, acpShutdown:697, acpSessions:702, chiefDefaultGet:707, chiefSubagentSetPolicy:746, chiefDefaultSet:770, acpAgentImport:786, acpAgentVerify:802, getAgentLifecycleState:813
 - `anon` (28): function/arrow expressions with no binding name
@@ -6508,7 +6570,7 @@ population. `wiring:` is the §11 verdict.
 - `fns` (8): agentRegistryList:26, agentRegistrySave:32, agentRegistryGet:43, agentRegistryRemove:49, agentRegistryDuplicate:55, agentRegistrySetDisabled:64, demoLoad:83, demoList:92
 - `anon` (6): function/arrow expressions with no binding name
 
-#### `ui/src/lib/agents.ts` — 623 lines · 0 tests · REACHABLE · imported by 23
+#### `ui/src/lib/agents.ts` — 623 lines · 0 tests · REACHABLE · imported by 24
 - `exports` (24): type AgentCapability, type AgentInstallStatus, interface AgentModel, type ModelProvider, interface AgentRuntime, const MODELS, const MODEL_MAP, function getModel, function formatContext, function formatPrice, const AGENTS, const AGENT_MAP, function getAgent, function getModelsForAgent, function isRuntimeUsable, function readinessToInstallStatus, function getModelsForAgentLive, function getDefaultModelForAgent, type TaskKind, const TASK_LABELS, const DEFAULT_ROUTING, const ROUTING_BOUND_AGENT, const CAPABILITY_LABELS, const PROVIDER_LABELS
 - `fns` (9): getModel:337, formatContext:341, formatPrice:346, getAgent:481, getModelsForAgent:485, isRuntimeUsable:506, readinessToInstallStatus:519, getModelsForAgentLive:550, getDefaultModelForAgent:554
 - `anon` (3): function/arrow expressions with no binding name
@@ -6695,7 +6757,7 @@ population. `wiring:` is the §11 verdict.
 - `exports` (11): const DAY_MS, const FIRST_TASK_NUDGE_AFTER_MS, const FIRST_SEEN_KEY, const NUDGE_SHOWN_KEY, interface FirstTask, const FIRST_TASKS, interface FirstRunStorage, const localStorageFirstRunStorage, function markFirstSeen, function shouldNudgeFirstTask, function resetFirstRun
 - `fns` (6): get:87, set:94, readStamp:104, markFirstSeen:116, shouldNudgeFirstTask:133, resetFirstRun:147
 
-#### `ui/src/lib/fs.ts` — 136 lines · 0 tests · REACHABLE · imported by 10
+#### `ui/src/lib/fs.ts` — 136 lines · 0 tests · REACHABLE · imported by 12
 - `exports` (14): interface FsEntry, interface FsList, interface FsRead, interface FsUndo, interface FsUndoSnapshot, function fsHome, function fsListDir, function fsReadFile, function fsWriteFile, function fsWriteTicket, function fsWriteCommit, function fsUndoList, function fsUndoRestore, function fsUndoSnapshot
 - `fns` (10): fsHome:50, fsListDir:55, fsReadFile:60, fsWriteFile:67, fsWriteTicket:74, fsWriteCommit:89, fsUndoList:97, fsUndoRestore:107, fsUndoSnapshot:116, demoList:132
 - `anon` (9): function/arrow expressions with no binding name
@@ -6752,7 +6814,7 @@ population. `wiring:` is the §11 verdict.
 - `fns` (1): lspDiagnostics:22
 - `anon` (1): function/arrow expressions with no binding name
 
-#### `ui/src/lib/mcp.ts` — 325 lines · 0 tests · REACHABLE · imported by 4
+#### `ui/src/lib/mcp.ts` — 325 lines · 0 tests · REACHABLE · imported by 5
 - `exports` (23): interface ToolInfo, interface McpCatalog, function mcpCatalog, interface McpServerRow, function mcpServers, interface McpExternalTool, interface McpExternalCatalog, const EMPTY_EXTERNAL_CATALOG, function mcpExternalTools, function mcpAttachRequest, function mcpAttachCommit, function mcpDetach, function mcpStop, function mcpStart, function mcpSetAutostart, function mcpRefresh, function waitForTicketResolution, interface StoreEntry, function storeCatalog, interface RemoteToolInfo, function mcpRemoteTools, function mcpRemoteStatus, function mcpConnectStart
 - `fns` (18): mcpCatalog:28, mcpServers:51, mcpExternalTools:85, mcpAttachRequest:94, mcpAttachCommit:109, mcpDetach:139, mcpStop:145, mcpStart:151, mcpSetAutostart:156, mcpRefresh:173, waitForTicketResolution:188, storeCatalog:217, mcpRemoteTools:230, mcpRemoteStatus:239, mcpConnectStart:247, demoStore:256, demoServers:300, demoCatalog:308
 - `anon` (16): function/arrow expressions with no binding name
@@ -6888,6 +6950,18 @@ population. `wiring:` is the §11 verdict.
 - `exports` (30): type SchedulerRequestKey, function createSchedulerRequestKey, type SchedulerTrigger, interface SchedulerJob, interface SchedulerList, interface NudgeSuggestion, function schedulerList, function schedulerCreate, function schedulerDelete, function schedulerEnable, function schedulerPause, function schedulerResume, function schedulerRunNow, function schedulerBattery, function schedulerFireEvent, function schedulerNudges, function schedulerNudge, interface SchedulerIncident, interface SchedulerNotepad, function schedulerNotepadGet, function schedulerNotepadAppend, function schedulerIncidents, function schedulerIncidentAck, interface AutomationRun, function schedulerRuns, function schedulerDuplicate, interface AutomationExport, function schedulerExport, function schedulerDoctor, function triggerLabel
 - `fns` (62): normalizeSchedulerRequestKey:20, createSchedulerRequestKey:32, schedulerKeyFor:43, settleSchedulerKey:52, schedulerList:147, live:150, preview:151, schedulerCreate:155, live:165, preview:166, schedulerDelete:170, live:173, preview:174, schedulerEnable:178, live:181, preview:182, schedulerPause:186, live:189, preview:190, schedulerResume:194, live:197, preview:198, schedulerRunNow:208, live:217, preview:218, schedulerBattery:228, live:231, preview:232, schedulerFireEvent:240, live:250, preview:251, schedulerNudges:262, live:265, preview:266, schedulerNudge:271, live:274, preview:275, schedulerNotepadGet:299, live:302, preview:303, schedulerNotepadAppend:308, live:311, preview:312, schedulerIncidents:317, live:320, preview:321, schedulerIncidentAck:326, live:329, preview:330, schedulerRuns:351, live:354, preview:355, schedulerDuplicate:360, live:363, preview:364, schedulerExport:384, live:387, preview:388, schedulerDoctor:393, live:396, preview:397, triggerLabel:402
 
+#### `ui/src/lib/search-controls.dom.test.tsx` — 467 lines · 17 tests · TEST · imported by 0
+- `fns` (24): idleSession:37, agent:49, setState:69, pressKey:75, acp_install_status:196, acp_agents:197, acp_launch:198, acp_prompt:214, usage_snapshot:247, usage_snapshot:264, usage_snapshot:278, usage_snapshot:292, usage_snapshot:302, search_config:334, search_instances:340, acp_tool_log:341, usage_snapshot:342, search_config:379, search_instances:385, acp_tool_log:386, search_config:413, search_instances:419, acp_tool_log:420, usage_snapshot:449
+- `anon` (43): function/arrow expressions with no binding name
+
+#### `ui/src/lib/search-controls.test.ts` — 199 lines · 18 tests · TEST · imported by 0
+- `anon` (22): function/arrow expressions with no binding name
+
+#### `ui/src/lib/search-controls.ts` — 403 lines · 0 tests · REACHABLE · imported by 3
+- `exports` (24): interface SearchConfigRow, interface SearchInstanceRow, interface SearchFeedRow, interface SearchApplyRow, type SearchBackendState, interface SearchBackendRow, interface SearchSummary, function feedSourceLabel, interface SearchBackendProjection, function searchBackends, const SEARCH_SETTINGS_HINT, interface WebSearchStatus, function searchSummary, const WEB_SEARCH_DEFAULT, const WEB_SEARCH_DIRECTIVE, function webSearchDirective, interface ToolLogEntryLike, interface SearchRunReport, function isSearchToolCall, function lastSearchRun, function searchRunLine, function readSearchConfig, function readSearchInstances, function applyPublicInstances
+- `fns` (14): feedSourceLabel:122, normalize:127, upstreamTimingLabel:132, searchBackends:151, push:167, searchSummary:233, webSearchDirective:304, isSearchToolCall:336, statusBucket:342, lastSearchRun:354, searchRunLine:376, readSearchConfig:390, readSearchInstances:395, applyPublicInstances:400
+- `anon` (7): function/arrow expressions with no binding name
+
 #### `ui/src/lib/session-recording.test.ts` — 105 lines · 8 tests · TEST · imported by 0
 - `fns` (6): memStorage:16, get:19, set:20, remove:21, fakeTarget:25, getAttribute:28
 - `anon` (8): function/arrow expressions with no binding name
@@ -6919,7 +6993,7 @@ population. `wiring:` is the §11 verdict.
 #### `ui/src/lib/spend.test.ts` — 11 lines · 2 tests · TEST · imported by 0
 - `anon` (2): function/arrow expressions with no binding name
 
-#### `ui/src/lib/spend.ts` — 249 lines · 0 tests · REACHABLE · imported by 5
+#### `ui/src/lib/spend.ts` — 249 lines · 0 tests · REACHABLE · imported by 8
 - `exports` (14): interface UsageRecord, type UsageSource, interface KeyUsage, interface SessionUsage, interface UsageObservations, function usageSourceLabel, function unreportedOwners, function costReadout, interface PrimarySpendView, interface UsageSnapshot, function primarySpendWarning, interface SessionTotal, function usageSnapshot, function sessionTotals
 - `fns` (12): usageSourceLabel:50, unreportedOwners:62, costReadout:69, primarySpendWarning:103, usageSnapshot:123, live:126, preview:127, sessionTotals:132, live:135, preview:136, demoSessionTotals:140, demoSnapshot:151
 - `anon` (3): function/arrow expressions with no binding name
@@ -6938,7 +7012,7 @@ population. `wiring:` is the §11 verdict.
 - `fns` (12): storageHealth:65, storageScan:71, storageLargeFiles:77, storageDuplicates:87, storageCleanupProposals:97, storageBattery:112, bytes:117, demoHealth:133, demoScan:146, demoLargeFiles:161, demoDupGroups:169, demoCleanupProposals:176
 - `anon` (6): function/arrow expressions with no binding name
 
-#### `ui/src/lib/store.ts` — 3,165 lines · 0 tests · REACHABLE · imported by 106
+#### `ui/src/lib/store.ts` — 3,165 lines · 0 tests · REACHABLE · imported by 115
 - `exports` (43): type ViewId, type ChatMode, function normalizeChatMode, type SessionStatus, interface ToolCallRecord, interface SpooledOutput, interface ChatMessage, interface ChatError, interface ArtifactActionUi, interface ArtifactServerState, interface Artifact, interface ProgressStep, interface MCQInterrupt, interface TaskElevation, interface TaskSnapshot, interface VerificationRecord, interface StreamStats, interface Session, function sessionTranscriptMarkdown, function sanitizeSessionRows, function mergeHydratedSessions, interface Automation, interface SessionLayout, interface DiaryEntry, interface PendingPatch, interface Connector, interface MemoryItem, interface PermissionEntry, const mockSessions, const mockMemory, interface LiveBudget, interface QueuedTurn, type TurnDispatcher, interface LiveNotification, interface AgentSendBlocker, function streamElapsedMs, function resetStreamingTestState, type StatusBarPills, const readStatusBarPills, const SETTINGS_SECTION_IDS, type SettingsSectionId, function taskScopeHash, const useAppStore
 - `fns` (159): normalizeChatMode:62, sessionTranscriptMarkdown:321, sanitizeSessionRows:333, mergeHydratedSessions:353, iso:448, markFirstDelta:732, ttfbFor:737, freshId:747, streamSessionId:753, hasActiveStream:758, bindStreamId:764, retireStream:775, streamElapsedMs:783, resetStreamingTestState:793, patchActiveAssistant:807, patchStreamMessage:827, readStatusBarPills:851, writeStatusBarPills:862, readPowerMode:873, writePowerMode:884, readPermission:948, writePermission:958, taskScopeHash:970, streamTestReset:1441, setWorkProjection:1463, setCoworkMode:1465, markSessionsHydrated:1468, setActiveSession:1469, newSession:1485, openAutomationRun:1512, pushMonitor:1539, clearMonitorBadge:1553, deleteSession:1554, reopenClosedSession:1588, reopenClosedSessionId:1597, purgeClosedSession:1623, purgeAllClosed:1625, cycleSession:1626, renameSession:1635, toggleSessionPinned:1644, clearSessionMessages:1651, compactSessionMessages:1665, setSessionGoal:1688, markGoalAchieved:1697, rewindToUserMessage:1702, rewindBeforeAssistant:1720, forkSession:1743, setActiveView:1768, setBrowserAttached:1780, clearBrowserUrl:1781, setDesktopAttached:1784, setCuaVisionGate:1787, setProviderKeysConfigured:1789, openSetup:1791, closeSetup:1792, setAgentSendBlocker:1794, setSessionChiefPin:1801, clearSessionChiefPin:1809, setUserDefaultChief:1827, openInBrowser:1828, toggleRail:1839, setRailCollapsed:1843, setFullscreenView:1848, addView:1851, closeView:1861, switchOfficeDoc:1872, closeOfficeDoc:1877, openOfficeDoc:1888, reorderViews:1920, setScopedView:1934, setScopedDoc:1936, patchArtifactServer:1941, setArtifactActions:1942, openSpooledOutput:1944, setAiPointerOpen:1950, pushDiaryEntry:1953, clearDiary:1955, toggleSidebar:1958, togglePowerMode:1961, setPowerMode:1967, setDevMode:1973, setStatusBarPills:1976, setComposerMode:1982, setComposerValue:1984, setSelectedAgent:1990, setSelectedModel:2006, cycleModelVariant:2011, setPersonaId:2021, setSoulId:2023, setAgentName:2025, setReconnect:2030, noteStreamTick:2031, forkFromMessage:2056, setAutoRoute:2082, setRouting:2084, setCenterScreen:2088, setSettingsSection:2090, setPermissionMode:2092, syncAutonomyFromRust:2109, freezeTaskSnapshot:2122, clearTaskSnapshot:2142, respondAutonomyCard:2143, pushAutonomyLimit:2198, effectiveAutonomyLevel:2218, setComposerRole:2237, setTaskFolder:2239, setOfficeFlyoutOpen:2242, setPaletteOpen:2245, setCockpitOpen:2248, toggleAgentPause:2251, notify:2272, notifyMcpError:2273, setLiveAgents:2276, setLiveBudget:2278, pushLiveNotification:2284, markLiveNotificationsRead:2289, setLiveStreamId:2293, clearLiveStreamId:2295, pushUserMessage:2303, streamStart:2320, appendReasoning:2343, streamAppend:2370, streamFinalize:2416, streamFail:2458, streamBudgetKill:2510, streamCancelled:2553, streamCitations:2586, streamWalkthrough:2595, streamToolCall:2607, streamToolResult:2625, streamToolProgress:2657, retryToolCall:2667, streamStep:2709, pushMcq:2737, respondMcq:2777, clearMcq:2834, setAcpHandle:2851, getAcpHandle:2888, clearAcpHandles:2890, setAcpConfigOptions:2903, setPendingPlan:2909, setTurnDispatcher:2916, queueTurn:2919, editQueuedTurn:2940, removeQueuedTurn:2951, setQueuePaused:2962, promoteQueuedTurn:2965, dequeueNextTurn:2981, parkEditorWrite:3011, takeEditorWrite:3013, pushVerification:3025, setOnboardingDone:3037, saveSessionLayout:3051, restoreSessionLayout:3065, setSessionPaused:3095, setPendingPatches:3105, setNlAutomationDraft:3109, setSessionCapabilityOverride:3112, resetSessionCapabilities:3127
 - `anon` (193): function/arrow expressions with no binding name
@@ -6952,7 +7026,7 @@ population. `wiring:` is the §11 verdict.
 - `fns` (18): tasksList:99, live:102, preview:107, tasksShow:111, live:114, preview:124, tasksCancel:128, live:131, preview:135, tasksRetry:139, live:142, preview:147, tasksEnqueue:151, live:158, preview:163, onTaskUpdate:169, taskStatusLabel:183, taskKindLabel:195
 - `anon` (2): function/arrow expressions with no binding name
 
-#### `ui/src/lib/tauri.ts` — 241 lines · 0 tests · REACHABLE · imported by 79
+#### `ui/src/lib/tauri.ts` — 241 lines · 0 tests · REACHABLE · imported by 85
 - `exports` (17): re-export listen, type UnlistenFn, function inTauri, function invoke, interface ChatWireEvent, function schedulerPauseSession, function onChatEvent, interface RuntimeStatus, function runtimeStatus, interface SidecarProbe, function sidecarProbe, interface AgentCard, interface InterruptCard, interface CockpitState, function cockpitSnapshot, function agentStop, function agentUndo
 - `fns` (10): inTauri:21, invoke:26, schedulerPauseSession:112, onChatEvent:124, runtimeStatus:137, sidecarProbe:149, cockpitSnapshot:186, agentStop:192, agentUndo:198, demoCockpit:203
 - `anon` (2): function/arrow expressions with no binding name
@@ -6991,12 +7065,12 @@ population. `wiring:` is the §11 verdict.
 - `fns` (5): trajectorySessions:33, trajectorySnapshot:39, groupBySource:47, demoSessions:61, demoInjections:65
 - `anon` (3): function/arrow expressions with no binding name
 
-#### `ui/src/lib/ui-prefs.ts` — 138 lines · 0 tests · REACHABLE · imported by 7
+#### `ui/src/lib/ui-prefs.ts` — 138 lines · 0 tests · REACHABLE · imported by 8
 - `exports` (10): function writePref, function readStoredText, function writeStoredText, function readStoredFlag, function writeStoredFlag, function removeStoredKey, function readPref, function usePref, type PermissionMode, type ComposerRole
 - `fns` (11): readRaw:5, writePref:17, writeRaw:21, parseOrUndefined:30, readStoredText:56, writeStoredText:74, readStoredFlag:85, writeStoredFlag:93, removeStoredKey:100, readPref:111, usePref:116
 - `anon` (2): function/arrow expressions with no binding name
 
-#### `ui/src/lib/utils.ts` — 7 lines · 0 tests · REACHABLE · imported by 117
+#### `ui/src/lib/utils.ts` — 7 lines · 0 tests · REACHABLE · imported by 127
 - `exports` (1): function cn
 - `fns` (1): cn:4
 
@@ -7033,7 +7107,7 @@ population. `wiring:` is the §11 verdict.
 - `fns` (1): env:4
 - `anon` (7): function/arrow expressions with no binding name
 
-#### `ui/src/lib/work.ts` — 511 lines · 0 tests · REACHABLE · imported by 7
+#### `ui/src/lib/work.ts` — 511 lines · 0 tests · REACHABLE · imported by 10
 - `exports` (37): interface WorkAddress, function sessionOwnerSurface, function sessionKindLabel, interface WorkPresence, interface WorkEventEnvelope, type DomainEvent, type OperationalEvent, type PresenceEvent, type RuntimeEvent, type WorkEvent, function presenceLabel, type WorkLifecycleState, function workStateLabel, function waitReasonLabel, interface WorkEventDescription, function describeWorkEvent, interface WorkSnapshot, function workList, function workSnapshot, function workEvents, function workPresence, function workReviews, interface PtySession, interface AgentSession, function workPtySpawn, function workPtyResize, function workPtySignal, function workPtyClose, function workPtySnapshot, function workWorktreeCreate, function workWorktreeAttach, function workWorktreeOp, function workAgentSpawn, function workAgentOp, function workAgentSessions, interface ChildWork, function workChildren
 - `fns` (24): sessionOwnerSurface:20, sessionKindLabel:34, presenceLabel:198, workStateLabel:221, waitReasonLabel:243, describeWorkEvent:268, shortId:393, workList:406, workSnapshot:411, workEvents:416, workPresence:421, workReviews:426, workPtySpawn:454, workPtyResize:457, workPtySignal:460, workPtyClose:463, workPtySnapshot:466, workWorktreeCreate:471, workWorktreeAttach:477, workWorktreeOp:480, workAgentSpawn:484, workAgentOp:490, workAgentSessions:493, workChildren:507
 - `anon` (17): function/arrow expressions with no binding name
@@ -7042,7 +7116,7 @@ population. `wiring:` is the §11 verdict.
 - `fns` (1): Bootstrap:12
 - `anon` (3): function/arrow expressions with no binding name
 
-#### `ui/src/test/dom-harness.tsx` — 171 lines · 0 tests · TEST-ONLY · imported by 9
+#### `ui/src/test/dom-harness.tsx` — 171 lines · 0 tests · TEST-ONLY · imported by 11
 - `exports` (12): type ShellHandler, function registerDom, function unregisterDom, function installShell, function removeShell, interface Mounted, function mount, function tick, function waitFor, function click, function withAct, function findButton
 - `fns` (20): chief_default_get:36, local_models:37, local_hardware:38, runtime_status:39, registerDom:43, unregisterDom:50, installShell:59, invoke:64, transformCallback:70, unregisterCallback:71, convertFileSrc:72, removeShell:79, mount:91, unmount:108, settle:116, tick:121, waitFor:136, click:151, withAct:161, findButton:166
 - `anon` (6): function/arrow expressions with no binding name
@@ -7189,7 +7263,7 @@ The tail of this list is where "referenced once, by its own re-export" hides.
 
 ### 11.4 TS/TSX files never imported by anything
 
-171 files (excluding test files).
+172 files (excluding test files).
 
 - `ARCH/archive/core-engine/vitest.config.ts`
 - `packages/coordinator/src/companion.ts`
@@ -7358,6 +7432,7 @@ The tail of this list is where "referenced once, by its own re-export" hides.
 - `ui/src/components/views/office-pdf-view.tsx`
 - `ui/src/components/views/office-xlsx-view.tsx`
 - `ui/src/components/views/pdf-canvas.tsx`
+- `ui/src/components/views/run-view.tsx`
 - `ui/src/globals.d.ts`
 - `ui/src/lib/doctor.ts`
 - `ui/src/lib/plan-draft.ts`
@@ -7365,7 +7440,7 @@ The tail of this list is where "referenced once, by its own re-export" hides.
 
 ### 11.5 TS/TSX files imported ONLY by tests (test-only modules)
 
-67 files.
+69 files.
 
 - `ARCH/archive/coordinator-loop/agent-patterns.ts`
 - `ARCH/archive/coordinator-loop/chat.ts`
@@ -7430,6 +7505,8 @@ The tail of this list is where "referenced once, by its own re-export" hides.
 - `packages/core-providers/src/index.ts`
 - `packages/core-tools/src/index.ts`
 - `packages/core-tools/src/types.ts`
+- `ui/src/components/views/run-projection.tsx`
+- `ui/src/components/views/run-usage.tsx`
 - `ui/src/lib/calendar.ts`
 - `ui/src/lib/catalog-models.ts`
 - `ui/src/lib/chief-handoff.ts`
@@ -7437,13 +7514,13 @@ The tail of this list is where "referenced once, by its own re-export" hides.
 
 ### 11.6 Tauri commands with no static `invoke()` call site
 
-366 commands registered. 306 have a direct `invoke("name")` site.
-Of the 60 without one:
+367 commands registered. 306 have a direct `invoke("name")` site.
+Of the 61 without one:
 
 - **11 are only *indirectly* referenced** — the name appears as a string literal somewhere in the
   UI/coordinator, or Rust mentions it. These are probably fine (the UI may pass a variable, as
   `vault-gate.tsx` does with `invoke(cmd)`).
-- **49 are cold** — the name appears nowhere outside its own definition and registration.
+- **50 are cold** — the name appears nowhere outside its own definition and registration.
 
 A high `Rust mentions` count on a generic word (`version`, `status`, `tasks`) is noise — the name
 matches unrelated identifiers. Counts above 50 are flagged `(noisy)` and carry no signal.
@@ -7461,6 +7538,7 @@ matches unrelated identifiers. Counts above 50 are flagged `(noisy)` and carry n
 | `mcp_remote_call` | `mcp_cmds` | 0 | 0 |
 | `skills_learn` | `skills_cmds` | 0 | 0 |
 | `vault_key_rotate` | `vault_cmds` | 0 | 0 |
+| `acp_session_load` | `acp_cmds` | 0 | 0 |
 | `acp_registry_status` | `acp_cmds` | 0 | 0 |
 | `acp_registry_install_plan` | `acp_cmds` | 0 | 0 |
 | `acp_install` | `acp_cmds` | 0 | 0 |
@@ -8145,7 +8223,7 @@ same heuristic class as §11, so a script invoked through a variable or a wrappe
 - purpose: P70.A4 — app metadata + assets.
 - wired: CI ×1 · package.json ×1 · other scripts ×1
 
-#### `scripts/check-arch-invariants.mjs` — 50.2 KB · 1,214 lines
+#### `scripts/check-arch-invariants.mjs` — 51.4 KB · 1,240 lines
 - purpose: EveryAIOS architecture-invariant gate (P69.E).
 - wired: CI ×1 · package.json ×1 · other scripts ×1
 
@@ -9425,7 +9503,7 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 
 - opening: Generated by `scripts/check-licences.mjs --write-notices` from the lockfiles.
 
-#### `TODO.md` — 2,899 lines · 942.5 KB
+#### `TODO.md` — 2,899 lines · 942.7 KB
 > EveryAIOS — Master Implementation TODO
 
 - opening: **Documentation ownership:** `DESKTOP-APP-SPEC.md` is the **product contract only** (behavior, schemas, UI layouts, invariants — not a build plan).
@@ -9459,7 +9537,7 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 
 ### 15.1 Tauri command registry (registered ↔ UI call sites)
 
-**366 commands** registered in the single `generate_handler!` in `src-tauri/src/commands.rs`.
+**367 commands** registered in the single `generate_handler!` in `src-tauri/src/commands.rs`.
 
 | # | Command | Module family | direct `invoke()` sites | literal refs | Rust mentions |
 | ---: | --- | --- | ---: | ---: | ---: |
@@ -9507,9 +9585,9 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 | 42 | `agui_listen` | `crate` | 0 | 0 | 2 |
 | 43 | `usage_snapshot` | `crate` | 1 | 1 | 0 |
 | 44 | `session_totals` | `crate` | 1 | 1 | 0 |
-| 45 | `search_config` | `search_cmds` | 2 | 2 | 0 |
-| 46 | `search_instances` | `search_cmds` | 1 | 1 | 0 |
-| 47 | `search_instances_apply` | `search_cmds` | 1 | 1 | 0 |
+| 45 | `search_config` | `search_cmds` | 3 | 5 | 0 |
+| 46 | `search_instances` | `search_cmds` | 2 | 3 | 0 |
+| 47 | `search_instances_apply` | `search_cmds` | 2 | 2 | 0 |
 | 48 | `replay_sessions` | `replay_cmds` | 1 | 1 | 0 |
 | 49 | `replay_timeline` | `replay_cmds` | 1 | 1 | 0 |
 | 50 | `replay_screenshot` | `replay_cmds` | 1 | 1 | 0 |
@@ -9596,239 +9674,240 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 | 131 | `agent_backend_set` | `agent_backend_cmds` | 2 | 3 | 0 |
 | 132 | `agent_backend_clear` | `agent_backend_cmds` | 1 | 2 | 0 |
 | 133 | `agent_backend_probe` | `agent_backend_cmds` | 1 | 1 | 0 |
-| 134 | `acp_prompt` | `acp_cmds` | 1 | 1 | 0 |
+| 134 | `acp_prompt` | `acp_cmds` | 1 | 3 | 0 |
 | 135 | `acp_session_commands` | `acp_cmds` | 1 | 1 | 0 |
 | 136 | `acp_session_config_options` | `acp_cmds` | 1 | 1 | 0 |
 | 137 | `acp_session_set_config_option` | `acp_cmds` | 1 | 1 | 0 |
 | 138 | `acp_config_options` | `acp_cmds` | 1 | 1 | 0 |
 | 139 | `acp_set_session_config_option` | `acp_cmds` | 1 | 1 | 0 |
-| 140 | `acp_tool_log` | `acp_cmds` | 1 | 1 | 0 |
-| 141 | `chief_subagents` | `acp_cmds` | 1 | 1 | 0 |
-| 142 | `chief_subagent_set_policy` | `acp_cmds` | 1 | 1 | 0 |
-| 143 | `chief_subagent_set_note` | `acp_cmds` | 1 | 1 | 0 |
-| 144 | `chief_subagent_set_enabled` | `acp_cmds` | 1 | 1 | 0 |
-| 145 | `chief_subagent_mix` | `acp_cmds` | 1 | 1 | 0 |
-| 146 | `acp_cancel` | `acp_cmds` | 1 | 1 | 0 |
-| 147 | `acp_shutdown` | `acp_cmds` | 1 | 1 | 0 |
-| 148 | `acp_sessions` | `acp_cmds` | 1 | 1 | 0 |
-| 149 | `acp_registry_refresh` | `acp_cmds` | 1 | 1 | 0 |
-| 150 | `acp_registry_status` | `acp_cmds` | 0 | 0 | 0 |
-| 151 | `acp_registry_install_plan` | `acp_cmds` | 0 | 0 | 0 |
-| 152 | `acp_install_status` | `acp_cmds` | 1 | 1 | 0 |
-| 153 | `acp_install_request` | `acp_cmds` | 1 | 1 | 0 |
-| 154 | `acp_install_commit` | `acp_cmds` | 1 | 1 | 0 |
-| 155 | `acp_install_await` | `acp_cmds` | 1 | 1 | 0 |
-| 156 | `acp_install` | `acp_cmds` | 0 | 0 | 0 |
-| 157 | `acp_agent_import` | `acp_cmds` | 1 | 1 | 0 |
-| 158 | `acp_agent_verify` | `acp_cmds` | 1 | 1 | 0 |
-| 159 | `acp_authenticate` | `acp_cmds` | 1 | 1 | 0 |
-| 160 | `audit_compact` | `maintenance_cmds` | 0 | 0 | 1 |
-| 161 | `scheduler_list` | `scheduler_cmds` | 1 | 1 | 0 |
-| 162 | `scheduler_create` | `scheduler_cmds` | 1 | 1 | 0 |
-| 163 | `scheduler_delete` | `scheduler_cmds` | 1 | 1 | 0 |
-| 164 | `scheduler_enable` | `scheduler_cmds` | 1 | 1 | 0 |
-| 165 | `scheduler_pause` | `scheduler_cmds` | 1 | 1 | 0 |
-| 166 | `scheduler_pause_session` | `scheduler_cmds` | 1 | 1 | 0 |
-| 167 | `scheduler_resume` | `scheduler_cmds` | 1 | 1 | 0 |
-| 168 | `scheduler_run_now` | `scheduler_cmds` | 1 | 1 | 0 |
-| 169 | `scheduler_runs` | `scheduler_cmds` | 1 | 1 | 0 |
-| 170 | `scheduler_duplicate` | `scheduler_cmds` | 1 | 1 | 0 |
-| 171 | `scheduler_export` | `scheduler_cmds` | 1 | 1 | 0 |
-| 172 | `scheduler_battery` | `scheduler_cmds` | 1 | 1 | 0 |
-| 173 | `scheduler_fire_event` | `scheduler_cmds` | 1 | 2 | 0 |
-| 174 | `scheduler_fire_webhook` | `scheduler_cmds` | 0 | 0 | 0 |
-| 175 | `scheduler_nudges` | `scheduler_cmds` | 1 | 1 | 0 |
-| 176 | `scheduler_nudge` | `scheduler_cmds` | 1 | 1 | 0 |
-| 177 | `scheduler_notepad_get` | `scheduler_cmds` | 1 | 1 | 0 |
-| 178 | `scheduler_notepad_append` | `scheduler_cmds` | 1 | 1 | 0 |
-| 179 | `scheduler_incidents` | `scheduler_cmds` | 1 | 1 | 0 |
-| 180 | `scheduler_incident_ack` | `scheduler_cmds` | 1 | 1 | 0 |
-| 181 | `scheduler_doctor` | `scheduler_cmds` | 1 | 1 | 0 |
-| 182 | `tasks_list` | `tasks_cmds` | 1 | 1 | 0 |
-| 183 | `tasks_show` | `tasks_cmds` | 1 | 1 | 0 |
-| 184 | `tasks_cancel` | `tasks_cmds` | 1 | 1 | 0 |
-| 185 | `tasks_retry` | `tasks_cmds` | 1 | 1 | 0 |
-| 186 | `tasks_enqueue` | `tasks_cmds` | 1 | 1 | 0 |
-| 187 | `tasks_start` | `tasks_cmds` | 0 | 0 | 0 |
-| 188 | `tasks_complete` | `tasks_cmds` | 0 | 0 | 0 |
-| 189 | `tasks_sweep` | `tasks_cmds` | 0 | 0 | 1 |
-| 190 | `storage_health` | `storage_cmds` | 1 | 1 | 0 |
-| 191 | `storage_scan` | `storage_cmds` | 1 | 1 | 0 |
-| 192 | `storage_large_files` | `storage_cmds` | 1 | 1 | 0 |
-| 193 | `storage_duplicates` | `storage_cmds` | 1 | 1 | 0 |
-| 194 | `storage_cleanup_proposals` | `storage_cmds` | 1 | 1 | 0 |
-| 195 | `storage_battery` | `storage_cmds` | 1 | 1 | 0 |
-| 196 | `sync_export_bundle` | `sync_cmds` | 1 | 1 | 0 |
-| 197 | `sync_import_bundle` | `sync_cmds` | 1 | 1 | 0 |
-| 198 | `sync_keypair_generate` | `sync_cmds` | 1 | 1 | 0 |
-| 199 | `sync_public_key` | `sync_cmds` | 1 | 1 | 0 |
-| 200 | `sync_serve_start` | `sync_cmds` | 1 | 1 | 0 |
-| 201 | `sync_serve_stop` | `sync_cmds` | 1 | 1 | 0 |
-| 202 | `sync_serve_status` | `sync_cmds` | 1 | 1 | 0 |
-| 203 | `sync_peer_sync` | `sync_cmds` | 1 | 1 | 0 |
-| 204 | `node_attach` | `sync_cmds` | 1 | 1 | 0 |
-| 205 | `sync_fingerprint` | `sync_cmds` | 1 | 1 | 0 |
-| 206 | `updater_check` | `updater_cmds` | 1 | 1 | 0 |
-| 207 | `updater_install` | `updater_cmds` | 0 | 0 | 0 |
-| 208 | `updater_channel_get` | `updater_cmds` | 1 | 1 | 0 |
-| 209 | `updater_channel_set` | `updater_cmds` | 1 | 1 | 0 |
-| 210 | `updater_download` | `updater_cmds` | 1 | 1 | 0 |
-| 211 | `updater_restart` | `updater_cmds` | 1 | 1 | 0 |
-| 212 | `fs_home` | `fs_cmds` | 1 | 1 | 0 |
-| 213 | `fs_list_dir` | `fs_cmds` | 1 | 1 | 0 |
-| 214 | `fs_read_file` | `fs_cmds` | 1 | 1 | 0 |
-| 215 | `fs_write_file` | `fs_cmds` | 1 | 1 | 0 |
-| 216 | `fs_write_ticket` | `fs_cmds` | 1 | 1 | 0 |
-| 217 | `fs_write_commit` | `fs_cmds` | 1 | 1 | 0 |
-| 218 | `fs_undo_list` | `fs_cmds` | 1 | 1 | 0 |
-| 219 | `fs_undo_restore` | `fs_cmds` | 1 | 1 | 0 |
-| 220 | `fs_undo_snapshot` | `fs_cmds` | 1 | 1 | 0 |
-| 221 | `terminal_profiles` | `terminal_cmds` | 1 | 1 | 0 |
-| 222 | `terminal_set_default` | `terminal_cmds` | 1 | 1 | 0 |
-| 223 | `terminal_set_automation` | `terminal_cmds` | 1 | 1 | 0 |
-| 224 | `terminal_confirm_unsafe` | `terminal_cmds` | 1 | 1 | 0 |
-| 225 | `terminal_get_shell_integration` | `terminal_cmds` | 0 | 0 | 0 |
-| 226 | `terminal_set_shell_integration` | `terminal_cmds` | 1 | 1 | 0 |
-| 227 | `terminal_spawn` | `terminal_cmds` | 1 | 1 | 0 |
-| 228 | `terminal_run` | `terminal_cmds` | 1 | 1 | 0 |
-| 229 | `terminal_replay` | `terminal_cmds` | 1 | 1 | 0 |
-| 230 | `terminal_write` | `terminal_cmds` | 1 | 1 | 0 |
-| 231 | `terminal_resize` | `terminal_cmds` | 1 | 1 | 0 |
-| 232 | `terminal_kill` | `terminal_cmds` | 1 | 1 | 0 |
-| 233 | `terminal_status` | `terminal_cmds` | 1 | 1 | 0 |
-| 234 | `terminal_commands` | `terminal_cmds` | 1 | 1 | 0 |
-| 235 | `terminal_last_command_context` | `terminal_cmds` | 1 | 1 | 0 |
-| 236 | `terminal_history_context` | `terminal_cmds` | 1 | 1 | 0 |
-| 237 | `browser_list_installed` | `browser_cmds` | 1 | 1 | 0 |
-| 238 | `browser_get_config` | `browser_cmds` | 1 | 1 | 0 |
-| 239 | `browser_set_config` | `browser_cmds` | 1 | 1 | 0 |
-| 240 | `browser_start` | `browser_cmds` | 1 | 1 | 0 |
-| 241 | `browser_navigate` | `browser_cmds` | 1 | 1 | 0 |
-| 242 | `browser_snapshot` | `browser_cmds` | 1 | 1 | 0 |
-| 243 | `browser_read` | `browser_cmds` | 1 | 1 | 0 |
-| 244 | `browser_read_url` | `browser_cmds` | 1 | 1 | 0 |
-| 245 | `browser_click` | `browser_cmds` | 1 | 1 | 0 |
-| 246 | `browser_type` | `browser_cmds` | 1 | 1 | 0 |
-| 247 | `browser_stop` | `browser_cmds` | 1 | 1 | 0 |
-| 248 | `browser_status` | `browser_cmds` | 1 | 1 | 0 |
-| 249 | `memory_request` | `memory_cmds` | 4 | 4 | 0 |
-| 250 | `memory_read` | `memory_cmds` | 1 | 1 | 0 |
-| 251 | `git_status` | `git_cmds` | 1 | 1 | 0 |
-| 252 | `git_log` | `git_cmds` | 1 | 1 | 0 |
-| 253 | `git_diff` | `git_cmds` | 1 | 1 | 0 |
-| 254 | `git_stage_all` | `git_cmds` | 1 | 1 | 0 |
-| 255 | `git_commit` | `git_cmds` | 1 | 1 | 0 |
-| 256 | `git_root` | `git_cmds` | 1 | 1 | 0 |
-| 257 | `git_worktree_add` | `git_cmds` | 1 | 1 | 0 |
-| 258 | `git_worktree_list` | `git_cmds` | 1 | 1 | 0 |
-| 259 | `git_worktree_merge` | `git_cmds` | 1 | 1 | 0 |
-| 260 | `git_worktree_revert` | `git_cmds` | 1 | 1 | 0 |
-| 261 | `lsp_diagnostics` | `lsp_cmds` | 1 | 1 | 0 |
-| 262 | `repomap_build` | `codeintel_cmds` | 0 | 0 | 4 |
-| 263 | `file_outline` | `codeintel_cmds` | 0 | 0 | 2 |
-| 264 | `model_aliases_resolve` | `codeintel_cmds` | 0 | 0 | 0 |
-| 265 | `ai_markers_scan` | `codeintel_cmds` | 0 | 0 | 0 |
-| 266 | `desktop_status` | `desktop_cmds` | 2 | 2 | 0 |
-| 267 | `desktop_attach` | `desktop_cmds` | 2 | 4 | 0 |
-| 268 | `desktop_policy_get` | `desktop_cmds` | 1 | 1 | 0 |
-| 269 | `desktop_apps` | `desktop_cmds` | 2 | 3 | 0 |
-| 270 | `desktop_policy_allow_path` | `desktop_cmds` | 1 | 3 | 0 |
-| 271 | `desktop_policy_remove_path` | `desktop_cmds` | 1 | 3 | 0 |
-| 272 | `desktop_policy_set_interaction` | `desktop_cmds` | 1 | 3 | 0 |
-| 273 | `desktop_windows` | `desktop_cmds` | 1 | 1 | 0 |
-| 274 | `desktop_read` | `desktop_cmds` | 1 | 1 | 0 |
-| 275 | `desktop_see` | `desktop_cmds` | 1 | 1 | 0 |
-| 276 | `desktop_act` | `desktop_cmds` | 1 | 1 | 0 |
-| 277 | `desktop_escalation` | `desktop_cmds` | 1 | 1 | 0 |
-| 278 | `desktop_act_escalating` | `desktop_cmds` | 1 | 1 | 0 |
-| 279 | `desktop_stop` | `desktop_cmds` | 1 | 1 | 0 |
-| 280 | `cua_dag_get` | `desktop_cmds` | 1 | 1 | 0 |
-| 281 | `cua_dag_edit_remaining` | `desktop_cmds` | 1 | 1 | 0 |
-| 282 | `work_list` | `work_cmds` | 1 | 1 | 0 |
-| 283 | `work_snapshot` | `work_cmds` | 1 | 1 | 0 |
-| 284 | `work_events` | `work_cmds` | 1 | 1 | 0 |
-| 285 | `work_presence` | `work_cmds` | 1 | 1 | 0 |
-| 286 | `work_reviews` | `work_cmds` | 1 | 1 | 0 |
-| 287 | `work_pty_spawn` | `work_cmds` | 1 | 1 | 0 |
-| 288 | `work_pty_resize` | `work_cmds` | 1 | 1 | 0 |
-| 289 | `work_pty_signal` | `work_cmds` | 1 | 1 | 0 |
-| 290 | `work_pty_close` | `work_cmds` | 1 | 1 | 0 |
-| 291 | `work_pty_snapshot` | `work_cmds` | 1 | 1 | 0 |
-| 292 | `work_worktree_create` | `work_cmds` | 1 | 1 | 0 |
-| 293 | `work_worktree_attach` | `work_cmds` | 1 | 1 | 0 |
-| 294 | `work_worktree_op` | `work_cmds` | 1 | 1 | 0 |
-| 295 | `work_agent_spawn` | `work_cmds` | 1 | 1 | 0 |
-| 296 | `work_agent_op` | `work_cmds` | 1 | 1 | 0 |
-| 297 | `work_agent_sessions` | `work_cmds` | 1 | 1 | 0 |
-| 298 | `work_children` | `work_cmds` | 1 | 1 | 0 |
-| 299 | `work_create` | `work_cmds` | 0 | 0 | 0 |
-| 300 | `work_get` | `work_cmds` | 0 | 0 | 0 |
-| 301 | `work_archive` | `work_cmds` | 0 | 0 | 0 |
-| 302 | `work_locator` | `work_cmds` | 0 | 0 | 0 |
-| 303 | `work_nodes` | `work_cmds` | 0 | 0 | 0 |
-| 304 | `work_node_register` | `work_cmds` | 0 | 0 | 0 |
-| 305 | `work_node_bind` | `work_cmds` | 0 | 0 | 0 |
-| 306 | `work_node_unbind` | `work_cmds` | 0 | 0 | 0 |
-| 307 | `work_authority_acquire` | `work_cmds` | 0 | 0 | 0 |
-| 308 | `work_authority_renew` | `work_cmds` | 0 | 0 | 0 |
-| 309 | `work_authority_release` | `work_cmds` | 0 | 0 | 0 |
-| 310 | `work_clients` | `work_cmds` | 0 | 0 | 0 |
-| 311 | `work_client_connect` | `work_cmds` | 0 | 0 | 0 |
-| 312 | `work_client_detach` | `work_cmds` | 0 | 0 | 0 |
-| 313 | `work_capabilities` | `work_cmds` | 0 | 0 | 0 |
-| 314 | `work_capability_grant` | `work_cmds` | 0 | 0 | 0 |
-| 315 | `work_capability_resolve` | `work_cmds` | 0 | 0 | 0 |
-| 316 | `work_review_resolve` | `work_cmds` | 0 | 0 | 0 |
-| 317 | `work_steer` | `work_cmds` | 0 | 0 | 0 |
-| 318 | `work_steer_interrupt` | `work_cmds` | 0 | 0 | 0 |
-| 319 | `work_manifest_create` | `work_cmds` | 0 | 0 | 0 |
-| 320 | `work_manifest_get` | `work_cmds` | 0 | 0 | 0 |
-| 321 | `work_manifest_restore` | `work_cmds` | 0 | 0 | 0 |
-| 322 | `work_attachment_add` | `work_cmds` | 0 | 0 | 0 |
-| 323 | `work_attachment_list` | `work_cmds` | 0 | 0 | 0 |
-| 324 | `work_attachment_resolve` | `work_cmds` | 0 | 0 | 0 |
-| 325 | `artifact_serve` | `artifact_cmds` | 1 | 1 | 0 |
-| 326 | `artifact_stop` | `artifact_cmds` | 1 | 1 | 0 |
-| 327 | `doctor_report` | `doctor_cmds` | 1 | 1 | 0 |
-| 328 | `diagnostics_sandbox_posture` | `diagnostics_cmds` | 1 | 1 | 0 |
-| 329 | `diagnostics_support_bundle` | `diagnostics_cmds` | 1 | 1 | 0 |
-| 330 | `data_remove_all` | `diagnostics_cmds` | 1 | 1 | 0 |
-| 331 | `openai_server_start` | `openai_cmds` | 1 | 1 | 0 |
-| 332 | `openai_server_stop` | `openai_cmds` | 1 | 1 | 0 |
-| 333 | `openai_server_status` | `openai_cmds` | 1 | 1 | 0 |
-| 334 | `discovery_inventory` | `discovery_cmds` | 1 | 1 | 0 |
-| 335 | `routing_feed_decide` | `discovery_cmds` | 1 | 1 | 0 |
-| 336 | `provider_health_probe` | `discovery_cmds` | 0 | 0 | 0 |
-| 337 | `model_download_start` | `model_cmds` | 1 | 1 | 0 |
-| 338 | `model_downloads` | `model_cmds` | 1 | 1 | 0 |
-| 339 | `model_download_cancel` | `model_cmds` | 1 | 1 | 0 |
-| 340 | `model_registry_list` | `model_cmds` | 1 | 1 | 0 |
-| 341 | `model_registry_remove` | `model_cmds` | 1 | 1 | 0 |
-| 342 | `model_recommend_quant` | `model_cmds` | 1 | 1 | 0 |
-| 343 | `model_serve` | `model_cmds` | 2 | 2 | 0 |
-| 344 | `model_serve_stop` | `model_cmds` | 0 | 0 | 0 |
-| 345 | `model_serve_list` | `model_cmds` | 0 | 0 | 1 |
-| 346 | `runtime_inventory_list` | `runtime_cmds` | 1 | 1 | 0 |
-| 347 | `runtime_models` | `runtime_cmds` | 1 | 1 | 0 |
-| 348 | `runtime_start` | `runtime_cmds` | 1 | 1 | 0 |
-| 349 | `runtime_stop` | `runtime_cmds` | 1 | 1 | 0 |
-| 350 | `model_estimate_fit` | `model_cmds` | 1 | 1 | 0 |
-| 351 | `model_gallery_parse` | `model_cmds` | 1 | 1 | 0 |
-| 352 | `model_best_pick` | `model_cmds` | 1 | 1 | 0 |
-| 353 | `settings_providers_list` | `settings_cmds` | 1 | 2 | 0 |
-| 354 | `settings_default_model_get` | `settings_cmds` | 1 | 2 | 0 |
-| 355 | `settings_default_model_set` | `settings_cmds` | 1 | 2 | 0 |
-| 356 | `settings_agents_list` | `settings_cmds` | 1 | 2 | 0 |
-| 357 | `settings_agent_get` | `settings_cmds` | 1 | 2 | 0 |
-| 358 | `settings_agent_loadout` | `settings_cmds` | 1 | 1 | 0 |
-| 359 | `settings_connections_list` | `settings_cmds` | 1 | 2 | 0 |
-| 360 | `settings_schedules_list` | `settings_cmds` | 1 | 2 | 0 |
-| 361 | `settings_schedule_get` | `settings_cmds` | 1 | 1 | 0 |
-| 362 | `settings_schedule_set_enabled` | `settings_cmds` | 1 | 2 | 0 |
-| 363 | `settings_extensions_list` | `settings_cmds` | 1 | 2 | 0 |
-| 364 | `voice_status` | `voice_cmds` | 1 | 1 | 0 |
-| 365 | `voice_vad_classify` | `voice_cmds` | 1 | 1 | 0 |
-| 366 | `voice_process_utterance` | `voice_cmds` | 1 | 1 | 0 |
+| 140 | `acp_session_load` | `acp_cmds` | 0 | 0 | 0 |
+| 141 | `acp_tool_log` | `acp_cmds` | 1 | 1 | 0 |
+| 142 | `chief_subagents` | `acp_cmds` | 1 | 1 | 0 |
+| 143 | `chief_subagent_set_policy` | `acp_cmds` | 1 | 1 | 0 |
+| 144 | `chief_subagent_set_note` | `acp_cmds` | 1 | 1 | 0 |
+| 145 | `chief_subagent_set_enabled` | `acp_cmds` | 1 | 1 | 0 |
+| 146 | `chief_subagent_mix` | `acp_cmds` | 1 | 1 | 0 |
+| 147 | `acp_cancel` | `acp_cmds` | 1 | 1 | 0 |
+| 148 | `acp_shutdown` | `acp_cmds` | 1 | 1 | 0 |
+| 149 | `acp_sessions` | `acp_cmds` | 1 | 1 | 0 |
+| 150 | `acp_registry_refresh` | `acp_cmds` | 1 | 1 | 0 |
+| 151 | `acp_registry_status` | `acp_cmds` | 0 | 0 | 0 |
+| 152 | `acp_registry_install_plan` | `acp_cmds` | 0 | 0 | 0 |
+| 153 | `acp_install_status` | `acp_cmds` | 1 | 1 | 0 |
+| 154 | `acp_install_request` | `acp_cmds` | 1 | 1 | 0 |
+| 155 | `acp_install_commit` | `acp_cmds` | 1 | 1 | 0 |
+| 156 | `acp_install_await` | `acp_cmds` | 1 | 1 | 0 |
+| 157 | `acp_install` | `acp_cmds` | 0 | 0 | 0 |
+| 158 | `acp_agent_import` | `acp_cmds` | 1 | 1 | 0 |
+| 159 | `acp_agent_verify` | `acp_cmds` | 1 | 1 | 0 |
+| 160 | `acp_authenticate` | `acp_cmds` | 1 | 1 | 0 |
+| 161 | `audit_compact` | `maintenance_cmds` | 0 | 0 | 1 |
+| 162 | `scheduler_list` | `scheduler_cmds` | 1 | 1 | 0 |
+| 163 | `scheduler_create` | `scheduler_cmds` | 1 | 1 | 0 |
+| 164 | `scheduler_delete` | `scheduler_cmds` | 1 | 1 | 0 |
+| 165 | `scheduler_enable` | `scheduler_cmds` | 1 | 1 | 0 |
+| 166 | `scheduler_pause` | `scheduler_cmds` | 1 | 1 | 0 |
+| 167 | `scheduler_pause_session` | `scheduler_cmds` | 1 | 1 | 0 |
+| 168 | `scheduler_resume` | `scheduler_cmds` | 1 | 1 | 0 |
+| 169 | `scheduler_run_now` | `scheduler_cmds` | 1 | 1 | 0 |
+| 170 | `scheduler_runs` | `scheduler_cmds` | 1 | 1 | 0 |
+| 171 | `scheduler_duplicate` | `scheduler_cmds` | 1 | 1 | 0 |
+| 172 | `scheduler_export` | `scheduler_cmds` | 1 | 1 | 0 |
+| 173 | `scheduler_battery` | `scheduler_cmds` | 1 | 1 | 0 |
+| 174 | `scheduler_fire_event` | `scheduler_cmds` | 1 | 2 | 0 |
+| 175 | `scheduler_fire_webhook` | `scheduler_cmds` | 0 | 0 | 0 |
+| 176 | `scheduler_nudges` | `scheduler_cmds` | 1 | 1 | 0 |
+| 177 | `scheduler_nudge` | `scheduler_cmds` | 1 | 1 | 0 |
+| 178 | `scheduler_notepad_get` | `scheduler_cmds` | 1 | 1 | 0 |
+| 179 | `scheduler_notepad_append` | `scheduler_cmds` | 1 | 1 | 0 |
+| 180 | `scheduler_incidents` | `scheduler_cmds` | 1 | 1 | 0 |
+| 181 | `scheduler_incident_ack` | `scheduler_cmds` | 1 | 1 | 0 |
+| 182 | `scheduler_doctor` | `scheduler_cmds` | 1 | 1 | 0 |
+| 183 | `tasks_list` | `tasks_cmds` | 1 | 1 | 0 |
+| 184 | `tasks_show` | `tasks_cmds` | 1 | 1 | 0 |
+| 185 | `tasks_cancel` | `tasks_cmds` | 1 | 1 | 0 |
+| 186 | `tasks_retry` | `tasks_cmds` | 1 | 1 | 0 |
+| 187 | `tasks_enqueue` | `tasks_cmds` | 1 | 1 | 0 |
+| 188 | `tasks_start` | `tasks_cmds` | 0 | 0 | 0 |
+| 189 | `tasks_complete` | `tasks_cmds` | 0 | 0 | 0 |
+| 190 | `tasks_sweep` | `tasks_cmds` | 0 | 0 | 1 |
+| 191 | `storage_health` | `storage_cmds` | 1 | 1 | 0 |
+| 192 | `storage_scan` | `storage_cmds` | 1 | 1 | 0 |
+| 193 | `storage_large_files` | `storage_cmds` | 1 | 1 | 0 |
+| 194 | `storage_duplicates` | `storage_cmds` | 1 | 1 | 0 |
+| 195 | `storage_cleanup_proposals` | `storage_cmds` | 1 | 1 | 0 |
+| 196 | `storage_battery` | `storage_cmds` | 1 | 1 | 0 |
+| 197 | `sync_export_bundle` | `sync_cmds` | 1 | 1 | 0 |
+| 198 | `sync_import_bundle` | `sync_cmds` | 1 | 1 | 0 |
+| 199 | `sync_keypair_generate` | `sync_cmds` | 1 | 1 | 0 |
+| 200 | `sync_public_key` | `sync_cmds` | 1 | 1 | 0 |
+| 201 | `sync_serve_start` | `sync_cmds` | 1 | 1 | 0 |
+| 202 | `sync_serve_stop` | `sync_cmds` | 1 | 1 | 0 |
+| 203 | `sync_serve_status` | `sync_cmds` | 1 | 1 | 0 |
+| 204 | `sync_peer_sync` | `sync_cmds` | 1 | 1 | 0 |
+| 205 | `node_attach` | `sync_cmds` | 1 | 1 | 0 |
+| 206 | `sync_fingerprint` | `sync_cmds` | 1 | 1 | 0 |
+| 207 | `updater_check` | `updater_cmds` | 1 | 1 | 0 |
+| 208 | `updater_install` | `updater_cmds` | 0 | 0 | 0 |
+| 209 | `updater_channel_get` | `updater_cmds` | 1 | 1 | 0 |
+| 210 | `updater_channel_set` | `updater_cmds` | 1 | 1 | 0 |
+| 211 | `updater_download` | `updater_cmds` | 1 | 1 | 0 |
+| 212 | `updater_restart` | `updater_cmds` | 1 | 1 | 0 |
+| 213 | `fs_home` | `fs_cmds` | 1 | 1 | 0 |
+| 214 | `fs_list_dir` | `fs_cmds` | 1 | 1 | 0 |
+| 215 | `fs_read_file` | `fs_cmds` | 1 | 1 | 0 |
+| 216 | `fs_write_file` | `fs_cmds` | 1 | 1 | 0 |
+| 217 | `fs_write_ticket` | `fs_cmds` | 1 | 1 | 0 |
+| 218 | `fs_write_commit` | `fs_cmds` | 1 | 1 | 0 |
+| 219 | `fs_undo_list` | `fs_cmds` | 1 | 1 | 0 |
+| 220 | `fs_undo_restore` | `fs_cmds` | 1 | 1 | 0 |
+| 221 | `fs_undo_snapshot` | `fs_cmds` | 1 | 1 | 0 |
+| 222 | `terminal_profiles` | `terminal_cmds` | 1 | 1 | 0 |
+| 223 | `terminal_set_default` | `terminal_cmds` | 1 | 1 | 0 |
+| 224 | `terminal_set_automation` | `terminal_cmds` | 1 | 1 | 0 |
+| 225 | `terminal_confirm_unsafe` | `terminal_cmds` | 1 | 1 | 0 |
+| 226 | `terminal_get_shell_integration` | `terminal_cmds` | 0 | 0 | 0 |
+| 227 | `terminal_set_shell_integration` | `terminal_cmds` | 1 | 1 | 0 |
+| 228 | `terminal_spawn` | `terminal_cmds` | 1 | 1 | 0 |
+| 229 | `terminal_run` | `terminal_cmds` | 1 | 1 | 0 |
+| 230 | `terminal_replay` | `terminal_cmds` | 1 | 1 | 0 |
+| 231 | `terminal_write` | `terminal_cmds` | 1 | 1 | 0 |
+| 232 | `terminal_resize` | `terminal_cmds` | 1 | 1 | 0 |
+| 233 | `terminal_kill` | `terminal_cmds` | 1 | 1 | 0 |
+| 234 | `terminal_status` | `terminal_cmds` | 1 | 1 | 0 |
+| 235 | `terminal_commands` | `terminal_cmds` | 1 | 1 | 0 |
+| 236 | `terminal_last_command_context` | `terminal_cmds` | 1 | 1 | 0 |
+| 237 | `terminal_history_context` | `terminal_cmds` | 1 | 1 | 0 |
+| 238 | `browser_list_installed` | `browser_cmds` | 1 | 1 | 0 |
+| 239 | `browser_get_config` | `browser_cmds` | 1 | 1 | 0 |
+| 240 | `browser_set_config` | `browser_cmds` | 1 | 1 | 0 |
+| 241 | `browser_start` | `browser_cmds` | 1 | 1 | 0 |
+| 242 | `browser_navigate` | `browser_cmds` | 1 | 1 | 0 |
+| 243 | `browser_snapshot` | `browser_cmds` | 1 | 1 | 0 |
+| 244 | `browser_read` | `browser_cmds` | 1 | 1 | 0 |
+| 245 | `browser_read_url` | `browser_cmds` | 1 | 1 | 0 |
+| 246 | `browser_click` | `browser_cmds` | 1 | 1 | 0 |
+| 247 | `browser_type` | `browser_cmds` | 1 | 1 | 0 |
+| 248 | `browser_stop` | `browser_cmds` | 1 | 1 | 0 |
+| 249 | `browser_status` | `browser_cmds` | 1 | 1 | 0 |
+| 250 | `memory_request` | `memory_cmds` | 4 | 4 | 0 |
+| 251 | `memory_read` | `memory_cmds` | 1 | 1 | 0 |
+| 252 | `git_status` | `git_cmds` | 1 | 1 | 0 |
+| 253 | `git_log` | `git_cmds` | 1 | 1 | 0 |
+| 254 | `git_diff` | `git_cmds` | 1 | 1 | 0 |
+| 255 | `git_stage_all` | `git_cmds` | 1 | 1 | 0 |
+| 256 | `git_commit` | `git_cmds` | 1 | 1 | 0 |
+| 257 | `git_root` | `git_cmds` | 1 | 1 | 0 |
+| 258 | `git_worktree_add` | `git_cmds` | 1 | 1 | 0 |
+| 259 | `git_worktree_list` | `git_cmds` | 1 | 1 | 0 |
+| 260 | `git_worktree_merge` | `git_cmds` | 1 | 1 | 0 |
+| 261 | `git_worktree_revert` | `git_cmds` | 1 | 1 | 0 |
+| 262 | `lsp_diagnostics` | `lsp_cmds` | 1 | 1 | 0 |
+| 263 | `repomap_build` | `codeintel_cmds` | 0 | 0 | 4 |
+| 264 | `file_outline` | `codeintel_cmds` | 0 | 0 | 2 |
+| 265 | `model_aliases_resolve` | `codeintel_cmds` | 0 | 0 | 0 |
+| 266 | `ai_markers_scan` | `codeintel_cmds` | 0 | 0 | 0 |
+| 267 | `desktop_status` | `desktop_cmds` | 2 | 2 | 0 |
+| 268 | `desktop_attach` | `desktop_cmds` | 2 | 4 | 0 |
+| 269 | `desktop_policy_get` | `desktop_cmds` | 1 | 1 | 0 |
+| 270 | `desktop_apps` | `desktop_cmds` | 2 | 3 | 0 |
+| 271 | `desktop_policy_allow_path` | `desktop_cmds` | 1 | 3 | 0 |
+| 272 | `desktop_policy_remove_path` | `desktop_cmds` | 1 | 3 | 0 |
+| 273 | `desktop_policy_set_interaction` | `desktop_cmds` | 1 | 3 | 0 |
+| 274 | `desktop_windows` | `desktop_cmds` | 1 | 1 | 0 |
+| 275 | `desktop_read` | `desktop_cmds` | 1 | 1 | 0 |
+| 276 | `desktop_see` | `desktop_cmds` | 1 | 1 | 0 |
+| 277 | `desktop_act` | `desktop_cmds` | 1 | 1 | 0 |
+| 278 | `desktop_escalation` | `desktop_cmds` | 1 | 1 | 0 |
+| 279 | `desktop_act_escalating` | `desktop_cmds` | 1 | 1 | 0 |
+| 280 | `desktop_stop` | `desktop_cmds` | 1 | 1 | 0 |
+| 281 | `cua_dag_get` | `desktop_cmds` | 1 | 1 | 0 |
+| 282 | `cua_dag_edit_remaining` | `desktop_cmds` | 1 | 1 | 0 |
+| 283 | `work_list` | `work_cmds` | 1 | 1 | 0 |
+| 284 | `work_snapshot` | `work_cmds` | 1 | 1 | 0 |
+| 285 | `work_events` | `work_cmds` | 1 | 1 | 0 |
+| 286 | `work_presence` | `work_cmds` | 1 | 1 | 0 |
+| 287 | `work_reviews` | `work_cmds` | 1 | 1 | 0 |
+| 288 | `work_pty_spawn` | `work_cmds` | 1 | 1 | 0 |
+| 289 | `work_pty_resize` | `work_cmds` | 1 | 1 | 0 |
+| 290 | `work_pty_signal` | `work_cmds` | 1 | 1 | 0 |
+| 291 | `work_pty_close` | `work_cmds` | 1 | 1 | 0 |
+| 292 | `work_pty_snapshot` | `work_cmds` | 1 | 1 | 0 |
+| 293 | `work_worktree_create` | `work_cmds` | 1 | 1 | 0 |
+| 294 | `work_worktree_attach` | `work_cmds` | 1 | 1 | 0 |
+| 295 | `work_worktree_op` | `work_cmds` | 1 | 1 | 0 |
+| 296 | `work_agent_spawn` | `work_cmds` | 1 | 1 | 0 |
+| 297 | `work_agent_op` | `work_cmds` | 1 | 1 | 0 |
+| 298 | `work_agent_sessions` | `work_cmds` | 1 | 1 | 0 |
+| 299 | `work_children` | `work_cmds` | 1 | 1 | 0 |
+| 300 | `work_create` | `work_cmds` | 0 | 0 | 0 |
+| 301 | `work_get` | `work_cmds` | 0 | 0 | 0 |
+| 302 | `work_archive` | `work_cmds` | 0 | 0 | 0 |
+| 303 | `work_locator` | `work_cmds` | 0 | 0 | 0 |
+| 304 | `work_nodes` | `work_cmds` | 0 | 0 | 0 |
+| 305 | `work_node_register` | `work_cmds` | 0 | 0 | 0 |
+| 306 | `work_node_bind` | `work_cmds` | 0 | 0 | 0 |
+| 307 | `work_node_unbind` | `work_cmds` | 0 | 0 | 0 |
+| 308 | `work_authority_acquire` | `work_cmds` | 0 | 0 | 0 |
+| 309 | `work_authority_renew` | `work_cmds` | 0 | 0 | 0 |
+| 310 | `work_authority_release` | `work_cmds` | 0 | 0 | 0 |
+| 311 | `work_clients` | `work_cmds` | 0 | 0 | 0 |
+| 312 | `work_client_connect` | `work_cmds` | 0 | 0 | 0 |
+| 313 | `work_client_detach` | `work_cmds` | 0 | 0 | 0 |
+| 314 | `work_capabilities` | `work_cmds` | 0 | 0 | 0 |
+| 315 | `work_capability_grant` | `work_cmds` | 0 | 0 | 0 |
+| 316 | `work_capability_resolve` | `work_cmds` | 0 | 0 | 0 |
+| 317 | `work_review_resolve` | `work_cmds` | 0 | 0 | 0 |
+| 318 | `work_steer` | `work_cmds` | 0 | 0 | 0 |
+| 319 | `work_steer_interrupt` | `work_cmds` | 0 | 0 | 0 |
+| 320 | `work_manifest_create` | `work_cmds` | 0 | 0 | 0 |
+| 321 | `work_manifest_get` | `work_cmds` | 0 | 0 | 0 |
+| 322 | `work_manifest_restore` | `work_cmds` | 0 | 0 | 0 |
+| 323 | `work_attachment_add` | `work_cmds` | 0 | 0 | 0 |
+| 324 | `work_attachment_list` | `work_cmds` | 0 | 0 | 0 |
+| 325 | `work_attachment_resolve` | `work_cmds` | 0 | 0 | 0 |
+| 326 | `artifact_serve` | `artifact_cmds` | 1 | 1 | 0 |
+| 327 | `artifact_stop` | `artifact_cmds` | 1 | 1 | 0 |
+| 328 | `doctor_report` | `doctor_cmds` | 1 | 1 | 0 |
+| 329 | `diagnostics_sandbox_posture` | `diagnostics_cmds` | 1 | 1 | 0 |
+| 330 | `diagnostics_support_bundle` | `diagnostics_cmds` | 1 | 1 | 0 |
+| 331 | `data_remove_all` | `diagnostics_cmds` | 1 | 1 | 0 |
+| 332 | `openai_server_start` | `openai_cmds` | 1 | 1 | 0 |
+| 333 | `openai_server_stop` | `openai_cmds` | 1 | 1 | 0 |
+| 334 | `openai_server_status` | `openai_cmds` | 1 | 1 | 0 |
+| 335 | `discovery_inventory` | `discovery_cmds` | 1 | 1 | 0 |
+| 336 | `routing_feed_decide` | `discovery_cmds` | 1 | 1 | 0 |
+| 337 | `provider_health_probe` | `discovery_cmds` | 0 | 0 | 0 |
+| 338 | `model_download_start` | `model_cmds` | 1 | 1 | 0 |
+| 339 | `model_downloads` | `model_cmds` | 1 | 1 | 0 |
+| 340 | `model_download_cancel` | `model_cmds` | 1 | 1 | 0 |
+| 341 | `model_registry_list` | `model_cmds` | 1 | 1 | 0 |
+| 342 | `model_registry_remove` | `model_cmds` | 1 | 1 | 0 |
+| 343 | `model_recommend_quant` | `model_cmds` | 1 | 1 | 0 |
+| 344 | `model_serve` | `model_cmds` | 2 | 2 | 0 |
+| 345 | `model_serve_stop` | `model_cmds` | 0 | 0 | 0 |
+| 346 | `model_serve_list` | `model_cmds` | 0 | 0 | 1 |
+| 347 | `runtime_inventory_list` | `runtime_cmds` | 1 | 1 | 0 |
+| 348 | `runtime_models` | `runtime_cmds` | 1 | 1 | 0 |
+| 349 | `runtime_start` | `runtime_cmds` | 1 | 1 | 0 |
+| 350 | `runtime_stop` | `runtime_cmds` | 1 | 1 | 0 |
+| 351 | `model_estimate_fit` | `model_cmds` | 1 | 1 | 0 |
+| 352 | `model_gallery_parse` | `model_cmds` | 1 | 1 | 0 |
+| 353 | `model_best_pick` | `model_cmds` | 1 | 1 | 0 |
+| 354 | `settings_providers_list` | `settings_cmds` | 1 | 2 | 0 |
+| 355 | `settings_default_model_get` | `settings_cmds` | 1 | 2 | 0 |
+| 356 | `settings_default_model_set` | `settings_cmds` | 1 | 2 | 0 |
+| 357 | `settings_agents_list` | `settings_cmds` | 1 | 2 | 0 |
+| 358 | `settings_agent_get` | `settings_cmds` | 1 | 2 | 0 |
+| 359 | `settings_agent_loadout` | `settings_cmds` | 1 | 1 | 0 |
+| 360 | `settings_connections_list` | `settings_cmds` | 1 | 2 | 0 |
+| 361 | `settings_schedules_list` | `settings_cmds` | 1 | 2 | 0 |
+| 362 | `settings_schedule_get` | `settings_cmds` | 1 | 1 | 0 |
+| 363 | `settings_schedule_set_enabled` | `settings_cmds` | 1 | 2 | 0 |
+| 364 | `settings_extensions_list` | `settings_cmds` | 1 | 2 | 0 |
+| 365 | `voice_status` | `voice_cmds` | 1 | 1 | 0 |
+| 366 | `voice_vad_classify` | `voice_cmds` | 1 | 1 | 0 |
+| 367 | `voice_process_utterance` | `voice_cmds` | 1 | 1 | 0 |
 
 ### 15.2 Coordinator IPC method registry (`handleRequest`)
 
@@ -10014,15 +10093,15 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 - `ui/scripts/` — build.mjs, check-monaco-dompurify.mjs
 - `ui/src/` — App.tsx, globals.css, globals.d.ts, guard-main.ts, main.tsx
 - `ui/src/components/` — nps-prompt.tsx, onboarding-modal.test.ts, onboarding-modal.tsx, theme-provider.tsx
-- `ui/src/components/chat/` — agent-model-picker.dom.test.tsx, agent-model-picker.tsx, artifact-card.tsx, casual-layer.dom.test.tsx, chat-composer.tsx, chat-panel.tsx, mcq-interrupt-card.tsx, message-bubble.tsx, now-doing-strip.tsx, pending-queue-chips.tsx, progress-steps.tsx, session-tabs.tsx, session-timeline.tsx, tool-chip.tsx, turn-checkpoint.tsx
+- `ui/src/components/chat/` — agent-model-picker.dom.test.tsx, agent-model-picker.tsx, artifact-card.tsx, casual-layer.dom.test.tsx, chat-composer.tsx, chat-panel.tsx, composer-telemetry.tsx, mcq-interrupt-card.tsx, message-bubble.tsx, now-doing-strip.tsx, pending-queue-chips.tsx, progress-steps.tsx, session-tabs.tsx, session-timeline.tsx, tool-chip.tsx, turn-checkpoint.tsx, web-search-control.tsx
 - `ui/src/components/panels/` — agent-builder-panel.tsx, agents-models-section.dom.test.tsx, agents-models-section.tsx, analytics-panel.tsx, analytics-sections.tsx, automation-editor.tsx, automations-panel.tsx, capability-matrix-panel.tsx, computer-use-section.dom.test.tsx, connectors-panel.dom.test.tsx, connectors-panel.tsx, discover-section.tsx, feedback-panel.tsx, guard-panel.tsx, home-launchpad.tsx, local-models-panel.dom.test.tsx, local-models-panel.tsx, memory-panel.tsx, runtime-session-section.tsx, schedules-section.tsx, settings-panel.tsx, settings-providers.tsx, settings-sections-extra.tsx, settings-sections-security.tsx, settings-sections-studio.tsx, settings-sections.tsx, settings-shared.tsx, skills-panel.tsx, tasks-rail.tsx, usage-metrics-section.tsx
 - `ui/src/components/shell/` — ai-pointer.tsx, center-column.tsx, cockpit-slideover.tsx, command-palette.tsx, companion-chip.tsx, keyboard-shortcuts.tsx, left-sidebar.tsx, notifications-popover.tsx, p0-shell.dom.test.tsx, right-rail.tsx, runtime-status-banner.tsx, setup-gate.tsx, status-bar.dom.test.tsx, status-bar.tsx, title-bar.tsx, toast-bridge.tsx, vault-gate.tsx
 - `ui/src/components/ui/` — accordion.tsx, alert-dialog.tsx, alert.tsx, aspect-ratio.tsx, avatar.tsx, badge.tsx, breadcrumb.tsx, button.tsx, calendar.tsx, card.tsx, carousel.tsx, chart.tsx, checkbox.tsx, collapsible.tsx, command.tsx, context-menu.tsx, dialog.tsx, drawer.tsx, dropdown-menu.tsx, empty-state.tsx, error-state.tsx, form.tsx, hover-card.tsx, input-otp.tsx, input.tsx, label.tsx, loading-state.tsx, menubar.tsx, navigation-menu.tsx, pagination.tsx, popover.tsx, progress.tsx, radio-group.tsx, resizable.tsx, scroll-area.tsx, select.tsx, separator.tsx, sheet.tsx, sidebar.tsx, skeleton.tsx, slider.tsx, sonner.tsx, switch.tsx, table.tsx, tabs.tsx, textarea.tsx, toast.tsx, toaster.tsx, toggle-group.tsx, toggle.tsx, tooltip.tsx
-- `ui/src/components/views/` — artifact-view.tsx, audit-view.tsx, blueprint-view.tsx, browse-view.tsx, chat-overlay.tsx, desktop-view.tsx, diff-view.tsx, folder-view.tsx, generative-view.tsx, kanban-view.tsx, local-server-view.tsx, office-docx-view.tsx, office-file-switcher.tsx, office-open-bar.tsx, office-pdf-view.tsx, office-pptx-view.tsx, office-ribbon.tsx, office-xlsx-view.tsx, pdf-canvas.tsx, progress-view.tsx, shell-view.tsx, storage-view.tsx, tool-output-view.tsx, trajectory-view.tsx
+- `ui/src/components/views/` — artifact-view.tsx, audit-view.tsx, blueprint-view.tsx, browse-view.tsx, chat-overlay.tsx, desktop-view.tsx, diff-view.tsx, folder-view.tsx, generative-view.tsx, kanban-view.tsx, local-server-view.tsx, office-docx-view.tsx, office-file-switcher.tsx, office-open-bar.tsx, office-pdf-view.tsx, office-pptx-view.tsx, office-ribbon.tsx, office-xlsx-view.tsx, pdf-canvas.tsx, progress-view.tsx, run-artifacts.tsx, run-header.tsx, run-inventory.tsx, run-outcome.tsx, run-projection.test.tsx, run-projection.tsx, run-section.tsx, run-trace.tsx, run-usage.tsx, run-view.dom.test.tsx, run-view.tsx, shell-view.tsx, storage-view.tsx, tool-output-view.tsx, trajectory-view.tsx
 - `ui/src/components/views/generative/` — generative-ui.tsx
 - `ui/src/components/views/ide/` — diff-rail.tsx, editor-tabs.tsx, explorer-panel.tsx, ide-workbench.tsx, monaco-pane.tsx, problems-panel.tsx, scm-panel.tsx
 - `ui/src/hooks/` — use-mobile.ts, use-toast.ts
-- `ui/src/lib/` — acp.ts, agent-backend.test.ts, agent-backend.ts, agent-builder.ts, agent-ownership.test.ts, agent-registry.ts, agents.ts, artifact.ts, at-refs.ts, attachments.test.ts, attachments.ts, audit.ts, autonomy.test.ts, bridge-agent-send.test.ts, bridge.ts, browser.ts, calendar.test.ts, calendar.ts, capabilities.ts, capability-status.test.ts, capability-status.ts, catalog-models.test.ts, catalog-models.ts, chat-event-routing.test.ts, checkpoints-preflight.test.ts, checkpoints-restore.test.ts, checkpoints.ts, chief-handoff.test.ts, chief-handoff.ts, chief-pin.test.ts, citations.test.ts, citations.ts, cockpit.ts, connections.ts, connector-scopes.ts, cua-dag.test.ts, cua-dag.ts, design-tokens.test.ts, desktop-apps.test.ts, desktop-apps.ts, desktop.ts, discovery.ts, doctor.ts, error-ttfb.test.ts, errors.test.ts, errors.ts, feedback.ts, first-run.test.ts, first-run.ts, fs.ts, fuzzy.test.ts, fuzzy.ts, git.ts, guard-autonomy.test.ts, guard-ux.test.ts, guard.ts, i18n.ts, interrupts.test.ts, interrupts.ts, layout.ts, local-models.ts, lsp.ts, mcp.ts, memory.ts, model-fit.test.ts, model-fit.ts, models-download.ts, monaco.ts, nps.test.ts, nps.ts, oauth.ts, occupancy.test.ts, occupancy.ts, office-open-bar.test.ts, office.ts, openai-server.ts, perf.ts, personas.ts, plain-language.test.ts, plain-language.ts, plan-draft.ts, project-groups.test.ts, provider-groups.test.ts, provider-groups.ts, providers.test.ts, providers.ts, queue-while-generating.test.ts, reasoning-stream.test.ts, recovery.test.ts, recovery.ts, rewind-goals-queue.test.ts, runtime.test.ts, runtime.ts, scheduler.test.ts, scheduler.ts, session-recording.test.ts, session-recording.ts, session-truth.test.ts, settings-groups.test.ts, settings.ts, skills-surfaces.test.ts, skills.ts, spend.test.ts, spend.ts, spreadsheet.ts, stagger.ts, storage.ts, store.ts, tasks-contract.test.ts, tasks.ts, tauri.ts, terminal-split.test.ts, terminal-split.ts, terminal.test.ts, terminal.ts, theme-persist.test.ts, tool-json.test.ts, tool-json.ts, trajectory.ts, ui-prefs.ts, utils.ts, ux-metrics.ts, ux.ts, version.ts, voice.test.ts, voice.ts, walkthrough.test.ts, walkthrough.ts, work.test.ts, work.ts
+- `ui/src/lib/` — acp.ts, agent-backend.test.ts, agent-backend.ts, agent-builder.ts, agent-ownership.test.ts, agent-registry.ts, agents.ts, artifact.ts, at-refs.ts, attachments.test.ts, attachments.ts, audit.ts, autonomy.test.ts, bridge-agent-send.test.ts, bridge.ts, browser.ts, calendar.test.ts, calendar.ts, capabilities.ts, capability-status.test.ts, capability-status.ts, catalog-models.test.ts, catalog-models.ts, chat-event-routing.test.ts, checkpoints-preflight.test.ts, checkpoints-restore.test.ts, checkpoints.ts, chief-handoff.test.ts, chief-handoff.ts, chief-pin.test.ts, citations.test.ts, citations.ts, cockpit.ts, connections.ts, connector-scopes.ts, cua-dag.test.ts, cua-dag.ts, design-tokens.test.ts, desktop-apps.test.ts, desktop-apps.ts, desktop.ts, discovery.ts, doctor.ts, error-ttfb.test.ts, errors.test.ts, errors.ts, feedback.ts, first-run.test.ts, first-run.ts, fs.ts, fuzzy.test.ts, fuzzy.ts, git.ts, guard-autonomy.test.ts, guard-ux.test.ts, guard.ts, i18n.ts, interrupts.test.ts, interrupts.ts, layout.ts, local-models.ts, lsp.ts, mcp.ts, memory.ts, model-fit.test.ts, model-fit.ts, models-download.ts, monaco.ts, nps.test.ts, nps.ts, oauth.ts, occupancy.test.ts, occupancy.ts, office-open-bar.test.ts, office.ts, openai-server.ts, perf.ts, personas.ts, plain-language.test.ts, plain-language.ts, plan-draft.ts, project-groups.test.ts, provider-groups.test.ts, provider-groups.ts, providers.test.ts, providers.ts, queue-while-generating.test.ts, reasoning-stream.test.ts, recovery.test.ts, recovery.ts, rewind-goals-queue.test.ts, runtime.test.ts, runtime.ts, scheduler.test.ts, scheduler.ts, search-controls.dom.test.tsx, search-controls.test.ts, search-controls.ts, session-recording.test.ts, session-recording.ts, session-truth.test.ts, settings-groups.test.ts, settings.ts, skills-surfaces.test.ts, skills.ts, spend.test.ts, spend.ts, spreadsheet.ts, stagger.ts, storage.ts, store.ts, tasks-contract.test.ts, tasks.ts, tauri.ts, terminal-split.test.ts, terminal-split.ts, terminal.test.ts, terminal.ts, theme-persist.test.ts, tool-json.test.ts, tool-json.ts, trajectory.ts, ui-prefs.ts, utils.ts, ux-metrics.ts, ux.ts, version.ts, voice.test.ts, voice.ts, walkthrough.test.ts, walkthrough.ts, work.test.ts, work.ts
 - `ui/src/test/` — dom-harness.tsx
 
 ### 15.4 Census
@@ -10030,9 +10109,9 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 | Extension | Files |
 | --- | ---: |
 | `.rs` | 516 |
-| `.ts` | 478 |
+| `.ts` | 480 |
 | `.md` | 203 |
-| `.tsx` | 151 |
+| `.tsx` | 165 |
 | `.json` | 43 |
 | `.mjs` | 35 |
 | `.log` | 34 |
@@ -10051,9 +10130,9 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 | `.ico` | 1 |
 | `.js` | 1 |
 | `.css` | 1 |
-| **TOTAL tracked** | **1528** |
+| **TOTAL tracked** | **1544** |
 
-Lines counted across the 1520 tracked text files at generation time: **456,365** (this map excluded — self-referential).
+Lines counted across the 1536 tracked text files at generation time: **462,749** (this map excluded — self-referential).
 
 ### 15.5 Coverage audit — is any tracked file unaccounted for?
 
@@ -10062,11 +10141,11 @@ Each section registers the files it gives an entry to; this table is a diff agai
 | Section | Files accounted for |
 | --- | ---: |
 | §9 Rust — per-file `####` | 516 |
-| §10 TS/TSX — per-file `####` | 629 |
+| §10 TS/TSX — per-file `####` | 645 |
 | §12.2 npm manifests | 13 |
 | §13 non-source inventory | 167 |
 | §14 documentation index | 203 |
-| **TOTAL** | **1528 / 1528** |
+| **TOTAL** | **1544 / 1544** |
 
 **100% of tracked files have an entry, and that is mechanically enforced:** the generator exits non-zero if this
 list is ever non-empty. Note what this does *not* claim — an entry is accounting, not explanation. §9/§10

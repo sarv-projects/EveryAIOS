@@ -1031,7 +1031,7 @@ export async function sendUserMessage(
         handleRecord?.bindingId || undefined,
       );
       if (result.handle !== handle || (result.applicationSessionId && result.applicationSessionId !== sessionId)) {
-        throw new Error('ACP prompt returned a handle owned by another application Session');
+        throw new Error('ACP prompt returned a handle owned by another chat');
       }
       // The shell returns the canonical owner after durable Work/Binding/Run
       // admission. Re-key the live record from its provisional launch identity

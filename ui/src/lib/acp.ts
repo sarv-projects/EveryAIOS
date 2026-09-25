@@ -39,6 +39,13 @@ export interface AuthMethod {
   type?: "agent" | "url" | "terminal";
 }
 
+/** Button copy for one handshake method. The registry does not say this; the agent does. */
+export function authMethodLabel(method: AuthMethod): string {
+  const name = method.name?.trim() || "this agent";
+  if (method.type === "terminal") return `Set up ${name}`;
+  return `Sign in with ${name}`;
+}
+
 export interface HarnessManifest {
   id: string;
   name: string;
@@ -148,7 +155,7 @@ export function acpHandleKey(
   agentId: string,
 ): string {
   if (!applicationSessionId.trim() || !agentId.trim()) {
-    throw new Error('ACP handle records require an application Session and agent id');
+    throw new Error('ACP handle records require a chat id and agent id');
   }
   return JSON.stringify([applicationSessionId, bindingId, workId, agentId]);
 }
@@ -551,7 +558,7 @@ export async function acpPrompt(
   // ownership assertion; the first turn may omit it while Work/Binding are
   // being established. A blank Session is refused before provider I/O.
   if (!sessionId.trim()) {
-    throw new Error('ACP prompt requires an application Session id');
+    throw new Error('ACP prompt requires a chat id');
   }
   return nativeCall('ACP prompt', () => invoke<AcpPromptResult>("acp_prompt", {
     handle,
@@ -657,7 +664,7 @@ async function cancelOwnedAcpTurn(
   bindingId: string,
 ): Promise<void> {
   if (!sessionId.trim() || !bindingId.trim()) {
-    throw new Error('ACP cancellation requires the owning Session and binding id');
+    throw new Error('ACP cancellation requires the owning chat and binding id');
   }
   return nativeCall('ACP cancel', () => invoke("acp_cancel", {
     handle,
@@ -681,7 +688,7 @@ export async function acpCancel(
   bindingId?: string,
 ): Promise<void> {
   if (sessionId === undefined || bindingId === undefined) {
-    throw new Error('ACP cancellation requires the owning Session and binding id');
+    throw new Error('ACP cancellation requires the owning chat and binding id');
   }
   return cancelOwnedAcpTurn(handle, sessionId, bindingId);
 }
@@ -751,6 +758,11 @@ export async function chiefSubagentSetPolicy(
       maxConcurrency: policy.maxConcurrency ?? undefined,
       workspace: policy.workspace ?? undefined,
       budget: policy.budget ?? undefined,
+      allowAsPrimary: policy.allowAsPrimary ?? undefined,
+      enableAsSubagent: policy.enableAsSubagent ?? undefined,
+      domains: policy.domains ?? undefined,
+      maxCentsPerTurn: policy.maxCentsPerTurn ?? undefined,
+      maxTokensPerTurn: policy.maxTokensPerTurn ?? undefined,
     }),
   )
 }
