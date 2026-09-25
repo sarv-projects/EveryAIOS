@@ -44,9 +44,11 @@ import {
   governanceLabel,
   acpAgentImport,
   acpAgentVerify,
+  authMethodLabel,
   getAgentLifecycleState,
   type AcpConfigOption,
   type AgentLifecycleState,
+  type AuthMethod,
 } from '@/lib/acp'
 import { STANDARD_SHARED_CAPABILITIES, isCapabilityEnabled } from '@/lib/capabilities'
 import { refreshAgentCatalog } from '@/lib/bridge'
@@ -222,7 +224,7 @@ export default function AgentModelPicker({ compact }: Props) {
   const setAcpConfigOptions = useAppStore((s) => s.setAcpConfigOptions)
   const [auth, setAuth] = useState<{
     handle: string
-    methods: { id: string; name: string; type?: string; description?: string }[]
+    methods: AuthMethod[]
     waitingUrl?: string
   } | null>(null)
 
@@ -1056,7 +1058,7 @@ export default function AgentModelPicker({ compact }: Props) {
                                 className="h-5 gap-1 px-2 text-[9px]"
                                 onClick={() => signIn(m.id)}
                               >
-                                Sign in with {m.name}
+                                {authMethodLabel(m)}
                               </Button>
                               {m.description && (
                                 <span className="truncate font-mono text-[8px] text-muted-foreground/60">
@@ -1091,10 +1093,10 @@ export default function AgentModelPicker({ compact }: Props) {
                             ) : (
                               <KeyRound className="h-3 w-3 text-sky-400" />
                             )}
-                            {connecting ? 'connecting…' : 'Connect / sign in'}
+                            {connecting ? 'connecting…' : 'Connect'}
                           </Button>
                           <span className="font-mono text-[9px] text-muted-foreground/50">
-                            subscription · api key · local
+                            Sign-in appears only if this agent asks for it
                           </span>
                         </div>
                       )}

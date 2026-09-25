@@ -8,6 +8,7 @@ import {
   ChevronRight,
   ChevronDown,
   CheckCircle2,
+  XCircle,
   Loader2,
   Radio,
   Wrench,
@@ -32,6 +33,7 @@ import {
   type WorkEventEnvelope,
   type WorkEventDescription,
 } from '@/lib/work'
+import { agentCardFromEvents, timelineStatus, type AgentCard } from '@/lib/agent-card'
 
 type EventKind = 'message' | 'tool' | 'work'
 
@@ -41,7 +43,7 @@ type Ev = {
   icon: React.ReactNode
   kind: EventKind
   label: string
-  status: 'done' | 'active'
+  status: 'done' | 'active' | 'failed'
   detail?: string
 }
 
@@ -70,6 +72,9 @@ function iconFor(tone: WorkEventDescription['tone']): React.ReactNode {
     case 'worktree': return <GitBranch className="h-3.5 w-3.5 text-teal-400" />
     case 'pty': return <Terminal className="h-3.5 w-3.5 text-zinc-400" />
     case 'review': return <Eye className="h-3.5 w-3.5 text-pink-400" />
+    case 'conflict': return <ShieldCheck className="h-3.5 w-3.5 text-rose-400" />
+    case 'handoff': return <GitBranch className="h-3.5 w-3.5 text-amber-300" />
+    case 'test': return <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
     default: return <Radio className="h-3.5 w-3.5 text-violet-400" />
   }
 }
@@ -84,6 +89,7 @@ function buildEvents(
   messages: { id: string; role: string; content: string; timestamp: string; toolCalls?: { id: string; toolId: string; status: string; error?: string }[]; artifacts?: { id: string; name: string }[] }[],
   work: WorkEventEnvelope[],
   running: boolean,
+  card: AgentCard,
 ): Ev[] {
   const out: Ev[] = []
   for (const m of messages) {
@@ -122,8 +128,42 @@ function buildEvents(
     const s = summarizeWorkEvent(w)
     out.push({ id: `work-${w.sequence}`, t: fmtTime(w.timestamp), icon: iconFor(s.tone), kind: 'work', label: s.label, status: s.status === 'active' ? 'active' : 'done', detail: s.detail })
   }
-  if (running && out.length > 0) out[out.length - 1] = { ...out[out.length - 1], status: 'active' }
+  if (running && out.length > 0 && !card.awaitingInput) {
+    const last = out[out.length - 1]
+    out[out.length - 1] = { ...last, status: timelineStatus(card, 'active', true) }
+  }
   return out
+}
+
+function AgentCardBoard({ card }: { card: AgentCard }) {
+  const status = card.awaitingInput ? 'Awaiting Input' : card.status
+  return (
+    <div className="border-b border-border px-4 py-2">
+      <div className="mb-1 flex items-center justify-between">
+        <span className="text-xs font-semibold">Agent card</span>
+        <Badge variant="outline" className="text-[10px]">{status}</Badge>
+      </div>
+      {card.conflicts.length > 0 && (
+        <p className="text-[10px] text-rose-300">Conflict: {card.conflicts.join(', ')}</p>
+      )}
+      {card.files.length > 0 && (
+        <p className="text-[10px] text-muted-foreground">Files: {card.files.join(', ')}</p>
+      )}
+      {card.tests.length > 0 && (
+        <p className="text-[10px] text-muted-foreground">
+          Tests: {card.tests.map((t) => `${t.name} ${t.passed ? 'passed' : 'failed'}`).join(', ')}
+        </p>
+      )}
+      {card.handoffs.map((h) => (
+        <details key={h.artifactId} className="mt-1 text-[10px]">
+          <summary className="cursor-pointer text-foreground">
+            Open handoff {h.artifactId}: {h.fromAgent} → {h.toAgent}
+          </summary>
+          <p className="mt-1 whitespace-pre-wrap text-muted-foreground">{h.summary}</p>
+        </details>
+      ))}
+    </div>
+  )
 }
 
 function CuaDagBoard({ workId }: { workId: string }) {
@@ -251,8 +291,8 @@ export default function ProgressView() {
   const workEvents = useAppStore((s) => s.workEvents)
   const session = useAppStore((s) => s.sessions.find((x) => x.id === s.activeSessionId))
   const running = session?.status === 'running'
-
-  const events = buildEvents(session?.messages ?? [], workEvents, !!running)
+  const card = agentCardFromEvents(workEvents)
+  const events = buildEvents(session?.messages ?? [], workEvents, !!running, card)
   const artifacts = (session?.messages ?? []).flatMap((m) =>
     (m.artifacts ?? []).map((a) => a.name),
   )
@@ -296,6 +336,7 @@ export default function ProgressView() {
         </div>
       </header>
 
+      <AgentCardBoard card={card} />
       <CuaDagBoard workId={workItems[0]?.workId ?? session?.id ?? 'default'} />
       <WalkthroughBoard />
 
@@ -394,7 +435,9 @@ export default function ProgressView() {
                           <ChevronRight className="h-3 w-3 text-muted-foreground" />
                         )
                       ) : null}
-                      {e.status === 'done' ? (
+                      {e.status === 'failed' ? (
+                        <XCircle className="h-3.5 w-3.5 text-rose-400" />
+                      ) : e.status === 'done' ? (
                         <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
                       ) : (
                         <Loader2 className="h-3.5 w-3.5 animate-spin text-brand" />
