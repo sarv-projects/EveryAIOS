@@ -100,7 +100,7 @@ Every injection point records its token cost → the cost ledger (§5.6).
 | **DeepSeek** (V4 Flash/Pro) | Automatic, long-lived (indefinite for stable prefixes) | **92–99%** | Best economics; route long sessions here; prefix must be byte-stable |
 | **Claude** (Anthropic) | **5 minutes** (silently reduced from 1hr in early 2026) | **77–87%** | Keep requests flowing within 5-min windows; add cache-keepalive if session idle; key affinity critical |
 | **OpenAI** (GPT-4o/o1) | Varies by model, ~5–10 min typical | **60–80%** | Less transparent; prefix ordering matters |
-| **Local (Ollama/llamafile)** | N/A (local compute) | N/A | No caching concern — context is local |
+| **Agent-owned local runtime** (Ollama/llamafile; superseded in part by ARCH/16-LOCAL-RUNTIME-INTEROP.md) | Runtime/agent-owned | Outside EveryAIOS provider-cache accounting | EveryAIOS does not route or account for this inference; the bound agent owns the provider/runtime and any local-compute economics |
 
 ⚠️ **Claude TTL caveat:** Anthropic silently dropped prompt cache TTL from 1 hour to 5 minutes. If the user's session has gaps >5min between turns, cache hit drops to near 0%. The router should prefer DeepSeek for cache-heavy long sessions when the user has DeepSeek keys.
 

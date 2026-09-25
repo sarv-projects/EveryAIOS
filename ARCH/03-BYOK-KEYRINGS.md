@@ -16,7 +16,9 @@ Three unrelated things get conflated in code and UI, so they are separated here 
 |---|---|---|
 | `subscription` | The agent uses **its own** subscription login. EveryAIOS never copies or harvests that credential | Claude Agent, Codex, Cursor, Devin, Copilot, Grok |
 | `api_key` | **BYOK** — the user's own keys, drawn from this document's key-rings. Cloud inference, user's credential | Qwen Code, Kimi CLI, goose, fast-agent, GLM Agent, DeepAgents |
-| `local` | **Local inference on this machine.** No cloud, no account. Ollama / llamafile / on-device | siGit Code (on-device via Onde) |
+| `local` | **A local runtime resource, not a keyring; the bound agent owns its own provider.** No EveryAIOS credential is created. | Ollama / llamafile / LM Studio / llama.cpp; resource lifecycle in ARCH/16 (superseded in part by ARCH/16-LOCAL-RUNTIME-INTEROP.md) |
+
+The examples are illustrations, not a list EveryAIOS branches on. The running agent's `authMethods` decide the controls. An empty list shows no sign-in and no key field. An agent may offer both a sign-in and its own provider key. Those secrets stay in the agent's store. This document's key rings are only for credentials EveryAIOS itself holds.
 
 **What `local` does NOT mean, and must never be set to:**
 
@@ -89,7 +91,7 @@ everyaios-vault (SQLCipher)
 
 - User has 2 OpenAI accounts with keys → two entries under `openai` → both active, weighted round-robin/priority → **no manual switching ever**.
 - Rate limits are per-account, so a 429 on account A immediately rolls to B; if B also 429s, backoff + retry after the max switches.
-- The same works for Anthropic, OpenRouter (including OpenRouter's own BYOK multi-key with Prioritized/Fallback sections), DeepSeek, and any OpenAI-compatible endpoint (Ollama keys are effectively unlimited → always primary for local models).
+- The same works for Anthropic, OpenRouter (including OpenRouter's own BYOK multi-key with Prioritized/Fallback sections), DeepSeek, and any OpenAI-compatible endpoint that uses BYOK; local runtimes are agent-owned resources, not key-ring entries (ARCH/16-LOCAL-RUNTIME-INTEROP.md).
 
 ## 3.4 Consistency with the rest of the system
 
@@ -100,7 +102,7 @@ everyaios-vault (SQLCipher)
 
 ## 3.5 Provider inventory (from doc 19 + ledger)
 
-**Provider set (user-locked 2026-09-10):** **all models.dev providers** (catalog data, 4h scheduled refresh from `https://models.dev/api.json`) **+ OpenCode-shaped custom inference** (format dropdown + optional key + headers/body/temp/models) **+ NVIDIA / NIM + three OpenCode rows (Zen `opencode` / Go `opencode-go` / Free `opencode-free`)** **+ OAuth ids when flagged + Ollama/llamafile/LM Studio/llama.cpp**. Adding a models.dev provider is a catalog refresh, not a crate. Custom inference is a `ProviderProfile` write, not a new broker branch. Live choke point until P55.5/P55.6: `Broker::DEFAULT_BASE_URLS` is still a handful of URLs — that is a bug vs this inventory, not a reduced product. Catalog 4h job + Providers +/verify/tick UI = P56.
+**Provider set (user-locked 2026-09-10):** **all models.dev providers** (catalog data, 4h scheduled refresh from `https://models.dev/api.json`) **+ OpenCode-shaped custom inference** (format dropdown + optional key + headers/body/temp/models) **+ NVIDIA / NIM + three OpenCode rows (Zen `opencode` / Go `opencode-go` / Free `opencode-free`)** **+ OAuth ids when flagged**. Local runtimes are resource + handoff instances owned through ARCH/16, not EveryAIOS-held provider or key-ring rows. Adding a models.dev provider is a catalog refresh, not a crate. Custom inference is a `ProviderProfile` write, not a new broker branch. Live choke point until P55.5/P55.6: `Broker::DEFAULT_BASE_URLS` is still a handful of URLs — that is a bug vs this inventory, not a reduced product. Catalog 4h job + Providers +/verify/tick UI = P56.
 
 ## 3.6 Failure taxonomy (no-failures goal, edge cases)
 
