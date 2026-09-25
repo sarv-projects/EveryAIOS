@@ -1,9 +1,10 @@
 'use client'
 
-import { memo, useEffect, useState } from 'react'
-import { CheckCircle2, ChevronDown, Loader2, RotateCw, ShieldAlert, X } from 'lucide-react'
+import { memo, useEffect, useMemo, useState } from 'react'
+import { Check, CheckCircle2, ChevronDown, Copy, Database, Loader2, RotateCw, ShieldAlert, Wrench, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { ToolCallRecord } from '@/lib/store'
+import { parseToolResult } from '@/lib/tool-json'
 import { useAppStore } from '@/lib/store'
 
 /** The short, user-facing state of a tool call. */
@@ -185,6 +186,121 @@ function safeJson(value: unknown): string {
   }
 }
 
+// eslint-disable-next-line no-control-regex
+const ANSI_CSI_RE = /[\u001b\u009b][[()#;?]*(?:\d{1,4}(?:;\d{0,4})*)?[0-9A-ORZcf-nqry=><]/g
+const ANSI_OSC_RE = /\u001b\][^\x07\u001b]*(?:\x07|\u001b\\)/g
+
+/** P64.11 — strip terminal escape sequences (SGR colors, cursor moves, OSC
+ * hyperlinks) from a raw CLI stream. */
+export function stripAnsi(input: string): string {
+  return input.replace(ANSI_OSC_RE, '').replace(ANSI_CSI_RE, '')
+}
+
+/** P64.11 — CLI stream normalization at the drawer boundary. The render-side
+ * twin of the `UIEventEnvelope` normalization in `everyaios-acp`: collapse
+ * `\r` spinner/progress frames to their final frame, drop ANSI churn, and
+ * trim blank-line runs — so raw external CLI stdout/stderr never spills past
+ * the tool drawer onto the chat surface. Display-only; stored records keep
+ * the original bytes. */
+export function normalizeCliStream(input: string): string {
+  const frames = stripAnsi(input)
+    .split('\n')
+    .map((line) => {
+      const parts = line.split('\r')
+      return parts[parts.length - 1]
+    })
+  return frames.join('\n').replace(/\n{3,}/g, '\n\n').replace(/[ \t]+$/gm, '').trimEnd()
+}
+
+/** P64.11 — payloads over this token budget render as a spooled blob card
+ * (stats + preview + inspect action) instead of an inline dump. */
+export const SPOOL_TOKEN_BUDGET = 2000
+
+/** Rough token estimate (4 chars ≈ 1 token) for spool decisions. */
+export function estimateTokens(text: string): number {
+  if (!text) return 0
+  return Math.ceil(text.length / 4)
+}
+
+/** Short display kind for a tool id (`codex_terminal_exec` → `Codex`). Used
+ * for the grouped drawer summary; the full id stays in Technical details. */
+function shortToolKind(toolId: string): string {
+  const word =
+    toolId.toLowerCase().replace(/[^a-z0-9]+/g, ' ').split(/\s+/).find(Boolean) ?? 'task'
+  return word.charAt(0).toUpperCase() + word.slice(1)
+}
+
+/** P64.11 — spooled big-payload card. Results over ~2,000 tokens are treated
+ * as spooled to content-addressed disk storage (`retrieve_original(hash)` on
+ * the host): the drawer shows stats plus a short preview, and `Inspect in
+ * Right Rail ↗` expands the full cleaned output in place without bloating
+ * the thread. Until a dedicated right-rail Monaco/diff viewer lands, this
+ * drawer is the inspection surface (see the follow-up note on the button). */
+function SpooledBlobCard({ id, text, failed }: { id: string; text: string; failed: boolean }) {
+  const [inspecting, setInspecting] = useState(false)
+  const [copied, setCopied] = useState(false)
+  const notify = useAppStore((s) => s.notify)
+  const tokens = estimateTokens(text)
+  const lines = text.split('\n').length
+  const preview = text.split('\n').slice(0, 8).join('\n')
+  const inspectId = `spooled-full-${id}`
+  return (
+    <div className="rounded-md border border-border/60 bg-background/60 p-2" data-testid="spooled-blob">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-muted-foreground">
+        <Database aria-hidden className="h-3 w-3 shrink-0" />
+        <span className="font-mono tabular-nums">
+          ~{tokens.toLocaleString()} tokens · {lines.toLocaleString()} lines ·{' '}
+          {text.length.toLocaleString()} chars
+        </span>
+        <span className="rounded-full border border-border px-1.5 py-px font-mono text-[9px] uppercase tracking-wide">
+          spooled
+        </span>
+      </div>
+      {!inspecting && (
+        <pre className="mt-1 max-h-24 overflow-hidden whitespace-pre-wrap break-words font-mono text-[10px] text-muted-foreground/80">
+          {preview}
+        </pre>
+      )}
+      <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+        <button
+          type="button"
+          className="inline-flex items-center gap-1 rounded border border-brand/40 bg-brand/10 px-2 py-1 text-[10px] text-brand transition-colors hover:bg-brand/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+          onClick={() => setInspecting((v) => !v)}
+          aria-expanded={inspecting}
+          aria-controls={inspectId}
+          title="Show the full spooled output here — a dedicated right-rail viewer is a follow-up"
+        >
+          {inspecting ? 'Collapse output' : 'Inspect full output'}
+        </button>
+        <button
+          type="button"
+          className="inline-flex items-center gap-1 rounded border border-border px-2 py-1 text-[10px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+          onClick={() => {
+            navigator.clipboard?.writeText(text)
+            setCopied(true)
+            setTimeout(() => setCopied(false), 1500)
+            notify('Full tool output copied')
+          }}
+        >
+          {copied ? <Check aria-hidden className="h-2.5 w-2.5 text-emerald-400" /> : <Copy aria-hidden className="h-2.5 w-2.5" />}
+          {copied ? 'Copied' : 'Copy full output'}
+        </button>
+      </div>
+      {inspecting && (
+        <pre
+          id={inspectId}
+          className={cn(
+            'mt-1.5 max-h-96 overflow-auto whitespace-pre-wrap break-words font-mono text-[10px]',
+            failed ? 'text-rose-300' : 'text-emerald-300/80',
+          )}
+        >
+          {text}
+        </pre>
+      )}
+    </div>
+  )
+}
+
 // P45.9 — memoized: tool-call rows only re-render when the record changes
 // (streaming updates mutate the running call's object identity; settled calls
 // keep identity, so untouched chips skip re-render entirely).
@@ -198,7 +314,35 @@ const ToolChip = memo(function ToolChip({ rec }: { rec: ToolCallRecord }) {
     return () => clearInterval(t)
   }, [rec.status, rec.startedAt])
   const summary = toolActivitySummary(rec)
-  const rawResult = safeJson(rec.error ?? rec.result)
+  const source = rec.error ?? rec.result
+  // P64.11 — normalize CLI streams at the drawer boundary: the render-side
+  // twin of the `UIEventEnvelope` normalization in `everyaios-acp`. Raw
+  // stdout/stderr (ANSI, spinners, progress churn) never reaches the chat
+  // surface unformatted; only the quarantined drawer shows it, cleaned.
+  const normalized = useMemo(
+    () => (typeof source === 'string' ? normalizeCliStream(source) : safeJson(source)),
+    [source],
+  )
+  const [parsedLarge, setParsedLarge] = useState<string | null>(null)
+  useEffect(() => {
+    if (normalized.length < 8_000) {
+      setParsedLarge(null)
+      return
+    }
+    let cancelled = false
+    void parseToolResult(normalized).then((value) => {
+      if (cancelled) return
+      setParsedLarge(typeof value === 'string' ? value : JSON.stringify(value, null, 2))
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [normalized])
+  const displayText = parsedLarge ?? normalized
+  // P64.11 — payloads over ~2,000 tokens count as spooled: the drawer shows
+  // the compact blob card instead of the full dump, so the thread stays lean.
+  const spooled = displayText.length > 0 && estimateTokens(displayText) > SPOOL_TOKEN_BUDGET
+  const rawResult = displayText
   const requestId = (rec as ToolCallRecord & { requestId?: string }).requestId
   const detailsId = `tool-details-${rec.id}`
 
@@ -206,7 +350,7 @@ const ToolChip = memo(function ToolChip({ rec }: { rec: ToolCallRecord }) {
     <div
       role="listitem"
       className={cn(
-        'overflow-hidden rounded-lg border bg-background/40',
+        'min-h-[44px] overflow-hidden rounded-lg border bg-background/40',
         rec.status === 'failed' && 'border-rose-500/40',
         rec.status === 'running' && 'border-brand/30',
         rec.status === 'done' && 'border-border',
@@ -229,9 +373,19 @@ const ToolChip = memo(function ToolChip({ rec }: { rec: ToolCallRecord }) {
           <p className="truncate text-[11px] leading-relaxed text-foreground" aria-live="polite">
             {summary.sentence}
           </p>
-          <div className="mt-0.5 flex items-center gap-2 text-[9px] text-muted-foreground">
+          <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[9px] text-muted-foreground">
             <span>{summary.status}</span>
             {summary.duration && <span className="font-mono tabular-nums">{summary.duration}</span>}
+            {/* P64.12 — specialist attribution badge: visible on the row
+                itself, so delegation is obvious without opening details. */}
+            {rec.specialist && (
+              <span
+                title={`Ran by ${rec.specialist}`}
+                className="inline-flex items-center rounded-full border border-sky-500/40 bg-sky-500/10 px-1.5 py-px font-mono text-[9px] text-sky-300"
+              >
+                @{rec.specialist}
+              </span>
+            )}
           </div>
         </div>
         <button
@@ -254,6 +408,12 @@ const ToolChip = memo(function ToolChip({ rec }: { rec: ToolCallRecord }) {
           <dl className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-1 text-[10px]">
             <dt className="text-muted-foreground">Tool</dt>
             <dd className="break-all font-mono text-foreground">{rec.toolId}</dd>
+            {rec.specialist && (
+              <>
+                <dt className="text-muted-foreground">Specialist</dt>
+                <dd className="font-mono text-foreground">@{rec.specialist}</dd>
+              </>
+            )}
             {rec.risk && (
               <>
                 <dt className="text-muted-foreground">Risk</dt>
@@ -285,7 +445,7 @@ const ToolChip = memo(function ToolChip({ rec }: { rec: ToolCallRecord }) {
               </pre>
             </div>
           )}
-          {rawResult && (
+          {rawResult && !spooled && (
             <div>
               <p className="mb-1 text-[9px] uppercase tracking-wide text-muted-foreground">
                 {rec.error ? 'Error' : 'Result'}
@@ -299,6 +459,9 @@ const ToolChip = memo(function ToolChip({ rec }: { rec: ToolCallRecord }) {
                 {rawResult}
               </pre>
             </div>
+          )}
+          {spooled && (
+            <SpooledBlobCard id={rec.id} text={rawResult} failed={rec.status === 'failed'} />
           )}
           {rec.status === 'failed' && (
             <button
@@ -316,13 +479,81 @@ const ToolChip = memo(function ToolChip({ rec }: { rec: ToolCallRecord }) {
   )
 })
 
+/** P64.11 — <ToolExecutionBox />: the grouped multi-tool drawer. Two or more
+ * actions in one turn collapse into a single compact header (`Executed N
+ * actions (Read, Terminal, Patch) · 1.8s`) that is closed by default once
+ * settled; expanding reveals the itemized rows (params, normalized output,
+ * spooled refs, retry). A single-tool turn renders as its own
+ * closed-by-default chip above, which is the same one-row pattern. The
+ * reserved min-height plus content-visibility keeps streaming CLS at zero. */
 export default function ToolChips({ calls }: { calls: ToolCallRecord[] }) {
+  const settled = calls.every((call) => call.status !== 'running')
+  // Closed by default once settled; follows live transitions (opens while
+  // work runs, collapses when the turn settles) but never fights an explicit
+  // user toggle in between — the effect only runs when `settled` flips.
+  const [open, setOpen] = useState(!settled)
+  const [, force] = useState(0)
+  useEffect(() => {
+    setOpen(!settled)
+  }, [settled])
+  // Live tick so the grouped total keeps time while work is running.
+  useEffect(() => {
+    if (settled) return
+    const t = setInterval(() => force((v) => v + 1), 1000)
+    return () => clearInterval(t)
+  }, [settled])
+  const kinds = useMemo(() => {
+    const seen: string[] = []
+    for (const c of calls) {
+      const k = shortToolKind(c.toolId)
+      if (!seen.includes(k)) seen.push(k)
+      if (seen.length >= 3) break
+    }
+    return seen
+  }, [calls])
+  // Grouped wall-clock total: earliest start → latest end (or now live).
+  // Computed inline (not memoized) so the live tick above refreshes it.
+  const starts = calls.map((c) => c.startedAt).filter((v): v is number => v !== undefined)
+  const ends = calls.map((c) => c.endedAt).filter((v): v is number => v !== undefined)
+  const total =
+    starts.length === 0
+      ? ''
+      : formatToolDuration(Math.min(...starts), !settled || ends.length === 0 ? Date.now() : Math.max(...ends))
   if (calls.length === 0) return null
-  return (
-    <div className="mt-2 flex flex-col gap-1.5" role="list" aria-label="Work activity">
+  const list = (
+    <div className="mt-2 flex min-h-[44px] flex-col gap-1.5 [content-visibility:auto] [contain-intrinsic-size:auto_44px]" role="list" aria-label="Work activity">
       {calls.map((c) => (
         <ToolChip key={c.id} rec={c} />
       ))}
+    </div>
+  )
+  if (calls.length < 2) return list
+  return (
+    <div className="mt-2 min-h-[28px]" data-testid="tool-execution-box">
+      <button
+        type="button"
+        className="inline-flex min-h-[24px] items-center gap-1.5 rounded border border-border/60 bg-background/40 px-2 py-1 text-[10px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+        title={open ? 'Collapse the grouped tool runs' : 'Expand the grouped tool runs'}
+      >
+        {settled ? (
+          <Wrench aria-hidden className="h-3 w-3 shrink-0" />
+        ) : (
+          <Loader2 aria-hidden className="h-3 w-3 shrink-0 animate-spin text-brand motion-reduce:animate-none" />
+        )}
+        <span aria-live="polite">
+          Executed {calls.length} actions
+          {kinds.length > 0 && <span> ({kinds.join(', ')})</span>}
+          {total && <span className="font-mono tabular-nums"> · {total}</span>}
+          {!settled && <span> · running</span>}
+        </span>
+        <ChevronDown
+          aria-hidden
+          className={cn('h-3 w-3 transition-transform motion-reduce:transition-none', open && 'rotate-180')}
+        />
+      </button>
+      {open && list}
     </div>
   )
 }

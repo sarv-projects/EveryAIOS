@@ -36,7 +36,7 @@ import {
   type AgentRuntime,
   type TaskKind,
 } from '@/lib/agents'
-import { acpIdFor, acpInstallAwait, acpInstallCommit, acpInstallRequest } from '@/lib/acp'
+import { acpIdFor, acpInstallAwait, acpInstallCommit, acpInstallRequest, chiefSubagentSetPolicy } from '@/lib/acp'
 import {
   agentBackendClear,
   agentBackendGet,
@@ -405,6 +405,18 @@ function AgentLogo({ agent }: { agent: AgentRuntime }) {
 
 type AgentReadiness = 'ready' | 'degraded' | 'unavailable' | 'unverified'
 
+/** Installed is not Ready. A catalog row with no executable, package, or WSL path cannot serve a turn. */
+function agentHasProgram(agent: AgentRuntime): boolean {
+  if (agent.path?.trim()) return true
+  const location = agent.location
+  if (!location || location.kind === 'unavailable') return false
+  if (location.kind === 'path' || location.kind === 'windows_path') return Boolean(location.executable)
+  if (location.kind === 'wsl') return Boolean(location.linuxPath)
+  if (location.kind === 'package_manager') return Boolean(location.package || location.command)
+  if (location.kind === 'managed') return Boolean(location.executable)
+  return false
+}
+
 function agentReadiness(agent: AgentRuntime): { state: AgentReadiness; reason: string } {
   // P71.2a — no runtime is "always live": readiness is the only evidence a
   // runtime can serve a turn, built-in or not.
@@ -415,7 +427,11 @@ function agentReadiness(agent: AgentRuntime): { state: AgentReadiness; reason: s
     return { state: 'degraded', reason: 'update in progress — launch may fail' }
   }
   const launchable = agent.launchable ?? agent.status === 'installed'
-  if (agent.status === 'installed' && launchable) {
+  const hasProgram = agentHasProgram(agent)
+  if (agent.status === 'installed' && launchable && !hasProgram) {
+    return { state: 'unverified', reason: 'no program path on this machine — not ready' }
+  }
+  if (agent.status === 'installed' && launchable && hasProgram) {
     return { state: 'ready', reason: 'verified launch path on this machine' }
   }
   if (agent.status === 'installed' && !launchable) {
@@ -581,6 +597,256 @@ function AgentDetailCards({ agent }: { agent: AgentRuntime }) {
   )
 }
 
+// === P63.12 — external subagent roster card =====================================
+// One configuration card per external CLI agent (Codex CLI, Claude Code,
+// OpenCode, Aider, …): dual role toggles, specialist domain tags, a
+// concurrency cap, and per-turn budget ceilings. This card only persists roster
+// policy through `chief_subagent_set_policy` — there is no mock loop here and
+// no live `delegate.spawn` path. Admission stays with the delegation policy on
+// the Work gateway (the scheduler never enforces these caps), and only a Ready
+// runtime may be hired.
+
+const SUBAGENT_DOMAINS = ['coding', 'architecture', 'research', 'scraping', 'office'] as const
+type SubagentDomain = (typeof SUBAGENT_DOMAINS)[number]
+
+function formatCentsPerTurn(cents: number): string {
+  if (!cents || cents <= 0) return 'chain cap'
+  return `$${(cents / 100).toFixed(2)} / turn`
+}
+
+function SubagentConfigCard({ agent }: { agent: AgentRuntime }) {
+  const notify = useAppStore((s) => s.notify)
+  const [allowAsPrimary, setAllowAsPrimary] = useState(true)
+  const [enableAsSubagent, setEnableAsSubagent] = useState(true)
+  const [domains, setDomains] = useState<SubagentDomain[]>([])
+  const [maxConcurrency, setMaxConcurrency] = useState(2)
+  const [maxCentsPerTurn, setMaxCentsPerTurn] = useState(0)
+  const [maxTokensPerTurn, setMaxTokensPerTurn] = useState(0)
+  const [saving, setSaving] = useState(false)
+  const [savedAt, setSavedAt] = useState<string | null>(null)
+  const readiness = agentReadiness(agent)
+  const hireable = readiness.state === 'ready'
+
+  const roleSummary =
+    allowAsPrimary && enableAsSubagent
+      ? 'primary + subagent'
+      : allowAsPrimary
+        ? 'primary only'
+        : enableAsSubagent
+          ? 'subagent only'
+          : 'disabled'
+
+  const toggleDomain = (tag: SubagentDomain) => {
+    setSavedAt(null)
+    setDomains((d) => (d.includes(tag) ? d.filter((t) => t !== tag) : [...d, tag]))
+  }
+
+  const markDirty = () => setSavedAt(null)
+
+  const save = async () => {
+    if (!inTauri()) {
+      notify('Subagent roster persists in the desktop shell — preview edits are not saved', 'error')
+      return
+    }
+    setSaving(true)
+    try {
+      await chiefSubagentSetPolicy(agent.id, {
+        allowAsPrimary,
+        enableAsSubagent,
+        domains: [...domains],
+        maxConcurrency: Math.min(8, Math.max(1, Math.floor(maxConcurrency) || 2)),
+        maxCentsPerTurn: Math.max(0, Math.floor(maxCentsPerTurn) || 0),
+        maxTokensPerTurn: Math.max(0, Math.floor(maxTokensPerTurn) || 0),
+      })
+      setSavedAt(new Date().toLocaleTimeString())
+      notify(`Subagent roster saved for ${agent.name} (${roleSummary})`)
+    } catch (e) {
+      notify(e instanceof Error ? e.message : `Could not save subagent config for ${agent.name}`, 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div
+      className="mt-2 rounded-md border border-border/50 bg-background/40 p-2"
+      data-testid={`subagent-config-${agent.id}`}
+    >
+      <div className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
+        <Boxes className="h-2.5 w-2.5" />
+        Subagent roster
+        <span
+          className={cn(
+            'ml-auto truncate normal-case',
+            hireable ? 'text-emerald-300/80' : 'text-muted-foreground/70',
+          )}
+          title={readiness.reason}
+        >
+          {hireable ? 'Ready — hireable via delegate.spawn' : `${readiness.state} — not hireable until Ready`}
+        </span>
+      </div>
+
+      <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
+        How this external CLI may serve: as the session&apos;s primary binding, as a hired
+        specialist, or both. Caps are enforced by the delegation policy on the Work gateway —
+        the scheduler never enforces them.
+      </p>
+
+      <div className="mt-2 grid gap-1.5 sm:grid-cols-2">
+        <label className="flex cursor-pointer items-center gap-2 rounded border border-border/40 bg-background/30 px-2 py-1.5">
+          <Switch
+            checked={allowAsPrimary}
+            onCheckedChange={(v) => {
+              setAllowAsPrimary(v)
+              markDirty()
+            }}
+            aria-label={`Allow ${agent.name} as primary`}
+          />
+          <span className="text-[10px]">
+            <span className="font-medium text-foreground">Allow as primary</span>
+            <br />
+            <span className="text-muted-foreground">may occupy the primary slot</span>
+          </span>
+        </label>
+        <label className="flex cursor-pointer items-center gap-2 rounded border border-border/40 bg-background/30 px-2 py-1.5">
+          <Switch
+            checked={enableAsSubagent}
+            onCheckedChange={(v) => {
+              setEnableAsSubagent(v)
+              markDirty()
+            }}
+            aria-label={`Enable ${agent.name} as subagent`}
+          />
+          <span className="text-[10px]">
+            <span className="font-medium text-foreground">Enable as subagent</span>
+            <br />
+            <span className="text-muted-foreground">may be hired through delegate.spawn</span>
+          </span>
+        </label>
+      </div>
+      <div className="mt-1 font-mono text-[9px] text-muted-foreground/70">
+        effective role: <span className="text-foreground/80">{roleSummary}</span>
+      </div>
+
+      <div className="mt-2">
+        <div className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
+          Specialist domains
+        </div>
+        <div className="mt-1 flex flex-wrap gap-1">
+          {SUBAGENT_DOMAINS.map((tag) => {
+            const on = domains.includes(tag)
+            return (
+              <button
+                key={tag}
+                type="button"
+                aria-pressed={on}
+                data-testid={`subagent-domain-${agent.id}-${tag}`}
+                onClick={() => toggleDomain(tag)}
+                className={cn(
+                  'rounded border px-1.5 py-0.5 font-mono text-[10px] capitalize transition-colors',
+                  on
+                    ? 'border-sky-500/50 bg-sky-500/10 text-sky-200'
+                    : 'border-border/60 text-muted-foreground hover:border-border hover:text-foreground',
+                )}
+              >
+                {tag}
+              </button>
+            )
+          })}
+        </div>
+        <p className="mt-1 text-[9px] leading-relaxed text-muted-foreground/80">
+          When the primary omits a target, the one Ready agent with that domain is admitted —
+          zero or several matches is a denial with a reason, never a silent swap.
+        </p>
+      </div>
+
+      <div className="mt-2 grid grid-cols-3 gap-1.5">
+        <label className="text-[10px] text-muted-foreground">
+          Max concurrency
+          <input
+            type="number"
+            min={1}
+            max={8}
+            value={maxConcurrency}
+            aria-label={`Max concurrent instances for ${agent.id}`}
+            onChange={(e) => {
+              markDirty()
+              setMaxConcurrency(Math.min(8, Math.max(1, Math.floor(Number(e.target.value)) || 1)))
+            }}
+            className="mt-0.5 h-7 w-full rounded border border-border bg-background px-1.5 font-mono text-[10px] text-foreground"
+          />
+        </label>
+        <label className="text-[10px] text-muted-foreground">
+          Max cents / turn
+          <input
+            type="number"
+            min={0}
+            value={maxCentsPerTurn}
+            aria-label={`Max cents per turn for ${agent.id}`}
+            onChange={(e) => {
+              markDirty()
+              setMaxCentsPerTurn(Math.max(0, Math.floor(Number(e.target.value)) || 0))
+            }}
+            className="mt-0.5 h-7 w-full rounded border border-border bg-background px-1.5 font-mono text-[10px] text-foreground"
+          />
+        </label>
+        <label className="text-[10px] text-muted-foreground">
+          Max tokens / turn
+          <input
+            type="number"
+            min={0}
+            value={maxTokensPerTurn}
+            aria-label={`Max tokens per turn for ${agent.id}`}
+            onChange={(e) => {
+              markDirty()
+              setMaxTokensPerTurn(Math.max(0, Math.floor(Number(e.target.value)) || 0))
+            }}
+            className="mt-0.5 h-7 w-full rounded border border-border bg-background px-1.5 font-mono text-[10px] text-foreground"
+          />
+        </label>
+      </div>
+      <p className="mt-1 text-[9px] leading-relaxed text-muted-foreground/80">
+        Budget ceiling: {formatCentsPerTurn(maxCentsPerTurn)}
+        {maxTokensPerTurn > 0 ? ` · ${formatTokens(maxTokensPerTurn)} tokens` : ' · no token cap'}. A
+        0 budget means the chain cap, never a free pass past Guard. Excess delegation requests
+        queue on the child Work or return backpressure.
+      </p>
+
+      <p className="mt-1.5 rounded border border-border/40 bg-background/30 px-2 py-1 text-[9px] leading-relaxed text-muted-foreground">
+        Sandbox: coding specialists run worktree-isolated (ephemeral, branched off the current
+        branch via <span className="font-mono">everyaios-core worktrees</span>) — no direct
+        mutation of the primary branch without review and an explicit merge.
+      </p>
+
+      <div className="mt-2 flex items-center gap-2">
+        <Button
+          size="sm"
+          className="h-6 px-2 text-[10px]"
+          disabled={saving}
+          data-testid={`subagent-save-${agent.id}`}
+          onClick={() => void save()}
+        >
+          {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+          {saving ? 'Saving…' : 'Save roster entry'}
+        </Button>
+        {savedAt && (
+          <span className="font-mono text-[9px] text-emerald-300/80">saved {savedAt}</span>
+        )}
+      </div>
+      {!hireable && (
+        <p className="mt-1 text-[9px] text-muted-foreground/80">
+          Roster saves once this CLI is installed — the host refuses unknown or uninstalled ids,
+          and only a Ready runtime may be hired ({readiness.reason}).
+        </p>
+      )}
+      <p className="mt-1 font-mono text-[8px] text-muted-foreground/70">
+        Settings card only: the live hire (child Work, worktree, chat badge inside the
+        parent&apos;s tool drawer) is not yet a path a person can finish.
+      </p>
+    </div>
+  )
+}
+
 function AgentCard({
   agent,
   catalogExpanded,
@@ -614,6 +880,8 @@ function AgentCard({
   // P65.2 — dual-card detail is a disclosure (open by default for the active
   // runtime so its ownership boundary is visible without a click).
   const [detailOpen, setDetailOpen] = useState(isSelected)
+  // P63.12 — the subagent roster entry is a disclosure per external CLI row.
+  const [subagentOpen, setSubagentOpen] = useState(false)
   const readiness = agentReadiness(agent)
 
   // Re-run discovery (ACP registry + install status + PATH probe) so the
@@ -760,6 +1028,8 @@ function AgentCard({
 
       {detailOpen && <AgentDetailCards agent={agent} />}
 
+      {subagentOpen && <SubagentConfigCard agent={agent} />}
+
       {configOpen && usable && <AgentBackendPanel agentId={agent.id} />}
 
       <div className="mt-2.5 flex items-center gap-1">
@@ -830,6 +1100,22 @@ function AgentCard({
             Host model override
           </Button>
         )}
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-7 px-2 text-[10px]"
+          aria-expanded={subagentOpen}
+          aria-label={`${subagentOpen ? 'Hide' : 'Show'} ${agent.name} subagent roster config`}
+          data-testid={`subagent-config-toggle-${agent.id}`}
+          onClick={() => setSubagentOpen((v) => !v)}
+        >
+          {subagentOpen ? (
+            <ChevronDown className="h-3 w-3" />
+          ) : (
+            <ChevronRight className="h-3 w-3" />
+          )}
+          Subagent
+        </Button>
         <Button
           size="sm"
           variant="ghost"

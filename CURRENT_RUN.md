@@ -1,5 +1,32 @@
 # CURRENT RUN STATE — Task Handover & Checkpoint
 
+## P64.11/P64.12/P63.12 Chat + Roster Implementation Handover — 2026-09-25
+
+### Active Goal
+- Implement `P64.11` (chat collapsible sub-boxes + CLI normalization + spooling + CLS=0), `P64.12` (memory passport pill + specialist attribution), `P63.12` (external subagent roster cards) via two parallel designer lanes with non-overlapping write scopes.
+
+### Where We Stopped
+- `ui/src/components/chat/message-bubble.tsx` + `ui/src/components/chat/tool-chip.tsx` (des-1): ReasoningSubbox auto-collapse on settle, strict 4-tier projection, ToolExecutionBox grouped drawer, stripAnsi/normalizeCliStream display-only, spooled blob cards (SPOOL_TOKEN_BUDGET 2000), CLS=0 reserves, MemoryPassportPill inspector, @name specialist badges.
+- `ui/src/components/panels/agents-models-section.tsx` (des-2, +288/-2): SubagentConfigCard per external row, dual role toggles, domain chips, maxConcurrency 1–8, budget ceilings, persists via chief_subagent_set_policy, no mock loop.
+- Orchestrator copy fix: `tool-chip.tsx:273` label `Inspect in Right Rail ↗` → `Inspect full output` (button expands inline; title already flags rail viewer as follow-up). Visual structure untouched.
+
+### Validation
+- `git diff --check` — clean. Stat: 3 files, 642 insertions, 33 deletions.
+- `pnpm --filter @everyaios/ui run type-check` — 0 errors in the 3 touched files; 2 pre-existing errors remain in unrelated uncommitted work (`agent-model-picker.tsx:1060` AuthMethod type, `progress-view.tsx:132` status union).
+- `node scripts/ipc-parity.mjs` — EXIT 0, 358 registered, 0 broken.
+
+### Next Exact Steps
+1. Stage/commit/push only the 3 UI files + this handover (done below).
+2. Leave `agent-model-picker` / `progress-view` type errors to their owning work; do not bundle.
+3. Follow-up (not this lane): dedicated right-rail viewer for spooled output; P71.10, Channel B GO/NO-GO, Windows qualification remain open.
+
+### Decisions & Gotchas
+- Des-1/Des-2 write scopes never overlapped; both preserved prior uncommitted partial work in place.
+- Spooled inspect expands inline by constraint (other files off-limits); label now says so honestly.
+- Committing these files also commits the prior partial chat work they were built on — that is the coherent P64/P63 milestone.
+
+---
+
 ## Complete Line-by-Line Markdown Documentation Audit Handover — 2026-09-25
 
 ### Active Goal

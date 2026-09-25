@@ -13,6 +13,7 @@ import {
   ChevronRight,
   Copy,
   Download,
+  Fingerprint,
   GitFork,
   Pencil,
   Quote,
@@ -162,7 +163,12 @@ function useLiveElapsed(start?: number, end?: number, active?: boolean): string 
   return s >= 60 ? `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, '0')}s` : `${s}s`
 }
 
-function Reasoning({
+/** P64.11 — <ReasoningSubbox />: live ticking stopwatch while the turn streams
+ * (`Thinking… 1.8s`, auto-expands); unconditionally auto-collapses to the
+ * compact `Thought for 4s` pill the moment the turn settles, so focus returns
+ * to the answer. Tabular figures plus a reserved min-height keep CLS at zero
+ * while it ticks. */
+function ReasoningSubbox({
   items,
   startedAt,
   endedAt,
@@ -173,8 +179,9 @@ function Reasoning({
 }) {
   const [open, setOpen] = useState(false)
   const live = !endedAt
-  // Auto-open while the model is actively thinking; the user can still
-  // collapse it (the open state is theirs once toggled).
+  const settled = !live
+  // Auto-open while the model is actively thinking; unconditionally
+  // auto-collapse the moment the turn settles (closed-on-complete).
   const firstRender = useRef(true)
   useEffect(() => {
     if (firstRender.current) {
@@ -182,21 +189,24 @@ function Reasoning({
       if (live) setOpen(true)
     }
   }, [live])
+  useEffect(() => {
+    if (settled) setOpen(false)
+  }, [settled])
   const elapsed = useLiveElapsed(startedAt, endedAt, live)
   return (
-    <Collapsible open={open} onOpenChange={setOpen} className="mt-2">
+    <Collapsible open={open} onOpenChange={setOpen} className="mt-2 min-h-[24px]">
       <CollapsibleTrigger asChild>
         <Button
           variant="ghost"
           size="sm"
-          className="h-6 gap-1.5 px-2 text-[10px] text-muted-foreground hover:text-foreground"
+          className="h-6 gap-1.5 px-2 text-[10px] tabular-nums text-muted-foreground hover:text-foreground"
         >
           <Brain
             className={cn('h-3 w-3 text-violet-300', live && 'animate-pulse')}
           />
-          {live ? 'Thinking' : 'Reasoning'}
-          {elapsed && (
-            <span className="font-mono text-[9px] text-muted-foreground/50">
+          {live ? 'Thinking' : `Thought for ${elapsed || 'a moment'}`}
+          {live && elapsed && (
+            <span className="font-mono text-[9px] tabular-nums text-muted-foreground/50">
               {elapsed}
             </span>
           )}
@@ -225,6 +235,82 @@ function Reasoning({
         ))}
       </CollapsibleContent>
     </Collapsible>
+  )
+}
+
+/** P64.12 — inspectable `<memory_passport>` pill. Renders discreetly in the
+ * assistant turn header (counts only); clicking opens the inspector drawer
+ * with the exact warm memories, active skills, and governance constraints
+ * injected into that turn. Closed by default so it reserves no layout. */
+function MemoryPassportPill({
+  passport,
+}: {
+  passport: NonNullable<ChatMessage['passport']>
+}) {
+  const [open, setOpen] = useState(false)
+  const generatedId = useId()
+  const id = `memory-passport-${generatedId.replace(/:/g, '')}`
+  const memCount = passport.memories.length
+  const skillCount = passport.skills.length
+  return (
+    <div className="mb-2 min-h-[22px]">
+      <button
+        type="button"
+        className="inline-flex items-center gap-1.5 rounded-full border border-teal-500/30 bg-teal-500/5 px-2 py-0.5 text-[10px] text-teal-200/90 transition-colors hover:bg-teal-500/15 hover:text-teal-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-controls={id}
+        aria-label={`${open ? 'Hide' : 'Show'} context passport: ${memCount} memories, ${skillCount} skills`}
+        title="Inspect the memories, skills, and governance injected into this turn"
+      >
+        <Fingerprint aria-hidden className="h-3 w-3 shrink-0" />
+        <span className="font-mono">memory passport</span>
+        <span className="font-mono text-[9px] tabular-nums text-teal-200/60">
+          {memCount} mem · {skillCount} skills
+        </span>
+        <ChevronDown
+          aria-hidden
+          className={cn('h-3 w-3 transition-transform motion-reduce:transition-none', open && 'rotate-180')}
+        />
+      </button>
+      {open && (
+        <div id={id} className="mt-1 rounded-md border border-teal-500/20 bg-teal-500/5 px-3 py-2">
+          <p className="text-[10px] uppercase tracking-wider text-teal-200/60">Governance</p>
+          <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
+            {passport.governance}
+          </p>
+          <p className="mt-2 text-[10px] uppercase tracking-wider text-teal-200/60">
+            Warm memories ({memCount})
+          </p>
+          {memCount > 0 ? (
+            <ul className="mt-0.5 list-disc space-y-0.5 pl-5 text-[11px] leading-relaxed text-foreground/90">
+              {passport.memories.map((m, i) => (
+                <li key={i}>{m}</li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-0.5 text-[11px] text-muted-foreground/70">No warm memories injected.</p>
+          )}
+          <p className="mt-2 text-[10px] uppercase tracking-wider text-teal-200/60">
+            Active skills ({skillCount})
+          </p>
+          {skillCount > 0 ? (
+            <div className="mt-1 flex flex-wrap gap-1">
+              {passport.skills.map((s) => (
+                <span
+                  key={s}
+                  className="rounded-full border border-border bg-background/60 px-1.5 py-px font-mono text-[10px] text-foreground/90"
+                >
+                  {s}
+                </span>
+              ))}
+            </div>
+          ) : (
+            <p className="mt-0.5 text-[11px] text-muted-foreground/70">No skills active.</p>
+          )}
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -803,6 +889,24 @@ const MessageBubble = memo(function MessageBubble({ message, streaming }: Props)
       </Avatar>
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <div className="max-w-full rounded-2xl rounded-tl-sm border border-border bg-card/60 px-3 py-2">
+          {/* P64.12 — inspectable context-passport pill (turn header). */}
+          {message.passport && <MemoryPassportPill passport={message.passport} />}
+          {/* P64.11 tier 1 — reasoning sub-box (closed-on-complete). */}
+          {message.reasoning && message.reasoning.length > 0 && (
+            <ReasoningSubbox
+              items={message.reasoning}
+              startedAt={message.reasoningStartedAt}
+              endedAt={message.endedAt}
+            />
+          )}
+          {/* P64.11 tier 2 — grouped tool execution drawer + progress (closed once settled). */}
+          {message.toolCalls && message.toolCalls.length > 0 && (
+            <ToolChips calls={message.toolCalls} />
+          )}
+          {message.steps && message.steps.length > 0 && (
+            <ProgressSteps steps={message.steps} />
+          )}
+          {/* P64.11 tier 3 — response body. */}
           <div className="prose prose-invert max-w-none">
             <ReactMarkdown
               remarkPlugins={[remarkMath]}
@@ -816,13 +920,6 @@ const MessageBubble = memo(function MessageBubble({ message, streaming }: Props)
             )}
           </div>
 
-          {message.reasoning && message.reasoning.length > 0 && (
-            <Reasoning
-              items={message.reasoning}
-              startedAt={message.reasoningStartedAt}
-              endedAt={message.endedAt}
-            />
-          )}
         </div>
 
         {message.error && <TurnErrorCard message={message} />}
@@ -846,14 +943,9 @@ const MessageBubble = memo(function MessageBubble({ message, streaming }: Props)
           </ol>
         )}
 
-        {message.toolCalls && message.toolCalls.length > 0 && (
-          <ToolChips calls={message.toolCalls} />
-        )}
-
-        {message.steps && message.steps.length > 0 && (
-          <ProgressSteps steps={message.steps} />
-        )}
-
+        {/* P64.11 tier 4 — approvals, checkpoints, and artifact cards live
+            below the response body (TurnErrorCard above, checkpoint +
+            artifacts + MCQ below). */}
         {isMutatingMessage(message) && !streaming && (
           <AssistantCheckpoint message={message} />
         )}
