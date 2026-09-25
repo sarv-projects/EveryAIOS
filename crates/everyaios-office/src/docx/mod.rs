@@ -2,16 +2,27 @@
 //!
 //! Pipeline (ARCH/04 §4.1): open ZIP → parts index + rels → block tree
 //! (anchored) → render plain text for the LLM → patch a block's text →
-//! byte-preserving ZIP rewrite.
+//! **verify field balance** → byte-preserving ZIP rewrite.
+//!
+//! Two guards sit between a patch and the commit (ARCH/04 §4.6):
+//! - [`field_balance`] refuses an unbalanced `w:fldChar` triple *before* the
+//!   patched bytes are accepted, so a Word-repair document can never be
+//!   produced and the archive stays byte-identical;
+//! - [`crate::limits`] refuses a package too large to load, by name, instead
+//!   of attempting a load it cannot bound.
+//!
+//! Orphaned media left by a removed paragraph is swept by [`DocxEngine::sweep_media`].
 
 pub mod blocktree;
 pub mod citation;
+pub mod field_balance;
 pub mod parts;
 pub mod patch;
 pub mod track;
 
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap, HashSet};
 
+use crate::limits::{LoadBudget, PatchLimits};
 use crate::zip::OoxmlArchive;
 use blocktree::{Block, BlockTree, build_blocks};
 
@@ -40,6 +51,27 @@ pub enum OfficeError {
     NoTextAnchor,
     #[error("invalid patch range on block {0}")]
     InvalidPatchRange(String),
+    #[error(
+        "unbalanced field characters: field #{field} in {part}: {detail} (patch refused; the file was not modified)"
+    )]
+    FieldBalance {
+        part: String,
+        field: usize,
+        detail: String,
+    },
+    #[error(
+        "{subject} is {actual} bytes, above the {kind} ceiling of {limit} bytes (refused: the engine will not attempt a load it cannot bound)"
+    )]
+    TooLarge {
+        kind: crate::limits::LimitKind,
+        subject: String,
+        actual: u64,
+        limit: u64,
+    },
+    #[error(
+        "package has {count} entries, above the entry-count ceiling of {limit} (refused: the engine will not attempt a load it cannot bound)"
+    )]
+    TooManyParts { count: usize, limit: usize },
     #[error("internal error")]
     Internal,
 }
@@ -57,24 +89,48 @@ pub struct DocxEngine {
     /// Current bytes of every part (patches mutate this; `save` rewrites the
     /// archive with only the changed parts).
     current: HashMap<String, Vec<u8>>,
+    /// Parts a media sweep removed (omitted from the rebuilt archive, in the
+    /// same atomic commit that rewrites the relationships part).
+    deleted: HashSet<String>,
 }
 
 impl DocxEngine {
     /// Open a `.docx` from bytes: parse the package, build the block tree.
+    ///
+    /// Uses the process size policy (`PatchLimits::default`, i.e. the
+    /// documented constants plus any `EVERYAIOS_OFFICE_*` override).
     pub fn open(bytes: Vec<u8>) -> Result<Self, OfficeError> {
-        let mut archive = OoxmlArchive::open(bytes)?;
+        Self::open_with_limits(bytes, PatchLimits::default())
+    }
 
-        let content_types = archive.read_part(CONTENT_TYPES)?;
-        let document_rels = archive.read_part(DOCUMENT_RELS).ok();
+    /// Open a `.docx` under an explicit size policy. Every part the engine
+    /// loads is charged against the policy's per-part and running-total
+    /// ceilings; a refusal names which ceiling and the actual size, and no
+    /// parsing happens for the part that was refused.
+    pub fn open_with_limits(bytes: Vec<u8>, limits: PatchLimits) -> Result<Self, OfficeError> {
+        limits.check_archive(bytes.len() as u64)?;
+        let mut archive = OoxmlArchive::open(bytes)?;
+        limits.check_part_count(archive.entry_count()?)?;
+        let mut budget = LoadBudget::new();
+
+        let content_types = read_bounded(&mut archive, &limits, &mut budget, CONTENT_TYPES)?;
+        let document_rels = read_optional_bounded(
+            &mut archive,
+            &limits,
+            &mut budget,
+            DOCUMENT_RELS,
+        )?;
         let parts = parts::PartsIndex::parse(&content_types, document_rels.as_deref())?;
 
-        let body = archive.read_part(BODY_PART)?;
+        let body = read_bounded(&mut archive, &limits, &mut budget, BODY_PART)?;
 
         // Load header/footer parts referenced by the body rels.
         let mut headers: Vec<(String, Vec<u8>)> = Vec::new();
         for rel in parts.header_footer_rels() {
             let target = parts.resolve_target(rel);
-            if let Ok(bytes) = archive.read_part(&target) {
+            if let Ok(Some(bytes)) =
+                read_optional_bounded(&mut archive, &limits, &mut budget, &target)
+            {
                 headers.push((target, bytes));
             }
         }
@@ -92,6 +148,7 @@ impl DocxEngine {
             parts,
             tree,
             current,
+            deleted: HashSet::new(),
         })
     }
 
@@ -117,6 +174,10 @@ impl DocxEngine {
 
     /// Apply an edit to a block's text. The block's *current* rendered text
     /// is used as the expected original (so stale edits are rejected).
+    ///
+    /// The patched bytes are verified for `w:fldChar` balance **before** they
+    /// are accepted, so an unbalanced field never reaches the engine's state
+    /// and a later `save` cannot commit it.
     pub fn patch_block(&mut self, address: &str, new_text: &str) -> Result<(), OfficeError> {
         let block = self
             .tree
@@ -133,6 +194,9 @@ impl DocxEngine {
             .clone();
         let expected = self.render_block(address)?;
         let patched = patch::apply_block_patch(&xml, &block, &expected, new_text)?;
+        // Refuse an unbalanced field triple: the engine's state (and therefore
+        // the archive) stays exactly as it was.
+        field_balance::verify(&block.part, &patched)?;
         self.current.insert(block.part, patched);
         // A patch may change the part's length, which shifts the byte range of
         // every later block. Rebuild from the bytes we just wrote so the next
@@ -171,16 +235,128 @@ impl DocxEngine {
         self.parts.content_type(part)
     }
 
+    /// Sweep media that a patch orphaned.
+    ///
+    /// Collects the `r:`-namespace relationship ids the (already patched)
+    /// body still names, finds the media payloads and `Relationship` entries
+    /// in `word/_rels/document.xml.rels` that no longer resolve to a
+    /// reference, and removes both **as one pending change set**: the
+    /// relationships part is rewritten by splicing out exactly the removed
+    /// `Relationship` elements, and the payloads are queued for omission in
+    /// the same `save` that carries the rewrite. A payload whose removal
+    /// would change a part the engine cannot safely rewrite (shared media, an
+    /// unreadable other `_rels` part, an explicit content-type `Override`) is
+    /// reported as a cleanup candidate and nothing is removed for it.
+    ///
+    /// The sweep never runs implicitly: a caller asks for it, so byte-stability
+    /// assertions for patch-only workflows stay exactly as they were.
+    pub fn sweep_media(&mut self) -> Result<crate::media_gc::MediaSweep, OfficeError> {
+        let body = self
+            .current
+            .get(BODY_PART)
+            .ok_or(OfficeError::Internal)?
+            .clone();
+        let Self {
+            archive,
+            current,
+            deleted,
+            ..
+        } = self;
+        let part_names: BTreeSet<String> = archive.parts()?.into_iter().collect();
+        let plan = {
+            let mut read = |name: &str| {
+                current
+                    .get(name)
+                    .cloned()
+                    .or_else(|| archive.read_part(name).ok())
+            };
+            crate::media_gc::sweep_part(BODY_PART, &body, &part_names, &mut read)?
+        };
+        if let Some(rels) = plan.rels_bytes {
+            current.insert(plan.sweep.rels_part.clone(), rels);
+        }
+        for part in &plan.remove_parts {
+            current.remove(part);
+            deleted.insert(part.clone());
+        }
+        Ok(plan.sweep)
+    }
+
     /// Rebuild the `.docx`: only parts changed by patches are re-deflated;
     /// every other entry is copied verbatim.
+    ///
+    /// Every pending part is re-verified for `w:fldChar` balance first: an
+    /// imbalance refuses the commit by name (part + field index) and returns
+    /// no bytes at all, so the file on disk is never half-written or corrupt.
     pub fn save(&mut self) -> Result<Vec<u8>, OfficeError> {
+        // Verify before anything is produced: a refusal leaves the caller's
+        // file (and this archive) byte-identical.
+        self.verify_pending_parts()?;
         let modified: Vec<(String, Vec<u8>)> = self
             .current
             .iter()
             .filter(|(_, bytes)| !bytes.is_empty())
             .map(|(k, v)| (k.clone(), v.clone()))
             .collect();
-        Ok(self.archive.save(&modified)?)
+        let mut deleted: Vec<String> = self.deleted.iter().cloned().collect();
+        deleted.sort();
+        Ok(self.archive.save_changes(&modified, &[], &deleted)?)
+    }
+
+    /// Field-balance report for every part this engine has loaded (body +
+    /// headers/footers). Empty for a document with no complex fields.
+    pub fn field_report(&self) -> Result<Vec<(String, field_balance::FieldReport)>, OfficeError> {
+        let mut out = Vec::new();
+        let mut names: Vec<&String> = self.current.keys().collect();
+        names.sort();
+        for name in names {
+            let bytes = &self.current[name];
+            if bytes.is_empty() {
+                continue;
+            }
+            out.push((
+                name.clone(),
+                field_balance::verify(name, bytes)?,
+            ));
+        }
+        Ok(out)
+    }
+
+    /// Refuse the commit when any pending part has an unbalanced field.
+    /// [`Self::field_report`] returns the first failure by value, so naming the
+    /// part and the field index is all the caller needs.
+    fn verify_pending_parts(&self) -> Result<(), OfficeError> {
+        self.field_report().map(|_| ())
+    }
+}
+
+/// Read one part, refusing a size the policy cannot bound before the
+/// decompression allocates anything.
+fn read_bounded(
+    archive: &mut OoxmlArchive,
+    limits: &PatchLimits,
+    budget: &mut LoadBudget,
+    name: &str,
+) -> Result<Vec<u8>, OfficeError> {
+    let size = archive.entry_size(name)?;
+    budget.charge(limits, name, size)?;
+    Ok(archive.read_part(name)?)
+}
+
+/// [`read_bounded`], but a missing part is not an error.
+fn read_optional_bounded(
+    archive: &mut OoxmlArchive,
+    limits: &PatchLimits,
+    budget: &mut LoadBudget,
+    name: &str,
+) -> Result<Option<Vec<u8>>, OfficeError> {
+    match archive.entry_size(name) {
+        Ok(size) => {
+            budget.charge(limits, name, size)?;
+            Ok(Some(archive.read_part(name)?))
+        }
+        Err(crate::zip::ArchiveError::PartNotFound(_)) => Ok(None),
+        Err(e) => Err(e.into()),
     }
 }
 
@@ -408,5 +584,244 @@ mod tests {
             String::from_utf8(reopened_archive.read_part("word/document.xml").unwrap()).unwrap();
         assert!(xml.contains("Goodbye, "));
         assert!(xml.contains("world!"));
+    }
+
+    // ── ARCH/04 §4.6 — field balance, media GC, size ceiling ────────────────
+
+    /// A docx whose body has one live image reference (`rId1`) and one page
+    /// field; `rId2`'s image is reachable only through a paragraph that is
+    /// not in the body, so it is the orphan the sweep must collect.
+    fn docx_with_image_and_field(body: &str) -> Vec<u8> {
+        use std::io::Write;
+        let mut w = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+        let opts = zip::write::SimpleFileOptions::default();
+        let mut add = |name: &str, bytes: &[u8]| {
+            w.start_file(name, opts).unwrap();
+            w.write_all(bytes).unwrap();
+        };
+        add(
+            "[Content_Types].xml",
+            br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="png" ContentType="image/png"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>"#,
+        );
+        add(
+            "_rels/.rels",
+            br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>"#,
+        );
+        add(
+            "word/_rels/document.xml.rels",
+            br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/image1.png"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/image2.png"/></Relationships>"#,
+        );
+        add("word/document.xml", body.as_bytes());
+        add("word/media/image1.png", b"PNGDATA-1");
+        add("word/media/image2.png", b"PNGDATA-2");
+        w.finish().unwrap().into_inner()
+    }
+
+    const BODY_WITH_LIVE_IMAGE_AND_FIELD: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"><w:body><w:p><w:r><w:t>See figure</w:t></w:r><w:r><w:drawing><wp:inline><a:blip r:embed="rId1"/></wp:inline></w:drawing></w:r></w:p><w:p><w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText>PAGE</w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:t>1</w:t></w:r><w:r><w:fldChar w:fldCharType="end"/></w:r></w:p></w:body></w:document>"#;
+
+    #[test]
+    fn save_reports_a_balanced_field_in_a_field_bearing_document() {
+        let e = DocxEngine::open(docx_with_image_and_field(BODY_WITH_LIVE_IMAGE_AND_FIELD)).unwrap();
+        let reports = e.field_report().unwrap();
+        assert_eq!(reports.len(), 1);
+        assert_eq!(reports[0].0, "word/document.xml");
+        assert_eq!(reports[0].1.fields, 1);
+        assert_eq!(reports[0].1.dirty, 0);
+        // A document with no complex fields reports nothing to verify.
+        let plain = engine();
+        assert!(plain.field_report().unwrap()[0].1.is_empty());
+    }
+
+    #[test]
+    fn patch_into_a_field_paragraph_commits_and_stays_balanced() {
+        // The page number is a real field: editing its cached result must keep
+        // begin/separate/end intact.
+        let mut e =
+            DocxEngine::open(docx_with_image_and_field(BODY_WITH_LIVE_IMAGE_AND_FIELD)).unwrap();
+        e.patch_block("p2", "2").unwrap();
+        let out = e.save().unwrap();
+        let reopened = DocxEngine::open(out).unwrap();
+        assert_eq!(reopened.render_block("p2").unwrap(), "2");
+        let reports = reopened.field_report().unwrap();
+        assert_eq!(reports[0].1.fields, 1);
+        assert_eq!(reports[0].1.dirty, 0);
+    }
+
+    #[test]
+    fn an_unbalanced_field_refuses_the_patch_and_leaves_the_archive_intact() {
+        // A body whose field is already unbalanced (an `end` with no `begin`)
+        // must not be patchable into a committed document.
+        let body = BODY_WITH_LIVE_IMAGE_AND_FIELD.replace(
+            r#"<w:r><w:fldChar w:fldCharType="begin"/></w:r>"#,
+            r#"<w:r><w:fldChar w:fldCharType="end"/></w:r>"#,
+        );
+        let original = docx_with_image_and_field(&body);
+        let mut source = OoxmlArchive::open(original.clone()).unwrap();
+        let source_body = source.read_part(BODY_PART).unwrap();
+
+        let mut e = DocxEngine::open(original).unwrap();
+        let err = e.patch_block("p1", "See figure v2").unwrap_err();
+        match err {
+            OfficeError::FieldBalance {
+                part,
+                field,
+                ref detail,
+            } => {
+                assert_eq!(part, BODY_PART);
+                assert_eq!(field, 1, "the stray 'end' names field #1");
+                assert!(detail.contains("end"), "{detail}");
+            }
+            other => panic!("expected FieldBalance, got {other:?}"),
+        }
+
+        // The engine's pending part is byte-identical to the input, so the
+        // refused edit left no trace…
+        assert_eq!(e.current[BODY_PART], source_body);
+        // …and the commit gate refuses too, so no bytes are ever handed back
+        // for `write_atomic`: the file on disk cannot change.
+        let err = e.save().unwrap_err();
+        assert!(
+            matches!(err, OfficeError::FieldBalance { field: 1, .. }),
+            "{err:?}"
+        );
+    }
+
+    #[test]
+    fn save_refuses_a_part_left_unbalanced_outside_patch_block() {
+        // Even if an unbalanced part reached the engine by another route
+        // (a stale rels/content-types edit, a future mutation path), the
+        // commit gate catches it and returns no bytes.
+        let mut e = DocxEngine::open(docx_with_image_and_field(BODY_WITH_LIVE_IMAGE_AND_FIELD)).unwrap();
+        let unbalanced = BODY_WITH_LIVE_IMAGE_AND_FIELD
+            .replace(
+                r#"<w:r><w:fldChar w:fldCharType="end"/></w:r></w:p></w:body>"#,
+                r#"</w:p></w:body>"#,
+            )
+            .into_bytes();
+        e.current
+            .insert(BODY_PART.to_string(), unbalanced);
+        let err = e.save().unwrap_err();
+        assert!(matches!(err, OfficeError::FieldBalance { field: 1, .. }), "{err:?}");
+    }
+
+    #[test]
+    fn sweep_media_removes_the_orphan_payload_and_its_relationship() {
+        let original = docx_with_image_and_field(BODY_WITH_LIVE_IMAGE_AND_FIELD);
+        let mut e = DocxEngine::open(original).unwrap();
+        let sweep = e.sweep_media().unwrap();
+        assert_eq!(sweep.referenced, std::collections::BTreeSet::from(["rId1".into()]));
+        assert_eq!(sweep.removed_rels, vec!["rId2".to_string()]);
+        assert_eq!(sweep.removed_parts, vec!["word/media/image2.png".to_string()]);
+        assert!(sweep.candidates.is_empty());
+
+        let out = e.save().unwrap();
+        let mut a = OoxmlArchive::open(out).unwrap();
+        // The orphan payload is gone and the rels entry went with it, in the
+        // same commit: no relationship points at a missing part.
+        assert!(a.read_part("word/media/image2.png").is_err());
+        let rels = String::from_utf8(a.read_part("word/_rels/document.xml.rels").unwrap()).unwrap();
+        assert!(!rels.contains("rId2"));
+        assert!(rels.contains("rId1"), "the live reference survives: {rels}");
+        // The still-referenced payload is untouched, and the body still parses.
+        assert_eq!(a.read_part("word/media/image1.png").unwrap(), b"PNGDATA-1");
+        let reopened = DocxEngine::open(e.save().unwrap()).unwrap();
+        assert_eq!(reopened.render_text(), "See figure\n1\n");
+    }
+
+    #[test]
+    fn sweep_media_is_a_noop_when_every_payload_is_referenced() {
+        let original = docx_with_image_and_field(BODY_WITH_LIVE_IMAGE_AND_FIELD);
+        // Reference the second image too (r:link, a reference form the sweep
+        // over-approximates on purpose).
+        let mut e = DocxEngine::open(original).unwrap();
+        let patched = BODY_WITH_LIVE_IMAGE_AND_FIELD.replace(
+            r#"r:embed="rId1""#,
+            r#"r:embed="rId1" r:link="rId2""#,
+        );
+        e.current.insert(BODY_PART.to_string(), patched.into_bytes());
+        let sweep = e.sweep_media().unwrap();
+        assert!(sweep.is_noop());
+        assert!(sweep.orphan_rels.is_empty());
+        let mut a = OoxmlArchive::open(e.save().unwrap()).unwrap();
+        assert_eq!(a.read_part("word/media/image2.png").unwrap(), b"PNGDATA-2");
+    }
+
+    #[test]
+    fn open_refuses_an_archive_over_the_ceiling_by_name() {
+        let bytes = crate::zip::tests::sample_docx();
+        let tight = crate::limits::PatchLimits {
+            max_archive_bytes: (bytes.len() - 1) as u64,
+            ..crate::limits::PatchLimits::default_policy()
+        };
+        let err = DocxEngine::open_with_limits(bytes, tight).err().expect("must refuse");
+        match err {
+            OfficeError::TooLarge {
+                kind,
+                actual,
+                limit,
+                ..
+            } => {
+                assert_eq!(kind, crate::limits::LimitKind::ArchiveBytes);
+                assert!(actual > limit);
+            }
+            other => panic!("expected TooLarge, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn open_refuses_an_oversized_part_before_parsing_it() {
+        let bytes = crate::zip::tests::sample_docx();
+        let mut a = OoxmlArchive::open(bytes.clone()).unwrap();
+        let body_size = a.entry_size("word/document.xml").unwrap();
+        let tight = crate::limits::PatchLimits {
+            max_part_bytes: body_size - 1,
+            ..crate::limits::PatchLimits::default_policy()
+        };
+        let err = DocxEngine::open_with_limits(bytes, tight).err().expect("must refuse");
+        let msg = err.to_string();
+        assert!(msg.contains("word/document.xml"), "{msg}");
+        assert!(matches!(
+            err,
+            OfficeError::TooLarge {
+                kind: crate::limits::LimitKind::PartBytes,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn open_refuses_a_total_part_load_over_the_ceiling() {
+        // Each part is under the per-part ceiling; together they are not.
+        let bytes = crate::zip::tests::sample_docx();
+        let mut a = OoxmlArchive::open(bytes.clone()).unwrap();
+        let body = a.entry_size("word/document.xml").unwrap();
+        let tight = crate::limits::PatchLimits {
+            max_part_bytes: body,
+            max_total_part_bytes: body, // only room for one part
+            ..crate::limits::PatchLimits::default_policy()
+        };
+        let err = DocxEngine::open_with_limits(bytes, tight).err().expect("must refuse");
+        assert!(matches!(
+            err,
+            OfficeError::TooLarge {
+                kind: crate::limits::LimitKind::TotalPartBytes,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn open_under_the_default_policy_still_works() {
+        // The documented ceilings must not break the normal path.
+        let e = DocxEngine::open_with_limits(
+            crate::zip::tests::sample_docx(),
+            crate::limits::PatchLimits::default_policy(),
+        )
+        .unwrap();
+        assert_eq!(e.render_block("p1").unwrap(), "Hello, world!");
     }
 }

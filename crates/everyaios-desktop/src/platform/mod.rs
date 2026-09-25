@@ -24,9 +24,32 @@ pub mod win;
 #[cfg(windows)]
 pub mod wgc;
 
+use crate::geometry::DpiScale;
+use crate::ladder::{ClickProfile, ClickRung, LadderTarget, RungDelivery};
 use crate::policy::InteractionMode;
 use crate::types::{ActKind, ReadResult, Region, SeeMethod, SeeResult, WindowInfo};
 use crate::{Capabilities, DesktopError};
+
+/// The click ladder each platform really has, declared as data.
+///
+/// The three profiles are deliberately different, and the difference is the
+/// honest part: macOS has no message-level primitive and no accessibility
+/// invoke by point in this dependency set, and X11 has no accessibility client
+/// at all. A platform that cannot do a rung says so instead of the ladder
+/// silently starting lower. Declared once, per backend, so the capability
+/// surface, the audit row and the engine's walk cannot disagree.
+pub fn linux_click_profile() -> ClickProfile {
+    ClickProfile::new(
+        "linux",
+        vec![ClickRung::SyntheticEvent, ClickRung::RawInput],
+        vec![
+            "no accessibility invoke on bare X11: no AT-SPI client is linked, so the ladder \
+             starts at the synthetic-event rung and the a11y tree is empty by design"
+                .into(),
+        ],
+    )
+    .expect("the linux click profile is a fixed, ordered literal")
+}
 
 /// A live desktop backend for the current platform.
 /// `X11` carries a live connection (large variant) — boxed is overkill since
@@ -158,6 +181,77 @@ impl PlatformBackend {
                 crate::platform::macos::MacBackend::restore_foreground(window_id)
             }
             PlatformBackend::Unsupported => Err(DesktopError::Unsupported("no backend".into())),
+        }
+    }
+
+    /// The click ladder this platform can actually walk, in fidelity order.
+    pub fn click_profile(&self) -> ClickProfile {
+        match self {
+            #[cfg(target_os = "linux")]
+            PlatformBackend::X11(_) => linux_click_profile(),
+            #[cfg(windows)]
+            PlatformBackend::Win => crate::platform::win::win_click_profile(),
+            #[cfg(target_os = "macos")]
+            PlatformBackend::Mac => crate::platform::macos::mac_click_profile(),
+            PlatformBackend::Unsupported => ClickProfile {
+                platform: "unsupported",
+                rungs: Vec::new(),
+                limits: vec!["no platform backend is attached, so there is no ladder".into()],
+            },
+        }
+    }
+
+    /// Attempt one rung of the click ladder.
+    ///
+    /// Every backend keeps its own interaction-mode floor here as well (the
+    /// engine checks first, so a new backend cannot forget the rule): a rung
+    /// that moves the pointer or needs the foreground must refuse under the
+    /// Background default regardless of what the authority decided, because the
+    /// Guard authorizes the *act* and the interaction default governs the
+    /// *posture*.
+    pub fn deliver_rung(
+        &self,
+        rung: ClickRung,
+        target: &LadderTarget,
+        mode: InteractionMode,
+    ) -> RungDelivery {
+        if rung.requires_foreground() && mode == InteractionMode::Background {
+            return RungDelivery::Blocked(format!(
+                "background contract: rung {} ({}) — switch the interaction default to \
+                 Foreground (Settings → Computer use) or use a named-element action",
+                rung.as_str(),
+                rung.describe()
+            ));
+        }
+        match self {
+            #[cfg(target_os = "linux")]
+            PlatformBackend::X11(b) => b.deliver_rung(rung, target, mode),
+            #[cfg(windows)]
+            PlatformBackend::Win => crate::platform::win::WinBackend::deliver_rung(rung, target, mode),
+            #[cfg(target_os = "macos")]
+            PlatformBackend::Mac => {
+                crate::platform::macos::MacBackend::deliver_rung(rung, target, mode)
+            }
+            PlatformBackend::Unsupported => {
+                RungDelivery::Unavailable("no platform backend is attached".into())
+            }
+        }
+    }
+
+    /// The measured DPI scale for a window, with its provenance.
+    ///
+    /// Never a bare `f64`: a `1.0` on an unscaled display and a `1.0` because
+    /// the platform could not be asked are different facts, and
+    /// [`DpiScale::source`] is what tells them apart.
+    pub fn dpi_scale(&self, _window: &WindowInfo) -> DpiScale {
+        match self {
+            #[cfg(target_os = "linux")]
+            PlatformBackend::X11(b) => b.dpi_scale(),
+            #[cfg(windows)]
+            PlatformBackend::Win => crate::platform::win::WinBackend::dpi_scale(window),
+            #[cfg(target_os = "macos")]
+            PlatformBackend::Mac => crate::platform::macos::MacBackend::dpi_scale(),
+            PlatformBackend::Unsupported => DpiScale::unknown(),
         }
     }
 

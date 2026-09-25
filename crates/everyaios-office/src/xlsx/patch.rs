@@ -39,6 +39,45 @@ pub enum PatchError {
     Io(#[from] std::io::Error),
     #[error("archive: {0}")]
     Archive(#[from] crate::zip::ArchiveError),
+    /// A size ceiling the engine will not attempt to load past (ARCH/04 §4.6).
+    #[error(
+        "{subject} is {actual} bytes, above the {kind} ceiling of {limit} bytes (refused: the engine will not attempt a load it cannot bound)"
+    )]
+    TooLarge {
+        kind: crate::limits::LimitKind,
+        subject: String,
+        actual: u64,
+        limit: u64,
+    },
+    /// Entry-count ceiling.
+    #[error(
+        "package has {count} entries, above the entry-count ceiling of {limit} (refused: the engine will not attempt a load it cannot bound)"
+    )]
+    TooManyParts { count: usize, limit: usize },
+}
+
+impl From<crate::docx::OfficeError> for PatchError {
+    fn from(e: crate::docx::OfficeError) -> Self {
+        match e {
+            crate::docx::OfficeError::TooLarge {
+                kind,
+                subject,
+                actual,
+                limit,
+            } => PatchError::TooLarge {
+                kind,
+                subject,
+                actual,
+                limit,
+            },
+            crate::docx::OfficeError::TooManyParts { count, limit } => {
+                PatchError::TooManyParts { count, limit }
+            }
+            crate::docx::OfficeError::Archive(a) => PatchError::Archive(a),
+            crate::docx::OfficeError::Xml(x) => PatchError::Xml(x),
+            other => PatchError::Recalc(other.to_string()),
+        }
+    }
 }
 
 /// Result of applying a batch: the patched archive bytes, the parts that
@@ -54,31 +93,41 @@ pub struct PatchOutcome {
 ///
 /// `sheet` names the target sheet (ops without a sheet target apply here).
 /// Formula cells get IronCalc-computed values (see module docs).
+///
+/// Uses the process size policy (`PatchLimits::default`).
 pub fn apply_batch(
     archive_bytes: &[u8],
     batch: &WorkbookCommandBatch,
     sheet: &str,
 ) -> Result<PatchOutcome, PatchError> {
+    apply_batch_with_limits(archive_bytes, batch, sheet, crate::limits::PatchLimits::default())
+}
+
+/// [`apply_batch`] under an explicit size policy: the container, its entry
+/// count, and every part the batch reads are checked against the ceilings
+/// before they are decompressed.
+pub fn apply_batch_with_limits(
+    archive_bytes: &[u8],
+    batch: &WorkbookCommandBatch,
+    sheet: &str,
+    limits: crate::limits::PatchLimits,
+) -> Result<PatchOutcome, PatchError> {
+    limits.check_archive(archive_bytes.len() as u64)?;
     let mut archive = crate::zip::OoxmlArchive::open(archive_bytes.to_vec()).map_err(|e| {
         PatchError::Io(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
             e.to_string(),
         ))
     })?;
+    limits.check_part_count(archive.entry_count()?)?;
 
-    let workbook_xml = archive
-        .read_part("xl/workbook.xml")
-        .map_err(|_| PatchError::PartNotFound("xl/workbook.xml".to_string()))?;
-    let rels_xml = archive
-        .read_part("xl/_rels/workbook.xml.rels")
-        .map_err(|_| PatchError::PartNotFound("xl/_rels/workbook.xml.rels".to_string()))?;
-    let sst = archive.read_part("xl/sharedStrings.xml").ok();
+    let workbook_xml = read_bounded(&mut archive, &limits, "xl/workbook.xml")?;
+    let rels_xml = read_bounded(&mut archive, &limits, "xl/_rels/workbook.xml.rels")?;
+    let sst = read_optional_bounded(&mut archive, &limits, "xl/sharedStrings.xml")?;
 
     let sheet_part = sheet_part_name(&workbook_xml, &rels_xml, sheet)
         .ok_or_else(|| PatchError::SheetNotFound(sheet.to_string()))?;
-    let mut sheet_bytes = archive
-        .read_part(&sheet_part)
-        .map_err(|_| PatchError::PartNotFound(sheet_part.clone()))?;
+    let mut sheet_bytes = read_bounded(&mut archive, &limits, &sheet_part)?;
 
     // Cached values for copy-down fill: top cell + delta.
     let mut fill_seed: Option<(CellRef, Scalar, Option<f64>)> = None;
@@ -151,7 +200,7 @@ pub fn apply_batch(
                 // The rename is a workbook.xml-only edit; re-run the rest of
                 // the batch through the normal path, then overlay the new
                 // workbook part.
-                return apply_after_rename(archive_bytes, batch, sheet, &wb);
+                return apply_after_rename(archive_bytes, batch, sheet, &wb, limits);
             }
             Operation::Pivot {
                 source,
@@ -201,6 +250,7 @@ fn apply_after_rename(
     batch: &WorkbookCommandBatch,
     sheet: &str,
     workbook_xml: &[u8],
+    limits: crate::limits::PatchLimits,
 ) -> Result<PatchOutcome, PatchError> {
     // Rename is a workbook.xml-only edit: re-run the rest of the ops through
     // the normal path (rename already applied), then swap in the new
@@ -210,7 +260,7 @@ fn apply_after_rename(
     filtered
         .operations
         .retain(|op| !matches!(op, Operation::RenameSheet { .. }));
-    let mut outcome = apply_batch(archive_bytes, &filtered, sheet)?;
+    let mut outcome = apply_batch_with_limits(archive_bytes, &filtered, sheet, limits)?;
     let mut archive = crate::zip::OoxmlArchive::open(outcome.bytes.clone()).map_err(|e| {
         PatchError::Io(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
@@ -220,6 +270,41 @@ fn apply_after_rename(
     outcome.bytes = archive.save(&[("xl/workbook.xml".to_string(), workbook_xml.to_vec())])?;
     outcome.changed_parts.push("xl/workbook.xml".to_string());
     Ok(outcome)
+}
+
+/// Read one part, refusing a size the policy cannot bound before the
+/// decompression allocates anything.
+fn read_bounded(
+    archive: &mut crate::zip::OoxmlArchive,
+    limits: &crate::limits::PatchLimits,
+    name: &str,
+) -> Result<Vec<u8>, PatchError> {
+    match archive.entry_size(name) {
+        Ok(size) => {
+            limits.check_part(name, size)?;
+            Ok(archive.read_part(name)?)
+        }
+        Err(crate::zip::ArchiveError::PartNotFound(_)) => {
+            Err(PatchError::PartNotFound(name.to_string()))
+        }
+        Err(e) => Err(PatchError::Archive(e)),
+    }
+}
+
+/// [`read_bounded`], but a missing part is not an error.
+fn read_optional_bounded(
+    archive: &mut crate::zip::OoxmlArchive,
+    limits: &crate::limits::PatchLimits,
+    name: &str,
+) -> Result<Option<Vec<u8>>, PatchError> {
+    match archive.entry_size(name) {
+        Ok(size) => {
+            limits.check_part(name, size)?;
+            Ok(Some(archive.read_part(name)?))
+        }
+        Err(crate::zip::ArchiveError::PartNotFound(_)) => Ok(None),
+        Err(e) => Err(PatchError::Archive(e)),
+    }
 }
 
 // ────────────────────────────────────────────────────────────────────────
@@ -1617,5 +1702,84 @@ mod tests {
         assert!(s.contains("uniqueCount=\"4\""), "{s}");
         assert!(s.contains("<si><t>Gamma &amp; co</t></si>"), "{s}");
         assert!(s.contains("<si><t>Delta</t></si>"), "{s}");
+    }
+
+    // ── ARCH/04 §4.6 — the size ceiling on the xlsx write path ─────────────
+
+    #[test]
+    fn apply_batch_refuses_an_oversized_workbook_by_name() {
+        let bytes = sample_xlsx(sheet(), None);
+        let tight = crate::limits::PatchLimits {
+            max_archive_bytes: (bytes.len() - 1) as u64,
+            ..crate::limits::PatchLimits::default_policy()
+        };
+        let err = apply_batch_with_limits(
+            &bytes,
+            &batch(vec![]),
+            "Sheet1",
+            tight,
+        )
+        .err()
+        .expect("must refuse");
+        assert!(matches!(
+            err,
+            PatchError::TooLarge {
+                kind: crate::limits::LimitKind::ArchiveBytes,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn apply_batch_refuses_an_oversized_part_by_name() {
+        let bytes = sample_xlsx(sheet(), None);
+        let tight = crate::limits::PatchLimits {
+            max_part_bytes: 1,
+            ..crate::limits::PatchLimits::default_policy()
+        };
+        let err = apply_batch_with_limits(&bytes, &batch(vec![]), "Sheet1", tight)
+            .err()
+            .expect("must refuse");
+        let msg = err.to_string();
+        assert!(msg.contains("xl/workbook.xml"), "{msg}");
+        assert!(matches!(
+            err,
+            PatchError::TooLarge {
+                kind: crate::limits::LimitKind::PartBytes,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn apply_batch_refuses_a_package_with_too_many_entries() {
+        let bytes = sample_xlsx(sheet(), None);
+        let tight = crate::limits::PatchLimits {
+            max_parts: 2,
+            ..crate::limits::PatchLimits::default_policy()
+        };
+        let err = apply_batch_with_limits(&bytes, &batch(vec![]), "Sheet1", tight)
+            .err()
+            .expect("must refuse");
+        assert!(matches!(err, PatchError::TooManyParts { limit: 2, .. }));
+    }
+
+    #[test]
+    fn apply_batch_under_the_default_policy_still_writes() {
+        let bytes = sample_xlsx(sheet(), None);
+        let b = batch(vec![Operation::SetCell {
+            address: CellRef { row: 1, col: 1 },
+            value: Scalar::Number(7.0),
+        }]);
+        let out = apply_batch_with_limits(
+            &bytes,
+            &b,
+            "Sheet1",
+            crate::limits::PatchLimits::default_policy(),
+        )
+        .expect("the documented ceilings must not break the normal path");
+        let mut a = crate::zip::OoxmlArchive::open(out.bytes).unwrap();
+        let s = String::from_utf8(a.read_part("xl/worksheets/sheet1.xml").unwrap()).unwrap();
+        assert!(s.contains("<v>7</v>"), "{s}");
     }
 }

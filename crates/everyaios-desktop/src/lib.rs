@@ -22,7 +22,9 @@
 //! effect in the product.
 
 pub mod apps;
+pub mod geometry;
 pub mod launch;
+pub mod ladder;
 pub mod ocr;
 pub mod platform;
 pub mod policy;
@@ -36,7 +38,15 @@ use std::sync::Arc;
 use thiserror::Error;
 
 pub use apps::{AppSource, InstalledApp, annotate_inventory, installed_apps, search_apps};
+pub use geometry::{
+    DpiScale, DpiSource, IMAGE_FACTOR, OutputBudget, SEE_MAX_BYTES, SEE_MAX_DIMENSION_PX,
+    SeeBudget, enforce_output_budget,
+};
 pub use launch::{is_secret_env_name, prepare_child, resolve_target};
+pub use ladder::{
+    ClickLadderDriver, ClickProfile, ClickRung, LadderTarget, LadderVerdict, RungAttempt,
+    RungAttemptOutcome, RungDelivery, RungGate, walk_ladder,
+};
 pub use ocr::{OcrEngine, VisionHit, locate_phrase};
 pub use policy::{
     ActProvenance, AppPolicy, AuditSink, ConfirmClass, DesktopGuard, GateDecision, InteractionMode,
@@ -69,6 +79,12 @@ pub enum DesktopError {
     Guard(String),
     #[error("unsupported: {0}")]
     Unsupported(String),
+    /// The see/screenshot surface refused to return the capture because it
+    /// could not be brought under the named output budget. Fail-closed: the
+    /// caller gets the real numbers and names region zoom, never an
+    /// over-budget payload with a quiet nod.
+    #[error("output budget: {0}")]
+    OutputBudget(String),
 }
 
 pub type Result<T> = std::result::Result<T, DesktopError>;
@@ -157,9 +173,46 @@ impl DesktopEngine {
         )
     }
 
+    /// Capture a region, applying the **named output budget** before returning.
+    ///
+    /// The budget lives here, not in the platform backends, for two reasons: it
+    /// is one implementation every platform gets (so the `<= 1280 px` /
+    /// `<= 900 KiB` claim is a fact rather than a per-platform intention), and
+    /// it is one place the result can **say** what it did
+    /// ([`SeeResult::budget`]). A capture over the dimension ceiling is
+    /// resampled onto the patch grid and reported as clamped; one still over the
+    /// byte ceiling after that is **refused** with
+    /// [`DesktopError::OutputBudget`] — the remedy is a smaller region, not a
+    /// silent downscale.
     pub fn see_region(&self, window: &WindowInfo, region: Region) -> Result<SeeResult> {
         self.guard.kill.check().map_err(DesktopError::Guard)?;
-        self.backend.see(window, region)
+        let mut raw = self.backend.see(window, region)?;
+        // The DPI provenance is the platform's, measured; the budget is ours.
+        raw.dpi = self.backend.dpi_scale(window);
+        raw.scale = raw.dpi.factor;
+        let budget = OutputBudget::shipped();
+        let (png, width, height, report) = geometry::enforce_output_budget(
+            std::mem::take(&mut raw.png),
+            raw.width,
+            raw.height,
+            &budget,
+        )?;
+        raw.png = png;
+        // A clamp changes the image the caller receives, so the reported
+        // dimensions must be the image's real dimensions and the region must be
+        // re-derived against them — otherwise a caller reading `region` would
+        // address the pre-clamp geometry.
+        raw.width = width;
+        raw.height = height;
+        raw.region = if report.output_width == report.captured_width
+            && report.output_height == report.captured_height
+        {
+            raw.region
+        } else {
+            Region::full(width, height)
+        };
+        raw.budget = Some(report);
+        Ok(raw)
     }
 
     // ---- Read ----
@@ -173,7 +226,11 @@ impl DesktopEngine {
     /// (the caller then uses the OCR vision fallback).
     pub fn read(&self, window: &WindowInfo) -> Result<ReadResult> {
         self.guard.kill.check().map_err(DesktopError::Guard)?;
-        self.backend.read(window)
+        let mut read = self.backend.read(window)?;
+        // Never trust a hardcoded 1.0: the platform's measured scale wins, and
+        // its provenance travels in `dpi_scale`'s sibling `DpiScale` on `see`.
+        read.dpi_scale = self.backend.dpi_scale(window).factor;
+        Ok(read)
     }
 
     // ---- Vision fallback (OCR) ----
@@ -206,6 +263,13 @@ impl DesktopEngine {
     /// The gate logic, background contract, launch validation, rate limit and
     /// kill switch are identical for every caller — provenance changes only the
     /// authority class recorded on the audit row.
+    ///
+    /// A coordinate or named click is **ladder-owned**: after the ordinary
+    /// Guard-2 preflight it walks [`ClickRung`] in the platform's declared
+    /// fidelity order, and the rung that ran is reported in
+    /// [`ActOutcome::click`]. Reaching the pointer-moving rung needs a
+    /// Guard-2 cursor-takeover decision; without one the walk stops and the
+    /// outcome carries the refusal — it never falls through to raw input.
     pub fn act_with(
         &self,
         window: &WindowInfo,
@@ -219,12 +283,7 @@ impl DesktopEngine {
         // process's cwd, so the executed file could differ from the allow-list
         // entry the gate matched.
         if let Some(reason) = crate::launch::validate(act) {
-            return Ok(ActOutcome {
-                kind: act.clone(),
-                ok: false,
-                verification: None,
-                error: Some(format!("launch refused: {reason}")),
-            });
+            return Ok(ActOutcome::err(act.clone(), format!("launch refused: {reason}")));
         }
         // P57.3 — the background contract is enforced before the platform call:
         // under the Background default the driver never raises another window,
@@ -232,16 +291,11 @@ impl DesktopEngine {
         if matches!(act, ActKind::ActivateWindow { .. })
             && !self.guard.policy().allows_raising_windows()
         {
-            return Ok(ActOutcome {
-                kind: act.clone(),
-                ok: false,
-                verification: None,
-                error: Some(
-                    "background contract: raising another window needs the Foreground \
-                     interaction default (Settings → Computer use)"
-                        .into(),
-                ),
-            });
+            return Ok(ActOutcome::err(
+                act.clone(),
+                "background contract: raising another window needs the Foreground \
+                 interaction default (Settings → Computer use)",
+            ));
         }
         // P57.2 — the Guard-2 subject is the program being launched, never the
         // window that happens to be focused: allow-listing an app has to gate
@@ -252,20 +306,80 @@ impl DesktopEngine {
             .preflight_with(subject, act, key, provenance)
             .map_err(DesktopError::Guard)?;
         if decision != GateDecision::Allow {
-            return Ok(ActOutcome {
-                kind: act.clone(),
-                ok: false,
-                verification: None,
-                error: Some(format!("gate decision: {}", decision.as_str())),
-            });
+            return Ok(ActOutcome::err(
+                act.clone(),
+                format!("gate decision: {}", decision.as_str()),
+            ));
+        }
+        if Self::is_ladder_act(act) {
+            return self.act_ladder(window, act, provenance, mode);
         }
         self.backend.act(window, act, mode)?;
-        Ok(ActOutcome {
-            kind: act.clone(),
-            ok: true,
-            verification: None,
-            error: None,
-        })
+        Ok(ActOutcome::ok(act.clone()))
+    }
+
+    /// Does this act go through the click ladder?
+    ///
+    /// Coordinate and named clicks: the two forms the ladder's rungs can
+    /// deliver. `SetValue` also falls back to raw input inside the Windows
+    /// backend, and that fallback is **not** yet ladder-gated — a known,
+    /// reported gap rather than a silent one.
+    fn is_ladder_act(act: &ActKind) -> bool {
+        matches!(act, ActKind::Click { .. } | ActKind::ClickByName { .. })
+    }
+
+    /// Walk the click ladder for one act. See [`ladder`] for the contract.
+    fn act_ladder(
+        &self,
+        window: &WindowInfo,
+        act: &ActKind,
+        provenance: ActProvenance,
+        mode: InteractionMode,
+    ) -> Result<ActOutcome> {
+        let driver = PlatformLadderDriver {
+            engine: self,
+            profile: self.backend.click_profile(),
+            mode,
+            provenance,
+        };
+        let target = LadderTarget::new(window.clone(), act.clone());
+        let verdict = walk_ladder(&driver, &target);
+        // The verdict is audited whatever it was: which rung ran (or why none
+        // did) and whether the walk escalated, on the same Merkle chain as the
+        // act itself.
+        self.guard
+            .audit_ladder(&window.app, act, &verdict, provenance);
+        match &verdict {
+            LadderVerdict::Delivered { .. } => Ok(ActOutcome {
+                kind: act.clone(),
+                ok: true,
+                verification: None,
+                click: Some(verdict),
+                error: None,
+            }),
+            LadderVerdict::NeedsAuthorization { reason, .. }
+            | LadderVerdict::Refused { reason, .. } => {
+                // A refusal must name what the user could do, and the
+                // foreground escalation request is exactly that (P57.4).
+                let escalation = self.escalation_for(window, act);
+                let suffix = match &escalation {
+                    Some(req) => format!(" — {}", req.reason),
+                    None => String::new(),
+                };
+                Ok(ActOutcome::refused(
+                    act.clone(),
+                    format!("{reason}{suffix}"),
+                    verdict,
+                ))
+            }
+            LadderVerdict::Exhausted { .. } | LadderVerdict::Misconfigured { .. } => {
+                Ok(ActOutcome::refused(
+                    act.clone(),
+                    verdict.describe(),
+                    verdict,
+                ))
+            }
+        }
     }
 
     // ---- P57.4 — foreground escalation (never silent) ----
@@ -326,6 +440,10 @@ impl DesktopEngine {
     /// foreground and interaction default are snapshotted, the policy is switched
     /// to Foreground for this single act, and both are restored afterwards — so a
     /// foreground escalation is reversible and auditable, not a focus steal.
+    ///
+    /// For a coordinate click this is the *only* route to the pointer-moving rung:
+    /// the gesture is what makes `Foreground` true for the one act, and the
+    /// ladder's Guard-2 cursor-takeover decision is asked again inside it.
     pub fn act_escalating(
         &self,
         window: &WindowInfo,
@@ -337,15 +455,10 @@ impl DesktopEngine {
             return self.act(window, act, key);
         };
         if !gesture_approved {
-            return Ok(ActOutcome {
-                kind: act.clone(),
-                ok: false,
-                verification: None,
-                error: Some(format!(
-                    "foreground escalation requires a human gesture: {}",
-                    request.reason
-                )),
-            });
+            return Ok(ActOutcome::err(
+                act.clone(),
+                format!("foreground escalation requires a human gesture: {}", request.reason),
+            ));
         }
         let previous_policy = self.guard.policy();
         let snapshot = self.foreground_snapshot();
@@ -398,22 +511,101 @@ impl DesktopEngine {
 
     /// Vision-driven click: OCR the window, locate the phrase, click the point
     /// (all through Guard-2). NotFound → honest halt, never a guess.
+    ///
+    /// The OCR hit is in the **returned image's** coordinate space, so it is
+    /// mapped back to a window coordinate through the capture's output scale
+    /// before the click is attempted. Without that, a clamped (downscaled)
+    /// capture would aim the click at a fraction of the intended point — a real
+    /// bug introduced by having an honest budget, and therefore handled here
+    /// rather than left to the caller.
     pub fn vision_click(&self, window: &WindowInfo, phrase: &str) -> Result<ActOutcome> {
-        match self.resolve_by_ocr(window, phrase)? {
+        let see = self.see(window)?;
+        let scale = (
+            see.budget.as_ref().map(|b| b.output_scale_x).unwrap_or(1.0),
+            see.budget.as_ref().map(|b| b.output_scale_y).unwrap_or(1.0),
+        );
+        let words = self.ocr.ocr(&see.png);
+        match ocr::locate_phrase(&words, phrase) {
             ocr::VisionHit::Point { x, y } | ocr::VisionHit::RegionCenter { x, y, .. } => {
-                self.act(window, &ActKind::Click { x, y }, None)
+                let (wx, wy) = (divide(x, scale.0), divide(y, scale.1));
+                self.act(window, &ActKind::Click { x: wx, y: wy }, None)
             }
-            ocr::VisionHit::NotFound => Ok(ActOutcome {
-                kind: ActKind::ClickByName {
+            ocr::VisionHit::NotFound => Ok(ActOutcome::err(
+                ActKind::ClickByName {
                     name: phrase.into(),
                 },
-                ok: false,
-                verification: None,
-                error: Some(format!(
-                    "phrase {phrase:?} not found in OCR — halting, not guessing"
-                )),
-            }),
+                format!("phrase {phrase:?} not found in OCR — halting, not guessing"),
+            )),
         }
+    }
+}
+
+/// Divide a coordinate by an output scale, defaulting to identity for a
+/// non-positive or absent scale.
+fn divide(value: i32, scale: f64) -> i32 {
+    if scale > 0.0 && (scale - 1.0).abs() > f64::EPSILON {
+        (f64::from(value) / scale).round() as i32
+    } else {
+        value
+    }
+}
+
+/// The engine's ladder driver: the platform backend attempts a rung, and the
+/// **guard** is the only authority.
+///
+/// Two properties make this the real boundary and not a wrapper:
+///
+/// - `attempt` never authorizes anything. The only gate on a gated rung is
+///   [`ClickLadderDriver::authorize`], and that routes to
+///   [`DesktopGuard::authorize_rung`] — the same kill switch, rate limit,
+///   policy evaluation, `PermissionGate` (→ Guard ticket store) and audit sink
+///   every other desktop effect rides. There is no second path.
+/// - the interaction-mode floor is checked **here**, once, so a platform
+///   backend added later cannot forget it. The backends keep their own floor as
+///   defence in depth; this is the single place that decides.
+struct PlatformLadderDriver<'a> {
+    engine: &'a DesktopEngine,
+    profile: ClickProfile,
+    mode: InteractionMode,
+    provenance: ActProvenance,
+}
+
+impl ClickLadderDriver for PlatformLadderDriver<'_> {
+    fn profile(&self) -> &ClickProfile {
+        &self.profile
+    }
+
+    fn attempt(&self, rung: ClickRung, target: &LadderTarget) -> RungDelivery {
+        if rung.requires_foreground() && self.mode == InteractionMode::Background {
+            // P57.3/P57.4 — the interaction default governs the *posture*; the
+            // guard decision governs the *act*. Both must hold for a rung that
+            // moves the pointer, and the mode is a setting, not a per-act
+            // approval — so the ladder stops here regardless of what the
+            // authority said.
+            return RungDelivery::Blocked(format!(
+                "background contract: rung {} ({}) needs the Foreground interaction default \
+                 (Settings → Computer use) — use a named-element action, or approve the \
+                 foreground escalation",
+                rung.as_str(),
+                rung.describe()
+            ));
+        }
+        self.engine
+            .backend
+            .deliver_rung(rung, target, self.mode)
+    }
+
+    fn authorize(&self, rung: ClickRung, target: &LadderTarget) -> std::result::Result<(), String> {
+        // The rung's authorization rides the **same** provenance the act
+        // declared, so a human-gesture cursor takeover is never filed as an
+        // agent action on the Merkle chain (or the reverse).
+        self.engine.guard.authorize_rung(
+            &target.window.app,
+            &target.act,
+            None,
+            self.provenance,
+            rung,
+        )
     }
 }
 

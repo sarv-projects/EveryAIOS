@@ -25,6 +25,8 @@ use x11rb::protocol::xtest;
 use x11rb::rust_connection::RustConnection;
 
 use crate::DesktopError;
+use crate::geometry::{DpiScale, DpiSource};
+use crate::ladder::{ClickRung, LadderTarget, RungDelivery};
 use crate::launch;
 use crate::policy::InteractionMode;
 use crate::types::{ActKind, ReadResult, Region, SeeMethod, SeeResult, WindowInfo};
@@ -255,27 +257,115 @@ impl X11Backend {
         Ok(ReadResult {
             window_id: window.id,
             tree: None, // no UIA equivalent on bare X11 → OCR fallback
-            dpi_scale: self.dpi_scale(),
+            dpi_scale: self.dpi_scale().factor,
             windows,
         })
     }
 
-    fn dpi_scale(&self) -> f64 {
-        if let Some(a) = self.atom(b"Xft.dpi") {
-            if let Some(reply) = self
-                .conn
-                .get_property(false, self.root, a, AtomEnum::ANY, 0, 1)
-                .ok()
-                .and_then(|c| c.reply().ok())
-            {
-                if let Some(dpi) = reply.value32().and_then(|mut v| v.next()) {
-                    if dpi > 0 {
-                        return f64::from(dpi) / 96.0;
-                    }
-                }
+    /// The measured X11 scale, with its provenance.
+    ///
+    /// X11 has **no per-window scale**: `XTEST` fake input, `SendEvent` and
+    /// `XGetImage` all address device pixels whatever the font DPI says. So the
+    /// only honest sources are the root `Xft.dpi` property (a global font hint,
+    /// which is why [`DpiScale::applies_to_click_coordinates`] is false for it
+    /// and no click is ever divided by it) and the honest "not measured"
+    /// answer when the property is absent.
+    pub fn dpi_scale(&self) -> DpiScale {
+        self.xft_dpi()
+            .map(|dpi| DpiScale::from_dpi(dpi, DpiSource::XftProperty))
+            .unwrap_or_else(DpiScale::unknown)
+    }
+
+    fn xft_dpi(&self) -> Option<u32> {
+        let a = self.atom(b"Xft.dpi")?;
+        let reply = self
+            .conn
+            .get_property(false, self.root, a, AtomEnum::ANY, 0, 1)
+            .ok()?
+            .reply()
+            .ok()?;
+        let dpi = reply.value32().and_then(|mut v| v.next())?;
+        (dpi > 0).then_some(dpi)
+    }
+
+    // ---- the click ladder --------------------------------------------
+
+    /// Attempt one rung of the click ladder.
+    ///
+    /// X11 can deliver a click two ways and the ladder names both:
+    /// a synthetic `ButtonPress`/`ButtonRelease` addressed to the target window
+    /// ([`ClickRung::SyntheticEvent`], no pointer motion, no focus) and XTEST
+    /// fake motion + button ([`ClickRung::RawInput`], moves the real pointer).
+    /// There is no accessibility rung: no AT-SPI client is linked, which is
+    /// also why [`Self::read`] returns no tree and the vision/OCR fallback
+    /// exists. A named click has no X11 surface at all, so it reports
+    /// `Unavailable` with that reason rather than pretending.
+    pub fn deliver_rung(
+        &self,
+        rung: ClickRung,
+        target: &LadderTarget,
+        _mode: InteractionMode,
+    ) -> RungDelivery {
+        let window = Window::from(target.window.id as u32);
+        // Resolve the point the rung should act on. A named act has no
+        // coordinate of its own; only the OCR/vision path can produce one.
+        let point = match &target.act {
+            ActKind::Click { x, y } => Some((*x, *y)),
+            ActKind::ClickByName { name } => {
+                return RungDelivery::Unavailable(format!(
+                    "X11 has no named-click surface (\"{name}\"): resolve the control through \
+                     the OCR/vision fallback and act on the coordinate"
+                ));
             }
+            other => {
+                return RungDelivery::Unavailable(format!(
+                    "rung {} does not apply to {}",
+                    rung.as_str(),
+                    other.describe()
+                ));
+            }
+        };
+        let (x, y) = point.expect("either a coordinate or an early return");
+        let Some((wx, wy, _, _)) = self.window_geometry(window) else {
+            return RungDelivery::Unavailable(format!("window {} is gone", target.window.id));
+        };
+        match rung {
+            ClickRung::SyntheticEvent => {
+                self.synthetic_click(window, x, y)
+                    .map(|()| {
+                        RungDelivery::Delivered(
+                            "synthetic ButtonPress/ButtonRelease addressed to the deepest child \
+                             under the point (no pointer motion, no focus change)"
+                                .into(),
+                        )
+                    })
+                    .unwrap_or_else(|e| RungDelivery::Failed(e.to_string()))
+            }
+            ClickRung::RawInput => {
+                if !self.xtest_available() {
+                    return RungDelivery::Failed(
+                        "XTEST extension not available on this X server".into(),
+                    );
+                }
+                let (sx, sy) = (wx + x, wy + y);
+                let narrow = |e: DesktopError| RungDelivery::Failed(e.to_string());
+                if let Err(e) = self.fake_motion(sx as i16, sy as i16) {
+                    return narrow(e);
+                }
+                if let Err(e) = self.fake_button(1, true, sx as i16, sy as i16) {
+                    return narrow(e);
+                }
+                if let Err(e) = self.fake_button(1, false, sx as i16, sy as i16) {
+                    return narrow(e);
+                }
+                RungDelivery::Delivered(format!(
+                    "XTEST click at ({sx},{sy}) — pointer moved"
+                ))
+            }
+            ClickRung::AccessibilityInvoke => RungDelivery::Unavailable(
+                "no accessibility invoke on bare X11: no AT-SPI client is linked".into(),
+            ),
         }
-        1.0
     }
 
     pub fn see(&self, window: &WindowInfo, region: Region) -> Result<SeeResult, DesktopError> {
@@ -337,7 +427,11 @@ impl X11Backend {
             height: u32::from(height),
             method: SeeMethod::X11GetImage,
             region: r,
-            scale: self.dpi_scale(),
+            scale: self.dpi_scale().factor,
+            dpi: self.dpi_scale(),
+            // The engine (`DesktopEngine::see`) applies the output budget; a
+            // direct backend call has had none applied, and says so via `None`.
+            budget: None,
         })
     }
 

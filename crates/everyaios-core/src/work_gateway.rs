@@ -7,9 +7,16 @@
 
 use everyaios_blueprint::DelegationGauge;
 pub use everyaios_types::AutonomyLevel;
+use everyaios_types::delegation::{CycleKind, CycleRefusal, SubagentTimeoutReceipt};
+use everyaios_types::turn_snapshot::{ChangeSetOutcome, TurnChangeSet};
+use everyaios_types::workbench::{
+    LeaseAccess, LeaseAttachment, LeaseState, OwnerContext, PostEffectOutcome, ResourceKind,
+    TypedResourceKey,
+};
 use everyaios_types::{
-    AgentBinding, BindingLifecycle, BindingUsage, CANONICAL_SCHEMA_VERSION, EffectUncertainty,
-    IdempotencyClass, RiskLevel, SessionKind, WaitCondition, WorkId, WorkState,
+    AgentBinding, AgentBindingId, BindingLifecycle, BindingUsage, CANONICAL_SCHEMA_VERSION,
+    EffectUncertainty, IdempotencyClass, RiskLevel, RunId, SessionId, SessionKind, WaitCondition,
+    WorkId, WorkState,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -61,6 +68,34 @@ pub struct ChildWorkRef {
     pub run_id: String,
     pub agent_session_id: String,
 }
+
+/// P69.G2 — the bounded diagnostic projection of one Work's cyclic-delegation
+/// refusals (`RECOVERY.md` §12): how many were recorded, and the most recent
+/// one. The journal keeps the full history; this is what a doctor/diagnostics
+/// surface reads, so it stays O(1) per Work.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DelegationRefusalRecord {
+    pub work_id: String,
+    pub count: u64,
+    pub last: CycleRefusal,
+}
+
+/// P69.G2 — one delegated child's liveness, plus the timeout receipt when it
+/// has already been reclaimed. The pair is what a parent (or a sweep) reads:
+/// "is it alive, and if not, what was the recorded statement about it".
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SubagentLivenessProbe {
+    pub liveness: everyaios_types::delegation::SubagentLiveness,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reclaimed: Option<SubagentTimeoutReceipt>,
+}
+
+/// P69.G2 — the reason recorded on a child Run that was reclaimed for a missed
+/// heartbeat. A distinct spelling from a normal `RunInterrupted` cause, so a
+/// reader can tell a timeout reclaim from any other interruption.
+pub const INTERRUPTED_BY_TIMEOUT: &str = "InterruptedByTimeout";
 
 /// Durable provenance attached to one Work.
 ///
@@ -465,6 +500,46 @@ pub enum DomainEvent {
         outcome: String,
         #[serde(default)]
         retry_safe: bool,
+    },
+    /// P69.G2 — one turn-scoped, atomic file change set was captured
+    /// (`RECOVERY.md` §10): the pre-mutation identity of every file a mutating
+    /// step was about to change, recorded as **one** event so a crash mid-turn
+    /// leaves exactly one durable record to roll back from. Carries digests and
+    /// store references only — never file bytes.
+    FileChangeSetCaptured {
+        change_set: everyaios_types::turn_snapshot::TurnChangeSet,
+    },
+    /// P69.G2 — a captured change set settled. The carried `outcome` is the
+    /// `RECOVERY.md` §10 verdict (`RolledBackDueToFailure`) or `Uncertain`; a
+    /// set that could not be fully restored is never reported as rolled back.
+    FileChangeSetSettled {
+        change_set: everyaios_types::turn_snapshot::TurnChangeSet,
+    },
+    /// P69.G2 — a delegation request was refused as cyclic
+    /// (`RECOVERY.md` §12). Durable, so the refusal is countable and
+    /// reportable rather than an error string that vanished with the call.
+    DelegationRefused {
+        refusal: everyaios_types::delegation::CycleRefusal,
+    },
+    /// P69.G2 — one durable delegation-lease lifecycle fact for a child Work
+    /// (`RECOVERY.md` §12 + ADR-0008 §2.1). The same
+    /// `LeaseLifecycleFact` vocabulary every other lease uses — this is not a
+    /// second lease log.
+    DelegationLeaseFact {
+        child_work_id: String,
+        fact: everyaios_types::workbench::LeaseLifecycleFact,
+    },
+    /// P69.G2 — a delegated child Work reported liveness. This event, not any
+    /// in-memory counter, is the durable heartbeat the reclaim sweep reads.
+    SubagentHeartbeat {
+        child_work_id: String,
+        at_ms: u64,
+    },
+    /// P69.G2 — an orphaned child lease was reclaimed on a heartbeat timeout
+    /// (`RECOVERY.md` §12). The receipt is the structured statement handed to
+    /// the parent; its effect state is `uncertain`, never done or failed.
+    SubagentLeaseReclaimed {
+        receipt: everyaios_types::delegation::SubagentTimeoutReceipt,
     },
     ArtifactCreated {
         artifact_id: String,
@@ -1144,6 +1219,32 @@ pub struct WorkGateway {
     /// The active binding pointer is a projection; complete binding history
     /// remains in `agent_bindings` and the event stream.
     active_binding_ids: BTreeMap<String, String>,
+    /// P69.G2 — turn-atomic file change sets (`RECOVERY.md` §10), keyed by
+    /// Work then step. A projection rebuilt from the journal; the pre-image
+    /// bytes live in the kernel snapshot store, never here.
+    file_change_sets: BTreeMap<String, BTreeMap<String, TurnChangeSet>>,
+    /// P69.G2 — the last recorded `CyclicDelegationRefused` per Work, plus a
+    /// per-Work count. Bounded on purpose: the journal is the full record, this
+    /// is what a diagnostics surface reads.
+    delegation_refusals: BTreeMap<String, DelegationRefusalRecord>,
+    /// P69.G2 — the last durable heartbeat per delegated child Work
+    /// (`RECOVERY.md` §12). This map, rebuilt from the journal, is the only
+    /// liveness clock; nothing in memory counts heartbeats.
+    subagent_heartbeats: BTreeMap<String, u64>,
+    /// P69.G2 — reclaimed-lease receipts per child Work, so a later reconcile
+    /// finds the timeout statement rather than an absence.
+    subagent_reclaims: BTreeMap<String, SubagentTimeoutReceipt>,
+    /// P69.G2 — the one `WorkRunLeaseCoordinator` (ADR-0008 §2.3) applied to
+    /// delegation leases over child Works. Reused, not duplicated: it is the
+    /// same fence/state machine every other lease goes through. Its view is a
+    /// cache of the journal, rebuilt on replay with `recovery = true` so a
+    /// restart never resurrects a live delegation lease.
+    delegation_leases: crate::workbench::WorkRunLeaseCoordinator,
+    /// P69.G2 — Rust-private possession custody for delegation leases, keyed
+    /// by child Work. Never serialized, never logged, never sent over IPC: the
+    /// safe `LeaseAttachment` is what any public surface reads.
+    delegation_lease_custody:
+        HashMap<String, (crate::workbench::LeaseHandle, crate::workbench::LeaseBearer)>,
     subscribers: Vec<std::sync::mpsc::Sender<WorkEventEnvelope>>,
 }
 
@@ -1524,6 +1625,66 @@ impl WorkGateway {
                     *retry_safe,
                     event.sequence,
                 )?;
+            }
+            WorkEvent::Domain(DomainEvent::FileChangeSetCaptured { change_set })
+            | WorkEvent::Domain(DomainEvent::FileChangeSetSettled { change_set }) => {
+                // Fail-closed: a malformed or half-written set refuses the
+                // replay rather than being dropped, because silently losing it
+                // would leave a crashed turn with no rollback record at all.
+                change_set
+                    .validate()
+                    .map_err(|e| format!("change set `{}` is invalid: {e}", change_set.change_set_id))?;
+                self.file_change_sets
+                    .entry(change_set.work_id.clone())
+                    .or_default()
+                    .insert(change_set.step_id.clone(), change_set.clone());
+            }
+            WorkEvent::Domain(DomainEvent::DelegationRefused { refusal }) => {
+                let record = self
+                    .delegation_refusals
+                    .entry(work_id.clone())
+                    .or_insert_with(|| DelegationRefusalRecord {
+                        work_id: work_id.clone(),
+                        count: 0,
+                        last: refusal.clone(),
+                    });
+                record.count = record.count.saturating_add(1);
+                record.last = refusal.clone();
+            }
+            WorkEvent::Domain(DomainEvent::DelegationLeaseFact {
+                child_work_id,
+                fact,
+            }) => {
+                // The one lease state machine, replayed with `recovery = true`:
+                // a delegation lease that was active when the process died
+                // lands `uncertain` (ADR-0008 §6.1), never live.
+                if fact.lease_id.as_str().is_empty() {
+                    return Err("delegation lease fact has an empty lease id".into());
+                }
+                self.delegation_leases
+                    .apply_fact(fact, true)
+                    .map_err(|e| format!("delegation lease fact for `{child_work_id}`: {e}"))?;
+            }
+            WorkEvent::Domain(DomainEvent::SubagentHeartbeat { child_work_id, at_ms }) => {
+                if child_work_id.trim().is_empty() {
+                    return Err("subagent heartbeat names no child work".into());
+                }
+                let slot = self
+                    .subagent_heartbeats
+                    .entry(child_work_id.clone())
+                    .or_insert(0);
+                // Liveness is monotonic per child: a replayed out-of-order beat
+                // never rewinds the clock, so silence can only grow.
+                if *at_ms >= *slot {
+                    *slot = *at_ms;
+                }
+            }
+            WorkEvent::Domain(DomainEvent::SubagentLeaseReclaimed { receipt }) => {
+                if receipt.child_work_id.trim().is_empty() {
+                    return Err("subagent reclaim names no child work".into());
+                }
+                self.subagent_reclaims
+                    .insert(receipt.child_work_id.clone(), receipt.clone());
             }
             WorkEvent::Operational(OperationalEvent::SessionAttached { client_id }) => {
                 let p = self.presence.entry(work_id.clone()).or_default();
@@ -2300,6 +2461,17 @@ impl WorkGateway {
             self.presence.remove(&id);
             return Err(error);
         }
+        // P69.G2 — liveness starts at birth. A child that never reports a
+        // heartbeat must not be treated as infinitely stale, so its own
+        // creation is the first beat on the durable clock.
+        self.append(
+            &id,
+            WorkEvent::Domain(DomainEvent::SubagentHeartbeat {
+                child_work_id: id.clone(),
+                at_ms: now_ms(),
+            }),
+            None,
+        )?;
         Ok(address)
     }
 
@@ -2509,6 +2681,563 @@ impl WorkGateway {
             run_id: run,
             agent_session_id: session,
         })
+    }
+
+    // ── P69.G2 — turn-atomic file change sets (RECOVERY.md §10) ────────────
+    //
+    // The set is recorded as ONE event on this journal, keyed by
+    // `(WorkId, StepId)`. The pre-image bytes live in the kernel snapshot
+    // store (`everyaios_core::turn_snapshot`); only digests and store
+    // references travel here, so no event, log, or IPC payload can carry file
+    // contents.
+
+    /// Record a captured change set. The set is validated first: an empty set,
+    /// a mismatched id, a duplicated path, or a bytes-capture with no
+    /// pre-image reference is refused rather than journaled.
+    pub fn record_file_change_set(
+        &mut self,
+        change_set: &TurnChangeSet,
+    ) -> Result<WorkEventEnvelope, String> {
+        change_set.validate()?;
+        if !change_set.is_secret_free() {
+            return Err(format!(
+                "change set `{}` carries secret-shaped text; refusing to journal it",
+                change_set.change_set_id
+            ));
+        }
+        if !self.works.contains_key(&change_set.work_id) {
+            return Err(format!("unknown work `{}`", change_set.work_id));
+        }
+        self.append(
+            &change_set.work_id,
+            WorkEvent::Domain(DomainEvent::FileChangeSetCaptured {
+                change_set: change_set.clone(),
+            }),
+            None,
+        )
+    }
+
+    /// Record a change set's settled verdict. A set that is already settled is
+    /// refused on replay (the same fact is idempotent in the journal but the
+    /// caller is told), and a set that *changes* its verdict is refused harder:
+    /// a completed rollback must never be quietly rewritten as `uncertain`, nor
+    /// the reverse.
+    pub fn settle_file_change_set(
+        &mut self,
+        change_set: &TurnChangeSet,
+        reason: Option<&str>,
+    ) -> Result<WorkEventEnvelope, String> {
+        change_set.validate()?;
+        let outcome = change_set
+            .outcome
+            .ok_or("settling a change set requires an outcome")?;
+        if matches!(outcome, ChangeSetOutcome::Open) {
+            return Err("`open` is not a settling outcome".into());
+        }
+        if !change_set.is_secret_free() {
+            return Err(format!(
+                "change set `{}` carries secret-shaped text; refusing to journal it",
+                change_set.change_set_id
+            ));
+        }
+        if !self.works.contains_key(&change_set.work_id) {
+            return Err(format!("unknown work `{}`", change_set.work_id));
+        }
+        if let Some(existing) = self.file_change_set(&change_set.work_id, &change_set.step_id) {
+            if let Some(previous) = existing.outcome {
+                return Err(format!(
+                    "change set `{}` is already settled as `{}`; refusing to settle it as `{}`",
+                    change_set.change_set_id,
+                    previous.as_str(),
+                    outcome.as_str()
+                ));
+            }
+        }
+        let mut settled = change_set.clone();
+        settled.reason = reason.map(str::to_string);
+        if !settled.is_secret_free() {
+            return Err(format!(
+                "change set `{}` rollback reason carries secret-shaped text; refusing to journal it",
+                change_set.change_set_id
+            ));
+        }
+        self.append(
+            &change_set.work_id,
+            WorkEvent::Domain(DomainEvent::FileChangeSetSettled {
+                change_set: settled,
+            }),
+            None,
+        )
+    }
+
+    /// The change set recorded for one `(work, step)` pair, or `None`.
+    pub fn file_change_set(&self, work_id: &str, step_id: &str) -> Option<&TurnChangeSet> {
+        self.file_change_sets
+            .get(work_id)
+            .and_then(|steps| steps.get(step_id))
+    }
+
+    /// Every change set recorded against a Work, in step order.
+    pub fn file_change_sets_for(&self, work_id: &str) -> Vec<&TurnChangeSet> {
+        self.file_change_sets
+            .get(work_id)
+            .map(|steps| steps.values().collect())
+            .unwrap_or_default()
+    }
+
+    /// The change sets still awaiting a verdict — the crash window. A restart
+    /// reads exactly this to decide what may be rolled back.
+    pub fn open_file_change_sets(&self, work_id: &str) -> Vec<&TurnChangeSet> {
+        self.file_change_sets_for(work_id)
+            .into_iter()
+            .filter(|set| set.is_open())
+            .collect()
+    }
+
+    // ── P69.G2 — delegation cycle detection (RECOVERY.md §12) ──────────────
+    //
+    // The child-Work chain is already the durable record of a delegation
+    // (I8), so cycle detection walks that graph: no in-memory DAG, no second
+    // registry, and a walk bounded by the graph size so a malformed journal is
+    // refused rather than looped on.
+
+    /// The hard bound on an ancestor walk. Larger than any realistic delegation
+    /// tree and smaller than infinity, so a malformed journal is refused.
+    pub const DELEGATION_WALK_BOUND: usize = 4096;
+
+    /// Walk the delegating Work's ancestor chain (root first) and refuse a
+    /// spawn that would re-enter it.
+    ///
+    /// Four refusals, all over the real graph:
+    ///
+    /// * the child Work to be created is already an ancestor of the parent
+    ///   (`AncestorWork`) — the parent chain would become cyclic;
+    /// * the caller named a Work that lives below the parent
+    ///   (`DescendantWork`);
+    /// * the member's `AgentBindingId` already appears on the ancestor chain
+    ///   (`AncestorBinding`) — the delegation would re-enter a binding that is
+    ///   already running this chain;
+    /// * the recorded graph is already cyclic (`RecordedCycle`) — refused, not
+    ///   walked.
+    ///
+    /// A missing Work is an `Err` (the caller named one that does not exist);
+    /// an acyclic request is `Ok(None)`.
+    pub fn delegation_cycle(
+        &self,
+        parent_work_id: &str,
+        proposed_child_work_id: &str,
+        member_binding_id: Option<&str>,
+    ) -> Result<Option<CycleRefusal>, String> {
+        let mut chain: Vec<String> = Vec::new();
+        let mut seen: Vec<String> = Vec::new();
+        let mut ancestor_bindings: Vec<(String, String)> = Vec::new();
+        let mut cursor = parent_work_id.to_string();
+        loop {
+            if chain.len() >= Self::DELEGATION_WALK_BOUND || seen.contains(&cursor) {
+                return Ok(Some(CycleRefusal {
+                    kind: CycleKind::RecordedCycle,
+                    chain,
+                    binding_id: None,
+                    proposed_child_work_id: proposed_child_work_id.to_string(),
+                }));
+            }
+            let address = self
+                .works
+                .get(&cursor)
+                .ok_or_else(|| format!("unknown work `{cursor}`"))?;
+            seen.push(cursor.clone());
+            chain.push(cursor.clone());
+            if let Some(binding) = address.binding_id.clone() {
+                ancestor_bindings.push((cursor.clone(), binding));
+            }
+            // The proposed child id is one of our own ancestors: minting it
+            // again would splice the chain into a loop.
+            if cursor == proposed_child_work_id {
+                return Ok(Some(CycleRefusal {
+                    kind: CycleKind::AncestorWork,
+                    chain,
+                    binding_id: None,
+                    proposed_child_work_id: proposed_child_work_id.to_string(),
+                }));
+            }
+            let Some(parent) = address.parent_work_id.clone() else {
+                break;
+            };
+            cursor = parent;
+        }
+        // A member binding already *above* the delegating Work means the
+        // delegation re-enters an ancestor. The delegating Work's own binding
+        // is excluded: re-using the current actor is not a cycle.
+        if let Some(binding) = member_binding_id.filter(|b| !b.is_empty()) {
+            if let Some((_, existing)) = ancestor_bindings
+                .iter()
+                .find(|(work, existing)| existing == binding && work != parent_work_id)
+            {
+                return Ok(Some(CycleRefusal {
+                    kind: CycleKind::AncestorBinding,
+                    chain,
+                    binding_id: Some(existing.clone()),
+                    proposed_child_work_id: proposed_child_work_id.to_string(),
+                }));
+            }
+        }
+        // The caller may also name a Work that already lives below the parent.
+        if proposed_child_work_id != parent_work_id
+            && self.is_descendant_of(proposed_child_work_id, parent_work_id)?
+        {
+            return Ok(Some(CycleRefusal {
+                kind: CycleKind::DescendantWork,
+                chain,
+                binding_id: None,
+                proposed_child_work_id: proposed_child_work_id.to_string(),
+            }));
+        }
+        Ok(None)
+    }
+
+    /// Is `candidate` somewhere below `ancestor` in the recorded graph?
+    /// Bounded like [`Self::work_depth`]: a malformed chain is an `Err`, never
+    /// an unbounded walk.
+    fn is_descendant_of(&self, candidate: &str, ancestor: &str) -> Result<bool, String> {
+        let mut cursor = candidate.to_string();
+        let mut steps = 0usize;
+        loop {
+            steps += 1;
+            if steps > self.works.len().max(1) {
+                return Err(format!("parent cycle while walking `{candidate}`"));
+            }
+            if cursor == ancestor {
+                return Ok(true);
+            }
+            match self.works.get(&cursor) {
+                Some(address) => match address.parent_work_id.clone() {
+                    Some(parent) => cursor = parent,
+                    None => return Ok(false),
+                },
+                None => return Ok(false),
+            }
+        }
+    }
+
+    /// Record a cyclic-delegation refusal as a durable fact on the delegating
+    /// Work's own timeline, so the refusal is auditable and countable after the
+    /// call returns.
+    pub fn record_delegation_refused(
+        &mut self,
+        parent_work_id: &str,
+        refusal: &CycleRefusal,
+    ) -> Result<WorkEventEnvelope, String> {
+        if !self.works.contains_key(parent_work_id) {
+            return Err(format!("unknown work `{parent_work_id}`"));
+        }
+        self.append(
+            parent_work_id,
+            WorkEvent::Domain(DomainEvent::DelegationRefused {
+                refusal: refusal.clone(),
+            }),
+            None,
+        )
+    }
+
+    /// The bounded refusal projection a diagnostics surface reads.
+    pub fn delegation_refusal_records(&self) -> Vec<&DelegationRefusalRecord> {
+        self.delegation_refusals.values().collect()
+    }
+
+    // ── P69.G2 — delegation lease heartbeat + orphan reclaim (§12) ─────────
+
+    /// The canonical resource key of a delegation lease: the child Work itself.
+    /// `ResourceKind::Other` because a delegation lease is a Work/Run
+    /// concurrency record, not a file, tab, window, or provider handle.
+    pub fn delegation_lease_key(child_work_id: &str) -> TypedResourceKey {
+        TypedResourceKey::new(ResourceKind::Other, format!("work:{child_work_id}"), 0)
+    }
+
+    /// Acquire the delegation lease over a child Work and record the acquire
+    /// fact on the **child's** own journal.
+    ///
+    /// The lease goes through the one `WorkRunLeaseCoordinator` (ADR-0008
+    /// §2.3), so contention, fencing, and the terminal-fact rules are the same
+    /// ones every other lease obeys — no second lease state machine. Possession
+    /// material stays in this process: only the `LeaseAttachment` is returned.
+    pub fn open_delegation_lease(
+        &mut self,
+        child_work_id: &str,
+        owner: OwnerContext,
+        scope_fingerprint: &str,
+        now_ms: u64,
+        ttl_ms: u64,
+    ) -> Result<LeaseAttachment, String> {
+        if !self.works.contains_key(child_work_id) {
+            return Err(format!("unknown child work `{child_work_id}`"));
+        }
+        let parent = self
+            .works
+            .get(child_work_id)
+            .and_then(|a| a.parent_work_id.clone())
+            .ok_or("a delegation lease may only be opened on a child Work")?;
+        if parent != owner.work_id.as_str() {
+            return Err(format!(
+                "child `{child_work_id}` belongs to `{parent}`, not to `{}`",
+                owner.work_id
+            ));
+        }
+        let key = Self::delegation_lease_key(child_work_id);
+        self.delegation_leases.note_resource_generation(&key, 0);
+        let acquired = self
+            .delegation_leases
+            .acquire(owner, key, LeaseAccess::Control, scope_fingerprint, 0, now_ms, ttl_ms)
+            .map_err(|e| e.to_string())?;
+        self.delegation_lease_custody
+            .insert(child_work_id.to_string(), (acquired.handle, acquired.bearer));
+        self.append(
+            child_work_id,
+            WorkEvent::Domain(DomainEvent::DelegationLeaseFact {
+                child_work_id: child_work_id.to_string(),
+                fact: acquired.fact,
+            }),
+            None,
+        )?;
+        Ok(acquired.attachment)
+    }
+
+    /// The safe attachment for a child's delegation lease, when one is held.
+    pub fn delegation_lease(&self, child_work_id: &str) -> Option<LeaseAttachment> {
+        self.delegation_lease_id(child_work_id)
+            .and_then(|id| self.delegation_leases.attachment_for(&id))
+    }
+
+    fn delegation_lease_id(&self, child_work_id: &str) -> Option<everyaios_types::LeaseId> {
+        self.delegation_leases
+            .lease_id_for_resource(&Self::delegation_lease_key(child_work_id).canonical_key())
+    }
+
+    /// The lease state of a child's delegation lease, for a surface that wants
+    /// the lifecycle rather than just the attachment.
+    pub fn delegation_lease_state(&self, child_work_id: &str) -> Option<LeaseState> {
+        let lease_id = self.delegation_lease_id(child_work_id)?;
+        self.delegation_leases.lease_state(&lease_id)
+    }
+
+    /// Record a durable heartbeat for a delegated child. This is the liveness
+    /// evidence `reclaim_orphaned_subagents` reads; the in-memory coordinator
+    /// is updated too, but the journal is the authority.
+    ///
+    /// A heartbeat for an unknown or already-terminal child is refused: a dead
+    /// child must not be able to look alive again.
+    pub fn heartbeat_subagent(&mut self, child_work_id: &str, at_ms: u64) -> Result<u64, String> {
+        if !self.works.contains_key(child_work_id) {
+            return Err(format!("unknown child work `{child_work_id}`"));
+        }
+        if self.presence_is_terminal(child_work_id) {
+            return Err(format!(
+                "child work `{child_work_id}` is terminal; refusing a heartbeat"
+            ));
+        }
+        if let Some(custody) = self.delegation_lease_custody.get(child_work_id).cloned() {
+            // Best-effort: the heartbeat number is durable either way, and a
+            // lease that is no longer live is reported by `delegation_lease`.
+            let _ = self
+                .delegation_leases
+                .heartbeat(&custody.0, &custody.1, at_ms);
+        }
+        self.append(
+            child_work_id,
+            WorkEvent::Domain(DomainEvent::SubagentHeartbeat {
+                child_work_id: child_work_id.to_string(),
+                at_ms,
+            }),
+            None,
+        )?;
+        Ok(at_ms)
+    }
+
+    /// The durable liveness of one delegated child, projected from its own
+    /// timeline. `None` when the Work is not a delegated child.
+    pub fn subagent_liveness(&self, child_work_id: &str) -> Option<SubagentLivenessProbe> {
+        let parent = self
+            .works
+            .get(child_work_id)
+            .and_then(|a| a.parent_work_id.clone())?;
+        Some(SubagentLivenessProbe {
+            liveness: everyaios_types::delegation::SubagentLiveness {
+                child_work_id: child_work_id.to_string(),
+                parent_work_id: parent,
+                last_heartbeat_ms: self
+                    .subagent_heartbeats
+                    .get(child_work_id)
+                    .copied()
+                    .unwrap_or(0),
+                terminal: self.presence_is_terminal(child_work_id),
+                lease: self.delegation_lease(child_work_id),
+            },
+            reclaimed: self.subagent_reclaims.get(child_work_id).cloned(),
+        })
+    }
+
+    /// Every delegated child's current liveness, for a sweep or a surface.
+    pub fn subagent_liveness_all(&self) -> Vec<SubagentLivenessProbe> {
+        let children: Vec<String> = self
+            .works
+            .values()
+            .filter(|a| a.parent_work_id.is_some())
+            .map(|a| a.work_id.as_str().to_string())
+            .collect();
+        children
+            .iter()
+            .filter_map(|id| self.subagent_liveness(id))
+            .collect()
+    }
+
+    /// Sweep for delegated children that have gone silent past the deadline and
+    /// reclaim their lease.
+    ///
+    /// For each orphan, in this order:
+    ///
+    /// 1. every unsettled effect on the child is recorded `EffectUncertain` —
+    ///    a heartbeat timeout is **not** an observation, so nothing here may be
+    ///    reported as done or failed;
+    /// 2. the child's lease is marked holder-lost, which lands it `Uncertain`
+    ///    (ADR-0008 §6.1) — not free, not reclaimed, so a replacement holder
+    ///    still has to reconcile;
+    /// 3. the child's Run moves to `Recoverable` with the
+    ///    `InterruptedByTimeout` reason, so the parent is told the child was
+    ///    interrupted rather than finished;
+    /// 4. a `SubagentTimeoutReceipt` is appended to the child's journal.
+    ///
+    /// Returns the receipts. An already-reclaimed child is never reclaimed
+    /// twice, so the sweep is idempotent.
+    pub fn reclaim_orphaned_subagents(
+        &mut self,
+        now_ms: u64,
+        timeout_ms: u64,
+    ) -> Result<Vec<SubagentTimeoutReceipt>, String> {
+        let probes = self.subagent_liveness_all();
+        let mut receipts = Vec::new();
+        for probe in probes {
+            let child = probe.liveness.child_work_id.clone();
+            if self.subagent_reclaims.contains_key(&child) {
+                continue;
+            }
+            if !probe.liveness.is_orphaned_at(now_ms, timeout_ms) {
+                continue;
+            }
+            let mut effect_ids = Vec::new();
+            let unsettled: Vec<(String, Option<IdempotencyClass>)> = self
+                .effect_projections
+                .get(&child)
+                .map(|effects| {
+                    effects
+                        .iter()
+                        .filter(|(_, effect)| effect.requires_reconciliation())
+                        .map(|(id, effect)| (id.clone(), effect.idempotency_class))
+                        .collect()
+                })
+                .unwrap_or_default();
+            for (effect_id, class) in unsettled {
+                effect_ids.push(effect_id.clone());
+                self.append(
+                    &child,
+                    WorkEvent::Domain(DomainEvent::EffectUncertain {
+                        effect_id,
+                        reason: Some("delegated child lease reclaimed: heartbeat timeout".into()),
+                        idempotency_class: class,
+                    }),
+                    None,
+                )?;
+            }
+            if let Some(lease) = probe.liveness.lease.clone() {
+                // The coordinator's own state machine lands the lease
+                // `uncertain`; the fact below is the same record, journaled.
+                let _ = self
+                    .delegation_leases
+                    .mark_holder_lost(&lease.lease_id, now_ms);
+                self.append(
+                    &child,
+                    WorkEvent::Domain(DomainEvent::DelegationLeaseFact {
+                        child_work_id: child.clone(),
+                        fact: everyaios_types::workbench::LeaseLifecycleFact::new(
+                            lease.lease_id.clone(),
+                            everyaios_types::workbench::LEASE_EVENT_UNCERTAIN,
+                            lease.fence,
+                            lease.generation,
+                            now_ms,
+                        )
+                        .with_detail("delegated child lease reclaimed: heartbeat timeout"),
+                    }),
+                    None,
+                )?;
+            }
+            self.delegation_lease_custody.remove(&child);
+            // The child's Run is interrupted, not finished. `Recoverable` is
+            // the vocabulary's uncertain-and-resumable state.
+            if let Some(run) = self.execution_id(&child).map(str::to_string) {
+                let already_recoverable = self
+                    .run_state(&child, &run)
+                    .is_some_and(|state| state == WorkState::Recoverable);
+                if !already_recoverable {
+                    self.append(
+                        &child,
+                        WorkEvent::Domain(DomainEvent::RunInterrupted {
+                            run_id: run,
+                            reason: Some(INTERRUPTED_BY_TIMEOUT.to_string()),
+                        }),
+                        None,
+                    )?;
+                }
+            }
+            let receipt = SubagentTimeoutReceipt {
+                child_work_id: child.clone(),
+                parent_work_id: probe.liveness.parent_work_id.clone(),
+                silent_ms: probe.liveness.silence_ms(now_ms),
+                timeout_ms,
+                lease: self.delegation_lease(&child),
+                effect_ids,
+                effect_state: PostEffectOutcome::Uncertain,
+            };
+            self.append(
+                &child,
+                WorkEvent::Domain(DomainEvent::SubagentLeaseReclaimed {
+                    receipt: receipt.clone(),
+                }),
+                None,
+            )?;
+            receipts.push(receipt);
+        }
+        Ok(receipts)
+    }
+
+    /// The reclaim receipt recorded for a child, when it was reclaimed.
+    pub fn subagent_reclaim(&self, child_work_id: &str) -> Option<&SubagentTimeoutReceipt> {
+        self.subagent_reclaims.get(child_work_id)
+    }
+
+    /// Build the canonical owner tuple for a delegation lease from the graph,
+    /// so a caller cannot hand the coordinator a tuple that disagrees with the
+    /// recorded parent/Run.
+    pub fn child_owner_context(
+        &self,
+        child_work_id: &str,
+        binding_id: &str,
+    ) -> Result<OwnerContext, String> {
+        let address = self
+            .works
+            .get(child_work_id)
+            .ok_or_else(|| format!("unknown child work `{child_work_id}`"))?;
+        let run = address
+            .current_run_id
+            .as_deref()
+            .ok_or_else(|| format!("child work `{child_work_id}` has no bound Run"))?;
+        let parent = address
+            .parent_work_id
+            .clone()
+            .ok_or("a delegation lease may only be opened on a child Work")?;
+        Ok(OwnerContext::new(
+            SessionId::new(address.session_id.clone().unwrap_or_default()),
+            WorkId::new(parent),
+            RunId::new(run),
+            AgentBindingId::new(binding_id),
+        ))
     }
 
     /// Bind a Run and persist the projection metadata needed to rebuild the

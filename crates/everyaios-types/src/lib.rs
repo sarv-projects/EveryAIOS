@@ -17,7 +17,9 @@
 
 use serde::{Deserialize, Serialize};
 
+pub mod delegation;
 pub mod plane;
+pub mod turn_snapshot;
 pub mod workbench;
 
 // ────────────────────────────────────────────────────────────────────────

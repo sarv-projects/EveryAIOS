@@ -213,6 +213,80 @@ mod tests {
         assert!(diff.changed.is_empty());
     }
 
+    // ARCH/04 §4.6 — the media sweep must land as ONE commit: the relationships
+    // rewrite and the payload removal are visible together, so no intermediate
+    // state can leave a relationship pointing at a missing part.
+    #[test]
+    fn media_sweep_lands_as_one_commit_with_no_dangling_relationship() {
+        let body = br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"><w:body><w:p><w:r><w:t>Kept</w:t></w:r><w:r><w:drawing><wp:inline><a:blip r:embed="rId1"/></wp:inline></w:drawing></w:r></w:p></w:body></w:document>"#;
+        let original = docx_with_two_images(body);
+
+        // The patch itself changes only the body part…
+        let mut engine = crate::docx::DocxEngine::open(original.clone()).unwrap();
+        engine.patch_block("p1", "Kept v2").unwrap();
+        let after_patch = engine.save().unwrap();
+        let diff = parts_diff(&original, &after_patch).unwrap();
+        assert_eq!(diff.changed, vec!["word/document.xml".to_string()]);
+        assert!(diff.added.is_empty() && diff.removed.is_empty());
+
+        // …and the sweep changes the rels part and removes the payload, in one
+        // more commit.
+        let mut engine = crate::docx::DocxEngine::open(after_patch.clone()).unwrap();
+        let sweep = engine.sweep_media().unwrap();
+        assert_eq!(sweep.removed_rels, vec!["rId2".to_string()]);
+        let after_sweep = engine.save().unwrap();
+        let diff = parts_diff(&after_patch, &after_sweep).unwrap();
+        assert_eq!(diff.changed, vec!["word/_rels/document.xml.rels".to_string()]);
+        assert_eq!(diff.removed, vec!["word/media/image2.png".to_string()]);
+        assert!(diff.added.is_empty());
+
+        // The invariant: every relationship in the rewritten rels part resolves
+        // to a part that exists.
+        let mut a = OoxmlArchive::open(after_sweep).unwrap();
+        let rels = String::from_utf8(a.read_part("word/_rels/document.xml.rels").unwrap()).unwrap();
+        for (id, target) in crate::media_gc::tests::rel_id_targets(&rels) {
+            let path = crate::media_gc::resolve_target(&target, "word/document.xml");
+            assert!(
+                a.read_part(&path).is_ok(),
+                "{id} points at {path}, which does not exist — Office would repair"
+            );
+        }
+        // The referenced payload survived untouched, byte-for-byte.
+        assert_eq!(a.read_part("word/media/image1.png").unwrap(), b"PNGDATA-1");
+    }
+
+    /// A docx with two image relationships: `rId1` referenced by the body,
+    /// `rId2` not referenced (the paragraph that held it is gone).
+    fn docx_with_two_images(body: &[u8]) -> Vec<u8> {
+        use std::io::Write;
+        let mut w = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+        let opts = zip::write::SimpleFileOptions::default();
+        let mut add = |name: &str, bytes: &[u8]| {
+            w.start_file(name, opts).unwrap();
+            w.write_all(bytes).unwrap();
+        };
+        add(
+            "[Content_Types].xml",
+            br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="png" ContentType="image/png"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>"#,
+        );
+        add(
+            "_rels/.rels",
+            br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>"#,
+        );
+        add(
+            "word/_rels/document.xml.rels",
+            br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/image1.png"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/image2.png"/></Relationships>"#,
+        );
+        add("word/document.xml", body);
+        add("word/media/image1.png", b"PNGDATA-1");
+        add("word/media/image2.png", b"PNGDATA-2");
+        w.finish().unwrap().into_inner()
+    }
+
     // ---- gated live oracle (needs LibreOffice) ------------------------------
     // Run with `EVERYAIOS_LIVE_TEST=1 cargo test -p everyaios-office --lib \
     //   conformance::tests::live_oracle_opens_clean -- --ignored`

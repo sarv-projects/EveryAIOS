@@ -42,6 +42,10 @@ use windows::Win32::UI::Accessibility::{
     UIA_MenuItemControlTypeId, UIA_RadioButtonControlTypeId, UIA_TextControlTypeId,
     UIA_ValuePatternId,
 };
+use windows::Win32::UI::HiDpi::{
+    DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2, GetDpiForWindow,
+    LogicalToPhysicalPointForPerMonitorDPI, SetProcessDpiAwarenessContext,
+};
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_EXTENDEDKEY, KEYEVENTF_KEYUP,
     KEYEVENTF_SCANCODE, MAPVK_VK_TO_VSC, MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP,
@@ -63,9 +67,34 @@ use windows::Win32::UI::WindowsAndMessaging::{
 const MK_LBUTTON: usize = 0x0001;
 
 use crate::DesktopError;
+use crate::geometry::{DpiScale, DpiSource};
+use crate::ladder::{ClickProfile, ClickRung, LadderTarget, RungDelivery};
 use crate::launch;
 use crate::policy::InteractionMode;
 use crate::types::{ActKind, ReadNode, ReadResult, Region, SeeMethod, SeeResult, WindowInfo};
+
+/// The Windows click ladder, as data.
+///
+/// All three rungs exist here — this is the only platform where the full ladder
+/// is real: UIA `InvokePattern` at the hit-test point, a `PostMessageW` message
+/// click to the deepest child under the point, and `SendInput` real pointer
+/// injection. `RawInput` is last and gated, as it is everywhere.
+pub fn win_click_profile() -> ClickProfile {
+    ClickProfile::new(
+        "windows",
+        vec![
+            ClickRung::AccessibilityInvoke,
+            ClickRung::SyntheticEvent,
+            ClickRung::RawInput,
+        ],
+        vec![
+            "the pointer-moving rung is gated: reaching it needs a Guard-2 cursor-takeover \
+             decision, and the walk stops there without one"
+                .into(),
+        ],
+    )
+    .expect("the Windows click profile is a fixed, ordered literal")
+}
 
 pub struct WinBackend;
 
@@ -200,7 +229,7 @@ impl WinUia {
         Ok(ReadResult {
             window_id: window.id,
             tree,
-            dpi_scale: 1.0,
+            dpi_scale: WinBackend::dpi_scale(window).factor,
             windows: WinBackend::list_windows()?,
         })
     }
@@ -251,12 +280,26 @@ impl WinUia {
     /// the caller fall back to a message click.
     pub fn invoke_at(&self, window: &WindowInfo, x: i32, y: i32) -> Result<bool, DesktopError> {
         let (sx, sy) = screen_point(window, x, y);
+        self.invoke_at_screen(window, sx, sy)
+    }
+
+    /// [`Self::invoke_at`] at an absolute **screen** point — the form the
+    /// name-addressed ladder uses, where the point comes from a UIA bounding
+    /// rectangle (already screen-space, physical pixels).
+    ///
+    /// The same-process check is the load-bearing part: a hit-test is a
+    /// screen-space lookup, so an overlapping window can answer for a point
+    /// inside our target. The click is only ever activated on an element that
+    /// really belongs to the process we were asked to act on.
+    pub fn invoke_at_screen(
+        &self,
+        window: &WindowInfo,
+        sx: i32,
+        sy: i32,
+    ) -> Result<bool, DesktopError> {
         let point = POINT { x: sx, y: sy };
         let target = hwnd_of(window);
-        let mut target_pid = 0u32;
-        unsafe {
-            GetWindowThreadProcessId(target, Some(&mut target_pid));
-        }
+        let target_pid = process_id_of(target)?;
         let element = match unsafe { self.automation.ElementFromPoint(point) } {
             Ok(e) if !e.as_raw().is_null() => e,
             _ => return Ok(false),
@@ -293,9 +336,28 @@ impl WinUia {
 /// The target is the deepest child of the requested window under the point
 /// (children are separate HWNDs and route their own input), and the search never
 /// leaves that window, so an overlapping app cannot receive the click.
+///
+/// The resolved HWND is then **re-checked against the target's own process**
+/// before the message is posted. `ChildWindowFromPointEx` only ever returns a
+/// descendant of the handle it is given, so this is belt-and-braces — but the
+/// rule it enforces ("a synthetic click never acts on another process's
+/// window") is worth a runtime check that cannot be argued away, and a violated
+/// check fails the click instead of the process.
 fn post_click(window: &WindowInfo, x: i32, y: i32) -> Result<(), DesktopError> {
     let (sx, sy) = screen_point(window, x, y);
+    post_click_at_screen(window, sx, sy)
+}
+
+/// [`post_click`] at an absolute screen point — the form the name-addressed
+/// ladder needs, where the point comes from a UIA bounding rectangle that is
+/// already screen-space.
+fn post_screen_click(window: &WindowInfo, sx: i32, sy: i32) -> Result<(), DesktopError> {
+    post_click_at_screen(window, sx, sy)
+}
+
+fn post_click_at_screen(window: &WindowInfo, sx: i32, sy: i32) -> Result<(), DesktopError> {
     let mut target = hwnd_of(window);
+    let target_pid = process_id_of(target)?;
     let mut client = POINT { x: sx, y: sy };
     for _ in 0..8 {
         let mut rect: RECT = RECT::default();
@@ -313,6 +375,13 @@ fn post_click(window: &WindowInfo, x: i32, y: i32) -> Result<(), DesktopError> {
         }
         target = child;
     }
+    if process_id_of(target)? != target_pid {
+        return Err(DesktopError::Platform(format!(
+            "refusing to post a click: the HWND under ({sx},{sy}) belongs to process {}, not the \
+             target's process {target_pid}",
+            process_id_of(target)?,
+        )));
+    }
     let lparam = LPARAM(((client.y as isize) << 16) | (client.x as isize & 0xffff));
     unsafe {
         PostMessageW(target, WM_LBUTTONDOWN, WPARAM(MK_LBUTTON), lparam)
@@ -323,25 +392,209 @@ fn post_click(window: &WindowInfo, x: i32, y: i32) -> Result<(), DesktopError> {
     Ok(())
 }
 
-/// P57.4 — the Background coordinate-click path: UIA invoke first (a real
-/// activation of the control under the point), message click as the fallback.
-/// Both leave the cursor and the keyboard focus alone; when neither can be
-/// delivered the action refuses with the escalation the user needs, rather than
-/// quietly warping the pointer.
-fn background_click(
-    window: &WindowInfo,
-    uia: Option<&WinUia>,
-    x: i32,
-    y: i32,
-) -> Result<(), DesktopError> {
-    let invoked = match uia {
-        Some(u) => u.invoke_at(window, x, y)?,
-        None => WinUia::init()?.invoke_at(window, x, y)?,
-    };
-    if invoked {
-        return Ok(());
+/// The owning process of an HWND. `0` is returned for a handle with no owning
+/// process (a desktop window / the shell), which callers treat as "unknown".
+fn process_id_of(hwnd: HWND) -> Result<u32, DesktopError> {
+    let mut pid = 0u32;
+    unsafe {
+        GetWindowThreadProcessId(hwnd, Some(&mut pid));
     }
-    post_click(window, x, y)
+    Ok(pid)
+}
+
+impl WinBackend {
+    /// P69.G4 — declare the process **per-monitor-v2 DPI aware**, once.
+    ///
+    /// This is the load-bearing half of the DPI work. A process that is *not*
+    /// per-monitor aware has its coordinates virtualised by Win32: the OS
+    /// scales `GetWindowRect`, `ElementFromPoint` and friends into the
+    /// process's own logical space while `SetCursorPos` still takes real screen
+    /// pixels. On a 1.25× or 1.5× display that mismatch is exactly the bug the
+    /// old hardcoded `1.0` hid — the numbers looked self-consistent and the
+    /// click still landed in the wrong place.
+    ///
+    /// With awareness set, every Win32 coordinate this module uses is physical,
+    /// which is also the space a screenshot and an incoming `ActKind::Click`
+    /// are in. The call is idempotent and may legitimately fail with
+    /// `E_ACCESSDENIED` when the host process (e.g. the Tauri shell) already
+    /// chose a context — that is not an error, it only means somebody else set
+    /// it, so it is reported as `false` and the caller falls back to the
+    /// measured per-window DPI rather than assuming a context it did not set.
+    pub fn ensure_per_monitor_v2() -> bool {
+        static SET: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+        *SET.get_or_init(|| unsafe {
+            SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2).is_ok()
+        })
+    }
+
+    /// P69.G4 — the target window's real DPI, with its provenance.
+    ///
+    /// `GetDpiForWindow` is per-window, so a second monitor at a different scale
+    /// is reported correctly. A zero answer (an invalid HWND, or a pre-10
+    /// Windows 10 host) degrades to the honest unknown, never to a fabricated
+    /// 96 DPI.
+    pub fn dpi_scale(window: &WindowInfo) -> DpiScale {
+        Self::ensure_per_monitor_v2();
+        let dpi = unsafe { GetDpiForWindow(hwnd_of(window)) };
+        DpiScale::from_dpi(dpi, DpiSource::PerMonitorV2)
+    }
+
+    /// P69.G4 — attempt one rung of the click ladder.
+    ///
+    /// Coordinate arithmetic, stated once so the three rungs cannot disagree:
+    /// the caller supplies **window-relative physical pixels** (the same space as
+    /// the screenshot), and a per-monitor-v2 aware process means
+    /// `GetWindowRect`/`ElementFromPoint`/`SetCursorPos` are all in physical
+    /// screen pixels too — so no factor is needed. If awareness could *not* be
+    /// set (something else in the process owns the DPI context), the measured
+    /// per-window factor is used to convert through
+    /// `LogicalToPhysicalPointForPerMonitorDPI` instead, which is the honest
+    /// fallback: better a documented conversion than a mis-placed click.
+    pub fn deliver_rung(
+        rung: ClickRung,
+        target: &LadderTarget,
+        mode: InteractionMode,
+    ) -> RungDelivery {
+        let window = &target.window;
+        let (x, y) = match &target.act {
+            ActKind::Click { x, y } => (*x, *y),
+            ActKind::ClickByName { name } => return deliver_named(rung, name, window, mode),
+            other => {
+                return RungDelivery::Unavailable(format!(
+                    "rung {} does not apply to {}",
+                    rung.as_str(),
+                    other.describe()
+                ));
+            }
+        };
+        match rung {
+            ClickRung::AccessibilityInvoke => {
+                let (sx, sy) = screen_point(window, x, y);
+                let uia = match WinUia::init() {
+                    Ok(u) => u,
+                    Err(e) => {
+                        return RungDelivery::Unavailable(format!("UI Automation unavailable: {e}"));
+                    }
+                };
+                match uia.invoke_at_screen(window, sx, sy) {
+                    Ok(true) => RungDelivery::Delivered(format!(
+                        "UIA InvokePattern on the control at ({sx},{sy}) (same process as the target)"
+                    )),
+                    Ok(false) => RungDelivery::Unavailable(
+                        "no invokable element owned by the target process at this point".into(),
+                    ),
+                    Err(e) => RungDelivery::Failed(e.to_string()),
+                }
+            }
+            ClickRung::SyntheticEvent => match post_click(window, x, y) {
+                Ok(()) => RungDelivery::Delivered(format!(
+                    "WM_LBUTTONDOWN/WM_LBUTTONUP posted to the target's own HWND at ({x},{y})"
+                )),
+                Err(e) => RungDelivery::Failed(e.to_string()),
+            },
+            ClickRung::RawInput => {
+                if mode == InteractionMode::Background {
+                    // Defence in depth: `PlatformBackend::deliver_rung` refuses
+                    // this first. Belt and braces so a future caller that
+                    // reaches the backend directly cannot warp the pointer.
+                    return RungDelivery::Blocked(
+                        "background contract: SendInput moves the real pointer — switch the \
+                         interaction default to Foreground"
+                            .into(),
+                    );
+                }
+                let (sx, sy) = physical_point(window, x, y);
+                let dpi = WinBackend::dpi_scale(window);
+                let fail = |e: DesktopError| RungDelivery::Failed(e.to_string());
+                let uia = WinUia::init().map_err(fail)?;
+                uia.send_click(sx, sy).map_err(fail)?;
+                RungDelivery::Delivered(format!(
+                    "SendInput at physical ({sx},{sy}) — cursor moved, target focused ({})",
+                    dpi.describe()
+                ))
+            }
+        }
+    }
+}
+
+/// The named-element form of the ladder: a name resolves to a control (rung 1)
+/// or to a point on that control (rungs 2 and 3). A name that does not resolve
+/// is `Unavailable` at every rung, never a guess at the screen centre.
+fn deliver_named(
+    rung: ClickRung,
+    name: &str,
+    window: &WindowInfo,
+    mode: InteractionMode,
+) -> RungDelivery {
+    if rung == ClickRung::RawInput && mode == InteractionMode::Background {
+        return RungDelivery::Blocked(
+            "background contract: SendInput moves the real pointer — switch the interaction \
+             default to Foreground"
+                .into(),
+        );
+    }
+    let uia = match WinUia::init() {
+        Ok(u) => u,
+        Err(e) => return RungDelivery::Unavailable(format!("UI Automation unavailable: {e}")),
+    };
+    let Some(tree) = uia.tree_for(window) else {
+        return RungDelivery::Unavailable(format!(
+            "no accessibility tree for this window, so \"{name}\" cannot be resolved"
+        ));
+    };
+    let Some(node) = tree.find_by_name(name) else {
+        return RungDelivery::Unavailable(format!("no UIA element named \"{name}\""));
+    };
+    // UIA bounding rectangles are screen-space, physical pixels.
+    let (cx, cy) = node.center();
+    match rung {
+        ClickRung::AccessibilityInvoke => match uia.invoke_at_screen(window, cx, cy) {
+            Ok(true) => RungDelivery::Delivered(format!(
+                "UIA InvokePattern on \"{name}\" at ({cx},{cy})"
+            )),
+            Ok(false) => RungDelivery::Unavailable(format!(
+                "\"{name}\" exposes no InvokePattern, so the control itself cannot be activated"
+            )),
+            Err(e) => RungDelivery::Failed(e.to_string()),
+        },
+        ClickRung::SyntheticEvent => match post_screen_click(window, cx, cy) {
+            Ok(()) => RungDelivery::Delivered(format!(
+                "WM_LBUTTON pair posted to the target's own HWND for \"{name}\" at ({cx},{cy})"
+            )),
+            Err(e) => RungDelivery::Failed(e.to_string()),
+        },
+        ClickRung::RawInput => match uia.send_click(cx, cy) {
+            Ok(()) => RungDelivery::Delivered(format!(
+                "SendInput at physical ({cx},{cy}) for \"{name}\" — cursor moved, target focused"
+            )),
+            Err(e) => RungDelivery::Failed(e.to_string()),
+        },
+    }
+}
+
+/// Window-relative physical pixels → physical screen pixels.
+///
+/// Under per-monitor-v2 awareness this is a plain offset (that is the point of
+/// the awareness call). When awareness could not be established, the window
+/// rect is in logical units, so the per-window DPI factor is applied through
+/// `LogicalToPhysicalPointForPerMonitorDPI` — and falls back to the unconverted
+/// offset only if even that is refused, in which case the platform itself could
+/// not confirm the space and a fabricated factor would be worse than none.
+fn physical_point(window: &WindowInfo, x: i32, y: i32) -> (i32, i32) {
+    let aware = WinBackend::ensure_per_monitor_v2();
+    if aware {
+        return screen_point(window, x, y);
+    }
+    let mut pt = POINT {
+        x: window.x + x,
+        y: window.y + y,
+    };
+    let ok = unsafe { LogicalToPhysicalPointForPerMonitorDPI(hwnd_of(window), &mut pt) };
+    if ok.as_bool() {
+        (pt.x, pt.y)
+    } else {
+        (window.x + x, window.y + y)
+    }
 }
 
 impl WinBackend {
@@ -356,6 +609,7 @@ impl WinBackend {
 
     pub fn see(window: &WindowInfo, region: Region) -> Result<SeeResult, DesktopError> {
         let hwnd = hwnd_of(window);
+        let dpi = WinBackend::dpi_scale(window);
         let mut rect: RECT = RECT::default();
         unsafe {
             GetWindowRect(hwnd, &mut rect)
@@ -382,7 +636,11 @@ impl WinBackend {
                 height: h,
                 method: SeeMethod::WindowsGraphicsCapture,
                 region,
-                scale: 1.0,
+                scale: dpi.factor,
+                dpi,
+                // The engine (`DesktopEngine::see`) applies the output budget;
+                // a direct backend call has had none applied.
+                budget: None,
             });
         }
 
@@ -403,7 +661,9 @@ impl WinBackend {
             height,
             method: SeeMethod::PrintWindow,
             region,
-            scale: 1.0,
+            scale: dpi.factor,
+            dpi,
+            budget: None,
         })
     }
 
@@ -733,17 +993,18 @@ pub fn act(
             u.send_click(x, y)?;
             send_input_type(value)
         }
-        ActKind::Click { x, y } => {
-            // P57.4 — Background never synthesizes global input. The click is a
-            // UIA invoke at the hit-test point, or a window message.
-            if mode == InteractionMode::Background {
-                return background_click(window, uia, *x, *y);
-            }
-            let (sx, sy) = screen_point(window, *x, *y);
-            match uia {
-                Some(u) => u.send_click(sx, sy),
-                None => WinUia::init()?.send_click(sx, sy),
-            }
+        ActKind::Click { .. } => {
+            // P69.G4 — a coordinate click is now **ladder-owned**
+            // (`DesktopEngine` walks `ClickRung` through `deliver_rung`),
+            // so reaching this arm means a caller bypassed the engine. Refuse
+            // rather than keep a second, ungated copy of the escalation: the
+            // engine is the only place that can ask Guard about the
+            // pointer-moving rung.
+            Err(DesktopError::Unsupported(
+                "coordinate clicks go through the click ladder (DesktopEngine::act_with) — \
+                 this backend arm has no gate on the pointer-moving rung and is refused"
+                    .into(),
+            ))
         }
         ActKind::Type { text } => send_input_type(text),
         ActKind::Press { key } => {

@@ -7,6 +7,10 @@
 //!   mkfs, dd, drop database, format, fork bombs, key exfiltration, `.git`
 //!   destruction, home wipes).
 //! - [`prescan`] — pre-exec scan of shell strings, filesystem paths and URLs.
+//! - [`deflection`] — P62.5/P69.G2 shell-bias deflection: a shell command that
+//!   drives Office, the browser, or the desktop from outside the shared plane is
+//!   refused with the façade to pivot onto. Token-aware text scan, **not** AST
+//!   inspection; read the module's documented limits before trusting it.
 //! - [`urlfloor`] — URL floors: `file://` only inside granted roots, scheme
 //!   guard.
 //! - [`ticket`] — the authorization ticket contract (doc 53 §3).
@@ -74,6 +78,9 @@ pub use capability_broker::{
 };
 pub use capability_contract::CapabilityInvocation;
 pub use decision::{DecisionPackage, WebActionKind};
+pub use deflection::{
+    DEFLECTION_AUDIT_KIND, DeflectionNudge, DeflectionTarget, deflect_shell_bias,
+};
 pub use diffcard::{CardAction, CardResponse, NativeCard, render_native_card};
 pub use egress::{ConnectivityMode, EgressEngine, EgressPlan, EgressVerdict};
 pub use fs_broker::{

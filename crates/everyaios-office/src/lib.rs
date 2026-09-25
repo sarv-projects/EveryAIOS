@@ -58,11 +58,33 @@
 //! - `pptx::notes` — speaker notes: extract text, build notes, validate
 //!   notes↔slides sync, plan rehearsal timing
 //! - `pdf::annot` — PDF annotations: sticky-note text + highlight rects
+//!
+//! ARCH/04 §4.6 closes the three gaps the document used to claim in the
+//! present tense but no code implemented (as TypeScript files, in a Rust-only
+//! crate):
+//! - `docx::field_balance` — `w:fldChar` `begin`/`separate`/`end` balance +
+//!   nesting verification. Runs after every patch and again before commit; a
+//!   violation refuses by naming the part and the field index, leaving the
+//!   archive byte-identical. A field with no `separate` (a dirty field) is
+//!   legal and is not rejected.
+//! - `media_gc` — orphaned-media collection. For one part: collect the
+//!   `r:`-namespace relationship ids its XML still names, find the media
+//!   payloads and `_rels` entries that no longer resolve, remove both in the
+//!   same atomic rebuild — or report them as cleanup candidates when removal
+//!   would change a part the engine cannot safely rewrite.
+//! - `limits` — the bounded-memory size policy. **This engine is DOM +
+//!   byte-range by design and does not stream**; the honest form of the
+//!   original "single-pass, <15MB on a 500-page document" claim is a
+//!   fail-closed ceiling: over it, a patch refuses with a named reason
+//!   instead of attempting a load it cannot bound. Every ceiling is
+//!   configurable (`EVERYAIOS_OFFICE_MAX_*` or an explicit `PatchLimits`).
 
 pub mod atomic;
 pub mod conformance;
 pub mod docx;
 pub mod legacy;
+pub mod limits;
+pub mod media_gc;
 pub mod pdf;
 pub mod pptx;
 pub mod provenance;
@@ -73,8 +95,11 @@ pub mod zip;
 
 pub use atomic::write_atomic;
 pub use conformance::{LibreOfficeOracle, PartsDiff, find_soffice, parts_diff};
+pub use docx::field_balance::{FieldBalanceError, FieldCheckError, FieldReport};
 pub use docx::{DocxEngine, OfficeError};
 pub use legacy::{LegacyKind, LegacyOpen, convert_to_modern};
+pub use limits::{LimitKind, LoadBudget, PatchLimits};
+pub use media_gc::{CandidateReason, CleanupCandidate, MediaSweep, SweepPlan};
 pub use pdf::pages::{
     PageOpError, delete_pages, extract_pages, merge as merge_pdfs, page_count,
     reorder as reorder_pages, rotate as rotate_pages, split as split_pdf,

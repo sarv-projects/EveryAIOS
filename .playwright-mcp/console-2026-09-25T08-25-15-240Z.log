@@ -1,0 +1,796 @@
+[   23334ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=e7320437:20102
+[   26029ms] [ERROR] The result of getSnapshot should be cached to avoid an infinite loop @ http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=e7320437:6001
+[   28457ms] Error: Maximum update depth exceeded. This can happen when a component repeatedly calls setState inside componentWillUpdate or componentDidUpdate. React limits the number of nested updates to prevent infinite loops.
+    at getRootForUpdatedFiber (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=e7320437:3526:128)
+    at enqueueConcurrentRenderForLane (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=e7320437:3514:16)
+    at forceStoreRerender (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=e7320437:6104:21)
+    at updateStoreInstance (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=e7320437:6086:41)
+    at Object.react_stack_bottom_frame (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=e7320437:18567:20)
+    at runWithFiberInDEV (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=e7320437:997:72)
+    at commitHookEffectListMount (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=e7320437:9411:163)
+    at commitHookPassiveMountEffects (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=e7320437:9465:60)
+    at commitPassiveMountOnFiber (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=e7320437:11040:29)
+    at recursivelyTraversePassiveMountEffects (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=e7320437:11010:13)
+[   28445ms] [WARNING] %s
+
+%s
+ An error occurred in the <PendingQueueChips> component. Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://react.dev/link/error-boundaries to learn more about error boundaries. @ http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=e7320437:6965
+[   28853ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://127.0.0.1:1420/favicon.ico:0
+[   29773ms] [LOG] [vite] server connection lost. Polling for restart... @ http://127.0.0.1:1420/@vite/client:963
+[   29779ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[   31807ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[   32817ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[   33822ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[   34825ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[   35830ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[   36835ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[   37840ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[   38845ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[   39850ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[   40857ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[   41862ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[   42870ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[   43879ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[   44896ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[   45915ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[   46947ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[   47958ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[   49003ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[   50060ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[   51210ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[   52355ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[   53461ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[   54584ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[   56151ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[   57501ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[   59604ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[   60862ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[   62953ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[   67254ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[   71730ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[   77698ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[   81428ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[   86667ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[   91389ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[   93929ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[   96225ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  100241ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  103148ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  105354ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  108314ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  112735ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  118059ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  123423ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  127331ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  133779ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  139057ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  144121ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  149241ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  151896ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  157051ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  162459ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  168176ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  172631ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  175374ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  177849ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  181923ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  187227ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  190135ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  195951ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  201473ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  206987ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  212124ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  218116ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  223125ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  227986ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  234045ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  236276ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  239077ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  244524ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  249787ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  252183ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  257506ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  261241ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  268117ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  272105ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  274492ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  278385ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  281121ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  286682ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  290720ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  295451ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  297607ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  303542ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  305917ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  310087ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  313739ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  317756ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  321639ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  327125ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  334046ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  336633ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  340530ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  345342ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  348343ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  351404ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  355816ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  361734ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  368609ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  372811ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  377418ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  381337ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  384476ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  389711ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  395619ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  400891ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  405580ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  409915ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  415076ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  420819ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  423961ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  429760ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  436063ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  438413ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  442969ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  446676ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  452644ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  458381ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  460933ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  463797ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  467401ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  470459ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  473929ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  477927ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  480137ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  484718ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  490582ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  494350ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  497795ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  503564ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  508036ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  514045ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  519908ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  524659ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  528172ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  533254ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  538222ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  540836ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  543710ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  548242ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  551737ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  556085ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  558529ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  562576ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  564982ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  568261ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  571096ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  577089ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  579397ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  584350ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  589459ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  594662ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  597366ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  602566ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  607613ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  611224ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  614869ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  617743ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  622357ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  626868ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  631286ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  637922ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  641390ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  645966ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  650632ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  655269ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  658921ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  662778ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  664897ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  670609ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  675522ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  680223ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  686100ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  689680ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  693239ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  699012ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  703909ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  709914ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  715786ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  721434ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:1420/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:1420/@vite/client:1034
+[  737548ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:20102
+[  738123ms] [ERROR] The result of getSnapshot should be cached to avoid an infinite loop @ http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6001
+[  738698ms] Error: Maximum update depth exceeded. This can happen when a component repeatedly calls setState inside componentWillUpdate or componentDidUpdate. React limits the number of nested updates to prevent infinite loops.
+    at getRootForUpdatedFiber (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:3526:128)
+    at enqueueConcurrentRenderForLane (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:3514:16)
+    at forceStoreRerender (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6104:21)
+    at updateStoreInstance (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6086:41)
+    at Object.react_stack_bottom_frame (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:18567:20)
+    at runWithFiberInDEV (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:997:72)
+    at commitHookEffectListMount (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:9411:163)
+    at commitHookPassiveMountEffects (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:9465:60)
+    at commitPassiveMountOnFiber (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:11040:29)
+    at recursivelyTraversePassiveMountEffects (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:11010:13)
+[  738694ms] [WARNING] %s
+
+%s
+ An error occurred in the <PendingQueueChips> component. Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://react.dev/link/error-boundaries to learn more about error boundaries. @ http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6965
+[ 3919115ms] [ERROR] You are calling ReactDOMClient.createRoot() on a container that has already been passed to createRoot() before. Instead, call root.render() on the existing root instead if you want to update it. @ http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:17253
+[ 3920289ms] Error: Maximum update depth exceeded. This can happen when a component repeatedly calls setState inside componentWillUpdate or componentDidUpdate. React limits the number of nested updates to prevent infinite loops.
+    at getRootForUpdatedFiber (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:3526:128)
+    at enqueueConcurrentRenderForLane (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:3514:16)
+    at forceStoreRerender (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6104:21)
+    at updateStoreInstance (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6086:41)
+    at Object.react_stack_bottom_frame (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:18567:20)
+    at runWithFiberInDEV (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:997:72)
+    at commitHookEffectListMount (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:9411:163)
+    at commitHookPassiveMountEffects (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:9465:60)
+    at commitPassiveMountOnFiber (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:11040:29)
+    at recursivelyTraversePassiveMountEffects (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:11010:13)
+[ 3920287ms] [WARNING] %s
+
+%s
+ An error occurred in the <PendingQueueChips> component. Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://react.dev/link/error-boundaries to learn more about error boundaries. @ http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6965
+[ 3921605ms] Error: Maximum update depth exceeded. This can happen when a component repeatedly calls setState inside componentWillUpdate or componentDidUpdate. React limits the number of nested updates to prevent infinite loops.
+    at getRootForUpdatedFiber (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:3526:128)
+    at enqueueConcurrentRenderForLane (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:3514:16)
+    at forceStoreRerender (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6104:21)
+    at updateStoreInstance (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6086:41)
+    at Object.react_stack_bottom_frame (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:18567:20)
+    at runWithFiberInDEV (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:997:72)
+    at commitHookEffectListMount (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:9411:163)
+    at commitHookPassiveMountEffects (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:9465:60)
+    at commitPassiveMountOnFiber (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:11040:29)
+    at recursivelyTraversePassiveMountEffects (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:11010:13)
+[ 3921604ms] [WARNING] %s
+
+%s
+ An error occurred in the <PendingQueueChips> component. Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://react.dev/link/error-boundaries to learn more about error boundaries. @ http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6965
+[ 3922638ms] Error: Maximum update depth exceeded. This can happen when a component repeatedly calls setState inside componentWillUpdate or componentDidUpdate. React limits the number of nested updates to prevent infinite loops.
+    at getRootForUpdatedFiber (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:3526:128)
+    at enqueueConcurrentRenderForLane (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:3514:16)
+    at forceStoreRerender (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6104:21)
+    at updateStoreInstance (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6086:41)
+    at Object.react_stack_bottom_frame (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:18567:20)
+    at runWithFiberInDEV (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:997:72)
+    at commitHookEffectListMount (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:9411:163)
+    at commitHookPassiveMountEffects (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:9465:60)
+    at commitPassiveMountOnFiber (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:11040:29)
+    at recursivelyTraversePassiveMountEffects (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:11010:13)
+[ 3922636ms] [WARNING] %s
+
+%s
+ An error occurred in the <PendingQueueChips> component. Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://react.dev/link/error-boundaries to learn more about error boundaries. @ http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6965
+[ 3924785ms] Error: Maximum update depth exceeded. This can happen when a component repeatedly calls setState inside componentWillUpdate or componentDidUpdate. React limits the number of nested updates to prevent infinite loops.
+    at getRootForUpdatedFiber (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:3526:128)
+    at enqueueConcurrentRenderForLane (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:3514:16)
+    at forceStoreRerender (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6104:21)
+    at updateStoreInstance (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6086:41)
+    at Object.react_stack_bottom_frame (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:18567:20)
+    at runWithFiberInDEV (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:997:72)
+    at commitHookEffectListMount (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:9411:163)
+    at commitHookPassiveMountEffects (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:9465:60)
+    at commitPassiveMountOnFiber (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:11040:29)
+    at recursivelyTraversePassiveMountEffects (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:11010:13)
+[ 3924781ms] [WARNING] %s
+
+%s
+ An error occurred in the <PendingQueueChips> component. Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://react.dev/link/error-boundaries to learn more about error boundaries. @ http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6965
+[ 3925569ms] Error: Maximum update depth exceeded. This can happen when a component repeatedly calls setState inside componentWillUpdate or componentDidUpdate. React limits the number of nested updates to prevent infinite loops.
+    at getRootForUpdatedFiber (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:3526:128)
+    at enqueueConcurrentRenderForLane (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:3514:16)
+    at forceStoreRerender (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6104:21)
+    at updateStoreInstance (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6086:41)
+    at Object.react_stack_bottom_frame (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:18567:20)
+    at runWithFiberInDEV (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:997:72)
+    at commitHookEffectListMount (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:9411:163)
+    at commitHookPassiveMountEffects (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:9465:60)
+    at commitPassiveMountOnFiber (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:11040:29)
+    at recursivelyTraversePassiveMountEffects (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:11010:13)
+[ 3925566ms] [WARNING] %s
+
+%s
+ An error occurred in the <PendingQueueChips> component. Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://react.dev/link/error-boundaries to learn more about error boundaries. @ http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6965
+[ 3925581ms] [ERROR] You are calling ReactDOMClient.createRoot() on a container that has already been passed to createRoot() before. Instead, call root.render() on the existing root instead if you want to update it. @ http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:17253
+[ 3926342ms] Error: Maximum update depth exceeded. This can happen when a component repeatedly calls setState inside componentWillUpdate or componentDidUpdate. React limits the number of nested updates to prevent infinite loops.
+    at getRootForUpdatedFiber (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:3526:128)
+    at enqueueConcurrentRenderForLane (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:3514:16)
+    at forceStoreRerender (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6104:21)
+    at updateStoreInstance (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6086:41)
+    at Object.react_stack_bottom_frame (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:18567:20)
+    at runWithFiberInDEV (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:997:72)
+    at commitHookEffectListMount (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:9411:163)
+    at commitHookPassiveMountEffects (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:9465:60)
+    at commitPassiveMountOnFiber (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:11040:29)
+    at recursivelyTraversePassiveMountEffects (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:11010:13)
+[ 3926340ms] [WARNING] %s
+
+%s
+ An error occurred in the <PendingQueueChips> component. Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://react.dev/link/error-boundaries to learn more about error boundaries. @ http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6965
+[ 3926815ms] Error: Maximum update depth exceeded. This can happen when a component repeatedly calls setState inside componentWillUpdate or componentDidUpdate. React limits the number of nested updates to prevent infinite loops.
+    at getRootForUpdatedFiber (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:3526:128)
+    at enqueueConcurrentRenderForLane (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:3514:16)
+    at forceStoreRerender (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6104:21)
+    at updateStoreInstance (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6086:41)
+    at Object.react_stack_bottom_frame (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:18567:20)
+    at runWithFiberInDEV (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:997:72)
+    at commitHookEffectListMount (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:9411:163)
+    at commitHookPassiveMountEffects (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:9465:60)
+    at commitPassiveMountOnFiber (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:11040:29)
+    at recursivelyTraversePassiveMountEffects (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:11010:13)
+[ 3926814ms] [WARNING] %s
+
+%s
+ An error occurred in the <PendingQueueChips> component. Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://react.dev/link/error-boundaries to learn more about error boundaries. @ http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6965
+[ 3927312ms] Error: Maximum update depth exceeded. This can happen when a component repeatedly calls setState inside componentWillUpdate or componentDidUpdate. React limits the number of nested updates to prevent infinite loops.
+    at getRootForUpdatedFiber (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:3526:128)
+    at enqueueConcurrentRenderForLane (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:3514:16)
+    at forceStoreRerender (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6104:21)
+    at updateStoreInstance (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6086:41)
+    at Object.react_stack_bottom_frame (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:18567:20)
+    at runWithFiberInDEV (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:997:72)
+    at commitHookEffectListMount (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:9411:163)
+    at commitHookPassiveMountEffects (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:9465:60)
+    at commitPassiveMountOnFiber (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:11040:29)
+    at recursivelyTraversePassiveMountEffects (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:11010:13)
+[ 3927311ms] [WARNING] %s
+
+%s
+ An error occurred in the <PendingQueueChips> component. Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://react.dev/link/error-boundaries to learn more about error boundaries. @ http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6965
+[ 3927757ms] Error: Maximum update depth exceeded. This can happen when a component repeatedly calls setState inside componentWillUpdate or componentDidUpdate. React limits the number of nested updates to prevent infinite loops.
+    at getRootForUpdatedFiber (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:3526:128)
+    at enqueueConcurrentRenderForLane (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:3514:16)
+    at forceStoreRerender (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6104:21)
+    at updateStoreInstance (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6086:41)
+    at Object.react_stack_bottom_frame (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:18567:20)
+    at runWithFiberInDEV (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:997:72)
+    at commitHookEffectListMount (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:9411:163)
+    at commitHookPassiveMountEffects (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:9465:60)
+    at commitPassiveMountOnFiber (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:11040:29)
+    at recursivelyTraversePassiveMountEffects (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:11010:13)
+[ 3927756ms] [WARNING] %s
+
+%s
+ An error occurred in the <PendingQueueChips> component. Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://react.dev/link/error-boundaries to learn more about error boundaries. @ http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6965
+[ 3928597ms] Error: Maximum update depth exceeded. This can happen when a component repeatedly calls setState inside componentWillUpdate or componentDidUpdate. React limits the number of nested updates to prevent infinite loops.
+    at getRootForUpdatedFiber (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:3526:128)
+    at enqueueConcurrentRenderForLane (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:3514:16)
+    at forceStoreRerender (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6104:21)
+    at updateStoreInstance (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6086:41)
+    at Object.react_stack_bottom_frame (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:18567:20)
+    at runWithFiberInDEV (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:997:72)
+    at commitHookEffectListMount (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:9411:163)
+    at commitHookPassiveMountEffects (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:9465:60)
+    at commitPassiveMountOnFiber (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:11040:29)
+    at recursivelyTraversePassiveMountEffects (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:11010:13)
+[ 3928594ms] [WARNING] %s
+
+%s
+ An error occurred in the <PendingQueueChips> component. Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://react.dev/link/error-boundaries to learn more about error boundaries. @ http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6965
+[ 3929225ms] Error: Maximum update depth exceeded. This can happen when a component repeatedly calls setState inside componentWillUpdate or componentDidUpdate. React limits the number of nested updates to prevent infinite loops.
+    at getRootForUpdatedFiber (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:3526:128)
+    at enqueueConcurrentRenderForLane (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:3514:16)
+    at forceStoreRerender (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6104:21)
+    at updateStoreInstance (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6086:41)
+    at Object.react_stack_bottom_frame (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:18567:20)
+    at runWithFiberInDEV (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:997:72)
+    at commitHookEffectListMount (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:9411:163)
+    at commitHookPassiveMountEffects (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:9465:60)
+    at commitPassiveMountOnFiber (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:11040:29)
+    at recursivelyTraversePassiveMountEffects (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:11010:13)
+[ 3929221ms] [WARNING] %s
+
+%s
+ An error occurred in the <PendingQueueChips> component. Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://react.dev/link/error-boundaries to learn more about error boundaries. @ http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6965
+[ 3929871ms] Error: Maximum update depth exceeded. This can happen when a component repeatedly calls setState inside componentWillUpdate or componentDidUpdate. React limits the number of nested updates to prevent infinite loops.
+    at getRootForUpdatedFiber (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:3526:128)
+    at enqueueConcurrentRenderForLane (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:3514:16)
+    at forceStoreRerender (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6104:21)
+    at updateStoreInstance (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6086:41)
+    at Object.react_stack_bottom_frame (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:18567:20)
+    at runWithFiberInDEV (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:997:72)
+    at commitHookEffectListMount (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:9411:163)
+    at commitHookPassiveMountEffects (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:9465:60)
+    at commitPassiveMountOnFiber (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:11040:29)
+    at recursivelyTraversePassiveMountEffects (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:11010:13)
+[ 3929866ms] [WARNING] %s
+
+%s
+ An error occurred in the <PendingQueueChips> component. Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://react.dev/link/error-boundaries to learn more about error boundaries. @ http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6965
+[ 3939468ms] [ERROR] You are calling ReactDOMClient.createRoot() on a container that has already been passed to createRoot() before. Instead, call root.render() on the existing root instead if you want to update it. @ http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:17253
+[ 3940239ms] Error: Maximum update depth exceeded. This can happen when a component repeatedly calls setState inside componentWillUpdate or componentDidUpdate. React limits the number of nested updates to prevent infinite loops.
+    at getRootForUpdatedFiber (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:3526:128)
+    at enqueueConcurrentRenderForLane (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:3514:16)
+    at forceStoreRerender (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6104:21)
+    at updateStoreInstance (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6086:41)
+    at Object.react_stack_bottom_frame (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:18567:20)
+    at runWithFiberInDEV (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:997:72)
+    at commitHookEffectListMount (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:9411:163)
+    at commitHookPassiveMountEffects (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:9465:60)
+    at commitPassiveMountOnFiber (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:11040:29)
+    at recursivelyTraversePassiveMountEffects (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:11010:13)
+[ 3940236ms] [WARNING] %s
+
+%s
+ An error occurred in the <PendingQueueChips> component. Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://react.dev/link/error-boundaries to learn more about error boundaries. @ http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6965
+[ 3940795ms] Error: Maximum update depth exceeded. This can happen when a component repeatedly calls setState inside componentWillUpdate or componentDidUpdate. React limits the number of nested updates to prevent infinite loops.
+    at getRootForUpdatedFiber (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:3526:128)
+    at enqueueConcurrentRenderForLane (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:3514:16)
+    at forceStoreRerender (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6104:21)
+    at updateStoreInstance (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6086:41)
+    at Object.react_stack_bottom_frame (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:18567:20)
+    at runWithFiberInDEV (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:997:72)
+    at commitHookEffectListMount (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:9411:163)
+    at commitHookPassiveMountEffects (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:9465:60)
+    at commitPassiveMountOnFiber (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:11040:29)
+    at recursivelyTraversePassiveMountEffects (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:11010:13)
+[ 3940792ms] [WARNING] %s
+
+%s
+ An error occurred in the <PendingQueueChips> component. Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://react.dev/link/error-boundaries to learn more about error boundaries. @ http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6965
+[ 3941190ms] Error: Maximum update depth exceeded. This can happen when a component repeatedly calls setState inside componentWillUpdate or componentDidUpdate. React limits the number of nested updates to prevent infinite loops.
+    at getRootForUpdatedFiber (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:3526:128)
+    at enqueueConcurrentRenderForLane (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:3514:16)
+    at forceStoreRerender (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6104:21)
+    at updateStoreInstance (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6086:41)
+    at Object.react_stack_bottom_frame (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:18567:20)
+    at runWithFiberInDEV (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:997:72)
+    at commitHookEffectListMount (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:9411:163)
+    at commitHookPassiveMountEffects (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:9465:60)
+    at commitPassiveMountOnFiber (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:11040:29)
+    at recursivelyTraversePassiveMountEffects (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:11010:13)
+[ 3941189ms] [WARNING] %s
+
+%s
+ An error occurred in the <PendingQueueChips> component. Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://react.dev/link/error-boundaries to learn more about error boundaries. @ http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6965
+[ 3941506ms] Error: Maximum update depth exceeded. This can happen when a component repeatedly calls setState inside componentWillUpdate or componentDidUpdate. React limits the number of nested updates to prevent infinite loops.
+    at getRootForUpdatedFiber (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:3526:128)
+    at enqueueConcurrentRenderForLane (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:3514:16)
+    at forceStoreRerender (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6104:21)
+    at updateStoreInstance (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6086:41)
+    at Object.react_stack_bottom_frame (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:18567:20)
+    at runWithFiberInDEV (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:997:72)
+    at commitHookEffectListMount (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:9411:163)
+    at commitHookPassiveMountEffects (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:9465:60)
+    at commitPassiveMountOnFiber (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:11040:29)
+    at recursivelyTraversePassiveMountEffects (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:11010:13)
+[ 3941505ms] [WARNING] %s
+
+%s
+ An error occurred in the <PendingQueueChips> component. Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://react.dev/link/error-boundaries to learn more about error boundaries. @ http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6965
+[ 3941687ms] Error: Maximum update depth exceeded. This can happen when a component repeatedly calls setState inside componentWillUpdate or componentDidUpdate. React limits the number of nested updates to prevent infinite loops.
+    at getRootForUpdatedFiber (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:3526:128)
+    at enqueueConcurrentRenderForLane (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:3514:16)
+    at forceStoreRerender (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6104:21)
+    at updateStoreInstance (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6086:41)
+    at Object.react_stack_bottom_frame (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:18567:20)
+    at runWithFiberInDEV (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:997:72)
+    at commitHookEffectListMount (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:9411:163)
+    at commitHookPassiveMountEffects (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:9465:60)
+    at commitPassiveMountOnFiber (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:11040:29)
+    at recursivelyTraversePassiveMountEffects (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:11010:13)
+[ 3941686ms] [WARNING] %s
+
+%s
+ An error occurred in the <PendingQueueChips> component. Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://react.dev/link/error-boundaries to learn more about error boundaries. @ http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6965
+[ 3942313ms] Error: Maximum update depth exceeded. This can happen when a component repeatedly calls setState inside componentWillUpdate or componentDidUpdate. React limits the number of nested updates to prevent infinite loops.
+    at getRootForUpdatedFiber (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:3526:128)
+    at enqueueConcurrentRenderForLane (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:3514:16)
+    at forceStoreRerender (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6104:21)
+    at updateStoreInstance (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6086:41)
+    at Object.react_stack_bottom_frame (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:18567:20)
+    at runWithFiberInDEV (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:997:72)
+    at commitHookEffectListMount (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:9411:163)
+    at commitHookPassiveMountEffects (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:9465:60)
+    at commitPassiveMountOnFiber (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:11040:29)
+    at recursivelyTraversePassiveMountEffects (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:11010:13)
+[ 3942312ms] [WARNING] %s
+
+%s
+ An error occurred in the <PendingQueueChips> component. Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://react.dev/link/error-boundaries to learn more about error boundaries. @ http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6965
+[ 3942641ms] Error: Maximum update depth exceeded. This can happen when a component repeatedly calls setState inside componentWillUpdate or componentDidUpdate. React limits the number of nested updates to prevent infinite loops.
+    at getRootForUpdatedFiber (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:3526:128)
+    at enqueueConcurrentRenderForLane (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:3514:16)
+    at forceStoreRerender (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6104:21)
+    at updateStoreInstance (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6086:41)
+    at Object.react_stack_bottom_frame (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:18567:20)
+    at runWithFiberInDEV (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:997:72)
+    at commitHookEffectListMount (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:9411:163)
+    at commitHookPassiveMountEffects (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:9465:60)
+    at commitPassiveMountOnFiber (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:11040:29)
+    at recursivelyTraversePassiveMountEffects (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:11010:13)
+[ 3942639ms] [WARNING] %s
+
+%s
+ An error occurred in the <PendingQueueChips> component. Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://react.dev/link/error-boundaries to learn more about error boundaries. @ http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6965
+[ 3942810ms] Error: Maximum update depth exceeded. This can happen when a component repeatedly calls setState inside componentWillUpdate or componentDidUpdate. React limits the number of nested updates to prevent infinite loops.
+    at getRootForUpdatedFiber (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:3526:128)
+    at enqueueConcurrentRenderForLane (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:3514:16)
+    at forceStoreRerender (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6104:21)
+    at updateStoreInstance (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6086:41)
+    at Object.react_stack_bottom_frame (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:18567:20)
+    at runWithFiberInDEV (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:997:72)
+    at commitHookEffectListMount (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:9411:163)
+    at commitHookPassiveMountEffects (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:9465:60)
+    at commitPassiveMountOnFiber (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:11040:29)
+    at recursivelyTraversePassiveMountEffects (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:11010:13)
+[ 3942809ms] [WARNING] %s
+
+%s
+ An error occurred in the <PendingQueueChips> component. Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://react.dev/link/error-boundaries to learn more about error boundaries. @ http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6965
+[ 3943076ms] Error: Maximum update depth exceeded. This can happen when a component repeatedly calls setState inside componentWillUpdate or componentDidUpdate. React limits the number of nested updates to prevent infinite loops.
+    at getRootForUpdatedFiber (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:3526:128)
+    at enqueueConcurrentRenderForLane (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:3514:16)
+    at forceStoreRerender (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6104:21)
+    at updateStoreInstance (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6086:41)
+    at Object.react_stack_bottom_frame (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:18567:20)
+    at runWithFiberInDEV (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:997:72)
+    at commitHookEffectListMount (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:9411:163)
+    at commitHookPassiveMountEffects (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:9465:60)
+    at commitPassiveMountOnFiber (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:11040:29)
+    at recursivelyTraversePassiveMountEffects (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:11010:13)
+[ 3943075ms] [WARNING] %s
+
+%s
+ An error occurred in the <PendingQueueChips> component. Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://react.dev/link/error-boundaries to learn more about error boundaries. @ http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6965
+[ 3965908ms] Error: Maximum update depth exceeded. This can happen when a component repeatedly calls setState inside componentWillUpdate or componentDidUpdate. React limits the number of nested updates to prevent infinite loops.
+    at getRootForUpdatedFiber (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:3526:128)
+    at enqueueConcurrentRenderForLane (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:3514:16)
+    at forceStoreRerender (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6104:21)
+    at updateStoreInstance (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6086:41)
+    at Object.react_stack_bottom_frame (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:18567:20)
+    at runWithFiberInDEV (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:997:72)
+    at commitHookEffectListMount (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:9411:163)
+    at commitHookPassiveMountEffects (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:9465:60)
+    at commitPassiveMountOnFiber (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:11040:29)
+    at recursivelyTraversePassiveMountEffects (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:11010:13)
+[ 3965906ms] [WARNING] %s
+
+%s
+ An error occurred in the <PendingQueueChips> component. Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://react.dev/link/error-boundaries to learn more about error boundaries. @ http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6965
+[ 3966860ms] Error: Maximum update depth exceeded. This can happen when a component repeatedly calls setState inside componentWillUpdate or componentDidUpdate. React limits the number of nested updates to prevent infinite loops.
+    at getRootForUpdatedFiber (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:3526:128)
+    at enqueueConcurrentRenderForLane (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:3514:16)
+    at forceStoreRerender (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6104:21)
+    at updateStoreInstance (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6086:41)
+    at Object.react_stack_bottom_frame (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:18567:20)
+    at runWithFiberInDEV (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:997:72)
+    at commitHookEffectListMount (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:9411:163)
+    at commitHookPassiveMountEffects (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:9465:60)
+    at commitPassiveMountOnFiber (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:11040:29)
+    at recursivelyTraversePassiveMountEffects (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:11010:13)
+[ 3966858ms] [WARNING] %s
+
+%s
+ An error occurred in the <PendingQueueChips> component. Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://react.dev/link/error-boundaries to learn more about error boundaries. @ http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6965
+[ 3967487ms] Error: Maximum update depth exceeded. This can happen when a component repeatedly calls setState inside componentWillUpdate or componentDidUpdate. React limits the number of nested updates to prevent infinite loops.
+    at getRootForUpdatedFiber (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:3526:128)
+    at enqueueConcurrentRenderForLane (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:3514:16)
+    at forceStoreRerender (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6104:21)
+    at updateStoreInstance (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6086:41)
+    at Object.react_stack_bottom_frame (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:18567:20)
+    at runWithFiberInDEV (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:997:72)
+    at commitHookEffectListMount (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:9411:163)
+    at commitHookPassiveMountEffects (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:9465:60)
+    at commitPassiveMountOnFiber (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:11040:29)
+    at recursivelyTraversePassiveMountEffects (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:11010:13)
+[ 3967471ms] [WARNING] %s
+
+%s
+ An error occurred in the <PendingQueueChips> component. Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://react.dev/link/error-boundaries to learn more about error boundaries. @ http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6965
+[ 3967989ms] Error: Maximum update depth exceeded. This can happen when a component repeatedly calls setState inside componentWillUpdate or componentDidUpdate. React limits the number of nested updates to prevent infinite loops.
+    at getRootForUpdatedFiber (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:3526:128)
+    at enqueueConcurrentRenderForLane (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:3514:16)
+    at forceStoreRerender (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6104:21)
+    at updateStoreInstance (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6086:41)
+    at Object.react_stack_bottom_frame (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:18567:20)
+    at runWithFiberInDEV (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:997:72)
+    at commitHookEffectListMount (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:9411:163)
+    at commitHookPassiveMountEffects (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:9465:60)
+    at commitPassiveMountOnFiber (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:11040:29)
+    at recursivelyTraversePassiveMountEffects (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:11010:13)
+[ 3967987ms] [WARNING] %s
+
+%s
+ An error occurred in the <PendingQueueChips> component. Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://react.dev/link/error-boundaries to learn more about error boundaries. @ http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6965
+[ 3967993ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:1420/src/components/views/office-xlsx-view.tsx?t=1790328678791:0
+[ 3968008ms] [ERROR] [vite] Failed to reload /src/components/views/office-xlsx-view.tsx. This could be due to syntax errors or importing non-existent modules. (see errors above) @ http://127.0.0.1:1420/@vite/client:881
+[ 3968876ms] Error: Maximum update depth exceeded. This can happen when a component repeatedly calls setState inside componentWillUpdate or componentDidUpdate. React limits the number of nested updates to prevent infinite loops.
+    at getRootForUpdatedFiber (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:3526:128)
+    at enqueueConcurrentRenderForLane (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:3514:16)
+    at forceStoreRerender (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6104:21)
+    at updateStoreInstance (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6086:41)
+    at Object.react_stack_bottom_frame (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:18567:20)
+    at runWithFiberInDEV (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:997:72)
+    at commitHookEffectListMount (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:9411:163)
+    at commitHookPassiveMountEffects (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:9465:60)
+    at commitPassiveMountOnFiber (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:11040:29)
+    at recursivelyTraversePassiveMountEffects (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:11010:13)
+[ 3968874ms] [WARNING] %s
+
+%s
+ An error occurred in the <PendingQueueChips> component. Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://react.dev/link/error-boundaries to learn more about error boundaries. @ http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6965
+[ 3969299ms] Error: Maximum update depth exceeded. This can happen when a component repeatedly calls setState inside componentWillUpdate or componentDidUpdate. React limits the number of nested updates to prevent infinite loops.
+    at getRootForUpdatedFiber (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:3526:128)
+    at enqueueConcurrentRenderForLane (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:3514:16)
+    at forceStoreRerender (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6104:21)
+    at updateStoreInstance (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6086:41)
+    at Object.react_stack_bottom_frame (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:18567:20)
+    at runWithFiberInDEV (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:997:72)
+    at commitHookEffectListMount (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:9411:163)
+    at commitHookPassiveMountEffects (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:9465:60)
+    at commitPassiveMountOnFiber (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:11040:29)
+    at recursivelyTraversePassiveMountEffects (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:11010:13)
+[ 3969298ms] [WARNING] %s
+
+%s
+ An error occurred in the <PendingQueueChips> component. Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://react.dev/link/error-boundaries to learn more about error boundaries. @ http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6965
+[ 3969713ms] Error: Maximum update depth exceeded. This can happen when a component repeatedly calls setState inside componentWillUpdate or componentDidUpdate. React limits the number of nested updates to prevent infinite loops.
+    at getRootForUpdatedFiber (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:3526:128)
+    at enqueueConcurrentRenderForLane (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:3514:16)
+    at forceStoreRerender (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6104:21)
+    at updateStoreInstance (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6086:41)
+    at Object.react_stack_bottom_frame (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:18567:20)
+    at runWithFiberInDEV (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:997:72)
+    at commitHookEffectListMount (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:9411:163)
+    at commitHookPassiveMountEffects (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:9465:60)
+    at commitPassiveMountOnFiber (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:11040:29)
+    at recursivelyTraversePassiveMountEffects (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:11010:13)
+[ 3969712ms] [WARNING] %s
+
+%s
+ An error occurred in the <PendingQueueChips> component. Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://react.dev/link/error-boundaries to learn more about error boundaries. @ http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6965
+[ 3969952ms] Error: Maximum update depth exceeded. This can happen when a component repeatedly calls setState inside componentWillUpdate or componentDidUpdate. React limits the number of nested updates to prevent infinite loops.
+    at getRootForUpdatedFiber (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:3526:128)
+    at enqueueConcurrentRenderForLane (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:3514:16)
+    at forceStoreRerender (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6104:21)
+    at updateStoreInstance (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6086:41)
+    at Object.react_stack_bottom_frame (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:18567:20)
+    at runWithFiberInDEV (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:997:72)
+    at commitHookEffectListMount (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:9411:163)
+    at commitHookPassiveMountEffects (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:9465:60)
+    at commitPassiveMountOnFiber (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:11040:29)
+    at recursivelyTraversePassiveMountEffects (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:11010:13)
+[ 3969948ms] [WARNING] %s
+
+%s
+ An error occurred in the <PendingQueueChips> component. Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://react.dev/link/error-boundaries to learn more about error boundaries. @ http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6965
+[ 3972043ms] [ERROR] You are calling ReactDOMClient.createRoot() on a container that has already been passed to createRoot() before. Instead, call root.render() on the existing root instead if you want to update it. @ http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:17253
+[ 3972649ms] Error: Maximum update depth exceeded. This can happen when a component repeatedly calls setState inside componentWillUpdate or componentDidUpdate. React limits the number of nested updates to prevent infinite loops.
+    at getRootForUpdatedFiber (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:3526:128)
+    at enqueueConcurrentRenderForLane (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:3514:16)
+    at forceStoreRerender (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6104:21)
+    at updateStoreInstance (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6086:41)
+    at Object.react_stack_bottom_frame (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:18567:20)
+    at runWithFiberInDEV (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:997:72)
+    at commitHookEffectListMount (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:9411:163)
+    at commitHookPassiveMountEffects (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:9465:60)
+    at commitPassiveMountOnFiber (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:11040:29)
+    at recursivelyTraversePassiveMountEffects (http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:11010:13)
+[ 3972646ms] [WARNING] %s
+
+%s
+ An error occurred in the <PendingQueueChips> component. Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://react.dev/link/error-boundaries to learn more about error boundaries. @ http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6965
+[ 3980400ms] Failed to fetch dynamically imported module: http://127.0.0.1:1420/src/components/views/office-xlsx-view.tsx?t=1790328678791
+[ 3980394ms] [WARNING] %s
+
+%s
+ An error occurred in one of your React components. Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://react.dev/link/error-boundaries to learn more about error boundaries. @ http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6965
+[ 3980764ms] Failed to fetch dynamically imported module: http://127.0.0.1:1420/src/components/views/office-xlsx-view.tsx?t=1790328678791
+[ 3980763ms] [WARNING] %s
+
+%s
+ An error occurred in one of your React components. Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://react.dev/link/error-boundaries to learn more about error boundaries. @ http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6965
+[ 3980851ms] Failed to fetch dynamically imported module: http://127.0.0.1:1420/src/components/views/office-xlsx-view.tsx?t=1790328678791
+[ 3980849ms] [WARNING] %s
+
+%s
+ An error occurred in one of your React components. Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://react.dev/link/error-boundaries to learn more about error boundaries. @ http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6965
+[ 3980945ms] Failed to fetch dynamically imported module: http://127.0.0.1:1420/src/components/views/office-xlsx-view.tsx?t=1790328678791
+[ 3980945ms] [WARNING] %s
+
+%s
+ An error occurred in one of your React components. Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://react.dev/link/error-boundaries to learn more about error boundaries. @ http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6965
+[ 3981054ms] Failed to fetch dynamically imported module: http://127.0.0.1:1420/src/components/views/office-xlsx-view.tsx?t=1790328678791
+[ 3981053ms] [WARNING] %s
+
+%s
+ An error occurred in one of your React components. Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://react.dev/link/error-boundaries to learn more about error boundaries. @ http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6965
+[ 3981055ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:1420/src/components/views/office-xlsx-view.tsx?t=1790328695010:0
+[ 3981067ms] [ERROR] [vite] Failed to reload /src/components/views/office-xlsx-view.tsx. This could be due to syntax errors or importing non-existent modules. (see errors above) @ http://127.0.0.1:1420/@vite/client:881
+[ 3994213ms] Failed to fetch dynamically imported module: http://127.0.0.1:1420/src/components/views/office-xlsx-view.tsx?t=1790328678791
+[ 3994212ms] [WARNING] %s
+
+%s
+ An error occurred in one of your React components. Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://react.dev/link/error-boundaries to learn more about error boundaries. @ http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6965
+[ 3994512ms] Failed to fetch dynamically imported module: http://127.0.0.1:1420/src/components/views/office-xlsx-view.tsx?t=1790328678791
+[ 3994511ms] [WARNING] %s
+
+%s
+ An error occurred in one of your React components. Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://react.dev/link/error-boundaries to learn more about error boundaries. @ http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6965
+[ 3994596ms] Failed to fetch dynamically imported module: http://127.0.0.1:1420/src/components/views/office-xlsx-view.tsx?t=1790328678791
+[ 3994595ms] [WARNING] %s
+
+%s
+ An error occurred in one of your React components. Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://react.dev/link/error-boundaries to learn more about error boundaries. @ http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6965
+[ 3994722ms] Failed to fetch dynamically imported module: http://127.0.0.1:1420/src/components/views/office-xlsx-view.tsx?t=1790328678791
+[ 3994721ms] [WARNING] %s
+
+%s
+ An error occurred in one of your React components. Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://react.dev/link/error-boundaries to learn more about error boundaries. @ http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6965
+[ 3994807ms] Failed to fetch dynamically imported module: http://127.0.0.1:1420/src/components/views/office-xlsx-view.tsx?t=1790328678791
+[ 3994805ms] [WARNING] %s
+
+%s
+ An error occurred in one of your React components. Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://react.dev/link/error-boundaries to learn more about error boundaries. @ http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6965
+[ 4067081ms] Failed to fetch dynamically imported module: http://127.0.0.1:1420/src/components/views/office-xlsx-view.tsx?t=1790328678791
+[ 4067080ms] [WARNING] %s
+
+%s
+ An error occurred in one of your React components. Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://react.dev/link/error-boundaries to learn more about error boundaries. @ http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6965
+[ 4067387ms] Failed to fetch dynamically imported module: http://127.0.0.1:1420/src/components/views/office-xlsx-view.tsx?t=1790328678791
+[ 4067385ms] [WARNING] %s
+
+%s
+ An error occurred in one of your React components. Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://react.dev/link/error-boundaries to learn more about error boundaries. @ http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6965
+[ 4067448ms] Failed to fetch dynamically imported module: http://127.0.0.1:1420/src/components/views/office-xlsx-view.tsx?t=1790328678791
+[ 4067447ms] [WARNING] %s
+
+%s
+ An error occurred in one of your React components. Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://react.dev/link/error-boundaries to learn more about error boundaries. @ http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6965
+[ 4067517ms] Failed to fetch dynamically imported module: http://127.0.0.1:1420/src/components/views/office-xlsx-view.tsx?t=1790328678791
+[ 4067516ms] [WARNING] %s
+
+%s
+ An error occurred in one of your React components. Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://react.dev/link/error-boundaries to learn more about error boundaries. @ http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6965
+[ 4067751ms] Failed to fetch dynamically imported module: http://127.0.0.1:1420/src/components/views/office-xlsx-view.tsx?t=1790328678791
+[ 4067749ms] [WARNING] %s
+
+%s
+ An error occurred in one of your React components. Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://react.dev/link/error-boundaries to learn more about error boundaries. @ http://127.0.0.1:1420/node_modules/.vite/deps/react-dom_client.js?v=f9a20b30:6965

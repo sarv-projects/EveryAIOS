@@ -206,10 +206,15 @@ impl ReferenceLibrary {
 /// body's `w:sectPr` — the standard bibliography anchor). Returns the patched
 /// document bytes. `docx_bytes` is the whole `.docx`; only `word/document.xml`
 /// is rewritten.
+///
+/// The rewritten part is verified for `w:fldChar` balance before the archive
+/// is rebuilt, so a citation insert can never commit an unbalanced field
+/// (ARCH/04 §4.6). The caller gets an error and the original bytes back —
+/// never a half-valid package.
 pub fn insert_citation_into_docx(
     docx_bytes: &[u8],
     citation_text: &str,
-) -> Result<Vec<u8>, crate::zip::ArchiveError> {
+) -> Result<Vec<u8>, CitationInsertError> {
     let mut archive = crate::zip::OoxmlArchive::open(docx_bytes.to_vec())?;
     let doc = archive.read_part("word/document.xml")?;
     let mut xml = String::from_utf8_lossy(&doc).to_string();
@@ -226,11 +231,53 @@ pub fn insert_citation_into_docx(
     } else if let Some(pos) = xml.rfind("</w:body>") {
         xml.insert_str(pos, &para);
     } else {
-        return Err(crate::zip::ArchiveError::PartNotFound(
+        return Err(CitationInsertError::Archive(crate::zip::ArchiveError::PartNotFound(
             "no body anchor in word/document.xml".into(),
-        ));
+        )));
     }
-    archive.save(&[("word/document.xml".to_string(), xml.into_bytes())])
+    let patched = xml.into_bytes();
+    crate::docx::field_balance::verify("word/document.xml", &patched)?;
+    Ok(archive.save(&[("word/document.xml".to_string(), patched)])?)
+}
+
+/// Failure modes of [`insert_citation_into_docx`]: a package/archive problem,
+/// or a field-balance refusal that leaves the source file untouched.
+#[derive(Debug, thiserror::Error)]
+pub enum CitationInsertError {
+    #[error("archive error: {0}")]
+    Archive(#[from] crate::zip::ArchiveError),
+    #[error("xml error: {0}")]
+    Xml(#[from] crate::xml::OfficeXmlError),
+    #[error(
+        "unbalanced field characters: field #{field} in {part}: {detail} (citation not inserted; the file was not modified)"
+    )]
+    FieldBalance {
+        part: String,
+        field: usize,
+        detail: String,
+    },
+    /// Any other engine refusal, carried verbatim so nothing is hidden.
+    #[error("{0}")]
+    Other(String),
+}
+
+impl From<crate::docx::OfficeError> for CitationInsertError {
+    fn from(e: crate::docx::OfficeError) -> Self {
+        match e {
+            crate::docx::OfficeError::FieldBalance {
+                part,
+                field,
+                detail,
+            } => CitationInsertError::FieldBalance {
+                part,
+                field,
+                detail,
+            },
+            crate::docx::OfficeError::Archive(a) => CitationInsertError::Archive(a),
+            crate::docx::OfficeError::Xml(x) => CitationInsertError::Xml(x),
+            other => CitationInsertError::Other(other.to_string()),
+        }
+    }
 }
 
 /// Render a full bibliography from a reference list.

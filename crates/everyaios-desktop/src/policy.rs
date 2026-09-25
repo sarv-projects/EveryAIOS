@@ -28,6 +28,15 @@ pub enum ConfirmClass {
     Captcha,
     /// Transmits data off-machine (send, upload, share, email…).
     Transmit,
+    /// The **lowest rung of the click ladder**: injecting real pointer/keyboard
+    /// input, which moves the user's cursor and takes focus. Never produced by
+    /// [`ConfirmClass::classify`] (it is not a keyword class — it is a property
+    /// of the *mechanism*) and never derived from the target; it is raised by
+    /// [`DesktopGuard::authorize_rung`] when a click ladder reaches
+    /// [`crate::ladder::ClickRung::RawInput`], so the decision rides the same
+    /// policy → human gate → audit path as every other effect rather than a
+    /// second authorization route.
+    CursorTakeover,
     /// Ordinary navigation / read / benign click.
     Routine,
 }
@@ -464,6 +473,29 @@ impl AppPolicy {
             Ok(GateDecision::Confirm(ConfirmClass::Routine))
         }
     }
+
+    /// [`AppPolicy::evaluate`] for a rung that the click ladder reached, where
+    /// the decision hinges on the **mechanism** rather than on the act's
+    /// keyword class.
+    ///
+    /// Every check `evaluate` performs still applies — hard denies, safe zones,
+    /// launch subject, allow-list, strict mode. The only difference: a rung
+    /// whose gate is `HumanAuthorization` (today: the pointer-moving raw-input
+    /// rung) is upgraded from `Allow` to `Confirm(CursorTakeover)`, so the
+    /// human gate is always asked. An allow-listed app is a permission to
+    /// *drive* it, not a permission to hijack the operator's mouse.
+    pub fn evaluate_rung(
+        &self,
+        app: &str,
+        act: &ActKind,
+        key: Option<&str>,
+    ) -> Result<GateDecision, String> {
+        let decision = self.evaluate(app, act, key)?;
+        Ok(match decision {
+            GateDecision::Allow => GateDecision::Confirm(ConfirmClass::CursorTakeover),
+            other => other,
+        })
+    }
 }
 
 /// Global kill switch — once stopped, every engine op fails closed.
@@ -624,6 +656,128 @@ impl DesktopGuard {
             },
         });
         self.sink.write("desktop.guard2", payload, provenance);
+    }
+
+    // ---- the click ladder's gate --------------------------------------
+
+    /// Authorize (or refuse) one rung of the click ladder.
+    ///
+    /// This is the **same** path as [`DesktopGuard::preflight_with`] — kill
+    /// switch, rate limit, policy evaluation, human gate, audit — with one
+    /// addition: a rung whose [`RungGate`](crate::ladder::RungGate) is
+    /// `HumanAuthorization` cannot come out `Allow` from the policy alone. It
+    /// is raised to `Confirm(CursorTakeover)` and pushed through the host's
+    /// `PermissionGate`, which is backed by the Guard ticket store. That is
+    /// deliberate:
+    ///
+    /// - The architecture marks the pointer-moving rung as needing a human
+    ///   decision, and an allow-listed *app* is not that decision.
+    /// - Routing it here means the ladder cannot become a Guard bypass (I12):
+    ///   the trait the ladder drives ([`crate::ladder::ClickLadderDriver`]) has
+    ///   no other authorization method, so there is nowhere to go around it.
+    /// - It costs a second rate-limit token and a second audit row, because it
+    ///   genuinely is a second authorization decision, not a re-read of the
+    ///   first.
+    ///
+    /// `Err(reason)` is the refusal the ladder surfaces verbatim; `Ok(())` is
+    /// the grant. A hard policy error (hard-deny app, safe zone, kill switch)
+    /// also arrives as `Err`, so the ladder stops there too.
+    pub fn authorize_rung(
+        &self,
+        app: &str,
+        act: &ActKind,
+        key: Option<&str>,
+        provenance: ActProvenance,
+        rung: crate::ladder::ClickRung,
+    ) -> Result<(), String> {
+        self.kill.check()?;
+        self.limiter.allow().map_err(|retry_after| {
+            format!(
+                "rate limit: retry in {:?} before rung {} runs",
+                retry_after,
+                rung.as_str()
+            )
+        })?;
+        // A gated rung is classified by its mechanism, not by a keyword on the
+        // target: the act has already been classified above and the escalation
+        // question is "may we move this human's cursor", which is orthogonal to
+        // "is this a Delete".
+        let policy_decision = if rung.gate() == crate::ladder::RungGate::HumanAuthorization {
+            self.policy().evaluate_rung(app, act, key)?
+        } else {
+            self.policy().evaluate(app, act, key)?
+        };
+        let decision = match policy_decision {
+            GateDecision::Confirm(class) => self.gate.request(act, class),
+            other => other,
+        };
+        self.audit_rung(app, act, rung, &decision, provenance);
+        match decision {
+            GateDecision::Allow => Ok(()),
+            GateDecision::Confirm(class) => Err(format!(
+                "rung {} needs a human decision: gate returned confirm({class:?})",
+                rung.as_str()
+            )),
+            GateDecision::Deny => Err(format!(
+                "rung {} refused: gate decision deny",
+                rung.as_str()
+            )),
+        }
+    }
+
+    /// Audit one rung decision, then the ladder verdict itself. Both rows are
+    /// on the same Merkle chain as every other desktop effect, so "which rung
+    /// ran" and "who authorized it" are both reconstructable after the fact.
+    pub fn audit_rung(
+        &self,
+        app: &str,
+        act: &ActKind,
+        rung: crate::ladder::ClickRung,
+        decision: &GateDecision,
+        provenance: ActProvenance,
+    ) {
+        let payload = serde_json::json!({
+            "surface": "desktop",
+            "kind": "click_ladder_rung",
+            "app": app,
+            "act": act.describe(),
+            "rung": rung.as_str(),
+            "rung_rank": rung.rank(),
+            "rung_mechanism": rung.describe(),
+            "moves_pointer": rung.moves_pointer(),
+            "requires_foreground": rung.requires_foreground(),
+            "gate": match rung.gate() {
+                crate::ladder::RungGate::Automatic => "automatic",
+                crate::ladder::RungGate::HumanAuthorization => "human_authorization",
+            },
+            "interaction": self.policy().interaction_mode.as_str(),
+            "decision": decision.as_str(),
+            "provenance": provenance.as_str(),
+        });
+        self.sink.write("desktop.guard2.rung", payload, provenance);
+    }
+
+    /// Record the verdict of a whole ladder walk: which rung ran, what was
+    /// tried first, and whether the walk escalated.
+    pub fn audit_ladder(
+        &self,
+        app: &str,
+        act: &ActKind,
+        verdict: &crate::ladder::LadderVerdict,
+        provenance: ActProvenance,
+    ) {
+        self.sink.write(
+            "desktop.ladder",
+            serde_json::json!({
+                "surface": "desktop",
+                "app": app,
+                "act": act.describe(),
+                "interaction": self.policy().interaction_mode.as_str(),
+                "provenance": provenance.as_str(),
+                "verdict": verdict.to_json(),
+            }),
+            provenance,
+        );
     }
 }
 
@@ -1021,5 +1175,137 @@ mod tests {
             )
             .unwrap_err();
         assert!(err.contains("hard-deny"));
+    }
+
+    // ---- the click-ladder gate ----------------------------------------
+
+    /// The pointer-moving rung is **never** allowed by the policy alone, even
+    /// on an allow-listed app with a routine act. An allow-list is permission to
+    /// drive an app, not permission to hijack the operator's cursor.
+    #[test]
+    fn a_gated_rung_reaches_the_human_gate_even_on_an_allow_listed_app() {
+        use crate::ladder::ClickRung;
+        let p = AppPolicy::default().allow("notepad");
+        let act = ActKind::Click { x: 10, y: 10 };
+        // The ordinary act is allowed outright.
+        assert_eq!(
+            p.evaluate("notepad", &act, None).unwrap(),
+            GateDecision::Allow
+        );
+        // The same act on the gated rung is a confirmation, always.
+        assert_eq!(
+            p.evaluate_rung("notepad", &act, None).unwrap(),
+            GateDecision::Confirm(ConfirmClass::CursorTakeover)
+        );
+        // …and it is still only an Allow once the human gate says so.
+        let allow = gate_allow();
+        assert!(
+            allow
+                .authorize_rung("notepad", &act, None, ActProvenance::Agent, ClickRung::RawInput)
+                .is_ok()
+        );
+        let confirm = DesktopGuard::new(
+            AppPolicy::default().allow("notepad"),
+            Box::new(ConfirmAllGate),
+            Box::new(NoopSink),
+        );
+        let err = confirm
+            .authorize_rung("notepad", &act, None, ActProvenance::Agent, ClickRung::RawInput)
+            .unwrap_err();
+        assert!(err.contains("human decision"), "got: {err}");
+        assert!(err.contains("raw_input"), "got: {err}");
+        // A deny-by-default host (the shipped Tauri gate today) refuses, so a
+        // coordinate click never silently reaches the pointer-moving rung.
+        let deny = DesktopGuard::new(
+            AppPolicy::default().allow("notepad"),
+            Box::new(DenyAllGate),
+            Box::new(NoopSink),
+        );
+        let err = deny
+            .authorize_rung("notepad", &act, None, ActProvenance::Agent, ClickRung::RawInput)
+            .unwrap_err();
+        assert!(err.contains("refused"), "got: {err}");
+    }
+
+    /// An ungated rung takes the ordinary path — no extra confirmation, so the
+    /// ladder does not ask the human twice for a non-moving mechanism.
+    #[test]
+    fn an_ungated_rung_takes_the_ordinary_policy_path() {
+        use crate::ladder::ClickRung;
+        let mut p = AppPolicy::default().allow("notepad");
+        p.allow_paths.clear();
+        let act = ActKind::Click { x: 10, y: 10 };
+        let decision = p.evaluate("notepad", &act, None).unwrap();
+        assert_eq!(decision, GateDecision::Allow);
+        for rung in [ClickRung::AccessibilityInvoke, ClickRung::SyntheticEvent] {
+            assert_eq!(rung.gate(), crate::ladder::RungGate::Automatic);
+        }
+        // Even with a DenyAll gate, an ungated rung never consults it.
+        let deny = DesktopGuard::new(p.clone(), Box::new(DenyAllGate), Box::new(NoopSink));
+        assert!(
+            deny.authorize_rung(
+                "notepad",
+                &act,
+                None,
+                ActProvenance::Agent,
+                ClickRung::SyntheticEvent
+            )
+            .is_ok()
+        );
+    }
+
+    /// The rung gate does not weaken any existing check: a hard-denied app, a
+    /// safe zone, and the kill switch all still stop the gated rung first.
+    #[test]
+    fn the_rung_gate_never_relaxes_the_existing_checks() {
+        use crate::ladder::ClickRung;
+        let p = AppPolicy {
+            safe_zones: vec![Region {
+                x: 0,
+                y: 0,
+                width: 100,
+                height: 100,
+            }],
+            ..AppPolicy::default()
+        };
+        // Safe zone, before any allow-list question.
+        assert!(
+            p.evaluate_rung("notepad", &ActKind::Click { x: 5, y: 5 }, None)
+                .is_err()
+        );
+        // Hard-deny app.
+        let err = p
+            .evaluate_rung("Windows Terminal", &ActKind::Click { x: 500, y: 500 }, None)
+            .unwrap_err();
+        assert!(err.contains("hard-deny"), "got: {err}");
+        // Kill switch.
+        let g = gate_allow();
+        g.kill.stop();
+        let err = g
+            .authorize_rung(
+                "notepad",
+                &ActKind::Click { x: 500, y: 500 },
+                None,
+                ActProvenance::Agent,
+                ClickRung::RawInput,
+            )
+            .unwrap_err();
+        assert!(err.contains("emergency stop"), "got: {err}");
+    }
+
+    /// The class is part of the same taxonomy and the same audit row, not a
+    /// second authorization vocabulary.
+    #[test]
+    fn cursor_takeover_is_in_the_one_confirm_taxonomy() {
+        assert_eq!(
+            ConfirmClass::classify("Save", None),
+            ConfirmClass::Routine,
+            "classification is unchanged: a target name never produces the class"
+        );
+        assert!(!ALWAYS_CONFIRM.contains(&ConfirmClass::CursorTakeover));
+        // It is a normal enum member: same serde, same gate, same audit.
+        let json = serde_json::to_string(&GateDecision::Confirm(ConfirmClass::CursorTakeover))
+            .unwrap();
+        assert!(json.contains("CursorTakeover"), "{json}");
     }
 }

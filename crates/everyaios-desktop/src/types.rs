@@ -6,6 +6,9 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::geometry::{DpiScale, SeeBudget};
+use crate::ladder::LadderVerdict;
+
 /// A desktop window as seen by the agent.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct WindowInfo {
@@ -55,8 +58,56 @@ pub struct SeeResult {
     /// Region this capture covers within the window (full window for `see()`,
     /// a sub-rect for region zoom).
     pub region: Region,
-    /// Scale factor applied (1.0 unless a DPI-aware zoom was requested).
+    /// Native scale factor of the capture path (1.0 on an unscaled display).
+    ///
+    /// This is the *platform's* factor, not a correction: the coordinates a
+    /// caller supplies and the pixels in `png` are both physical, so nothing
+    /// here rescales them. [`Self::dpi`] is the measured value with its
+    /// provenance, and it is what says whether a raw-input rung has to convert.
     pub scale: f64,
+    /// The measured DPI factor **with its source**, so a `1.0` is
+    /// distinguishable from "not measured".
+    pub dpi: DpiScale,
+    /// The output budget the engine actually applied — including whether it
+    /// clamped. `None` only for a raw platform capture that did not go through
+    /// [`crate::geometry::enforce_output_budget`] (a direct backend call); an
+    /// engine-produced capture always has one.
+    pub budget: Option<SeeBudget>,
+}
+
+impl SeeResult {
+    /// Map a point in **this returned image** back to a **window-relative**
+    /// point, undoing any clamp. A model that predicts a coordinate on a
+    /// downscaled capture is aiming at the same control as on a full-size one,
+    /// so a click must not use the raw image coordinate.
+    pub fn image_point_to_window(&self, x: i32, y: i32) -> (i32, i32) {
+        match &self.budget {
+            Some(b) => b.image_point_to_window(x, y),
+            // No budget report: the image is the capture, so the two spaces
+            // are the same. An honest identity, not a guess.
+            None => (x, y),
+        }
+    }
+
+    /// One honest sentence for an audit row: what was captured, what came back,
+    /// and whether the budget changed it.
+    pub fn describe(&self) -> String {
+        let dpi = self.dpi.describe();
+        match &self.budget {
+            Some(b) => format!(
+                "{} · {} · {} · {}",
+                format!("{:?}", self.method),
+                dpi,
+                b.describe(),
+                if b.disposition.clamped() {
+                    "clamped"
+                } else {
+                    "unchanged"
+                }
+            ),
+            None => format!("{:?} · {dpi} · no output budget applied", self.method),
+        }
+    }
 }
 
 /// A rectangular region in window/physical coordinates.
@@ -185,7 +236,13 @@ pub struct ReadResult {
     pub window_id: u64,
     /// None when the platform/a11y surface is absent → vision-fallback path.
     pub tree: Option<ReadNode>,
-    /// Effective DPI scale for this window (for coordinate math).
+    /// The effective DPI scale for this window (for coordinate math).
+    ///
+    /// Measured per platform, not hardcoded: Windows per-monitor-v2
+    /// (`GetDpiForWindow`), macOS backing scale, X11 `Xft.dpi`. A `1.0` is a
+    /// real value on an unscaled display *and* the honest answer where the
+    /// platform could not be asked — see [`crate::geometry::DpiSource`] to tell
+    /// the two apart.
     pub dpi_scale: f64,
     /// The window list snapshot used (apps + windows).
     pub windows: Vec<WindowInfo>,
@@ -322,7 +379,52 @@ pub struct ActOutcome {
     pub ok: bool,
     /// Post-action re-observe (tree diff / OCR text) when a verifier ran.
     pub verification: Option<VerifyOutcome>,
+    /// **Which rung of the click ladder actually ran, and what was tried before
+    /// it.** `Some` for every coordinate/name click (and for the refusal when a
+    /// rung needed authority that did not arrive), so a fall-through is visible
+    /// in the result instead of having to be inferred from behaviour.
+    pub click: Option<LadderVerdict>,
     pub error: Option<String>,
+}
+
+impl ActOutcome {
+    /// A completed act.
+    pub fn ok(kind: ActKind) -> Self {
+        Self {
+            kind,
+            ok: true,
+            verification: None,
+            click: None,
+            error: None,
+        }
+    }
+
+    /// A refused/declined act, with the reason the caller must see.
+    pub fn err(kind: ActKind, reason: impl Into<String>) -> Self {
+        Self {
+            kind,
+            ok: false,
+            verification: None,
+            click: None,
+            error: Some(reason.into()),
+        }
+    }
+
+    /// A refused act that carries a click-ladder verdict.
+    pub fn refused(kind: ActKind, reason: impl Into<String>, click: LadderVerdict) -> Self {
+        Self {
+            kind,
+            ok: false,
+            verification: None,
+            click: Some(click),
+            error: Some(reason.into()),
+        }
+    }
+
+    /// The rung that delivered this act, when the act went through the ladder.
+    pub fn rung(&self) -> Option<crate::ladder::ClickRung> {
+        self.click.as_ref().and_then(|v| v.rung())
+    }
 }
 
 /// Verify cascade outcome — halt-over-guess is the contract.
@@ -490,5 +592,84 @@ mod tests {
         assert!(d.contains("type 5 char(s)"), "{d}");
         let d2 = ActKind::Click { x: 1, y: 2 }.describe();
         assert!(d2.contains("click at (1,2)"), "{d2}");
+    }
+
+    fn see_result_with_budget(budget: SeeBudget) -> SeeResult {
+        SeeResult {
+            window_id: 7,
+            png: vec![1, 2, 3],
+            width: budget.output_width,
+            height: budget.output_height,
+            method: SeeMethod::PrintWindow,
+            region: Region::full(budget.output_width, budget.output_height),
+            scale: 1.0,
+            dpi: DpiScale::from_dpi(120, crate::geometry::DpiSource::PerMonitorV2),
+            budget: Some(budget),
+        }
+    }
+
+    fn sample_budget(scale: f64) -> SeeBudget {
+        SeeBudget {
+            captured_width: 3000,
+            captured_height: 1500,
+            output_width: 1232,
+            output_height: 616,
+            output_scale_x: scale,
+            output_scale_y: scale,
+            disposition: crate::geometry::BudgetDisposition::Clamped {
+                dimension: true,
+                aligned: true,
+            },
+            alignment: 28,
+            max_dimension_px: 1280,
+            max_bytes: 900 * 1024,
+            bytes: 1234,
+        }
+    }
+
+    /// A clamped capture must not hand a raw image coordinate to a click: the
+    /// mapping back to window space is the honest inverse of the clamp.
+    #[test]
+    fn a_clamped_capture_maps_image_points_back_to_window_space() {
+        let see = see_result_with_budget(sample_budget(1232.0 / 3000.0));
+        let (wx, wy) = see.image_point_to_window(616, 308);
+        assert!((wx - 1500).abs() <= 1, "got {wx}");
+        assert!((wy - 750).abs() <= 1, "got {wy}");
+        // And the description says it was clamped, with the measured DPI.
+        let d = see.describe();
+        assert!(d.contains("clamped"), "{d}");
+        assert!(d.contains("per_monitor_v2 factor 1.25"), "{d}");
+    }
+
+    /// A raw backend capture with no budget report is an honest identity, not a
+    /// silent lie: the description says the budget was never applied.
+    #[test]
+    fn an_unbudgeted_capture_is_labelled_not_assumed_fine() {
+        let mut see = see_result_with_budget(sample_budget(1.0));
+        see.budget = None;
+        assert_eq!(see.image_point_to_window(5, 6), (5, 6));
+        assert!(see.describe().contains("no output budget applied"));
+    }
+
+    #[test]
+    fn act_outcome_carries_the_rung_that_ran() {
+        use crate::ladder::ClickRung;
+        let ok = ActOutcome::ok(ActKind::Click { x: 1, y: 1 });
+        assert_eq!(ok.rung(), None);
+        assert!(ok.click.is_none());
+
+        let refused = ActOutcome::refused(
+            ActKind::Click { x: 1, y: 1 },
+            "gate decision: deny",
+            LadderVerdict::NeedsAuthorization {
+                rung: ClickRung::RawInput,
+                reason: "gate decision: deny".into(),
+                attempts: vec![],
+            },
+        );
+        assert!(!refused.ok);
+        // Nothing ran, so no rung is reported as having delivered it.
+        assert_eq!(refused.rung(), None);
+        assert!(refused.error.unwrap().contains("deny"));
     }
 }

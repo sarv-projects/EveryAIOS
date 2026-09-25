@@ -18,6 +18,7 @@ use std::time::Instant;
 
 use everyaios_audit::{AuditEvent, merkle::MerkleChain};
 use everyaios_guard::CapabilityBroker;
+use everyaios_guard::deflection::{DEFLECTION_AUDIT_KIND, DeflectionNudge, deflect_shell_bias};
 use everyaios_guard::{
     ConnectivityMode, DecisionPackage, EgressEngine, EgressVerdict, NetPolicy, Operation,
     ResourceBinding, RiskLevel, RiskTier, bind_exec_bytes, bind_path, bind_url, open_parent_dir,
@@ -908,6 +909,11 @@ pub struct ToolService {
     /// G8 cascade (cache → SearXNG → DDG).
     search: everyaios_search::G8Cascade,
     search_transport: Arc<dyn everyaios_search::SearchTransport>,
+    /// P64.11/P69.G5 — the content-addressed tool-output spool. `None` until
+    /// the host attaches one; an over-cap result then passes through whole
+    /// (a larger context, never a lost result). Attached by the boot path so
+    /// the *decision to compact* is kernel-side, never the renderer's.
+    spool: Option<Arc<crate::spool::Spool>>,
 }
 
 /// P48.3 — one attached external MCP server: its backend dispatcher plus the
@@ -973,7 +979,23 @@ impl ToolService {
                 std::time::Duration::from_secs(60),
             ),
             search_transport: Arc::new(UreqSearchTransport),
+            spool: None,
         }
+    }
+
+    /// P64.11/P69.G5 — attach the kernel spool. Once attached, every committed
+    /// tool result over [`crate::spool::TOOL_OUTPUT_SERIALIZE_CAP`] is written
+    /// to the content-addressed spool and replaced in the agent-facing response
+    /// by a compact reference. The host attaches this at boot; a `ToolService`
+    /// without one still works and simply does not compact.
+    pub fn attach_spool(&mut self, spool: Arc<crate::spool::Spool>) {
+        self.spool = Some(spool);
+    }
+
+    /// The attached spool, if any. Exposed so the shell's `retrieve_original`
+    /// command reads through the same instance the executor writes to.
+    pub fn spool(&self) -> Option<&Arc<crate::spool::Spool>> {
+        self.spool.as_ref()
     }
 
     /// P2.3 — attach a browser engine so `save_pdf_enhanced`/
@@ -1186,6 +1208,43 @@ impl ToolService {
             }));
         }
 
+        // P69.G2 — Guard-1 shell-bias deflection, on the one pre-exec shell
+        // path. A command that drives Office, the browser, or the desktop from
+        // the shell is a *refusal*, not a warning: it returns before the
+        // ticket is minted, so no ticket, caller-supplied `argsHash`, or
+        // pre-existing approval can authorize it, and it is never downgraded
+        // for a read-only tool or for an external agent's mutating call. The
+        // refusal is recorded on the same Merkle chain (same `guard.blocked`
+        // kind) as every other Guard-1 denial — not a second audit path — and
+        // the response names the shared façade so the model can pivot without
+        // a human. Order is deliberate: the destructive-command blocklist above
+        // keeps first refusal, so its verdict is unchanged.
+        let deflections = deflect_shell(&args);
+        if !deflections.is_empty() {
+            let reason = Self::deflection_reason(&deflections);
+            let seq = self.record_deflection_refusal(
+                &spec.id,
+                &hash,
+                &session,
+                &agent,
+                &deflections,
+            );
+            return Ok(json!({
+                "action": "block",
+                "refused": true,
+                "reason": reason,
+                "guard": "deflection",
+                "suggestedFacade": deflections[0].facade,
+                "suggestedTool": deflections[0].suggested_tool,
+                "deflection": {
+                    "targets": deflections.iter().map(|d| d.target).collect::<Vec<_>>(),
+                    "matched": deflections.iter().map(|d| d.matched.clone()).collect::<Vec<_>>(),
+                    "suggestedTools": deflections[0].target.suggested_tools(),
+                },
+                "auditSeq": seq,
+            }));
+        }
+
         let root = self.workspace.to_string_lossy().to_string();
         {
             let mut eg = self.egress.lock().unwrap_or_else(|e| e.into_inner());
@@ -1242,6 +1301,22 @@ impl ToolService {
         let mut decision = DecisionPackage::new(format!("{} {}", spec.id, hash));
         decision.risk = risk_of(&spec.risk);
         decision.affected_paths = collect_paths(&args);
+        // P69.G5 — `retrieve_original` names a content address, not a path. The
+        // blob path it resolves to is what the guard must judge, so it is bound
+        // here and flows into `capture_bindings` → `reverify_preconditions`
+        // like any other read. A hash that does not resolve contributes no
+        // path — and the dispatch refuses it — so an unresolvable address can
+        // never be authorized into reading something.
+        if spec.id == "retrieve_original" {
+            let hash_arg = args.get("hash").and_then(Value::as_str).unwrap_or("");
+            if let Some(spool) = self.spool.as_ref()
+                && let Ok(path) = spool.resolve(hash_arg)
+            {
+                decision
+                    .affected_paths
+                    .push(path.to_string_lossy().to_string());
+            }
+        }
         decision.script_lines = collect_shell(&args);
         decision.network_destinations = collect_urls(&args);
 
@@ -1313,6 +1388,76 @@ impl ToolService {
                 "reason": reason,
             }),
         })
+    }
+
+    /// P69.G2 — the refusal line an agent receives for a deflected shell
+    /// command. Every hit is named (never just the first) so a command that
+    /// spans two bypass shapes still tells the model what to stop doing, and
+    /// each hit carries the concrete tool to pivot onto.
+    fn deflection_reason(nudges: &[DeflectionNudge]) -> String {
+        let details = nudges
+            .iter()
+            .map(|n| n.message.as_str())
+            .collect::<Vec<_>>()
+            .join(" ");
+        format!(
+            "Guard-1 refused this command (shell-bias deflection). {details}"
+        )
+    }
+
+    /// P69.G2 — the Merkle payload for a refused deflected shell command. A
+    /// refusal is evidence, so it names the tool, the args hash, the
+    /// session/agent that proposed it, and every needle that fired together
+    /// with the façade to use instead. Appended to the *same* chain and under
+    /// the *same* `guard.blocked` kind as every other Guard-1 denial.
+    fn deflection_audit_payload(
+        tool_id: &str,
+        args_hash: &str,
+        session_id: &str,
+        agent_id: &str,
+        nudges: &[DeflectionNudge],
+    ) -> Value {
+        json!({
+            "toolId": tool_id,
+            "argsHash": args_hash,
+            "sessionId": session_id,
+            "agentId": agent_id,
+            "guard": "deflection",
+            "ok": false,
+            "state": "refused",
+            "outcome": "refused",
+            "deflections": nudges
+                .iter()
+                .map(|n| json!({
+                    "target": n.target,
+                    "matched": n.matched,
+                    "facade": n.facade,
+                    "suggestedTool": n.suggested_tool,
+                }))
+                .collect::<Vec<_>>(),
+        })
+    }
+
+    /// P69.G2 — append the refusal to the audit chain and return its seq.
+    fn record_deflection_refusal(
+        &mut self,
+        tool_id: &str,
+        args_hash: &str,
+        session_id: &str,
+        agent_id: &str,
+        nudges: &[DeflectionNudge],
+    ) -> u64 {
+        let seq = (self.audit.len() as u64) + 1;
+        let payload = Self::deflection_audit_payload(tool_id, args_hash, session_id, agent_id, nudges);
+        self.audit.push(AuditEvent {
+            seq,
+            ts_ms: now_ms(),
+            kind: DEFLECTION_AUDIT_KIND.to_string(),
+            payload,
+            trace_id: String::new(),
+            span_id: String::new(),
+        });
+        seq
     }
 
     /// P64.5 — build the Merkle `tool.exec` audit payload for a committed
@@ -1417,7 +1562,14 @@ impl ToolService {
         if ok && !spec.read_only {
             self.used_idempotency.insert(idem.clone());
         }
+        // P64.11/P69.G5 — content-addressed spooling, applied *after* the
+        // dispatch and *before* the response leaves the kernel. The audit
+        // `resultHash` is taken from the full result first, so the durable
+        // trail still attests to what the tool actually returned even though
+        // the agent sees a reference. The reference keeps `ok`, so the
+        // idempotency and uncertainty rules above are unchanged.
         let result_hash = canonical_args_hash(&result);
+        let result = self.compact_result(result);
         let uncertain = !ok && !spec.read_only;
 
         let payload = Self::tool_exec_audit_payload(
@@ -1453,6 +1605,20 @@ impl ToolService {
             }
         }
         Ok(out)
+    }
+
+    /// P64.11/P69.G5 — the compaction step for one committed result.
+    ///
+    /// With a spool attached, a result whose serialized size is over
+    /// [`crate::spool::TOOL_OUTPUT_SERIALIZE_CAP`] is written once to the
+    /// content-addressed spool and replaced by a compact reference. Without a
+    /// spool the result passes through untouched — a larger context, which is
+    /// recoverable; a silently dropped payload, which is not.
+    fn compact_result(&self, result: Value) -> Value {
+        match self.spool.as_ref() {
+            Some(spool) => spool.project_result(&result, now_ms()).0,
+            None => result,
+        }
     }
 
     fn dispatch(&mut self, spec: &RegisteredTool, args: &Value) -> Value {
@@ -1563,6 +1729,38 @@ impl ToolService {
             // P71.1 — delegation is a kernel seam, not a catalog fan-out.
             "delegate.spawn" | "delegate.status" | "delegate.cancel" => {
                 self.dispatch_delegate(facade, args)
+            }
+            // P69.G5 — the spool drilldown. The content address was resolved
+            // and bound to the ticket in `exec` (so the guard the ticket was
+            // minted against names the exact blob path this read will touch,
+            // TOCTOU re-verification included). Here the address is re-resolved
+            // through the same guarded `Spool::retrieve`; a hash that stopped
+            // resolving refuses rather than falling back to anything.
+            "retrieve_original" => {
+                let Some(spool) = self.spool.clone() else {
+                    return json!({
+                        "ok": false,
+                        "error": "tool-output spool not attached on this host",
+                    });
+                };
+                let hash = args.get("hash").and_then(Value::as_str).unwrap_or("");
+                let offset = args.get("offset").and_then(Value::as_u64).unwrap_or(0);
+                let limit = args.get("limit").and_then(Value::as_u64).unwrap_or(0);
+                match spool.retrieve(hash, offset, limit) {
+                    Ok(slice) => json!({
+                        "ok": true,
+                        "hash": slice.hash,
+                        "offset": slice.offset,
+                        "limit": slice.limit,
+                        "totalLines": slice.total_lines,
+                        "returnedLines": slice.returned_lines,
+                        "nextOffset": slice.next_offset,
+                        "eof": slice.eof,
+                        "byteCapped": slice.byte_capped,
+                        "text": slice.text,
+                    }),
+                    Err(err) => json!({"ok": false, "error": err.to_string()}),
+                }
             }
             _ => json!({"ok": false, "error": format!("façade has no route yet: {facade}")}),
         }
@@ -2755,6 +2953,18 @@ fn prescan(spec: &RegisteredTool, args: &Value) -> Vec<String> {
         .collect()
 }
 
+/// P69.G2 — the shell-bias deflection verdicts for the shell-shaped args, in
+/// argument order. Same argument keys the blocklist pre-scan collects, so the
+/// two controls see exactly the same text; only the shell is inspected (a path
+/// or URL that merely names a library is not a bypass — see the documented
+/// limits in [`everyaios_guard::deflection`]).
+fn deflect_shell(args: &Value) -> Vec<DeflectionNudge> {
+    collect_shell(args)
+        .iter()
+        .filter_map(|cmd| deflect_shell_bias(cmd))
+        .collect()
+}
+
 fn collect_paths(args: &Value) -> Vec<String> {
     let mut out = Vec::new();
     if let Some(p) = args.get("path").and_then(Value::as_str) {
@@ -3460,6 +3670,20 @@ pub const FACADE_ROUTES: &[FacadeRoute] = &[
         targets: &[],
         kernel_route: true,
     },
+    // P69.G5 — the spool drilldown. Kernel-routed to the content-addressed
+    // spool, not a catalog fan-out: there is no file to read, only a content
+    // address to resolve inside the spool root. `read_only` is true, so it
+    // rides the same native-read auto-allow that `file_ops.read` gets — the
+    // floor, the ticket, and the audit row are the executor's, unchanged.
+    FacadeRoute {
+        facade: "retrieve_original",
+        description:
+            "Read a line range of a spooled tool output by its content address (hash)",
+        read_only: true,
+        destructive: false,
+        targets: &[],
+        kernel_route: true,
+    },
 ];
 
 /// P64.9 — look up a façade by id.
@@ -3989,6 +4213,192 @@ mod tests {
             )
             .unwrap();
         assert_eq!(pre["action"], "block");
+    }
+
+    // -----------------------------------------------------------------
+    // P69.G2 — Guard-1 shell-bias deflection on the live pre-exec path.
+    // -----------------------------------------------------------------
+
+    /// Pre-flight a `script.run` through the one pre-exec shell path.
+    fn script_preflight(service: &mut ToolService, code: &str) -> Value {
+        service
+            .handle(
+                "tool/exec",
+                &json!({
+                    "toolId": "script.run",
+                    "sessionId": "s",
+                    "agentId": "a",
+                    "args": {"code": code}
+                }),
+            )
+            .unwrap()
+    }
+
+    #[test]
+    fn p69_g2_deflected_shell_is_refused_with_the_facade_to_use() {
+        let dir = tempfile();
+        let mut s = svc(&dir);
+        let out = script_preflight(
+            &mut s,
+            "python -c 'import openpyxl; openpyxl.load_workbook(\"b.xlsx\").save(\"b.xlsx\")'",
+        );
+        assert_eq!(out["action"], "block", "{out}");
+        assert_eq!(out["refused"], true, "{out}");
+        assert_eq!(out["guard"], "deflection", "{out}");
+        assert_eq!(out["suggestedFacade"], "office", "{out}");
+        assert_eq!(out["suggestedTool"], "office.edit", "{out}");
+        assert_eq!(out["deflection"]["targets"], json!(["office"]), "{out}");
+        assert_eq!(out["deflection"]["matched"], json!(["openpyxl"]), "{out}");
+        let reason = out["reason"].as_str().unwrap();
+        // The refusal is a first-class result the model can act on: it names
+        // what was refused and the capability to call instead.
+        assert!(reason.contains("openpyxl"), "{reason}");
+        assert!(reason.contains("office.edit"), "{reason}");
+        assert!(reason.contains("cannot be run"), "{reason}");
+        // No ticket is minted, so nothing can consume one to authorize the call.
+        assert!(out["ticketId"].is_null(), "{out}");
+    }
+
+    #[test]
+    fn p69_g2_deflection_targets_browser_and_desktop_facades() {
+        let dir = tempfile();
+        let mut s = svc(&dir);
+        let b = script_preflight(&mut s, "npx playwright test --reporter=line");
+        assert_eq!(b["action"], "block", "{b}");
+        assert_eq!(b["suggestedFacade"], "browser", "{b}");
+        assert_eq!(b["suggestedTool"], "browser.operate", "{b}");
+
+        let d = script_preflight(&mut s, "xdotool mousemove 10 20 click 1");
+        assert_eq!(d["action"], "block", "{d}");
+        assert_eq!(d["suggestedFacade"], "computer_use", "{d}");
+        assert_eq!(d["suggestedTool"], "computer_use.see", "{d}");
+    }
+
+    #[test]
+    fn p69_g2_near_miss_identifier_is_not_deflected() {
+        let dir = tempfile();
+        let mut s = svc(&dir);
+        for code in [
+            "cat report.pptx",
+            "grep -rn selenite .",
+            "cat my_python_docx_wrapper.py",
+            "ls playwright-report/index.html",
+        ] {
+            let out = script_preflight(&mut s, code);
+            assert_ne!(
+                out["guard"], "deflection",
+                "must not be a deflection: {code} -> {out}"
+            );
+            assert!(out["action"] == "allow" || out["action"] == "ask", "{out}");
+        }
+    }
+
+    #[test]
+    fn p69_g2_a_clean_command_is_untouched_and_leaves_no_refusal_row() {
+        let dir = tempfile();
+        let mut s = svc(&dir);
+        let out = script_preflight(&mut s, "printf 'hello\\n'");
+        assert_ne!(out["action"], "block", "{out}");
+        assert!(out["action"] == "allow" || out["action"] == "ask", "{out}");
+        assert!(!out["refused"].is_boolean() || out["refused"] == false);
+        // Nothing was refused, so the audit chain is still empty.
+        assert_eq!(s.audit_len(), 0);
+    }
+
+    #[test]
+    fn p69_g2_deflection_refusal_is_recorded_on_the_audit_chain() {
+        let dir = tempfile();
+        let mut s = svc(&dir);
+        assert_eq!(s.audit_len(), 0, "chain starts empty");
+        let out = script_preflight(&mut s, "python -c 'import pyautogui; pyautogui.click()'");
+        assert_eq!(out["action"], "block", "{out}");
+        // The refusal appended exactly one durable row, on the same chain the
+        // committed `tool.exec` rows use, and it is tamper-evident.
+        assert_eq!(s.audit_len(), 1);
+        assert!(s.audit.verify().is_none());
+        assert_eq!(out["auditSeq"], 1);
+
+        let payload = ToolService::deflection_audit_payload(
+            "script.run",
+            "h",
+            "s",
+            "a",
+            &[everyaios_guard::deflection::deflect_shell_bias("pyautogui").unwrap()],
+        );
+        assert_eq!(payload["toolId"], "script.run");
+        assert_eq!(payload["guard"], "deflection");
+        assert_eq!(payload["state"], "refused");
+        assert_eq!(payload["ok"], false);
+        assert_eq!(payload["deflections"][0]["target"], "desktop");
+        assert_eq!(payload["deflections"][0]["facade"], "computer_use");
+        assert_eq!(
+            payload["deflections"][0]["suggestedTool"],
+            "computer_use.see"
+        );
+        assert_eq!(payload["deflections"][0]["matched"], "pyautogui");
+        // The kind is the guard's own denial kind, not a parallel trail.
+        assert_eq!(
+            everyaios_guard::deflection::DEFLECTION_AUDIT_KIND,
+            "guard.blocked"
+        );
+    }
+
+    #[test]
+    fn p69_g2_deflection_is_not_downgradable_by_a_ticket_or_args_hash() {
+        let dir = tempfile();
+        let mut s = svc(&dir);
+        // A caller-supplied `argsHash` (the coordinator's pre-flight claim) and
+        // a pre-existing `ticketId` must not buy authorization for a refused
+        // command: the deflection returns before the ticket is consulted.
+        let out = s
+            .handle(
+                "tool/exec",
+                &json!({
+                    "toolId": "script.run",
+                    "sessionId": "s",
+                    "agentId": "external",
+                    "argsHash": "deadbeef",
+                    "ticketId": "tkt:forged",
+                    "args": {"code": "python -c 'import xlsxwriter'"}
+                }),
+            )
+            .unwrap();
+        assert_eq!(out["action"], "block", "{out}");
+        assert_eq!(out["refused"], true, "{out}");
+        assert_eq!(out["suggestedTool"], "office.edit", "{out}");
+        assert_eq!(s.audit_len(), 1);
+    }
+
+    /// **Documented blind spot (P69.G2).** The deflection reads command text,
+    /// so a module name assembled at runtime is invisible. Recorded here as
+    /// well as in the guard crate so the limitation is pinned where the
+    /// pre-exec decision is made. Closing it needs an AST pass over the
+    /// command (`ARCH/RECOVERY.md` §13 step 1) — explicitly out of scope.
+    #[test]
+    fn p69_g2_dynamically_constructed_name_is_not_deflected() {
+        let dir = tempfile();
+        let mut s = svc(&dir);
+        let out = script_preflight(&mut s, "python -c 'import open\" + \"pyxl'");
+        assert_ne!(out["action"], "block", "{out}");
+        assert!(out["action"] == "allow" || out["action"] == "ask", "{out}");
+        assert_ne!(out["guard"], "deflection");
+        assert_eq!(s.audit_len(), 0, "no refusal row for a miss");
+    }
+
+    #[test]
+    fn p69_g2_deflection_does_not_change_the_blocklist_verdict() {
+        let dir = tempfile();
+        let mut s = svc(&dir);
+        // A destructive command keeps the blocklist's refusal wording and is
+        // not re-labelled as a deflection.
+        let out = script_preflight(&mut s, "rm -rf /");
+        assert_eq!(out["action"], "block", "{out}");
+        assert!(
+            out["reason"].as_str().unwrap().contains("Guard-1 blocked"),
+            "{out}"
+        );
+        assert!(out["refused"].is_null(), "{out}");
+        assert_eq!(s.audit_len(), 0, "the blocklist path is not re-audited");
     }
 
     #[test]

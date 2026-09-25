@@ -217,6 +217,20 @@ pub const STORES: &[StoreSpec] = &[
                updater_cmds. Losing it reverts the user to the stable channel, never to a \
                broken state; stamped so an upgrade report names it.",
     },
+    StoreSpec {
+        name: "spool",
+        path: "spool/*.blob",
+        version: 1,
+        policy: StorePolicy::Derived,
+        note: "P64.11/P69.G5 — the content-addressed tool-output spool. Derived on purpose: \
+               the file name *is* the SHA-256 of its own contents and the payload is opaque \
+               bytes, so there is no inner schema to stamp and no migration an upgrade has \
+               to perform. It is a bounded cache, not a record — \
+               `everyaios_core::spool::SPOOL_RETENTION_DAYS` (7) and `SPOOL_MAX_TOTAL_BYTES` \
+               (512 MiB) reclaim it at boot and before every write, so an upgrade loses at \
+               most a bounded window of `retrieve_original` drilldowns that the transcript's \
+               own tool result already covers.",
+    },
 ];
 
 /// Look up a store by name.

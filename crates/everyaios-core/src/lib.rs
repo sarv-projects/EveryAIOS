@@ -82,6 +82,10 @@ pub mod search_config;
 pub mod self_audit;
 pub mod shell_integration;
 pub mod sidecar_link;
+// P64.11/P69.G5 — the content-addressed tool-output spool. Kernel-owned: the
+// blob write, the compact reference, `retrieve_original`, and the retention
+// policy. The renderer card is a view over this, never a second copy.
+pub mod spool;
 // P70.A8 — durable-store schema stamps + forward-only migration.
 pub mod store_schema;
 pub mod supervisor;
@@ -92,6 +96,10 @@ pub mod telemetry;
 pub mod terminal;
 pub mod tools;
 pub mod tracing;
+// P69.G2 — the turn-atomic file snapshot store (`RECOVERY.md` §10). The
+// pre-image bytes live here and nowhere else; the Work journal carries only
+// digests and store references.
+pub mod turn_snapshot;
 pub mod vault_key;
 pub mod version;
 pub mod voice;
@@ -292,6 +300,7 @@ pub fn boot(args: &[String]) -> Result<String, Box<dyn std::error::Error>> {
     // named store instead of being read by a build that cannot understand it.
     let stores = store_schema::ensure_all(&cfg.data_dir)?;
 
+
     Ok(format!(
         "everyaios-core {} ready — data_dir={} vault={} ({}), retention_days={}, {}",
         version::VERSION,
@@ -301,6 +310,14 @@ pub fn boot(args: &[String]) -> Result<String, Box<dyn std::error::Error>> {
         cfg.retention_days,
         store_schema::summary(&stores),
     ))
+}
+
+/// Milliseconds since the Unix epoch, the one clock the spool policy uses.
+pub fn now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
 }
 
 /// Extract the `--coordinator-bin <path>` argument from args, if present.

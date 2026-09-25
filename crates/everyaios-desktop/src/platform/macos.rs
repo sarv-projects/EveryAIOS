@@ -27,9 +27,50 @@ use std::process::Command;
 use image::GenericImageView;
 
 use crate::DesktopError;
+use crate::geometry::DpiScale;
+use crate::ladder::{ClickProfile, ClickRung, LadderTarget, RungDelivery};
 use crate::launch;
 use crate::policy::InteractionMode;
 use crate::types::{ActKind, ReadResult, Region, SeeMethod, SeeResult, WindowInfo};
+
+/// The macOS click ladder, as an honest statement of what System Events can
+/// actually do.
+///
+/// Two of the three rungs do not exist here, and saying so is the point:
+///
+/// - **No message-level primitive exists on macOS at all.** There is no
+///   `PostMessage` equivalent: an app receives real events from the window
+///   server. A coordinate click therefore has no "address the event to the
+///   target window" rung.
+/// - **No accessibility invoke *by point*.** `AXPress` needs an
+///   ApplicationServices FFI layer that is not in this build's dependency set,
+///   which is exactly what `Capabilities::a11y_action == false` reports. A
+///   *named* AX click (`click "Save" of window 1`) does work through System
+///   Events and is used by [`MacBackend::act`] for `ClickByName` — but the
+///   coordinate ladder, which is what a model drives from a screenshot, has no
+///   by-point form.
+///
+/// So the coordinate ladder on macOS is a **single, gated** rung, and it is the
+/// pointer-moving one. Under the Background default it therefore always stops:
+/// there is no non-moving coordinate click to fall back to, which is precisely
+/// the honest version of the §4 background contract.
+pub fn mac_click_profile() -> ClickProfile {
+    ClickProfile::new(
+        "macos",
+        vec![ClickRung::RawInput],
+        vec![
+            "no message-level primitive on macOS: an app only receives window-server events, \
+             so there is no synthetic-event rung to fall back to"
+                .into(),
+            "no accessibility invoke by point: AXPress needs an ApplicationServices FFI layer \
+             that is not in this build (Capabilities::a11y_action is false). A *named* AX click \
+             works through System Events, but a coordinate click from a screenshot has no \
+             by-point rung"
+                .into(),
+        ],
+    )
+    .expect("the macOS click profile is a fixed, ordered literal")
+}
 
 pub struct MacBackend;
 
@@ -130,14 +171,134 @@ impl MacBackend {
             method: SeeMethod::MacScreenCapture,
             region: Region::full(width, height),
             scale: 1.0,
+            dpi: Self::dpi_scale(),
+            // The engine (`DesktopEngine::see`) applies the output budget; a
+            // direct backend call has had none applied, and says so via `None`.
+            budget: None,
         })
+    }
+
+    /// The main display's backing scale, with its provenance.
+    ///
+    /// `screencapture` returns **pixels**; System Events `click at` takes
+    /// **points**. On a Retina display those differ by the backing scale, which
+    /// is the concrete reason a click sent in pixel coordinates lands in the
+    /// wrong place there — the platform's "scale factor is 1.0" assumption is
+    /// what produced it.
+    ///
+    /// The value is the main display's, because that is what the OS exposes
+    /// without a per-window window-server query; it is reported as
+    /// [`DpiSource::BackingStore`] so a caller can see it is a display-level
+    /// fact. When it cannot be read, the honest [`DpiScale::unknown`] is
+    /// returned and no coordinate is converted.
+    #[cfg(target_os = "macos")]
+    pub fn dpi_scale() -> DpiScale {
+        #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+        #[link(name = "CoreGraphics", kind = "framework")]
+        unsafe extern "C" {
+            fn CGMainDisplayPixelsWide() -> usize;
+            fn CGMainDisplayPointsWide() -> usize;
+        }
+        // SAFETY: two side-effect-free CoreGraphics display-geometry queries.
+        let (px, pt) = unsafe { (CGMainDisplayPixelsWide(), CGMainDisplayPointsWide()) };
+        if pt == 0 {
+            return DpiScale::unknown();
+        }
+        DpiScale::from_factor(px as f64 / pt as f64, DpiSource::BackingStore)
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    pub fn dpi_scale() -> DpiScale {
+        DpiScale::unknown()
+    }
+
+    /// Attempt one rung of the click ladder.
+    ///
+    /// Only [`ClickRung::RawInput`] exists on this platform (see
+    /// [`mac_click_profile`]); the other two return `Unavailable` with the
+    /// reason, so the verdict trail is self-explanatory rather than a bare
+    /// "unsupported".
+    ///
+    /// The coordinate is converted from the **pixel** space the caller uses
+    /// (the same space as the screenshot) into the **point** space System
+    /// Events expects, using the measured backing scale — and only when that
+    /// scale is actually measured. An unmeasured scale converts nothing, so a
+    /// host that cannot be asked behaves exactly as it did before rather than
+    /// guessing a factor.
+    pub fn deliver_rung(
+        rung: ClickRung,
+        target: &LadderTarget,
+        _mode: InteractionMode,
+    ) -> RungDelivery {
+        let (x, y) = match &target.act {
+            ActKind::Click { x, y } => (*x, *y),
+            other => {
+                return RungDelivery::Unavailable(format!(
+                    "rung {} does not apply to {}",
+                    rung.as_str(),
+                    other.describe()
+                ));
+            }
+        };
+        let dpi = Self::dpi_scale();
+        match rung {
+            ClickRung::RawInput => {
+                // `click at` takes points; the incoming coordinate is pixels.
+                let converts = dpi.applies_to_click_coordinates() && !dpi.is_identity();
+                let (tx, ty) = if converts {
+                    (
+                        dpi.to_logical(f64::from(x)) as i32,
+                        dpi.to_logical(f64::from(y)) as i32,
+                    )
+                } else {
+                    (x, y)
+                };
+                let script = format!("tell application \"System Events\" to click at {{{tx}, {ty}}}");
+                let status = Command::new("osascript")
+                    .arg("-e")
+                    .arg(&script)
+                    .status()
+                    .map_err(|e| RungDelivery::Failed(format!("osascript: {e}")));
+                match status {
+                    Ok(s) if s.success() => {
+                        let conversion = if converts {
+                            format!(
+                                " (pixel ({x},{y}) → point ({tx},{ty}) via {})",
+                                dpi.describe()
+                            )
+                        } else {
+                            String::new()
+                        };
+                        RungDelivery::Delivered(format!(
+                            "System Events click at ({tx},{ty}){conversion}"
+                        ))
+                    }
+                    Ok(_) => RungDelivery::Failed(
+                        "osascript failed — Accessibility permission? (System Settings → Privacy \
+                         & Security → Accessibility)"
+                            .into(),
+                    ),
+                    Err(e) => RungDelivery::Failed(format!("osascript: {e:?}")),
+                }
+            }
+            ClickRung::SyntheticEvent => RungDelivery::Unavailable(
+                "macOS has no message-level primitive: an app only receives window-server \
+                 events, so there is no synthetic-event rung"
+                    .into(),
+            ),
+            ClickRung::AccessibilityInvoke => RungDelivery::Unavailable(
+                "no accessibility invoke by point on this build: AXPress needs an \
+                 ApplicationServices FFI layer that is not linked (a named AX click works)"
+                    .into(),
+            ),
+        }
     }
 
     pub fn read(_window: &WindowInfo) -> Result<ReadResult, DesktopError> {
         Ok(ReadResult {
             window_id: _window.id,
             tree: None, // deep AX traversal follow-on → OCR fallback
-            dpi_scale: 1.0,
+            dpi_scale: Self::dpi_scale().factor,
             windows: Self::list_windows()?,
         })
     }

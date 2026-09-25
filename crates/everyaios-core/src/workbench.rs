@@ -357,6 +357,19 @@ impl WorkRunLeaseCoordinator {
         self.leases.get(lease_id.as_str()).map(|r| r.lease.state)
     }
 
+    /// The lease currently recorded against a canonical resource key.
+    ///
+    /// The delegation path keys a lease by the child Work rather than by a
+    /// Session, so it needs a resource→lease lookup. Non-secret: it returns the
+    /// opaque id only, and a resource with no lease is `None` rather than a
+    /// synthesized one.
+    pub fn lease_id_for_resource(&self, canonical_key: &str) -> Option<LeaseId> {
+        self.leases
+            .values()
+            .find(|r| r.lease.resource.canonical_key() == canonical_key)
+            .map(|r| r.lease.lease_id.clone())
+    }
+
     /// The engine publishes the physical version it observes. Recovery and
     /// adapters call this; admission compares against it.
     pub fn note_resource_generation(&mut self, key: &TypedResourceKey, generation: u64) {

@@ -61,6 +61,19 @@ impl OoxmlArchive {
         Ok(names)
     }
 
+    /// Number of entries in the container (read from the central directory,
+    /// without decompressing anything).
+    pub fn entry_count(&mut self) -> Result<usize, ArchiveError> {
+        Ok(self.archive.len())
+    }
+
+    /// The *uncompressed* size of one entry, without decompressing it. The
+    /// bounded-memory policy (see [`crate::limits`]) checks this before a
+    /// part is read, so an oversized part is refused instead of allocated.
+    pub fn entry_size(&mut self, name: &str) -> Result<u64, ArchiveError> {
+        Ok(self.by_name(name)?.size())
+    }
+
     /// Decompressed bytes of one part.
     pub fn read_part(&mut self, name: &str) -> Result<Vec<u8>, ArchiveError> {
         let mut file = self.by_name(name)?;

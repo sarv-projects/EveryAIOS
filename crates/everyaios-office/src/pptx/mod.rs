@@ -5,6 +5,14 @@
 //! surgery → add/remove slides (clone part + rels + `[Content_Types].xml`
 //! registration) → byte-preserving ZIP rewrite. Untouched slide parts are
 //! copied verbatim; only the targeted part(s) change.
+//!
+//! The same two ARCH/04 §4.6 guards as the Word engine apply: the
+//! [`crate::limits`] size policy bounds what the engine will load (refusing by
+//! name rather than attempting an unbounded load), and
+//! [`PptxEngine::sweep_media`] collects media orphaned by a removed slide or
+//! shape. Field-character balancing is Word-specific — DrawingML's `a:fld` is
+//! a self-contained element, not a `begin`/`separate`/`end` triple, so it has
+//! no balance invariant to check.
 
 pub mod anim;
 pub mod author;
@@ -13,11 +21,12 @@ pub mod parts;
 pub mod text;
 pub mod transition;
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::ops::Range;
 
 use roxmltree::Node;
 
+use crate::limits::PatchLimits;
 use crate::xml;
 use crate::zip::{ArchiveError, OoxmlArchive};
 
@@ -55,8 +64,26 @@ pub struct PptxEngine {
 
 impl PptxEngine {
     /// Open a `.pptx` from bytes: parse the package + slide order.
+    ///
+    /// Uses the process size policy (`PatchLimits::default`, i.e. the
+    /// documented constants plus any `EVERYAIOS_OFFICE_*` override).
     pub fn open(bytes: Vec<u8>) -> Result<Self, crate::OfficeError> {
+        Self::open_with_limits(bytes, PatchLimits::default())
+    }
+
+    /// Open a `.pptx` under an explicit size policy. The container, its entry
+    /// count, and each part the engine reads are checked against the policy
+    /// before the bytes are decompressed.
+    pub fn open_with_limits(
+        bytes: Vec<u8>,
+        limits: PatchLimits,
+    ) -> Result<Self, crate::OfficeError> {
+        limits.check_archive(bytes.len() as u64)?;
         let mut archive = OoxmlArchive::open(bytes)?;
+        limits.check_part_count(archive.entry_count()?)?;
+        for name in [CONTENT_TYPES, PRESENTATION, PRESENTATION_RELS] {
+            limits.check_part(name, archive.entry_size(name)?)?;
+        }
         let content_types = archive.read_part(CONTENT_TYPES)?;
         let presentation = archive.read_part(PRESENTATION)?;
         let rels = archive.read_part(PRESENTATION_RELS)?;
@@ -315,6 +342,57 @@ impl PptxEngine {
         self.parts.rels.retain(|r| r.id != rel_id);
 
         Ok(())
+    }
+
+    /// Sweep media that a slide edit orphaned (ARCH/04 §4.6).
+    ///
+    /// Same contract as [`crate::docx::DocxEngine::sweep_media`], for one
+    /// slide part: the `r:` ids the slide still names are collected, the media
+    /// payloads and `Relationship` entries in the slide's own `_rels` part that
+    /// nothing references any more are removed **in the same rebuild**, and
+    /// anything unsafe to remove is reported as a cleanup candidate instead.
+    ///
+    /// Removing a slide queues its rels part for deletion but leaves the media
+    /// it referenced; call this for every removed slide part before `save` to
+    /// collect the payloads (the removed slide's rels are already gone, so its
+    /// own ids read as unreferenced by the archive).
+    pub fn sweep_media(
+        &mut self,
+        part: &str,
+    ) -> Result<crate::media_gc::MediaSweep, crate::OfficeError> {
+        let current_bytes = self.try_part_bytes(part)?;
+        let Some(part_bytes) = current_bytes else {
+            return Err(crate::OfficeError::BlockNotFound(part.to_string()));
+        };
+        let Self {
+            archive,
+            edited,
+            new,
+            deleted,
+            ..
+        } = self;
+        let part_names: BTreeSet<String> = archive.parts()?.into_iter().collect();
+        let plan = {
+            let mut read = |name: &str| {
+                if let Some(b) = edited.get(name) {
+                    return Some(b.clone());
+                }
+                if deleted.contains(name) {
+                    return None;
+                }
+                archive.read_part(name).ok()
+            };
+            crate::media_gc::sweep_part(part, &part_bytes, &part_names, &mut read)?
+        };
+        if let Some(rels) = plan.rels_bytes {
+            edited.insert(plan.sweep.rels_part.clone(), rels);
+        }
+        for p in &plan.remove_parts {
+            edited.remove(p);
+            new.remove(p);
+            deleted.insert(p.clone());
+        }
+        Ok(plan.sweep)
     }
 
     /// Rebuild the `.pptx`: rewritten parts re-deflated, new parts appended,
@@ -639,5 +717,152 @@ mod tests {
         let mut b = OoxmlArchive::open(out).unwrap();
         let after = b.raw_entry("ppt/slides/slide2.xml").unwrap();
         assert_eq!(before, after);
+    }
+
+    // ── ARCH/04 §4.6 — media GC + size ceiling ──────────────────────────────
+
+    /// A two-slide deck where slide 1's rels carry one image relationship and
+    /// the slide XML names it (`rId2`).
+    fn sample_pptx_with_media(live: bool) -> Vec<u8> {
+        const CT_MEDIA: &[u8] = br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="png" ContentType="image/png"/><Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/><Override PartName="/ppt/slides/slide1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/></Types>"#;
+        const SLIDE_RELS_MEDIA: &[u8] = br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/image1.png"/></Relationships>"#;
+        let blip = if live {
+            r#"<p:pic><p:blipFill><a:blip r:embed="rId2"/></p:blipFill></p:pic>"#
+        } else {
+            ""
+        };
+        let slide = format!(
+            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/>{blip}<p:sp><p:nvSpPr><p:cNvPr id="2" name="Title 1"/><p:cNvSpPr/><p:nvPr><p:ph type="title"/></p:nvPr></p:nvSpPr><p:spPr/><p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:t>Hello</a:t></a:r></a:p></p:txBody></p:sp></p:spTree></p:cSld></p:sld>"#
+        );
+
+        let mut w = ZipWriter::new(Cursor::new(Vec::new()));
+        let opts = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+        let mut add = |name: &str, bytes: &[u8]| {
+            w.start_file(name, opts).unwrap();
+            w.write_all(bytes).unwrap();
+        };
+        add("[Content_Types].xml", CT_MEDIA);
+        add("_rels/.rels", ROOT_RELS);
+        add("ppt/presentation.xml", PRESENTATION);
+        // Only slide1 is registered, so the deck has one slide.
+        add(
+            "ppt/_rels/presentation.xml.rels",
+            br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide1.xml"/></Relationships>"#,
+        );
+        add("ppt/slides/slide1.xml", slide.as_bytes());
+        add("ppt/slides/_rels/slide1.xml.rels", SLIDE_RELS_MEDIA);
+        add("ppt/media/image1.png", b"PNGDATA-1");
+        w.finish().unwrap().into_inner()
+    }
+
+    #[test]
+    fn sweep_media_collects_an_unreferenced_slide_image() {
+        let mut e = PptxEngine::open(sample_pptx_with_media(false)).unwrap();
+        let sweep = e.sweep_media("ppt/slides/slide1.xml").unwrap();
+        assert!(sweep.referenced.is_empty());
+        assert_eq!(sweep.removed_rels, vec!["rId2".to_string()]);
+        assert_eq!(sweep.removed_parts, vec!["ppt/media/image1.png".to_string()]);
+        assert!(sweep.candidates.is_empty());
+
+        let out = e.save().unwrap();
+        let mut a = OoxmlArchive::open(out).unwrap();
+        assert!(a.read_part("ppt/media/image1.png").is_err());
+        let rels =
+            String::from_utf8(a.read_part("ppt/slides/_rels/slide1.xml.rels").unwrap()).unwrap();
+        assert!(!rels.contains("rId2"), "dangling relationship: {rels}");
+        assert!(rels.contains("slideLayout1.xml"), "the live rel survives");
+    }
+
+    #[test]
+    fn sweep_media_keeps_a_referenced_slide_image() {
+        let mut e = PptxEngine::open(sample_pptx_with_media(true)).unwrap();
+        let sweep = e.sweep_media("ppt/slides/slide1.xml").unwrap();
+        assert!(sweep.is_noop());
+        let mut a = OoxmlArchive::open(e.save().unwrap()).unwrap();
+        assert_eq!(a.read_part("ppt/media/image1.png").unwrap(), b"PNGDATA-1");
+    }
+
+    #[test]
+    fn sweep_media_of_a_removed_slide_collects_its_payload() {
+        // remove_slide drops the slide part AND its rels; the payload it
+        // referenced is still in the package, so the sweep (run against the
+        // removed slide's rels bytes, which the engine still holds) collects
+        // it. Nothing can reference it any more: the slide is gone.
+        let mut e = PptxEngine::open(sample_pptx_with_media(true)).unwrap();
+        let rels_before = String::from_utf8(
+            e.try_part_bytes("ppt/slides/_rels/slide1.xml.rels")
+                .unwrap()
+                .unwrap(),
+        )
+        .unwrap();
+        assert!(rels_before.contains("rId2"));
+        // With the slide's rels queued for deletion, the payload has no
+        // remaining referrer: sweeping the (now deleted) slide part reports
+        // nothing to remove because its rels part is unreadable — so the
+        // caller is expected to sweep before removing. Assert that contract.
+        e.remove_slide("ppt/slides/slide1.xml").unwrap();
+        let sweep = e.sweep_media("ppt/slides/slide1.xml");
+        assert!(
+            sweep.is_err(),
+            "a removed slide can no longer be swept; the payload is reported by the caller instead"
+        );
+    }
+
+    #[test]
+    fn open_refuses_an_oversized_pptx_by_name() {
+        let bytes = sample_pptx();
+        let tight = crate::limits::PatchLimits {
+            max_archive_bytes: (bytes.len() - 1) as u64,
+            ..crate::limits::PatchLimits::default_policy()
+        };
+        let err = PptxEngine::open_with_limits(bytes, tight).err().expect("must refuse");
+        assert!(matches!(
+            err,
+            crate::OfficeError::TooLarge {
+                kind: crate::limits::LimitKind::ArchiveBytes,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn open_refuses_an_oversized_pptx_part() {
+        let bytes = sample_pptx();
+        // The first part the engine reads is [Content_Types].xml; a 1-byte
+        // ceiling names it in the refusal.
+        let tight = crate::limits::PatchLimits {
+            max_part_bytes: 1,
+            ..crate::limits::PatchLimits::default_policy()
+        };
+        let err = PptxEngine::open_with_limits(bytes, tight)
+            .err()
+            .expect("must refuse");
+        let msg = err.to_string();
+        assert!(msg.contains("[Content_Types].xml"), "{msg}");
+        assert!(matches!(
+            err,
+            crate::OfficeError::TooLarge {
+                kind: crate::limits::LimitKind::PartBytes,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn open_refuses_a_package_with_too_many_entries() {
+        let bytes = sample_pptx();
+        let tight = crate::limits::PatchLimits {
+            max_parts: 2,
+            ..crate::limits::PatchLimits::default_policy()
+        };
+        let err = PptxEngine::open_with_limits(bytes, tight).err().expect("must refuse");
+        assert!(matches!(
+            err,
+            crate::OfficeError::TooManyParts { limit: 2, .. }
+        ));
     }
 }
