@@ -1,5 +1,44 @@
 # CURRENT RUN STATE — Task Handover & Checkpoint
 
+## Local-Runtime Handoff Plane — ALL LANES LANDED (2026-09-25, final)
+
+### Reconciliation note
+The background board may still show fix-9, fix-10, fix-11, fix-12 and des-4 as "running / status uncertain". That is a status-API limitation (`client.session.status is not a function`), not live work. **All five returned terminal results in-conversation and their output was reviewed and committed by the orchestrator.** Commit map for this wave:
+- fix-9 → `7f6e775` (Rust retirement + canonical runtime types)
+- fix-11 → `9e28b86` (TODO P52/P52-R + changelog)
+- fix-12 → `5dbba9a` (ARCH 03/05/09/11) + spec portion inside `e8effb2`
+- fix-10 → `e8effb2` (ARCH/16 contract + spec A5/§4/§4.1)
+- des-4 → `bf54b02` (UI panel, handoff, model-routing deletion, DOM tests)
+- fix-13 → `f346805` (Tauri registry + runtime commands + ACP handoff)
+- orchestrator fixes: `82a443f` (3 pre-existing UI type errors), `7ead9ad` (9 guard clippy errors), `66b681f` + `8ca2d2f` (codebase map), `8276e00` (this handover), `dd4f035` (TODO truth repair), `4dc020f` (broken SECURITY.md link)
+
+### Verification at final state
+`ui tsc --noEmit` 0 errors · `ui bun test src/lib` 374/0 · `local-models-panel.dom.test.tsx` 5/0 · `src-tauri cargo check` clean, 0 warnings · `src-tauri cargo test --lib` 95/0/1-ignored · `everyaios-guard` clippy clean, 198/0 · vault 146+2, types 26, core `models::` 44 all pass · `ipc-parity` 366 registered / 306 UI sites / 0 broken · `check-arch-invariants` OK · `check-doc-sync`, `check-doc-refs`, `check-store-schemas` PASS · `gen-codebase-map --check` current (1528 files, 516 rust, 629 ts/tsx, 366 commands).
+
+### What the wave delivered
+1. **Retired** host-side local inference: `everyaios-vault::local` + `Broker::with_local` deleted; no `LocalEndpoint` anywhere; the `local://` provider scheme is gone from the spec.
+2. **Canonical contracts** in `everyaios-types`: `RuntimeControl`, `RuntimeOwnership`, `RuntimeHealthState`, `ModelControlTier`, `AgentRuntimeCompatibility`, `RuntimeInventoryEntry`.
+3. **Managed resource truth**: `ManagedServeHandle` retains the child (RAII stop) and `AppState.model_serves` retains it across the command boundary — the earlier defect where the handle was dropped (killing the runtime instantly) is fixed.
+4. **Tauri surface**: `runtime_inventory_list`, `runtime_models`, `runtime_start`, `runtime_stop` (managed-only, Guard-gated via `GuardService::evaluate` + single-use `use_ticket`, audited), `model_serve_stop`, `model_serve_list`, `acp_config_options`, `acp_set_session_config_option` (advertised-only, returns `requested`, refuses Subscription/ConfigFileOnly/Unknown).
+5. **Discovery honesty**: listed local models are `capabilities_verified: false`, catalog status `inventoried`, wire `lifecycle: "observed"` — never `Healthy` from a listing.
+6. **UI**: Runtimes / Library / Explore / Hardware sections; `Observed ≠ Healthy`; Stop only on Managed; agent handoff that says "This agent manages its own model — configure it inside the agent" for native-only, offers the agent's own ACP options when advertised, and never renders a universal model dropdown; `model-routing.ts` deleted; `localRuntime` provider state removed.
+7. **Docs**: new `ARCH/16-LOCAL-RUNTIME-INTEROP.md`; ROUTING §8, AGENT §3.1/§4/§5.4, CAPABILITIES, SECURITY, DESKTOP, 00-INDEX, 03/05/09/11 updated; spec A1/A5/A8 + LLM-calls + BYOK + vault module table + R2 + KV acceptance reconciled; TODO P52 rewritten + P52-R1–R10 opened + census 1676=1304+372; SPEC-CHANGELOG v4.06 block.
+
+### Known honest gaps (by design, documented)
+- **Managed Ollama start is refused**: `LocalManager::ensure_ollama` returns only `bool` and drops the `Child`, so EveryAIOS cannot honestly own it. Message: "Ollama managed start is not wired: the local manager does not retain the child process; attach to a user-run Ollama instead." Building a managed-Ollama spawner is the next implementation step (P52-R2), not a fake.
+- **P52.6 ModelCache deferred** (no consumer; residency belongs to the runtime) and **P52.7 MLX deferred** (macOS out of v1).
+- The non-technical "Set up a local runtime" flow (P52-R5) is UI scaffolding; the managed spawn it needs depends on the Ollama gap above.
+- `DESKTOP-APP-SPEC.md:173` ("keyless locals" relay registration) and `:924` (Ollama provider-call diagram) still describe the deleted path — follow-up lane, not yet done.
+- macOS/MLX deferred everywhere per SUPPORT-MATRIX (P8.8, P9.1, P10.4/10.5 reopened in `dd4f035`).
+
+### Next Exact Steps
+1. Confirm CI green on `8ca2d2f` across all 10 jobs/3 OSes.
+2. Follow-up lane: spec 173 + 924 stale local-provider text.
+3. Implementation lane: managed Ollama spawner that returns a retained handle (unblocks P52-R2 and the casual setup path).
+4. Untracked pre-existing files needing an explicit wire-or-exclude decision: `scripts/windows-acceptance.mjs`, `src-tauri/src/channel_b.rs`, `ui/src/lib/{agent-card,display-number,settings-acceptance,acp-auth-label}*`, `.playwright-mcp/`.
+
+---
+
 ## Local-Runtime Handoff Plane Handover — 2026-09-25 (in progress, updated after CI triage)
 
 ### CI triage since the last update
