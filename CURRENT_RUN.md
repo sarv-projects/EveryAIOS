@@ -27,10 +27,20 @@ The background board may show `exp-8`, `des-5`, `des-6` as "unreconciled / evide
 - P71.10 lease/projection types exist (3,877 lines) with ZERO live consumers. P71.12 `session_load` wiring in flight. Windows-host rows (P66/P68/P70.E5-E9) cannot close on Linux.
 - TODO census: **1677 = 1303 done + 374 open**. Rising count = honest tracking, not regression.
 
-### Next Exact Steps
-1. Reconcile fix-14 (`session_load`) when it lands; verify with real test counts.
-2. Next buildable v1 rows: P52-R2 managed-Ollama spawner (unblocks the casual "Set up a local runtime" path), P52-R3/R4 wiring, the `search_report` Rust command, `lib/work.ts` awaited state, shared `agentSendBlockerFor`.
-3. Keep CI green per commit; `release-qualify.mjs` must stay at ≥ the recorded state.
+### Next Exact Steps (ordered, dependency-aware)
+1. **fix-14 landed** (`5d47fb1`): P71.12 resolved as a deliberate exclusion — `acp_session_load` returns a typed refusal; provider resume is out of v1 by decision. Reconciled: src-tauri `--lib` 100/0/1-ignored, acp 170/0, IPC 367 registered 0 broken (1 ghost = the refusal seam, which is correct), arch-invariants OK.
+2. **P64.13** (new row) — the four cockpit honesty gaps: `work.ts` awaited state, shared `agentSendBlockerFor()`, artifact reveal-in-file-manager, a real per-run context-window source.
+3. **P64.14** (new row) — the `search_report` projection so the composer can state which backend answered instead of "not reported".
+4. **P52-R2** — managed-Ollama spawner that returns a retained handle (the single blocker for the casual "Set up a local runtime" path and for P52-R5).
+5. **P71.10** — wire the existing workbench projection/lease types to a live consumer (3,877 lines with zero readers).
+6. Host-blocked, cannot close on Linux: P66.6–P66.9, P68.7, P70.E5/E6/E8/E9/E12, P57.6 runtime evidence.
+7. **Process rule:** `git diff --cached` per hunk before every commit (a file-level `git add` swept ~100 unreviewed lines in `40519d6`); verify at HEAD-relative paths, not worktree-relative, before pushing.
+
+### Next v1 rows, in one list (no lane is running)
+- Buildable here: P64.13, P64.14, P52-R2, P52-R3/R4, P71.10 wiring, P51.x UI remainders.
+- Windows-host-blocked: P66.6–P66.9, P68.7, P70.E5/E6/E8/E9/E12, P57.6.
+- Post-v1 by ADR: every voice (H15/H28/H30/H31) and image (P9.9*) row, P50.4.3, P52.7 MLX.
+- Census **1679 = 1304 done + 375 open**; the rise is honest tracking (P64.13/P64.14 opened this round, P71.11/P71.12 opened and P71.12 closed by the audit).
 
 ---
 

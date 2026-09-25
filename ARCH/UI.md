@@ -113,6 +113,39 @@ bearer/token material, provider-private state, or a second copy of Work/Run/Guar
 
 ## 4. The File Workbench
 
+### 4.0 The Run surface (landed 2026-09-25)
+
+The right rail carries **one run surface** (`ViewId::run`, `ui/src/components/views/run-view.tsx`) that
+answers "what happened in this run" in a single place: run identity, the bound agent and its real
+readiness, working directory, context/usage, the ordered trace steps, the files the run produced, the
+workspace's run-relevant inventory, and MCP servers. It is an **aggregation projection** — `progress`,
+`trajectory`, `diff`, `artifact` and `tool-output` remain reachable as drill-down lenses from it, and none
+of them is removed.
+
+Three rules this surface exists to enforce, all learned by rendering real journal data:
+
+1. **A step's status is one fact: has the journal closed it?** Open + parked → *waiting*; open + live →
+   *running*; closed → *done*. The earlier rule that collapsed every `active` row to `done` once a run
+   parked made a pending Guard approval render as **"Done"**, which is the exact dishonesty the cockpit
+   must not ship.
+2. **`uncertain` is never `done` and never `failed`.** An interrupted effect is rendered as uncertain.
+3. **A readout with no source says so.** The context meter renders "Not reported" with no percentage
+   until a real per-run window exists on a command; a model name is shown as reported by the agent or not
+   shown. A filter that matches nothing says "No step matches this filter. The run recorded N steps" — it
+   never implies an empty run.
+
+Keyboard: the trace is a single tab stop (APG listbox pattern) with Arrow/Home/End, so a 40-step run is
+one stop rather than forty. State changes are announced through a polite live region, because the pulse
+is the panel's only live signal. A per-step drill-down button appears **only** where the step names a
+resource that maps to a real view; a `tool_started` names a tool, not a view, so it gets no button rather
+than a dead one.
+
+This mirrors the aggregation pattern in the OpenCowork `ContextPanel` (brief 12 §2): take the pattern,
+never the code. EveryAIOS additionally requires the journal-derived honesty rules above, which that
+project does not need because it has no Guard ticket lifecycle.
+
+## 4.1 The File Workbench
+
 Inspect data should be a first-class subsystem, not another panel. The right side expands into a resizable
 workbench:
 
@@ -132,7 +165,7 @@ There is no `MarkdownFile`, `PDFFile`, `RustFile` at the system level. There is 
 viewers that can render it. Opening it adds a typed `ResourceRef` and a per-Session `LensState`; it does not
 transfer physical ownership or acquire a lease merely because a tab was opened.
 
-### 4.1 Viewer selection cascade
+### 4.2 Viewer selection cascade
 
 1. explicit user override
 2. MIME type
@@ -178,6 +211,35 @@ content is truncated or sampled, the viewer says so — a silently partial table
 The user-facing container word is **Chat**, not Session ([SESSION.md](SESSION.md)). The cockpit may show a
 Work timeline and a plan; it must not expose `Run`, `Step`, `Effect`, `AgentBinding` or `Event` as concepts to
 a casual user. Power surfaces may, but only labelled as such.
+
+`scripts/check-vocabulary.mjs` enforces this over every string, template, JSX text and i18n value in
+`ui/src`. **It applies to thrown error messages too, not just to rendered copy** — a
+`throw new Error('ACP prompt requires an application Session id')` reaches the user through the runtime
+state banner and is a vocabulary violation. Errors the user sees are user-facing text. (Five such strings
+in `ui/src/lib/acp.ts` and `bridge.ts` were reworded to chat vocabulary on 2026-09-25.)
+
+### 5.1 The composer — refuse, never fabricate (landed 2026-09-25)
+
+The chat bar is the most-readout-dense surface in the product, so it is where fabrication is most likely.
+
+- **Send refuses with a named reason.** With no bound agent, in browser preview, or with an agent whose
+  readiness is unknown or not Ready, the send control is disabled, names the reason
+  (`aria-label="Cannot send — …"` + `aria-describedby` → the live status row), and **nothing moves**: no
+  transcript row, no queue entry, the draft is not cleared. The four refusal reasons are owned in one
+  exported table and worded from the single `readinessLabel` owner.
+- **Every number has a source or says it has none.** The context meter previously divided a token count by
+  a hard-coded 128,000 window; the window is the agent's own and the desktop is never told it, so the
+  meter now reads **"Not reported"** with no percentage. Cost distinguishes *reported* from *estimated* and
+  never blends the two. Tokens come from the usage ledger or read "not reported". A budget cap with no real
+  source is not rendered at all.
+- **A control that does not act says so.** The autonomy control additionally shows the level actually
+  frozen into the running turn, because a live dial change never mutates a turn already in flight.
+- **Web search is off by default and local-first.** Turning it on lists the real resolved cascade from
+  `search_config`, marking each endpoint *in the cascade — reachability is decided when a query runs*
+  (never "online"), *not used — public instances are off*, or the feed's reported upstream success rate.
+  An empty cascade says "no search backend configured" and routes to Settings → Search. Which backend
+  answered, and how many results, are printed as **"not reported"** until a `search_report` projection
+  exists — the agent's own tool-call state is shown instead, sourced from the ACP tool log.
 
 ---
 

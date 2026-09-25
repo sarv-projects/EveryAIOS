@@ -58,6 +58,56 @@ Each entry records the date or release marker, change category, affected section
 **Verification:** `node scripts/check-doc-sync.mjs` **PASS**; `wsl -e node scripts/check-doc-refs.mjs` **PASS**.
 
 ---
+## 2026-09-25 — Cockpit honesty wave: chat bar, right rail, v1 audit, and the runtime handoff plane
+
+**Change category:** UI truthfulness, one architecture contract, delivery-status correction, and CI
+remediation. No capability identity, primitive, or invariant was added.
+
+**Decision.** Three things were decided and are now enforced in code rather than prose.
+**(1) The cockpit may not fabricate.** The chat bar's send path refuses with a named reason and mutates
+nothing; every readout either has a source or reads "not reported" (the context meter's hard-coded
+128,000 divisor is gone — the window is the agent's own and the desktop is never told it); cost
+distinguishes reported from estimated. Web search is off by default, local-first, and shows the real
+resolved cascade. The right rail gains **one run surface** that aggregates identity, usage, the ordered
+trace, artifacts and inventory, with the five existing views kept as drill-downs. **(2) EveryAIOS owns the
+environment; the external agent owns the engine** — recorded as
+[`ARCH/16-LOCAL-RUNTIME-INTEROP.md`](ARCH/16-LOCAL-RUNTIME-INTEROP.md), retiring the host-side
+local-inference path (`everyaios-vault::local`, `Broker::with_local`, every `LocalEndpoint`, the
+`local://` provider scheme) and adding the canonical `RuntimeControl` / `RuntimeOwnership` /
+`RuntimeHealthState` / `RuntimeInventoryEntry` contracts, a managed-serve handle that retains its child
+process, and a Guard-gated runtime inventory. `Observed` is never rendered as `Healthy`, and a launch
+override stays `requested` until the agent confirms. **(3) A row may close by a recorded decision.**
+P71.12 closed as a deliberate exclusion: v1 ships without provider resume, because the reconnect seam that
+ADR-0007 §3 makes a precondition does not exist, and `acp_session_load` now returns a typed refusal instead
+of fabricating one.
+
+**Implementation impact.** A v1 line-by-line architecture audit (voice and image rows excluded) corrected
+four published surfaces that contradicted the tree — SUPPORT-MATRIX, ADR-0007's own evidence table,
+DESKTOP §6.2 and CORE §11.3 — each of which claimed an unimplemented capability that had in fact landed
+(Channel B `mcpServers` population, `compile_work` on the live firing path, journal-authoritative recovery,
+WGC compiled), and one audit finding was itself retracted after source verification (the ACP v2 refusal
+already existed; only its CI gate was missing — `E3-ACP-V2` now asserts it and was proven to fire).
+Delivery truth was repaired earlier the same day: 49 falsely-checked rows reopened, 16 untracked contract
+and test surfaces opened, `TEST-CASES.md`'s 50 end-to-end cases and 8 integration suites now tracked. CI was
+brought green per commit (HEAD-relative UI typecheck, workspace rustfmt, the automation-owned ACP
+work-resolution defect, cross-platform MCP test fixtures, the router use-policy fallback, the vocabulary
+gate, and a codebase-map refresh that cleared release gate E3). `release-qualify.mjs` now reports
+**3 PASS / 4 RUNNABLE / 5 BLOCKED**, matching what the documents claim.
+
+**Affected documents.** `ARCH/16-LOCAL-RUNTIME-INTEROP.md` (new), `ARCH/UI.md` §4.0 and §5.1 (new),
+`ARCH/ROUTING.md`, `ARCH/AGENT.md` §3.2/§4/§5.4, `ARCH/EXTERNAL-AGENTS.md` §7, `ARCH/CAPABILITIES.md`,
+`ARCH/SECURITY.md`, `ARCH/DESKTOP.md`, `ARCH/CORE.md` §11.3, `ARCH/00-INDEX.md`, `ARCH/03/05/09/11`,
+`ARCH/ADR/0007`, `DESKTOP-APP-SPEC.md` (A1/A5/A8 and the §4 local-runtime subsection), `SUPPORT-MATRIX.md`,
+`SECURITY.md`, `PACKAGING.md`, `README.md`, `TODO.md` (P52 rewrite + P52-R1–R10, P64.13/P64.14, P71.10–P71.12,
+P69.G1–G9, P10.6.1–.7), and this changelog.
+
+**Verification.** `cargo test` vault/types/core and `src-tauri --lib` green (100 tests); coordinator
+241/0; UI 518/0 with `tsc --noEmit` clean; `ipc-parity` 367 registered / 0 broken;
+`check-arch-invariants`, `check-doc-sync`, `check-doc-refs`, `check-vocabulary`, `check-store-schemas`
+all PASS; `gen-codebase-map --check` current. No Windows-host acceptance, no real-agent acceptance, and no
+real credential run was performed, so every such row remains open and unqualified.
+
+---
 ## 2026-09-24 — ADR-0007: Windows-first v1 scope and qualification amendment
 
 **Change category:** scope, qualification policy, and delivery-status documentation only. No capability identity,
