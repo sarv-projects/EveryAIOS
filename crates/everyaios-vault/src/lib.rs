@@ -16,7 +16,6 @@ pub mod credential_broker;
 pub mod egress;
 pub mod keyring;
 pub mod ledger;
-pub mod local;
 pub mod oauth;
 pub mod session;
 pub mod session_budget;
@@ -36,7 +35,6 @@ pub use keyring::{
     KeyStatus, MAX_429_SWITCHES, RoutingPolicy, SelectedKey,
 };
 pub use ledger::{Pricing, RecentUsage, SessionTotal, Usage, UsageRow, default_pricing};
-pub use local::{DEFAULT_NUM_CTX, Grammar, LocalEndpoint, LocalRuntime, MIN_WARN_NUM_CTX};
 pub use oauth::{
     DeviceCodeStart, DevicePoll, OAuthAccountInfo, OAuthError, OAuthManager, PkceStart,
 };

@@ -139,24 +139,6 @@ fn context_window_respects_configured_floor() {
 }
 
 #[test]
-fn endpoint_for_maps_ollama_and_llamafile() {
-    let mgr = LocalManager::new(cfg(mock_host()));
-    let ollama = mgr.endpoint_for("ollama").expect("ollama endpoint");
-    assert_eq!(ollama.base_url, mock_host());
-    assert_eq!(ollama.runtime, everyaios_vault::LocalRuntime::Ollama);
-    assert_eq!(ollama.num_ctx, 16_384);
-
-    let lf = mgr.endpoint_for("llamafile").expect("llamafile endpoint");
-    assert_eq!(lf.runtime, everyaios_vault::LocalRuntime::Llamafile);
-    assert_eq!(
-        lf.base_url,
-        format!("http://127.0.0.1:{}", cfg("x").llamafile_port)
-    );
-
-    assert!(mgr.endpoint_for("openai").is_none());
-}
-
-#[test]
 fn find_llamafile_scans_data_dir_bin() {
     let dir = std::env::temp_dir().join(format!("everyaios-llamafile-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);

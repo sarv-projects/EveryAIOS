@@ -1079,6 +1079,127 @@ pub struct AgentBinding {
     pub private_state_ref: Option<String>,
 }
 
+/// How much model control an agent binding exposes for a runtime.
+///
+/// This is capability evidence, not authority to run inference. A runtime may
+/// list a model without the bound agent being able to select or use it.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RuntimeControl {
+    /// The agent owns provider, model, authentication, and fallback.
+    NativeOnly,
+    /// A verified launch environment may override provider/model settings.
+    LaunchOverride,
+    /// The agent advertises ACP `ConfigOption`s for per-session model control.
+    SessionConfig,
+    /// The runtime has not been probed, so no model control may be offered.
+    #[default]
+    Unknown,
+}
+
+/// Who owns a runtime's lifecycle.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RuntimeOwnership {
+    /// EveryAIOS owns the process handle and its stop/restart lifecycle.
+    Managed,
+    /// The user already runs the process; discovery may observe but never stop it.
+    External,
+    /// The runtime runs on another machine and is not locally manageable.
+    Remote,
+}
+
+/// Evidence-backed health for a runtime endpoint.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RuntimeHealthState {
+    /// No health evidence has been collected.
+    #[default]
+    Unknown,
+    /// The endpoint is reachable, but no full health probe has completed.
+    Observed,
+    /// A full probe verified the runtime is ready for use.
+    Healthy,
+    /// The runtime responds with reduced capability or an explicit warning.
+    Degraded,
+    /// A previously observed runtime is no longer reachable.
+    Down,
+    /// The endpoint or required runtime protocol is not supported here.
+    Unsupported,
+}
+
+/// The five-level model-control ladder exposed as UI data.
+///
+/// Higher tiers add control but do not imply that an external agent will use
+/// a listed model. Tier four is reserved and refused in v1 because the host
+/// must not become a managed reasoning engine.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[repr(u8)]
+pub enum ModelControlTier {
+    /// Tier 0: inventory/listing only.
+    Inventory = 0,
+    /// Tier 1: the agent owns provider and model selection.
+    NativeOnly = 1,
+    /// Tier 2: a verified launch environment can override provider/model settings.
+    LaunchOverride = 2,
+    /// Tier 3: the binding advertises ACP `ConfigOption`s for session control.
+    SessionConfig = 3,
+    /// Tier 4: fully managed inference; reserved and refused in v1.
+    FullyManagedInference = 4,
+}
+
+impl ModelControlTier {
+    /// Returns the stable numeric rung used by UI projections.
+    pub const fn as_u8(self) -> u8 {
+        self as u8
+    }
+}
+
+/// Agent-specific evidence about whether a runtime can be used.
+///
+/// `usable = None` and `control = RuntimeControl::Unknown` are the safe
+/// defaults before a binding-specific probe.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AgentRuntimeCompatibility {
+    /// Canonical identity of the agent binding this evidence concerns.
+    pub agent_id: AgentId,
+    /// Maximum verified model-control surface exposed by that binding.
+    pub control: RuntimeControl,
+    /// Whether the agent can use this runtime, or `None` when not probed.
+    pub usable: Option<bool>,
+    /// Probe evidence or the explicit reason usability is unavailable.
+    #[serde(default)]
+    pub reason: Option<String>,
+}
+
+/// One observed model-runtime endpoint in the canonical inventory.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RuntimeInventoryEntry {
+    /// Stable identity for this observed endpoint.
+    pub id: String,
+    /// Runtime kind proven by a handshake, or `generic_openai_compatible` as fallback.
+    pub kind: String,
+    /// Base endpoint suitable for runtime-specific client construction.
+    pub endpoint: String,
+    /// Runtime-reported version, when a handshake exposes one.
+    pub version: Option<String>,
+    /// Wire protocol proven by the handshake, or `unknown` when unproven.
+    pub protocol: String,
+    /// Lifecycle owner; inventory discovery never infers managed ownership.
+    pub ownership: RuntimeOwnership,
+    /// Current health evidence without agent-usability inference.
+    pub health: RuntimeHealthState,
+    /// Unix epoch milliseconds of the last completed probe, when one occurred.
+    pub last_probe_ms: Option<u64>,
+    /// Model identifiers listed by the runtime; never proof of agent usability.
+    #[serde(default)]
+    pub models: Vec<String>,
+    /// Binding-specific usability evidence, empty until explicitly probed.
+    #[serde(default)]
+    pub agent_compatibility: Vec<AgentRuntimeCompatibility>,
+}
+
 /// The canonical effect request: every mutating operation reduces to this
 /// shape before it reaches Guard and the executor (`ARCH/CORE.md` §7).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

@@ -21,7 +21,6 @@ use crate::keyring::{
     KeyRing, KeyRingError, KeyStatus, MAX_429_SWITCHES, RoutingPolicy, SelectedKey,
 };
 use crate::ledger::{Pricing, Usage, UsageRow, default_pricing};
-use crate::local::{self, LocalEndpoint};
 use crate::oauth::{OAuthManager, is_oauth_provider};
 use crate::session_budget::SessionBudget;
 
@@ -193,11 +192,6 @@ pub struct Broker<'a> {
     /// token refresh + one retry before the error surfaces (doc 33 §7.4
     /// token lifecycle; failover semantics stay identical to BYOK keys).
     oauth: Option<OAuthManager<'a>>,
-    /// P1.8 (A5): keyless local endpoints (ollama / llamafile). When a
-    /// provider is registered here the broker routes straight to the local
-    /// runtime — no KeyRing selection, no auth header; usage still lands in
-    /// the ledger + session budget (tokens count, $ is 0).
-    local_endpoints: HashMap<String, LocalEndpoint>,
     /// P3.3 (J14): extra headers injected into every outbound HTTP request.
     /// Used for distributed-trace linkage (`traceparent`) and any future
     /// cross-boundary propagation.
@@ -228,7 +222,6 @@ impl<'a> Broker<'a> {
             pricing,
             budget: SessionBudget::default_budget(),
             oauth: None,
-            local_endpoints: HashMap::new(),
             extra_headers: HashMap::new(),
             endpoints: HashMap::new(),
         }
@@ -377,23 +370,6 @@ impl<'a> Broker<'a> {
             .unwrap_or(WireTransport::OpenaiChat)
     }
 
-    /// Register a keyless local endpoint (P1.8/A5). Local providers bypass
-    /// the key ring entirely — the machine owns the weights.
-    pub fn with_local(mut self, provider: &str, endpoint: LocalEndpoint) -> Self {
-        self.local_endpoints.insert(provider.to_string(), endpoint);
-        self
-    }
-
-    /// Is `provider` served by a configured local runtime?
-    pub fn is_local(&self, provider: &str) -> bool {
-        self.local_endpoints.contains_key(provider)
-    }
-
-    /// The configured local endpoint for `provider`, if any.
-    pub fn local_endpoint(&self, provider: &str) -> Option<&LocalEndpoint> {
-        self.local_endpoints.get(provider)
-    }
-
     /// Attach the OAuth manager so subscription accounts get 401→refresh→
     /// retry semantics (P1.7).
     pub fn with_oauth(mut self, oauth: OAuthManager<'a>) -> Self {
@@ -462,10 +438,6 @@ impl<'a> Broker<'a> {
         session_id: &str,
         mut body: serde_json::Value,
     ) -> Result<serde_json::Value, BrokerError> {
-        // P1.8 (A5): keyless local runtime — no key ring, no auth header.
-        if let Some(ep) = self.local_endpoints.get(provider) {
-            return self.local_chat_completion(ep, provider, model, session_id, body);
-        }
         // P55.5 — the resolved endpoint (base URL + dialect) decides the URL
         // and the request/response shape; nothing here hardcodes a path.
         let endpoint = self.endpoints.get(provider).cloned();
@@ -545,12 +517,6 @@ impl<'a> Broker<'a> {
     /// transport error *mid*-body has already emitted, which the caller must
     /// surface in-band (the A8 server writes an SSE error frame) — that is the
     /// same posture as any real streaming endpoint.
-    ///
-    /// Local runtimes (P1.8 ollama/llamafile) buffer their upstream SSE inside
-    /// `local.rs`; their events are replayed through `on_event` in order. The
-    /// frames the caller emits are still real SSE, but for a local runtime they
-    /// are not latency-incremental. That asymmetry is deliberate and documented
-    /// rather than papered over.
     pub fn chat_completion_stream_cb(
         &self,
         provider: &str,
@@ -559,15 +525,6 @@ impl<'a> Broker<'a> {
         mut body: serde_json::Value,
         on_event: &mut dyn FnMut(&ChatStreamEvent),
     ) -> Result<Vec<ChatStreamEvent>, BrokerError> {
-        // P1.8 (A5): keyless local runtime — no key ring, no auth header.
-        if let Some(ep) = self.local_endpoints.get(provider) {
-            let events =
-                self.local_chat_completion_stream(ep, provider, model, session_id, body)?;
-            for e in &events {
-                on_event(e);
-            }
-            return Ok(events);
-        }
         let endpoint = self.endpoints.get(provider).cloned();
         let transport = self.transport(provider);
         body["stream"] = serde_json::json!(true);
@@ -805,107 +762,6 @@ impl<'a> Broker<'a> {
                 }
             }
         }
-    }
-}
-
-impl<'a> Broker<'a> {
-    /// P1.8 (A5/B5) — keyless local completion. Grammar rides the request
-    /// (GBNF passthrough on ollama's `format` / llamafile's `grammar`); usage
-    /// lands in the ledger + session budget at $0 cost.
-    fn local_chat_completion(
-        &self,
-        ep: &LocalEndpoint,
-        provider: &str,
-        model: &str,
-        session_id: &str,
-        mut body: serde_json::Value,
-    ) -> Result<serde_json::Value, BrokerError> {
-        if !self.budget.can_issue(session_id) {
-            return Err(BrokerError::SessionBudgetExceeded {
-                session: session_id.to_string(),
-                limit: self.budget.limit(),
-                spent: self.budget.spent(session_id),
-            });
-        }
-        body["stream"] = serde_json::json!(false);
-        let (resp, usage) = match ep.runtime {
-            crate::local::LocalRuntime::Ollama => {
-                let req = local::ollama_body(ep, model, &body);
-                local::ollama_chat(&ep.base_url, &req)?
-            }
-            // MLX is OpenAI-compatible like llamafile — same request shape.
-            // (mlx_lm.server honors `response_format` on recent versions and
-            // ignores what it doesn't know; a mismatch surfaces as a visible
-            // tool-call parse error, never silent corruption.)
-            crate::local::LocalRuntime::Llamafile | crate::local::LocalRuntime::Mlx => {
-                let req = local::llamafile_body(ep, model, &body);
-                local::llamafile_chat(&ep.base_url, &req)?
-            }
-        };
-        self.record_local(session_id, provider, model, usage)?;
-        Ok(resp)
-    }
-
-    /// P1.8 (A5/B5) — keyless local stream. Same contract as the cloud path:
-    /// `Vec<ChatStreamEvent>` with deltas + finish + cache-aware usage.
-    fn local_chat_completion_stream(
-        &self,
-        ep: &LocalEndpoint,
-        provider: &str,
-        model: &str,
-        session_id: &str,
-        body: serde_json::Value,
-    ) -> Result<Vec<ChatStreamEvent>, BrokerError> {
-        if !self.budget.can_issue(session_id) {
-            return Err(BrokerError::SessionBudgetExceeded {
-                session: session_id.to_string(),
-                limit: self.budget.limit(),
-                spent: self.budget.spent(session_id),
-            });
-        }
-        let mut body = body;
-        body["stream"] = serde_json::json!(true);
-        let events = match ep.runtime {
-            crate::local::LocalRuntime::Ollama => {
-                let req = local::ollama_body(ep, model, &body);
-                local::ollama_chat_stream(&ep.base_url, &req)?
-            }
-            crate::local::LocalRuntime::Llamafile | crate::local::LocalRuntime::Mlx => {
-                let req = local::llamafile_body(ep, model, &body);
-                local::llamafile_chat_stream(&ep.base_url, &req)?
-            }
-        };
-        let usage = usage_from_stream(events.as_slice());
-        self.record_local(session_id, provider, model, usage)?;
-        Ok(events)
-    }
-
-    /// Shared local recording: one ledger row (key_id = model — there is no
-    /// key) + J11 session settle at $0 cost. Tokens count; local $ is always
-    /// 0. Same error contract as the cloud path: a failed ledger write
-    /// propagates (cost accounting must never fail silently).
-    fn record_local(
-        &self,
-        session_id: &str,
-        provider: &str,
-        model: &str,
-        usage: Usage,
-    ) -> Result<(), BrokerError> {
-        let cost = 0.0;
-        self.vault.record_usage(&UsageRow {
-            session: session_id.to_string(),
-            provider: provider.to_string(),
-            model: model.to_string(),
-            key_id: model.to_string(),
-            usage,
-            cost,
-            tool: None,
-            task_id: String::new(),
-            run_id: String::new(),
-            work_id: String::new(),
-        })?;
-        self.budget.settle(session_id, cost);
-        Ok(())
     }
 }
 
@@ -1327,19 +1183,8 @@ fn cost_of_usage(pricing: &HashMap<String, Pricing>, provider: &str, usage: Usag
         .cost_of(usage)
 }
 
-/// Parse OpenAI-style SSE stream into events. Lines look like:
-/// `data: {"choices":[{"delta":{"content":"hi"},"finish_reason":null}]}`
-/// and the stream ends with `data: [DONE]`.
-///
-/// `pub(crate)` — the local llamafile path (P1.8) streams the same shape.
-pub(crate) fn parse_sse<R: BufRead>(reader: R) -> Vec<ChatStreamEvent> {
-    parse_sse_with(reader, &mut |_| {})
-}
-
-/// [`parse_sse`] with incremental delivery: every parsed event is also handed
-/// to `on_event` the moment it is read off the socket (P9.5/A8). The returned
-/// `Vec` is unchanged, so the buffered callers and the usage accountant keep
-/// working exactly as before.
+/// Parse OpenAI-style SSE stream into events while handing each event to
+/// `on_event` as it is read off the socket (P9.5/A8).
 pub(crate) fn parse_sse_with<R: BufRead>(
     mut reader: R,
     on_event: &mut dyn FnMut(&ChatStreamEvent),
@@ -1495,7 +1340,7 @@ pub fn assemble_tool_calls(
         .collect()
 }
 
-/// B5 local JSON-mode: parse a grammar-enforced object into tool calls.
+/// JSON-mode: parse a constrained object into tool calls.
 /// Accepts `{"tool":"…","args":{…}}`, `{"name":"…","arguments":{…}}`,
 /// and `{"tool_calls":[…]}`. Arbitrary JSON (no tool name) is ignored.
 pub fn extract_json_tool_calls(text: &str) -> Vec<(String, serde_json::Value)> {
@@ -2330,7 +2175,7 @@ mod tests {
             "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}\n",
             "data: [DONE]\n",
         );
-        let events = parse_sse(BufReader::new(sse.as_bytes()));
+        let events = parse_sse_with(BufReader::new(sse.as_bytes()), &mut |_| {});
         assert_eq!(events.len(), 3);
         assert_eq!(events[0].delta.as_deref(), Some("Hel"));
         assert_eq!(events[1].delta.as_deref(), Some("lo"));
@@ -2347,7 +2192,7 @@ mod tests {
             "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"tool_calls\"}]}\n",
             "data: [DONE]\n",
         );
-        let events = parse_sse(BufReader::new(sse.as_bytes()));
+        let events = parse_sse_with(BufReader::new(sse.as_bytes()), &mut |_| {});
         let calls = assemble_tool_calls(&events, false);
         assert_eq!(calls.len(), 1);
         assert_eq!(calls[0].0, "search.query");

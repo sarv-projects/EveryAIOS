@@ -9,11 +9,10 @@
 //!   --nobrowser` and health-checked via `/health`.
 //!
 //! Context windows (doc 33 §7.4): Ollama's default 4,096 is too low — below
-//! 15K the agent loops. We force `num_ctx` (default 16,384) on every call
-//! (the vault broker does that per-request) and surface the effective window
-//! to the UI so it can warn loudly under 15K.
+//! 15K an agent may loop. This module manages runtime processes and records
+//! effective context limits for projection; the bound external agent remains
+//! the only model-selection and inference owner.
 
-use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpStream};
 use std::path::{Path, PathBuf};
@@ -382,36 +381,6 @@ impl LocalManager {
             })
             .unwrap_or(u64::MAX) as u32;
         model_max.min(self.cfg.num_ctx)
-    }
-
-    /// The vault broker endpoint for a local provider name (if configured).
-    pub fn endpoint_for(&self, provider: &str) -> Option<everyaios_vault::LocalEndpoint> {
-        match provider {
-            "ollama" => Some(
-                everyaios_vault::LocalEndpoint::ollama(self.ollama_host())
-                    .with_num_ctx(self.cfg.num_ctx),
-            ),
-            "llamafile" => {
-                let port = self.cfg.llamafile_port;
-                Some(
-                    everyaios_vault::LocalEndpoint::llamafile(format!("http://127.0.0.1:{port}"))
-                        .with_num_ctx(self.cfg.num_ctx),
-                )
-            }
-            _ => None,
-        }
-    }
-
-    /// A map of every configured local provider → endpoint (for the broker).
-    pub fn endpoints(&self) -> HashMap<String, everyaios_vault::LocalEndpoint> {
-        let mut out = HashMap::new();
-        if let Some(ep) = self.endpoint_for("ollama") {
-            out.insert("ollama".to_string(), ep);
-        }
-        if let Some(ep) = self.endpoint_for("llamafile") {
-            out.insert("llamafile".to_string(), ep);
-        }
-        out
     }
 
     // ---- minimal HTTP helpers (no extra deps; localhost only) -----------

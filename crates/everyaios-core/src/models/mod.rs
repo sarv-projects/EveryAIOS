@@ -14,7 +14,8 @@
 //! - [`probe`] — hardware probes (CPU/RAM/disk/VRAM) + runtime process
 //!   discovery + TTL-cached OpenAI-compatible endpoint probing.
 //! - [`ModelsRuntime`] — bind a downloaded GGUF to a runtime (managed
-//!   llamafile serve, or `ollama create`), fail-closed when no runtime exists.
+//!   llamafile serve, or `ollama create`), fail closed when no runtime exists,
+//!   and return a [`ManagedServeHandle`] that retains process custody.
 
 pub mod best;
 pub mod cache;
@@ -32,17 +33,18 @@ pub use hf::{HfClient, HfError, HfFile};
 pub use local_url::{LocalUrl, LocalUrlError, LocalUrlResolver, ResolvedEndpoint};
 pub use mlx::{MlxServer, mlx_quant_id, prefer_mlx};
 pub use probe::{
-    DiscoveredRuntime, HardwareInfo, ProbeCache, discover_runtimes, find_runtime_processes,
-    probe_hardware, probe_openai_endpoint,
+    DiscoveredRuntime, HardwareInfo, ProbeCache, discover_runtime_inventory, discover_runtimes,
+    find_runtime_processes, probe_hardware, probe_openai_endpoint,
 };
 pub use store::{ModelEntry, ModelRegistry};
 
-use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Child, Command, ExitStatus};
 use std::time::Duration;
 
-use everyaios_vault::LocalEndpoint;
+use everyaios_types::RuntimeHealthState;
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 
 /// llama.cpp KV-cache element types (P39.4 — `-ctk`/`-ctv`, i.e.
 /// `--cache-type-k/-v`; verified in `llama.cpp/common/arg.cpp`: F32 / F16 /
@@ -213,20 +215,110 @@ pub fn gguf_args_with_options(
     args
 }
 
+/// Process custody for a runtime started by [`ModelsRuntime`].
+///
+/// The handle owns the child until [`ManagedServeHandle::stop`] is called or
+/// the handle is dropped; a bare endpoint can therefore never silently orphan
+/// a process. Persisting and reattaching this resource across application
+/// restarts is the Tauri layer's responsibility, not this core handle's.
+#[derive(Debug)]
+pub struct ManagedServeHandle {
+    child: Child,
+    /// Loopback port on which the managed runtime was launched.
+    pub port: u16,
+    /// Loopback base URL exposed by the managed runtime.
+    pub base_url: String,
+    /// Registry or Hugging Face model identity served by this process.
+    pub model_id: String,
+    /// Stable SHA-256 hash of the model identity and launch arguments.
+    pub config_hash: String,
+}
+
+impl ManagedServeHandle {
+    /// Returns the child's exit status when it has exited, without blocking.
+    pub fn phase(&mut self) -> std::io::Result<Option<ExitStatus>> {
+        self.child.try_wait()
+    }
+
+    /// Returns current health evidence, preferring process state over HTTP.
+    ///
+    /// An exited child is `Down`. A live child is `Healthy` only after either
+    /// its native health endpoint or OpenAI-compatible model listing answers;
+    /// otherwise it is `Degraded`, never optimistically `Healthy`.
+    pub fn health(&mut self) -> RuntimeHealthState {
+        match self.phase() {
+            Ok(Some(_)) | Err(_) => RuntimeHealthState::Down,
+            Ok(None) => {
+                let native_health = ureq::get(&format!("{}/health", self.base_url))
+                    .timeout(Duration::from_secs(1))
+                    .call()
+                    .map(|response| response.status() == 200)
+                    .unwrap_or(false);
+                if native_health || probe_openai_endpoint(&self.base_url) {
+                    RuntimeHealthState::Healthy
+                } else {
+                    RuntimeHealthState::Degraded
+                }
+            }
+        }
+    }
+
+    /// Kills and reaps the managed child, consuming the custody handle.
+    pub fn stop(mut self) -> Result<(), ModelsError> {
+        terminate_child(&mut self.child).map_err(|e| ModelsError::Io(e.to_string()))
+    }
+}
+
+impl Drop for ManagedServeHandle {
+    fn drop(&mut self) {
+        let _ = terminate_child(&mut self.child);
+    }
+}
+
+fn terminate_child(child: &mut Child) -> std::io::Result<()> {
+    match child.try_wait()? {
+        Some(_) => Ok(()),
+        None => match child.kill() {
+            Ok(()) => {
+                child.wait()?;
+                Ok(())
+            }
+            Err(error) => match child.try_wait()? {
+                Some(_) => Ok(()),
+                _ => Err(error),
+            },
+        },
+    }
+}
+
+fn managed_config_hash(model_id: &str, args: &[String]) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(model_id.as_bytes());
+    for arg in args {
+        hasher.update([0]);
+        hasher.update(arg.as_bytes());
+    }
+    hasher
+        .finalize()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
+}
+
 /// Bind a downloaded GGUF to a runtime.
 pub struct ModelsRuntime;
 
 impl ModelsRuntime {
     /// Serve `entry` with a managed **llamafile** (`--model <gguf>`), reusing
-    /// the P1.8 health-wait discipline (≤60s). Returns the endpoint the broker
-    /// can route `local://` URLs to. Defaults to `ServeOptions::default()`.
+    /// the P1.8 health-wait discipline (≤60s). Returns process custody rather
+    /// than a bare endpoint. Defaults to `ServeOptions::default()`.
     pub fn serve_gguf(
         entry: &ModelEntry,
         llamafile_bin: Option<&Path>,
         port: u16,
         num_ctx: u32,
         kv_cache: Option<KvCacheType>,
-    ) -> Result<LocalEndpoint, ModelsError> {
+    ) -> Result<ManagedServeHandle, ModelsError> {
         Self::serve_gguf_with_options(
             entry,
             llamafile_bin,
@@ -247,7 +339,7 @@ impl ModelsRuntime {
         num_ctx: u32,
         kv_cache: Option<KvCacheType>,
         opts: ServeOptions,
-    ) -> Result<LocalEndpoint, ModelsError> {
+    ) -> Result<ManagedServeHandle, ModelsError> {
         // P52.7 — the MLX sidecar branch: serve an HF model id via
         // `mlx_lm.server` instead of the local GGUF via llamafile. Liveness
         // is the documented `/v1/models` endpoint (≤60s; the first run may
@@ -266,9 +358,10 @@ impl ModelsRuntime {
             return Err(ModelsError::Io(format!("gguf not on disk: {}", entry.path)));
         }
 
-        let effective_ctx = opts.num_ctx.unwrap_or(num_ctx);
+        let args = gguf_args_with_options(&path, port, num_ctx, kv_cache, opts);
+        let config_hash = managed_config_hash(&entry.id, &args);
         let mut cmd = Command::new(bin);
-        for arg in gguf_args_with_options(&path, port, num_ctx, kv_cache, opts) {
+        for arg in &args {
             cmd.arg(arg);
         }
         let mut child = cmd
@@ -278,24 +371,31 @@ impl ModelsRuntime {
             .map_err(|e| ModelsError::SpawnFailed(e.to_string()))?;
 
         // Health wait ≤60s (first run may unpack the weights).
-        let base = format!("http://127.0.0.1:{port}");
+        let base_url = format!("http://127.0.0.1:{port}");
         let deadline = std::time::Instant::now() + Duration::from_secs(60);
         while std::time::Instant::now() < deadline {
-            if ureq::get(&format!("{base}/health"))
+            if let Ok(Some(status)) = child.try_wait() {
+                return Err(ModelsError::SpawnFailed(format!(
+                    "managed runtime exited before health: {status}"
+                )));
+            }
+            if ureq::get(&format!("{base_url}/health"))
                 .timeout(Duration::from_secs(1))
                 .call()
                 .map(|r| r.status() == 200)
                 .unwrap_or(false)
             {
-                return Ok(LocalEndpoint {
-                    runtime: everyaios_vault::LocalRuntime::Llamafile,
-                    base_url: base,
-                    num_ctx: effective_ctx,
+                return Ok(ManagedServeHandle {
+                    child,
+                    port,
+                    base_url,
+                    model_id: entry.id.clone(),
+                    config_hash,
                 });
             }
             std::thread::sleep(Duration::from_millis(500));
         }
-        let _ = child.kill();
+        let _ = terminate_child(&mut child);
         Err(ModelsError::HealthTimeout)
     }
 
@@ -306,9 +406,9 @@ impl ModelsRuntime {
     /// llamafile path; liveness probed on the documented `/v1/models`.
     pub fn serve_mlx_with_options(
         port: u16,
-        num_ctx: u32,
+        _num_ctx: u32,
         opts: ServeOptions,
-    ) -> Result<LocalEndpoint, ModelsError> {
+    ) -> Result<ManagedServeHandle, ModelsError> {
         let model_id = opts.model_id.clone().ok_or(ModelsError::NoRuntime(
             "MLX runtime needs a model id (mlx-community/<name>-4bit) — set serveOptions.modelId",
         ))?;
@@ -326,9 +426,11 @@ impl ModelsRuntime {
                 "mlx_lm.server not on PATH — install mlx-lm on Apple Silicon: pip install mlx-lm",
             ));
         }
-        let spec = MlxServer::new(model_id, port);
-        let mut cmd = Command::new(spec.argv().first().expect("mlx argv is non-empty"));
-        for arg in spec.argv().iter().skip(1) {
+        let spec = MlxServer::new(model_id.clone(), port);
+        let args = spec.argv();
+        let config_hash = managed_config_hash(&model_id, &args);
+        let mut cmd = Command::new(args.first().expect("mlx argv is non-empty"));
+        for arg in args.iter().skip(1) {
             cmd.arg(arg);
         }
         let mut child = cmd
@@ -338,24 +440,31 @@ impl ModelsRuntime {
             .map_err(|e| ModelsError::SpawnFailed(e.to_string()))?;
 
         // Health wait ≤60s (first run may download the weights from HF).
-        let base = format!("http://127.0.0.1:{port}");
+        let base_url = format!("http://127.0.0.1:{port}");
         let deadline = std::time::Instant::now() + Duration::from_secs(60);
         while std::time::Instant::now() < deadline {
-            if ureq::get(&format!("{base}/v1/models"))
+            if let Ok(Some(status)) = child.try_wait() {
+                return Err(ModelsError::SpawnFailed(format!(
+                    "managed runtime exited before health: {status}"
+                )));
+            }
+            if ureq::get(&format!("{base_url}/v1/models"))
                 .timeout(Duration::from_secs(1))
                 .call()
                 .map(|r| r.status() == 200)
                 .unwrap_or(false)
             {
-                return Ok(LocalEndpoint {
-                    runtime: everyaios_vault::LocalRuntime::Mlx,
-                    base_url: base,
-                    num_ctx: opts.num_ctx.unwrap_or(num_ctx),
+                return Ok(ManagedServeHandle {
+                    child,
+                    port,
+                    base_url,
+                    model_id,
+                    config_hash,
                 });
             }
             std::thread::sleep(Duration::from_millis(500));
         }
-        let _ = child.kill();
+        let _ = terminate_child(&mut child);
         Err(ModelsError::HealthTimeout)
     }
 
@@ -398,6 +507,9 @@ impl ModelsRuntime {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::{Read, Write};
+    use std::net::{TcpListener, TcpStream};
+    use std::time::Instant;
 
     fn entry() -> ModelEntry {
         ModelEntry {
@@ -411,10 +523,126 @@ mod tests {
         }
     }
 
+    const FIXTURE_PORT_ENV: &str = "EVERYAIOS_MANAGED_SERVE_FIXTURE_PORT";
+
+    fn fixture_responds(port: u16, path: &str) -> bool {
+        ureq::get(&format!("http://127.0.0.1:{port}{path}"))
+            .timeout(Duration::from_millis(250))
+            .call()
+            .map(|response| response.status() == 200)
+            .unwrap_or(false)
+    }
+
+    fn endpoint_closed(port: u16) -> bool {
+        TcpStream::connect_timeout(
+            &format!("127.0.0.1:{port}").parse().unwrap(),
+            Duration::from_millis(100),
+        )
+        .is_err()
+    }
+
+    fn spawn_fixture_server() -> ManagedServeHandle {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        drop(listener);
+        let child = Command::new(std::env::current_exe().unwrap())
+            .arg("--exact")
+            .arg("models::tests::managed_serve_fixture_server")
+            .arg("--nocapture")
+            .env(FIXTURE_PORT_ENV, port.to_string())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .unwrap();
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while Instant::now() < deadline {
+            if fixture_responds(port, "/health") {
+                return ManagedServeHandle {
+                    child,
+                    port,
+                    base_url: format!("http://127.0.0.1:{port}"),
+                    model_id: "fixture-model".into(),
+                    config_hash: managed_config_hash("fixture-model", &[]),
+                };
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        let mut handle = ManagedServeHandle {
+            child,
+            port,
+            base_url: format!("http://127.0.0.1:{port}"),
+            model_id: "fixture-model".into(),
+            config_hash: managed_config_hash("fixture-model", &[]),
+        };
+        let _ = terminate_child(&mut handle.child);
+        panic!("managed serve fixture did not start");
+    }
+
+    fn wait_for_endpoint_closed(port: u16) {
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while Instant::now() < deadline {
+            if endpoint_closed(port) {
+                return;
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        panic!("managed serve endpoint still reachable on port {port}");
+    }
+
+    #[test]
+    fn managed_serve_fixture_server() {
+        let Ok(port) = std::env::var(FIXTURE_PORT_ENV) else {
+            return;
+        };
+        let port: u16 = port.parse().unwrap();
+        let listener = TcpListener::bind(("127.0.0.1", port)).unwrap();
+        for stream in listener.incoming() {
+            let Ok(mut stream) = stream else { continue };
+            let mut request = [0_u8; 2048];
+            let read = stream.read(&mut request).unwrap_or(0);
+            let request = String::from_utf8_lossy(&request[..read]);
+            let path = request
+                .lines()
+                .next()
+                .and_then(|line| line.split_whitespace().nth(1))
+                .unwrap_or("/");
+            let body = if path == "/health" {
+                r#"{"status":"ok"}"#
+            } else if path == "/v1/models" {
+                r#"{"data":[{"id":"fixture-model"}]}"#
+            } else {
+                r#"{"error":"not found"}"#
+            };
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            );
+            let _ = stream.write_all(response.as_bytes());
+        }
+    }
+
+    #[test]
+    fn dropping_managed_serve_handle_ends_resource_and_is_not_healthy() {
+        let mut stopped = spawn_fixture_server();
+        let stopped_port = stopped.port;
+        assert_eq!(stopped.health(), RuntimeHealthState::Healthy);
+        stopped.stop().unwrap();
+        wait_for_endpoint_closed(stopped_port);
+
+        let dropped = spawn_fixture_server();
+        let dropped_port = dropped.port;
+        assert!(fixture_responds(dropped_port, "/health"));
+        drop(dropped);
+        wait_for_endpoint_closed(dropped_port);
+        assert!(endpoint_closed(dropped_port));
+    }
+
     #[test]
     fn serve_gguf_fails_closed_without_binary() {
         let e = entry();
-        let err = ModelsRuntime::serve_gguf(&e, None, 11435, 16384, None).unwrap_err();
+        let result: Result<ManagedServeHandle, ModelsError> =
+            ModelsRuntime::serve_gguf(&e, None, 11435, 16384, None);
+        let err = result.unwrap_err();
         assert!(matches!(err, ModelsError::NoRuntime(_)));
     }
 
@@ -457,14 +685,14 @@ mod tests {
     #[test]
     fn serve_gguf_fails_closed_on_missing_binary_file() {
         let e = entry();
-        let err = ModelsRuntime::serve_gguf(
+        let result: Result<ManagedServeHandle, ModelsError> = ModelsRuntime::serve_gguf(
             &e,
             Some(Path::new("/nonexistent/llamafile")),
             11435,
             16384,
             None,
-        )
-        .unwrap_err();
+        );
+        let err = result.unwrap_err();
         assert!(matches!(err, ModelsError::NoRuntime(_)));
     }
 
@@ -476,7 +704,9 @@ mod tests {
         std::fs::write(&bin, "#!/bin/sh\nexit 0\n").unwrap();
         let mut e = entry();
         e.path = "/nonexistent/phi.gguf".into();
-        let err = ModelsRuntime::serve_gguf(&e, Some(&bin), 11435, 16384, None).unwrap_err();
+        let result: Result<ManagedServeHandle, ModelsError> =
+            ModelsRuntime::serve_gguf(&e, Some(&bin), 11435, 16384, None);
+        let err = result.unwrap_err();
         assert!(matches!(err, ModelsError::Io(_)));
         let _ = std::fs::remove_dir_all(&tmp);
     }
@@ -556,6 +786,30 @@ mod tests {
         assert_eq!(args[ctx + 1], "8192"); // num_ctx override wins
         assert!(args.contains(&"--no-mmap".to_string()));
         assert!(!args.contains(&"--mlock".to_string()));
+    }
+
+    #[test]
+    fn managed_config_hash_changes_with_per_serve_options() {
+        let path = Path::new("/w/phi.gguf");
+        let base = managed_config_hash(
+            "phi-4",
+            &gguf_args_with_options(path, 11435, 16384, None, ServeOptions::default()),
+        );
+        let changed = managed_config_hash(
+            "phi-4",
+            &gguf_args_with_options(
+                path,
+                11435,
+                16384,
+                None,
+                ServeOptions {
+                    gpu_layers: Some(12),
+                    ..ServeOptions::default()
+                },
+            ),
+        );
+        assert_eq!(base.len(), 64);
+        assert_ne!(base, changed);
     }
 
     #[test]

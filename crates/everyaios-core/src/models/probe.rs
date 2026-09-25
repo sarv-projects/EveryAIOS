@@ -7,8 +7,10 @@
 //! - TTL cache so repeated discovery is cheap (default 10s).
 
 use std::collections::HashMap;
-use std::time::{Duration, Instant};
+use std::net::{SocketAddr, TcpStream};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
+use everyaios_types::{RuntimeHealthState, RuntimeInventoryEntry, RuntimeOwnership};
 use serde::Serialize;
 
 #[derive(Debug, Clone, Serialize, Default)]
@@ -190,9 +192,272 @@ pub fn discover_runtimes(
     out
 }
 
+#[derive(Debug, Clone)]
+struct RuntimeProbeCandidate {
+    probe_base: String,
+    endpoint: String,
+    socket: SocketAddr,
+}
+
+fn runtime_probe_candidate(probe_base: &str, endpoint: &str) -> Option<RuntimeProbeCandidate> {
+    let authority = probe_base.strip_prefix("http://")?;
+    Some(RuntimeProbeCandidate {
+        probe_base: probe_base.trim_end_matches('/').to_string(),
+        endpoint: endpoint.to_string(),
+        socket: authority.parse().ok()?,
+    })
+}
+
+fn well_known_runtime_candidates() -> Vec<RuntimeProbeCandidate> {
+    [
+        ("http://127.0.0.1:11434", "http://127.0.0.1:11434"),
+        ("http://127.0.0.1:1234", "http://127.0.0.1:1234/v1"),
+        ("http://127.0.0.1:1337", "http://127.0.0.1:1337/v1"),
+        ("http://127.0.0.1:8000", "http://127.0.0.1:8000/v1"),
+    ]
+    .into_iter()
+    .filter_map(|(probe_base, endpoint)| runtime_probe_candidate(probe_base, endpoint))
+    .collect()
+}
+
+fn parse_ollama_models(body: &str) -> Option<Vec<String>> {
+    let value: serde_json::Value = serde_json::from_str(body).ok()?;
+    let models = value.get("models")?.as_array()?;
+    Some(
+        models
+            .iter()
+            .filter_map(|model| {
+                model
+                    .get("name")
+                    .or_else(|| model.get("model"))
+                    .and_then(serde_json::Value::as_str)
+                    .map(str::to_string)
+            })
+            .collect(),
+    )
+}
+
+fn probe_ollama_models(probe_base: &str) -> Option<Vec<String>> {
+    let response = ureq::get(&format!("{probe_base}/api/tags"))
+        .timeout(Duration::from_secs(2))
+        .call()
+        .ok()?;
+    parse_ollama_models(&response.into_string().ok()?)
+}
+
+fn fetch_openai_models(probe_base: &str) -> Option<Vec<String>> {
+    let response = ureq::get(&format!("{probe_base}/v1/models"))
+        .timeout(Duration::from_secs(2))
+        .call()
+        .ok()?;
+    let value: serde_json::Value = serde_json::from_str(&response.into_string().ok()?).ok()?;
+    let models = value.get("data")?.as_array()?;
+    Some(
+        models
+            .iter()
+            .filter_map(|model| {
+                model
+                    .get("id")
+                    .or_else(|| model.get("name"))
+                    .and_then(serde_json::Value::as_str)
+                    .map(str::to_string)
+            })
+            .collect(),
+    )
+}
+
+fn inventory_entry(
+    discovered: DiscoveredRuntime,
+    candidate: &RuntimeProbeCandidate,
+    protocol: &str,
+    health: RuntimeHealthState,
+    models: Vec<String>,
+) -> RuntimeInventoryEntry {
+    RuntimeInventoryEntry {
+        id: format!("{}@{}", discovered.name, candidate.socket),
+        kind: discovered.name,
+        endpoint: candidate.endpoint.clone(),
+        version: None,
+        protocol: protocol.to_string(),
+        ownership: RuntimeOwnership::External,
+        health,
+        last_probe_ms: SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .ok()
+            .and_then(|duration| u64::try_from(duration.as_millis()).ok()),
+        models,
+        agent_compatibility: Vec::new(),
+    }
+}
+
+fn discover_runtime_inventory_from(
+    candidates: &[RuntimeProbeCandidate],
+) -> Vec<RuntimeInventoryEntry> {
+    let mut inventory = Vec::new();
+    for candidate in candidates {
+        if TcpStream::connect_timeout(&candidate.socket, Duration::from_millis(150)).is_err() {
+            continue;
+        }
+
+        if let Some(models) = probe_ollama_models(&candidate.probe_base) {
+            inventory.push(inventory_entry(
+                DiscoveredRuntime {
+                    name: "ollama".into(),
+                    pid: None,
+                    endpoint: Some(candidate.endpoint.clone()),
+                },
+                candidate,
+                "ollama",
+                RuntimeHealthState::Observed,
+                models,
+            ));
+            continue;
+        }
+
+        if probe_openai_endpoint(&candidate.probe_base) {
+            inventory.push(inventory_entry(
+                DiscoveredRuntime {
+                    name: "generic_openai_compatible".into(),
+                    pid: None,
+                    endpoint: Some(candidate.endpoint.clone()),
+                },
+                candidate,
+                "openai_compatible",
+                RuntimeHealthState::Observed,
+                fetch_openai_models(&candidate.probe_base).unwrap_or_default(),
+            ));
+            continue;
+        }
+
+        inventory.push(inventory_entry(
+            DiscoveredRuntime {
+                name: "generic_openai_compatible".into(),
+                pid: None,
+                endpoint: Some(candidate.endpoint.clone()),
+            },
+            candidate,
+            "unknown",
+            RuntimeHealthState::Unsupported,
+            Vec::new(),
+        ));
+    }
+    inventory
+}
+
+/// Discovers the canonical inventory of user-run loopback model runtimes.
+///
+/// Well-known ports are hints only. Runtime kind comes from a protocol
+/// handshake; otherwise the entry is `generic_openai_compatible`. Every entry
+/// remains externally owned, and successful discovery is only `Observed` until
+/// a deeper health probe completes. Model listings never create an
+/// agent-compatibility claim.
+pub fn discover_runtime_inventory() -> Vec<RuntimeInventoryEntry> {
+    discover_runtime_inventory_from(&well_known_runtime_candidates())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::{Read, Write};
+    use std::net::TcpListener;
+    use std::thread;
+
+    fn spawn_responder(routes: &[(&str, &str)]) -> SocketAddr {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let routes = routes
+            .iter()
+            .map(|(path, body)| ((*path).to_string(), (*body).to_string()))
+            .collect::<Vec<_>>();
+        thread::spawn(move || {
+            for stream in listener.incoming() {
+                let Ok(mut stream) = stream else { continue };
+                let mut request = [0_u8; 2048];
+                let read = stream.read(&mut request).unwrap_or(0);
+                let request = String::from_utf8_lossy(&request[..read]);
+                let path = request
+                    .lines()
+                    .next()
+                    .and_then(|line| line.split_whitespace().nth(1))
+                    .unwrap_or("/");
+                let (status, body) = routes
+                    .iter()
+                    .find(|(route, _)| *route == path)
+                    .map(|(_, body)| ("200 OK", body.as_str()))
+                    .unwrap_or(("404 Not Found", r#"{"error":"not found"}"#));
+                let response = format!(
+                    "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()
+                );
+                let _ = stream.write_all(response.as_bytes());
+            }
+        });
+        address
+    }
+
+    fn candidate_for(address: SocketAddr) -> RuntimeProbeCandidate {
+        runtime_probe_candidate(
+            &format!("http://{address}"),
+            &format!("http://{address}/v1"),
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn runtime_inventory_is_empty_when_no_candidate_is_reachable() {
+        assert!(discover_runtime_inventory_from(&[]).is_empty());
+    }
+
+    #[test]
+    fn ollama_handshake_identifies_runtime_without_claiming_agent_usability() {
+        let address = spawn_responder(&[(
+            "/api/tags",
+            r#"{"models":[{"name":"qwen3:4b"},{"model":"llama3.2:1b"}]}"#,
+        )]);
+        let inventory = discover_runtime_inventory_from(&[candidate_for(address)]);
+        assert_eq!(inventory.len(), 1);
+        let runtime = &inventory[0];
+        assert_eq!(runtime.kind, "ollama");
+        assert_eq!(runtime.protocol, "ollama");
+        assert_eq!(runtime.ownership, RuntimeOwnership::External);
+        assert_eq!(runtime.health, RuntimeHealthState::Observed);
+        assert_eq!(runtime.models, vec!["qwen3:4b", "llama3.2:1b"]);
+        assert!(runtime.agent_compatibility.is_empty());
+    }
+
+    #[test]
+    fn openai_models_handshake_falls_back_to_generic_runtime() {
+        let address = spawn_responder(&[("/v1/models", r#"{"data":[{"id":"fixture-model"}]}"#)]);
+        let inventory = discover_runtime_inventory_from(&[candidate_for(address)]);
+        assert_eq!(inventory.len(), 1);
+        let runtime = &inventory[0];
+        assert_eq!(runtime.kind, "generic_openai_compatible");
+        assert_eq!(runtime.protocol, "openai_compatible");
+        assert_eq!(runtime.ownership, RuntimeOwnership::External);
+        assert_eq!(runtime.health, RuntimeHealthState::Observed);
+        assert_eq!(runtime.models, vec!["fixture-model"]);
+        assert!(runtime.agent_compatibility.is_empty());
+    }
+
+    #[test]
+    fn open_port_without_protocol_handshake_stays_unsupported() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        thread::spawn(move || {
+            for stream in listener.incoming() {
+                drop(stream);
+            }
+        });
+        let inventory = discover_runtime_inventory_from(&[candidate_for(address)]);
+        assert_eq!(inventory.len(), 1);
+        let runtime = &inventory[0];
+        assert_eq!(runtime.kind, "generic_openai_compatible");
+        assert_eq!(runtime.protocol, "unknown");
+        assert_eq!(runtime.health, RuntimeHealthState::Unsupported);
+        assert_ne!(runtime.health, RuntimeHealthState::Healthy);
+        assert!(runtime.models.is_empty());
+        assert!(runtime.agent_compatibility.is_empty());
+    }
 
     #[test]
     fn probe_cache_honors_ttl() {
