@@ -4386,7 +4386,7 @@ population. `wiring:` is the §11 verdict.
 | `packages/core-security` | 5 | 556 | 24 | 28 | 10 | 23 | 0 |
 | `packages/core-tools` | 6 | 349 | 9 | 6 | 21 | 3 | 0 |
 | `ui` | 1 | 198 | 7 | 0 | 0 | 0 | 0 |
-| `ui/src` | 286 | 69,834 | 2048 | 3921 | 1273 | 540 | 169 |
+| `ui/src` | 286 | 70,122 | 2053 | 3928 | 1277 | 540 | 169 |
 
 ### 10.1 `ARCH/archive`
 
@@ -5809,10 +5809,10 @@ population. `wiring:` is the §11 verdict.
 - `fns` (1): respondMcq:129
 - `anon` (14): function/arrow expressions with no binding name
 
-#### `ui/src/components/chat/chat-composer.tsx` — 661 lines · 0 tests · REACHABLE · imported by 2
-- `exports` (2): re-export splitAtRefs, function ChatComposer
-- `fns` (10): HintPopover:53, HintRow:66, WorkModeChip:88, AutonomyChip:111, SimpleAutonomyDial:151, IconBtn:188, ChatComposer:223, pickFile:343, onFileChosen:345, send:384
-- `anon` (58): function/arrow expressions with no binding name
+#### `ui/src/components/chat/chat-composer.tsx` — 944 lines · 0 tests · REACHABLE · imported by 2
+- `exports` (6): re-export splitAtRefs, type SendGateCode, interface SendGate, interface SendGateInput, function composerSendState, function ChatComposer
+- `fns` (15): composerSendState:119, HintPopover:165, HintRow:178, WorkModeChip:200, AutonomyChip:223, SimpleAutonomyDial:263, IconBtn:300, StatusRow:341, ChatComposer:410, onWebStatus:485, pickFile:554, onFileChosen:556, withDirective:594, send:600, openSearchSettings:703
+- `anon` (65): function/arrow expressions with no binding name
 
 #### `ui/src/components/chat/chat-panel.tsx` — 1,229 lines · 0 tests · REACHABLE · imported by 1
 - `exports` (1): function ChatPanel
@@ -6508,7 +6508,7 @@ population. `wiring:` is the §11 verdict.
 - `fns` (8): agentRegistryList:26, agentRegistrySave:32, agentRegistryGet:43, agentRegistryRemove:49, agentRegistryDuplicate:55, agentRegistrySetDisabled:64, demoLoad:83, demoList:92
 - `anon` (6): function/arrow expressions with no binding name
 
-#### `ui/src/lib/agents.ts` — 623 lines · 0 tests · REACHABLE · imported by 24
+#### `ui/src/lib/agents.ts` — 623 lines · 0 tests · REACHABLE · imported by 23
 - `exports` (24): type AgentCapability, type AgentInstallStatus, interface AgentModel, type ModelProvider, interface AgentRuntime, const MODELS, const MODEL_MAP, function getModel, function formatContext, function formatPrice, const AGENTS, const AGENT_MAP, function getAgent, function getModelsForAgent, function isRuntimeUsable, function readinessToInstallStatus, function getModelsForAgentLive, function getDefaultModelForAgent, type TaskKind, const TASK_LABELS, const DEFAULT_ROUTING, const ROUTING_BOUND_AGENT, const CAPABILITY_LABELS, const PROVIDER_LABELS
 - `fns` (9): getModel:337, formatContext:341, formatPrice:346, getAgent:481, getModelsForAgent:485, isRuntimeUsable:506, readinessToInstallStatus:519, getModelsForAgentLive:550, getDefaultModelForAgent:554
 - `anon` (3): function/arrow expressions with no binding name
@@ -6938,9 +6938,9 @@ population. `wiring:` is the §11 verdict.
 - `fns` (12): storageHealth:65, storageScan:71, storageLargeFiles:77, storageDuplicates:87, storageCleanupProposals:97, storageBattery:112, bytes:117, demoHealth:133, demoScan:146, demoLargeFiles:161, demoDupGroups:169, demoCleanupProposals:176
 - `anon` (6): function/arrow expressions with no binding name
 
-#### `ui/src/lib/store.ts` — 3,160 lines · 0 tests · REACHABLE · imported by 106
+#### `ui/src/lib/store.ts` — 3,165 lines · 0 tests · REACHABLE · imported by 106
 - `exports` (43): type ViewId, type ChatMode, function normalizeChatMode, type SessionStatus, interface ToolCallRecord, interface SpooledOutput, interface ChatMessage, interface ChatError, interface ArtifactActionUi, interface ArtifactServerState, interface Artifact, interface ProgressStep, interface MCQInterrupt, interface TaskElevation, interface TaskSnapshot, interface VerificationRecord, interface StreamStats, interface Session, function sessionTranscriptMarkdown, function sanitizeSessionRows, function mergeHydratedSessions, interface Automation, interface SessionLayout, interface DiaryEntry, interface PendingPatch, interface Connector, interface MemoryItem, interface PermissionEntry, const mockSessions, const mockMemory, interface LiveBudget, interface QueuedTurn, type TurnDispatcher, interface LiveNotification, interface AgentSendBlocker, function streamElapsedMs, function resetStreamingTestState, type StatusBarPills, const readStatusBarPills, const SETTINGS_SECTION_IDS, type SettingsSectionId, function taskScopeHash, const useAppStore
-- `fns` (159): normalizeChatMode:57, sessionTranscriptMarkdown:316, sanitizeSessionRows:328, mergeHydratedSessions:348, iso:443, markFirstDelta:727, ttfbFor:732, freshId:742, streamSessionId:748, hasActiveStream:753, bindStreamId:759, retireStream:770, streamElapsedMs:778, resetStreamingTestState:788, patchActiveAssistant:802, patchStreamMessage:822, readStatusBarPills:846, writeStatusBarPills:857, readPowerMode:868, writePowerMode:879, readPermission:943, writePermission:953, taskScopeHash:965, streamTestReset:1436, setWorkProjection:1458, setCoworkMode:1460, markSessionsHydrated:1463, setActiveSession:1464, newSession:1480, openAutomationRun:1507, pushMonitor:1534, clearMonitorBadge:1548, deleteSession:1549, reopenClosedSession:1583, reopenClosedSessionId:1592, purgeClosedSession:1618, purgeAllClosed:1620, cycleSession:1621, renameSession:1630, toggleSessionPinned:1639, clearSessionMessages:1646, compactSessionMessages:1660, setSessionGoal:1683, markGoalAchieved:1692, rewindToUserMessage:1697, rewindBeforeAssistant:1715, forkSession:1738, setActiveView:1763, setBrowserAttached:1775, clearBrowserUrl:1776, setDesktopAttached:1779, setCuaVisionGate:1782, setProviderKeysConfigured:1784, openSetup:1786, closeSetup:1787, setAgentSendBlocker:1789, setSessionChiefPin:1796, clearSessionChiefPin:1804, setUserDefaultChief:1822, openInBrowser:1823, toggleRail:1834, setRailCollapsed:1838, setFullscreenView:1843, addView:1846, closeView:1856, switchOfficeDoc:1867, closeOfficeDoc:1872, openOfficeDoc:1883, reorderViews:1915, setScopedView:1929, setScopedDoc:1931, patchArtifactServer:1936, setArtifactActions:1937, openSpooledOutput:1939, setAiPointerOpen:1945, pushDiaryEntry:1948, clearDiary:1950, toggleSidebar:1953, togglePowerMode:1956, setPowerMode:1962, setDevMode:1968, setStatusBarPills:1971, setComposerMode:1977, setComposerValue:1979, setSelectedAgent:1985, setSelectedModel:2001, cycleModelVariant:2006, setPersonaId:2016, setSoulId:2018, setAgentName:2020, setReconnect:2025, noteStreamTick:2026, forkFromMessage:2051, setAutoRoute:2077, setRouting:2079, setCenterScreen:2083, setSettingsSection:2085, setPermissionMode:2087, syncAutonomyFromRust:2104, freezeTaskSnapshot:2117, clearTaskSnapshot:2137, respondAutonomyCard:2138, pushAutonomyLimit:2193, effectiveAutonomyLevel:2213, setComposerRole:2232, setTaskFolder:2234, setOfficeFlyoutOpen:2237, setPaletteOpen:2240, setCockpitOpen:2243, toggleAgentPause:2246, notify:2267, notifyMcpError:2268, setLiveAgents:2271, setLiveBudget:2273, pushLiveNotification:2279, markLiveNotificationsRead:2284, setLiveStreamId:2288, clearLiveStreamId:2290, pushUserMessage:2298, streamStart:2315, appendReasoning:2338, streamAppend:2365, streamFinalize:2411, streamFail:2453, streamBudgetKill:2505, streamCancelled:2548, streamCitations:2581, streamWalkthrough:2590, streamToolCall:2602, streamToolResult:2620, streamToolProgress:2652, retryToolCall:2662, streamStep:2704, pushMcq:2732, respondMcq:2772, clearMcq:2829, setAcpHandle:2846, getAcpHandle:2883, clearAcpHandles:2885, setAcpConfigOptions:2898, setPendingPlan:2904, setTurnDispatcher:2911, queueTurn:2914, editQueuedTurn:2935, removeQueuedTurn:2946, setQueuePaused:2957, promoteQueuedTurn:2960, dequeueNextTurn:2976, parkEditorWrite:3006, takeEditorWrite:3008, pushVerification:3020, setOnboardingDone:3032, saveSessionLayout:3046, restoreSessionLayout:3060, setSessionPaused:3090, setPendingPatches:3100, setNlAutomationDraft:3104, setSessionCapabilityOverride:3107, resetSessionCapabilities:3122
+- `fns` (159): normalizeChatMode:62, sessionTranscriptMarkdown:321, sanitizeSessionRows:333, mergeHydratedSessions:353, iso:448, markFirstDelta:732, ttfbFor:737, freshId:747, streamSessionId:753, hasActiveStream:758, bindStreamId:764, retireStream:775, streamElapsedMs:783, resetStreamingTestState:793, patchActiveAssistant:807, patchStreamMessage:827, readStatusBarPills:851, writeStatusBarPills:862, readPowerMode:873, writePowerMode:884, readPermission:948, writePermission:958, taskScopeHash:970, streamTestReset:1441, setWorkProjection:1463, setCoworkMode:1465, markSessionsHydrated:1468, setActiveSession:1469, newSession:1485, openAutomationRun:1512, pushMonitor:1539, clearMonitorBadge:1553, deleteSession:1554, reopenClosedSession:1588, reopenClosedSessionId:1597, purgeClosedSession:1623, purgeAllClosed:1625, cycleSession:1626, renameSession:1635, toggleSessionPinned:1644, clearSessionMessages:1651, compactSessionMessages:1665, setSessionGoal:1688, markGoalAchieved:1697, rewindToUserMessage:1702, rewindBeforeAssistant:1720, forkSession:1743, setActiveView:1768, setBrowserAttached:1780, clearBrowserUrl:1781, setDesktopAttached:1784, setCuaVisionGate:1787, setProviderKeysConfigured:1789, openSetup:1791, closeSetup:1792, setAgentSendBlocker:1794, setSessionChiefPin:1801, clearSessionChiefPin:1809, setUserDefaultChief:1827, openInBrowser:1828, toggleRail:1839, setRailCollapsed:1843, setFullscreenView:1848, addView:1851, closeView:1861, switchOfficeDoc:1872, closeOfficeDoc:1877, openOfficeDoc:1888, reorderViews:1920, setScopedView:1934, setScopedDoc:1936, patchArtifactServer:1941, setArtifactActions:1942, openSpooledOutput:1944, setAiPointerOpen:1950, pushDiaryEntry:1953, clearDiary:1955, toggleSidebar:1958, togglePowerMode:1961, setPowerMode:1967, setDevMode:1973, setStatusBarPills:1976, setComposerMode:1982, setComposerValue:1984, setSelectedAgent:1990, setSelectedModel:2006, cycleModelVariant:2011, setPersonaId:2021, setSoulId:2023, setAgentName:2025, setReconnect:2030, noteStreamTick:2031, forkFromMessage:2056, setAutoRoute:2082, setRouting:2084, setCenterScreen:2088, setSettingsSection:2090, setPermissionMode:2092, syncAutonomyFromRust:2109, freezeTaskSnapshot:2122, clearTaskSnapshot:2142, respondAutonomyCard:2143, pushAutonomyLimit:2198, effectiveAutonomyLevel:2218, setComposerRole:2237, setTaskFolder:2239, setOfficeFlyoutOpen:2242, setPaletteOpen:2245, setCockpitOpen:2248, toggleAgentPause:2251, notify:2272, notifyMcpError:2273, setLiveAgents:2276, setLiveBudget:2278, pushLiveNotification:2284, markLiveNotificationsRead:2289, setLiveStreamId:2293, clearLiveStreamId:2295, pushUserMessage:2303, streamStart:2320, appendReasoning:2343, streamAppend:2370, streamFinalize:2416, streamFail:2458, streamBudgetKill:2510, streamCancelled:2553, streamCitations:2586, streamWalkthrough:2595, streamToolCall:2607, streamToolResult:2625, streamToolProgress:2657, retryToolCall:2667, streamStep:2709, pushMcq:2737, respondMcq:2777, clearMcq:2834, setAcpHandle:2851, getAcpHandle:2888, clearAcpHandles:2890, setAcpConfigOptions:2903, setPendingPlan:2909, setTurnDispatcher:2916, queueTurn:2919, editQueuedTurn:2940, removeQueuedTurn:2951, setQueuePaused:2962, promoteQueuedTurn:2965, dequeueNextTurn:2981, parkEditorWrite:3011, takeEditorWrite:3013, pushVerification:3025, setOnboardingDone:3037, saveSessionLayout:3051, restoreSessionLayout:3065, setSessionPaused:3095, setPendingPatches:3105, setNlAutomationDraft:3109, setSessionCapabilityOverride:3112, resetSessionCapabilities:3127
 - `anon` (193): function/arrow expressions with no binding name
 
 #### `ui/src/lib/tasks-contract.test.ts` — 110 lines · 5 tests · TEST · imported by 0
@@ -8395,7 +8395,7 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 | .agents/skills/codebase-intelligence/references/ | 7 | 466 |
 | .agents/skills/skill-creator/ | 1 | 85 |
 | .agents/templates/ | 1 | 169 |
-| ARCH — the design set (+ DIAGRAMS & ADR) | 43 | 11,652 |
+| ARCH — the design set (+ DIAGRAMS & ADR) | 43 | 11,659 |
 | RESEARCH/2026-ai-landscape — other research | 11 | 970 |
 | RESEARCH/desktop_app — the prior-art & competitor corpus | 93 | 12,987 |
 | deploy/ — deployment docs | 1 | 105 |
@@ -8403,9 +8403,9 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 | docs/codebase/ | 10 | 977 |
 | docs/release/ | 4 | 208 |
 | docs/testing/ | 2 | 892 |
-| root — specs, handover, and this map | 17 | 14,537 |
+| root — specs, handover, and this map | 17 | 14,580 |
 | ui/ — UI design docs | 1 | 83 |
-| **TOTAL** | **203** | **44,433** |
+| **TOTAL** | **203** | **44,483** |
 
 ### 14.1 .agents/
 
@@ -8611,7 +8611,7 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 
 - opening: - **Status:** accepted - **Date:** 2026-09-21 - **Applies to:** [`SESSION.md`](ARCH/ADR/../SESSION.md) §2, §3, §6, §8 · [`WORK.md`](ARCH/ADR/../WORK.md) §7 · [`AUTOMATION.md`](ARCH/ADR/../AUTOMATION.md) §10 - **Related:** [`ADR
 
-#### `ARCH/ADR/0007-windows-first-v1-qualification.md` — 218 lines · 15.1 KB
+#### `ARCH/ADR/0007-windows-first-v1-qualification.md` — 224 lines · 16.1 KB
 > ADR-0007 — Windows-first v1 qualification scope expansion
 
 - opening: - **Status:** accepted - **Date:** 2026-09-24 - **Applies to:** [`CORE.md`](ARCH/ADR/../CORE.md) · [`AGENT.md`](ARCH/ADR/../AGENT.md) · [`EXTERNAL-AGENTS.md`](ARCH/ADR/../EXTERNAL-AGENTS.md) · [`AUTOMATION.md`](../AUTOMATION.md
@@ -8641,12 +8641,12 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 
 - opening: **Status:** Subsystem contract, derived from [`CORE.md`](ARCH/CORE.md) §8.
 
-#### `ARCH/CORE.md` — 733 lines · 46.8 KB
+#### `ARCH/CORE.md` — 734 lines · 46.9 KB
 > ARCH/CORE — The EveryAIOS Core Architecture (single architectural authority)
 
 - opening: **Status:** Architecture authority. This file is the **root** of the `ARCH/` set: every other architecture document derives from it and none may weaken it.
 
-#### `ARCH/DESKTOP.md` — 239 lines · 18.7 KB
+#### `ARCH/DESKTOP.md` — 239 lines · 18.8 KB
 > ARCH/DESKTOP — computer use: driving the real OS
 
 - opening: **Status:** Subsystem contract, derived from [`CORE.md`](ARCH/CORE.md).
@@ -9375,10 +9375,10 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 
 - opening: Read [`ARCH/CORE.md`](ARCH/CORE.md) — the root architecture authority — and [`AGENTS.md`](AGENTS.md), which is the durable contract for any agent or human working here.
 
-#### `CURRENT_RUN.md` — 2,798 lines · 322.3 KB
+#### `CURRENT_RUN.md` — 2,837 lines · 327.2 KB
 > CURRENT RUN STATE — Task Handover & Checkpoint
 
-- opening: - `7f6e775` (runtime retirement) CI was red.
+- opening: The background board may still show fix-9, fix-10, fix-11, fix-12 and des-4 as "running / status uncertain".
 
 #### `DESKTOP-APP-SPEC.md` — 1,609 lines · 345.7 KB
 > DESKTOP-APP-SPEC.md — Complete Product Specification
@@ -9410,7 +9410,7 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 
 - opening: This file records historical decisions, research transfers, implementation updates, and verification evidence for `DESKTOP-APP-SPEC.md`.
 
-#### `SUPPORT-MATRIX.md` — 110 lines · 10.0 KB
+#### `SUPPORT-MATRIX.md` — 112 lines · 10.5 KB
 > EveryAIOS v1 — support matrix
 
 - opening: **What this file is.** The published statement of which platforms v1 ships for, what is verified on each, and what is explicitly **not** in v1.
@@ -9425,7 +9425,7 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 
 - opening: Generated by `scripts/check-licences.mjs --write-notices` from the lockfiles.
 
-#### `TODO.md` — 2,897 lines · 940.3 KB
+#### `TODO.md` — 2,899 lines · 942.5 KB
 > EveryAIOS — Master Implementation TODO
 
 - opening: **Documentation ownership:** `DESKTOP-APP-SPEC.md` is the **product contract only** (behavior, schemas, UI layouts, invariants — not a build plan).
@@ -10053,7 +10053,7 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 | `.css` | 1 |
 | **TOTAL tracked** | **1528** |
 
-Lines counted across the 1520 tracked text files at generation time: **456,027** (this map excluded — self-referential).
+Lines counted across the 1520 tracked text files at generation time: **456,365** (this map excluded — self-referential).
 
 ### 15.5 Coverage audit — is any tracked file unaccounted for?
 
