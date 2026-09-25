@@ -719,6 +719,16 @@ export interface SubagentProfile {
   maxConcurrency: number
   workspace: 'shared' | 'isolated'
   budget: number
+  /** P63.12 — may occupy the primary slot (absent until the backend carries it). */
+  allowAsPrimary?: boolean
+  /** P63.12 — may be hired through delegate.spawn (absent until the backend carries it). */
+  enableAsSubagent?: boolean
+  /** coding, architecture, research, scraping, office. */
+  domains?: string[]
+  /** Dollar ceiling in cents. 0 means unset. */
+  maxCentsPerTurn?: number
+  /** Token ceiling. 0 means unset. */
+  maxTokensPerTurn?: number
 }
 
 /**

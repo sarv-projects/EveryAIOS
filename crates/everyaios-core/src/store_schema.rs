@@ -191,6 +191,24 @@ pub const STORES: &[StoreSpec] = &[
                rebuild by design.",
     },
     StoreSpec {
+        name: "execution_kernel_checkpoint",
+        path: "work/execution-kernel.checkpoint.json",
+        version: 1,
+        policy: StorePolicy::Derived,
+        note: "ExecutionKernel snapshot cache. `work/events.jsonl` is the authority; this file is \
+               accepted only after its identities and states validate against the replayed Work \
+               events, so a stale or unreadable checkpoint costs a rebuild, never data.",
+    },
+    StoreSpec {
+        name: "acpx_sessions",
+        path: "acpx-sessions.json",
+        version: 1,
+        policy: StorePolicy::Manifest,
+        note: "P51.19 — named acpx driver sessions (cwd, queue, last outcome) so a later `acpx \
+               flow`/`doctor` invocation resumes the same named session. Hand-authored state: an \
+               upgrade must preserve the session names the user relies on.",
+    },
+    StoreSpec {
         name: "update_channel",
         path: "update_channel.json",
         version: 1,

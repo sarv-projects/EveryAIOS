@@ -101,6 +101,8 @@ losing one costs a rebuild, and stamping them would misstate what an upgrade has
 | `cua_replan_log` | `replan_log.jsonl` | v1 | manifest | replan history, as user-openable diagnostic evidence |
 | `plan_cache` | `plans.db` | v1 | derived | nothing — a miss rebuilds the plan |
 | `repo_cache` | `repo_cache.db` | v1 | derived | nothing — a stale index falls back to a full rebuild |
+| `execution_kernel_checkpoint` | `work/execution-kernel.checkpoint.json` | v1 | derived | nothing — accepted only after validating against the replayed Work events, else rebuilt |
+| `acpx_sessions` | `acpx-sessions.json` | v1 | manifest | the named acpx driver sessions the user resumes by name (P51.19) |
 | `update_channel` | `update_channel.json` | v1 | manifest | the user reverts to the stable channel — never a broken state (P70.C2) |
 
 A store that already holds data but has no recorded version is **adopted** at the current version and marked
