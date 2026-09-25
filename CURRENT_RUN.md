@@ -1,5 +1,50 @@
 # CURRENT RUN STATE — Task Handover & Checkpoint
 
+## Local-Runtime Handoff Plane Handover — 2026-09-25 (in progress)
+
+### Active Goal
+- Conform local-model handling to ADR-0005: **EveryAIOS owns the environment; the external agent owns the engine.** EveryAIOS may observe/connect to local inference runtimes and provision+start one as a Managed resource; it is never the inference engine, never a model router, never a second AgentBinding, and never shows a model list as if it were the agent's. macOS/MLX deferred (v1 = Windows + WSL2).
+- User directive: research the architecture docs first, implement all of it including the UI, update every required `.md`.
+
+### Where We Stopped
+Committed and pushed:
+- `9e28b86` — TODO P52.1–P52.7 rewritten to the review disposition, P52-R1–R10 opened, P52.8–P52.24 marked UX-not-infrastructure, P69.G-trace `ManagedResource` note, census **1676 = 1304 done + 372 open**, SPEC-CHANGELOG v4.06 block. doc-sync PASS.
+- `7f6e775` — **Rust retirement + canonical contracts.** Deleted `everyaios-vault/src/local.rs` + `local_tests.rs`; removed `Broker::with_local`/`is_local`/`local_endpoint`/local completion+stream helpers and the `local` module re-exports; removed `LocalManager::endpoint_for/endpoints`. Added `ManagedServeHandle` (retains `Child`, RAII stop, `phase()`, `health()`, `stop()`, config_hash over model identity + launch args). Added `discover_runtime_inventory()` (ports as hints; Ollama by `/api/tags`, generic by `/v1/models`, open-but-silent = `Unsupported`; all External + Observed-until-probed; no agent-usability claims). Added to `everyaios-types`: `RuntimeControl`, `RuntimeOwnership`, `RuntimeHealthState`, `ModelControlTier`, `AgentRuntimeCompatibility`, `RuntimeInventoryEntry`. Tests: vault 146+2, types 26, core `models::` 44 — pass; fmt clean.
+- `5dbba9a` — ARCH 03/05/09/11 stale-provider rows corrected. doc-sync PASS.
+
+Uncommitted (lanes still running — do not stage):
+- fix-10 `ses_f272a1352ffeWiIVScONtXtQ9v` — NEW `ARCH/16-LOCAL-RUNTIME-INTEROP.md` (**has two broken links `ADR/ADR/0005…` and `ADR/ADR/0007…` — doubled path segment; fix before commit**), ARCH/00-INDEX, ROUTING, AGENT, CAPABILITIES, SECURITY, DESKTOP, spec A5 broker-provider sentence + §4 product subsection + §4.1 row.
+- fix-12 `ses_f2724f20affec2Vc6QaTNV5Umn` — its `DESKTOP-APP-SPEC.md` edits (A1, provider-activate, A8, LLM-calls, BYOK bullet, pi-style, vault module table `local` = RETIRED, R2 footprint, `local://` KV acceptance) validated but held because fix-10 owns the same file. Left stale for a follow-up: spec 134/173/183/192/267/498/924/1507 (**173 "keyless locals" relay registration and 924 Ollama provider-call diagram are the consequential ones**); matrix A8/A11/B5; 11-AI-CHAT C-3, R-8.
+- des-4 `ses_f272b24c3ffebueLa6tv7K7a2p` — UI: deletes `model-routing.ts` + test, retires `localRuntime` provider state (store/chat-composer/capability-matrix), Runtimes/Library/Explore/Hardware panel, agent handoff replaces "Use", DOM tests. `ui/src/lib/local-models.ts` has a blank line at EOF (why tree-wide `git diff --check` is non-zero).
+- fix-13 `ses_f271bc85cffeZJ0izuJQYVmg32` — Tauri: retain `ManagedServeHandle` in an `AppState` registry (fix-9 found `model_cmds.rs:502` drops the handle, which under RAII now kills the child), `model_serve_stop`/`model_serve_list`, `runtime_inventory_list`/`runtime_models`/`runtime_start`/`runtime_stop` via the existing Guard path, discovery honesty fix, ACP `config_options`/`set_session_config_option` returning `requested`.
+
+### Next Exact Steps
+1. Reconcile des-4, fix-10, fix-12, fix-13; fix the doubled `ADR/ADR/` links; re-run `check-doc-refs.mjs`.
+2. Full verification: cargo check+test for vault/types/core; `cd src-tauri && cargo check && cargo test --lib`; `cd ui && tsc --noEmit` + `bun test src/lib` + the new DOM test; `node scripts/{check-doc-sync,check-doc-refs,check-arch-invariants,ipc-parity}.mjs` + `gen-codebase-map --check`.
+3. Commit remaining lanes ARCH-contract-first, regenerate CODEBASE-MAP, push.
+4. Follow-up lane for the residual stale surfaces (spec 173/924 especially).
+5. P52-R beyond the Tauri surface is not started: the non-technical "Set up a local runtime" flow and the advisory FitResult surface.
+
+### Decisions & Gotchas
+- Review verdict: **conditional NO-GO on the full ecosystem, GO on resource-management + handoff.** Boundary sentence: "EveryAIOS owns the environment; the external agent owns the engine."
+- `Observed ≠ Healthy`: a runtime listing a model is never proof an agent can use it and never a green "ready" badge.
+- An override request stays `requested` until the agent confirms — never "applied".
+- macOS/MLX deferred everywhere (P52.7, P8.8, P9.1, P10.4/10.5, R2 footprint).
+- `everyaios_catalog::discovery::ManagedResource` (projection enum) vs `everyaios_core::resources::ManagedResource<R>` (process lifecycle) are different types — keep them distinct in JSON.
+- 49 falsely-checked TODO rows were reopened in `dd4f035`; done = 1304 by design, not regression.
+
+---
+
+## Router scorer fallback fix — 2026-09-25
+
+- **Active Goal:** Fix the P51.3 keyless-runtime use-policy fallback test without weakening its assertion.
+- **Where We Stopped:** `packages/coordinator/src/router.ts:203-212` now applies both the credential gate and the use-policy gate when selecting a no-candidate fallback provider. `scorer.ts` and `router-scorer.test.ts` were not changed.
+- **Next Exact Steps:** Orchestrator should review the focused diff and retain or stage the change as appropriate; no commit was made in this subtask.
+- **Decisions & Gotchas:** The failure was in fallback provider selection, not scoring: Ollama has no catalog/local model in the isolated test, so the old credential-only fallback returned the hard-coded default `nvidia` even though Ollama passed the use-policy/keyless gate.
+- **Validation:** `cd packages/coordinator && bun test src/router-scorer.test.ts` — 10 passed, 0 failed.
+
+---
+
 ## P64.4-6 Handover — 2026-09-25 (implemented, test-blocked)
 
 - fix-2 done: P64.4 spec-only spawn context + worktree provision (chat.rs), P64.5 ladder rung in audit payload (tools.rs), P64.6 risk derivation + shadow preflight (tools.rs/execution.rs). Scope clean: 3 files, +594/-32, no UI/session writes.
