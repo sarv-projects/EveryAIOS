@@ -1147,6 +1147,17 @@ Detected profiles (never a hardcoded two-shell list): PowerShell · cmd · Git B
 
 ## 28. External Agent Shared Cowork MCP Channel B Binding & Large Payload Spooling
 
+> **Step 5 is specified — not implemented (renderer card only). Corrected 2026-09-25 against source.** The
+> `Spool` participant below has no counterpart in the tree: no `~/.everyaios/spool/`, no
+> `TOOL_OUTPUT_SERIALIZE_CAP`, no `retrieve_original`, no `tool_output_ref`, and no `SpooledHandle`. There
+> is no spool writer behind `everyaios-mcp` — the MCP `tools/call` response carries the full text. The only
+> real thing is the chat renderer card (`ui/src/components/chat/tool-chip.tsx:219`, `SPOOL_TOKEN_BUDGET`,
+> `SpooledBlobCard`) plus the right rail's `tool-output` view, which decides to *draw* a spooled card over
+> the **in-memory** payload and writes no blob. Steps 1–4 are live (the loopback server, the ACP
+> `mcpServers` handshake, `tools/list` over HTTP JSON-RPC serving `SHARED_FACADES`, and the Guard ticket
+> before `execute_native`). Owning TODO rows: `P64.11`, `P69.G5`. The diagram is kept as the target
+> contract; Step 5 is marked so no reader takes it as delivered.
+
 ```mermaid
 sequenceDiagram
     autonumber
@@ -1155,7 +1166,7 @@ sequenceDiagram
     participant ExtAgent as External ACP Agent (Child Process)
     participant Guard as Guard-1/2 Engine (everyaios-guard)
     participant Exec as Work-Native Core (Office / Browser / CUA)
-    participant Spool as Large Payload Spool (~/.everyaios/spool/)
+    participant Spool as Large Payload Spool (~/.everyaios/spool/) — SPECIFIED, NOT IMPLEMENTED
 
     Note over Host,McpSrv: Step 1: Bind Host Loopback MCP Server
     Host->>McpSrv: McpServer::bind_loopback("127.0.0.1:0")
@@ -1178,7 +1189,7 @@ sequenceDiagram
     Exec->>Exec: IronCalc 0.8.3 DAG recalc + OOXML surgical XML patch
     Exec-->>McpSrv: ExecutionResult (Large XML/Table Diff: 8,400 tokens)
 
-    Note over McpSrv,Spool: Step 5: Payload Spooling (CCR / MEM-15 Rule)
+    Note over McpSrv,Spool: Step 5: Payload Spooling (CCR / MEM-15 Rule) — SPECIFIED, NOT IMPLEMENTED
     McpSrv->>Spool: Spool if >2,000 tokens -> write ~/.everyaios/spool/{sha256}.blob
     Spool-->>McpSrv: SpooledHandle { hash: "a3f8...", preview: "Modified sheet.xlsx: B4=1200 (+12 dependent cells recalculated)" }
 
@@ -1187,21 +1198,34 @@ sequenceDiagram
 
 ---
 
-## 29. Guard-1 AST Tool Deflection & Recovery Nudge Loop
+## 29. Guard-1 Tool Deflection & Recovery Nudge Loop
+
+> **Corrected 2026-09-25 against source — the diagram below is a specification, not a trace.** The real
+> classifier is `everyaios-guard::deflection::deflect_shell_bias`
+> (`crates/everyaios-guard/src/deflection.rs:50`): a **lowercased substring scan over hardcoded needles**
+> (`openpyxl`, `python-docx`, `libreoffice --headless`, `puppeteer`, `playwright`, `pyautogui`, `xdotool`, …).
+> `everyaios-guard` has **no `tree-sitter` dependency**, so "AST Classifier" and "Tree-Sitter AST
+> inspection" are **specified — not implemented**. The returned value is
+> `DeflectionNudge { target, matched, message }` — a single `deflection_nudge: …` message naming the façade
+> family, with no `suggested_tool`/`suggested_args`/`DEFLECT_RECOVER` shape and no schema attachment. The
+> loop is also **unwired**: the only non-test reference is the uncalled re-export
+> `shell_bias_nudge` (`crates/everyaios-guard/src/toctou.rs:234`), so no `Recovery` hop, no nudge, and no
+> agent pivot happens today. Owning TODO row: `P69.G2`; the prose contract is
+> [`RECOVERY.md`](RECOVERY.md) §13.
 
 ```mermaid
 sequenceDiagram
     autonumber
     participant Model as External Coding Model (Claude Code / Codex / OpenCode)
-    participant Guard as Guard-1 Security & AST Classifier (everyaios-guard)
-    participant Recovery as Recovery Engine (ARCH/RECOVERY.md §13)
+    participant Guard as Guard-1 Security & Substring Classifier (everyaios-guard) — no AST pass
+    participant Recovery as Recovery Engine (ARCH/RECOVERY.md §13) — SPECIFIED, NOT WIRED
     participant MCP as Shared Plane MCP Facade (Channel B)
 
     Note over Model: Coding Model exhibits Shell-Bias
     Model->>Guard: Proposes native tool: bash.run("python -c 'import openpyxl; wb = openpyxl.load_workbook(...)")
     
-    Note over Guard: AST & Heuristic Inspection (SEC-4)
-    Guard->>Guard: Tree-Sitter AST inspection detects forbidden python-docx / openpyxl / playwright
+    Note over Guard: Substring Inspection (SEC-4) — specified as AST
+    Guard->>Guard: lowercased substring match on hardcoded needles detects forbidden python-docx / openpyxl / playwright
     Guard-->>Recovery: Trigger Deflection (Reason: "Avoid shell dependency hell; use native shared facade")
     
     Recovery-->>Model: Tool Error with Deflection Nudge:<br/>"DEFLECT_RECOVER: Do not run python scripts to edit Excel files.<br/>Invoke the everyaios office.xlsx_edit tool via MCP instead.<br/>Schema: { path: string, cell: string, value: any }"

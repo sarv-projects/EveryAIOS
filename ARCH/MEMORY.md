@@ -248,5 +248,5 @@ External agents interact with the durable memory layer through two complementary
 2. **On-Demand Tool Retrieval via Channel B MCP (`memory.*`):**
    - External agents discover `memory.recall`, `memory.remember`, and `memory.forget` over the loopback MCP server.
    - If an agent requires deep historical knowledge, it calls `memory.recall(query: "...")`.
-   - Results exceeding 2,000 tokens are spooled to `~/.everyaios/spool/{sha256}.blob` with a disk handle returned (`CCR` rule), preserving the external agent's active context window.
+   - **Specified — not implemented (renderer card only).** Corrected 2026-09-25 against source: no result is spooled to `~/.everyaios/spool/{sha256}.blob` and no disk handle is returned — there is no spool writer, no `retrieve_original`, and no `tool_output_ref` in the tree. The only real thing is the chat renderer card (`ui/src/components/chat/tool-chip.tsx:219`, `SPOOL_TOKEN_BUDGET`) + `SpooledBlobCard`, which draws a "spooled" card and opens the right rail's `tool-output` view over the **in-memory** payload; it writes nothing to disk. The `CCR` rule stays the specification. Owning TODO rows: `P64.11` (the >2,000-token disk spool) and `P69.G1` (this row's Channel B `memory.*` spool).
 

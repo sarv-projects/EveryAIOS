@@ -197,6 +197,17 @@ Windows evidence release-blocking; it does not change desktop ownership or creat
 
 ## 9. Windows 4-Tier Click Ladder & Fallback Hierarchy (Open-Codex Pattern)
 
+> **Specified — not implemented as a ladder. Corrected 2026-09-25 against source.** `everyaios-desktop`
+> declares exactly **two** action primitives in `Capabilities` (`crates/everyaios-desktop/src/types.rs:345-352`:
+> `invoke_set_value` and `send_input`); there is no ladder type, no tier state, and no Tier-3/Tier-4 symbols
+> anywhere in the crate. What *does* exist is a platform-specific sequence, not this contract:
+> `platform/win.rs:228-235` tries UIA `InvokePattern` first, `invoke_at` (`:252-321`) falls back to a
+> `PostMessageW` `WM_LBUTTONDOWN`/`WM_LBUTTONUP` message click, and the raw pointer path is `send_click`
+> (`:208-215`, `SetCursorPos` + `mouse_event`). **Tier 3 (Direct Composition injection) does not exist and
+> Tier 4 has no Guard-2 approval card** — the foreground escalation is a policy fact
+> (`InteractionMode::Background` is the default, `policy.rs`), not a gated ladder rung. Owning TODO row:
+> `P69.G4`. The table below is the target contract, not a description of the tree.
+
 To operate with maximum speed and minimum disruption to the human user, desktop input dispatches through an escalating 4-tier ladder:
 
 | Tier | Mechanism | Cursor Theft? | Focus Required? | Escalation Gate |
@@ -210,6 +221,16 @@ To operate with maximum speed and minimum disruption to the human user, desktop 
 
 ## 10. Patch-Aligned Coordinate Quantization & VLM Formatting (UI-TARS Pattern)
 
+> **Specified — not implemented. Corrected 2026-09-25 against source.** `IMAGE_FACTOR` does not exist
+> anywhere in the tree; no quantization is applied to screenshot dimensions or bounding boxes, and DPI
+> normalization is a **hardcoded `1.0`** (`platform/win.rs:203,385,406`; `types.rs:59` `scale` /
+> `types.rs:189` `dpi_scale` are fields, not a normalization step), so the `scaleFactor` line below is a
+> requirement, not a fact. The `<= 1280px` / `<= 900KB` screenshot clamps do not exist either — the only
+> implemented output clamp is `P64_MAX_OUTPUT_BYTES = 50 * 1024` on the execution-kernel tool/preflight
+> preview path (`crates/everyaios-core/src/execution.rs:2138`), which is a different surface with a
+> different limit. Owning TODO row: `P69.G4`. The specification is kept; none of it may be described as
+> delivered.
+
 When falling back to vision-based VLM grounding:
 - **Patch Alignment (`IMAGE_FACTOR = 28`):** Screenshot dimensions and bounding boxes are quantized to multiples of 28 pixels, matching visual encoder patch tokens (UI-TARS / Qwen2-VL) to prevent visual aliasing and sub-pixel coordinate misalignments.
 - **Scale Factor Normalization:** High-DPI Windows displays (`scaleFactor = 1.25, 1.5, 2.0`) are normalized to physical pixel coordinates before `SendInput` execution.
@@ -221,17 +242,22 @@ When falling back to vision-based VLM grounding:
 
 External agents (running via ACP in child processes) discover and invoke desktop capabilities via the host-bound Channel B MCP server (`http://127.0.0.1:<port>/mcp`):
 
-1. **Discovery:** The agent calls `tools/list` on Channel B and receives `computer_use.snapshot`, `computer_use.interact`, `computer_use.launch_app`.
-2. **Observation (`computer_use.snapshot`):**
+1. **Discovery:** The agent calls `tools/list` on Channel B and receives `computer_use.see` and `computer_use.act` — the canonical ids in `SHARED_FACADES` (`crates/everyaios-mcp/src/lib.rs:814,823`). (There is no `computer_use.snapshot`, `.interact`, or `.launch_app`; `see` fans out to `windows`+`tabs`, `act` to `act`+`wait` and is `destructive`/`high` risk.)
+2. **Observation (`computer_use.see`):**
    - Captures active window hierarchy and accessibility tree via UI Automation / AT-SPI.
    - Elements are indexed with deterministic ref IDs (`e1`, `e2`, `e3`).
-   - If payload exceeds 2,000 tokens or 900 KB, the raw tree / screenshot is spooled to `~/.everyaios/spool/{sha256}.blob`, returning a compact text preview and disk handle.
-3. **Execution (`computer_use.interact`):**
+   - **Specified — not implemented:** the >2,000-token / >900 KB spool to `~/.everyaios/spool/{sha256}.blob`
+     with a disk handle does not exist — no spool writer, no `retrieve_original`, no `tool_output_ref` in
+     the tree. The only real thing is the renderer-side `SPOOL_TOKEN_BUDGET` card in
+     `ui/src/components/chat/tool-chip.tsx:219`, which draws a card and opens the rail's `tool-output` view
+     over the in-memory payload and writes nothing. Owning TODO rows: `P64.11`, `P69.G4`.
+3. **Execution (`computer_use.act`):**
    - The agent supplies `ref: "e2"` and `action: "click" | "set_value"`.
-   - Dispatch flows through the 4-tier click ladder (§9).
-   - **Mandatory Invalidation Rule:** Execution immediately invalidates all prior element refs, forcing the agent to re-observe before issuing subsequent acts.
+   - Dispatch flows through the 4-tier click ladder (§9) — **specified — not implemented**; today it is the
+     `invoke_set_value` → `send_input` two-primitive path in `everyaios-desktop`.
+   - **Mandatory Invalidation Rule:** Execution immediately invalidates all prior element refs, forcing the agent to re-observe before issuing subsequent acts. This is a **contract** of §3, not a delivered mechanism.
 4. **Guard-1/2 Interception:**
-   - Attempts by external agents to run raw OS automation scripts (e.g. `pyautogui`, `xdotool`, `powershell SendKeys`) in bash/python are intercepted by Guard-1 AST inspection and deflected to `computer_use.interact` (`ARCH/RECOVERY.md` §13).
+   - Attempts by external agents to run raw OS automation scripts (e.g. `pyautogui`, `xdotool`, `powershell SendKeys`) in bash/python are classified by `everyaios-guard::deflection::deflect_shell_bias` — a **lowercased substring scan over hardcoded needles**, not AST inspection — and nudged to the `computer_use.*` façade ([`RECOVERY.md`](RECOVERY.md) §13). **Specified — not implemented:** the nudge is **unwired** — `DeflectionNudge` has one non-test reference, an uncalled re-export (`crates/everyaios-guard/src/toctou.rs:234`), and no call site reaches a denial or a card. Owning TODO row: `P69.G2`.
    - Sensitive window targets (credential vaults, system settings, payment gateways) trigger Guard-2 interactive approval cards.
 
 Computer use and inference are both agent-owned at runtime; a local runtime is not a computer-use path and cannot drive Office.

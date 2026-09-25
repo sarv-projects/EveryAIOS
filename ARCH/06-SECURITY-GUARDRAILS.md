@@ -20,14 +20,22 @@
 `everyaios-guard` is the sole authorization authority ([`SECURITY.md`](SECURITY.md) §4; I12). Every layer below either proposes to Guard, enforces Guard's decision, or records it — no layer decides permissions for itself.
 
 ```
-LLM output ──► [1] Trust Ladder policy (sidecar, proposes — a policy INPUT, never an authority)
-             ──► [2] Grammar extractor (sidecar, structure)
+LLM output ──► [1] Trust Ladder policy (sidecar — ARCHIVED with the engine, P71.2c; survives as §6.2's
+                              policy input, never an authority)
+             ──► [2] Grammar extractor (sidecar — ARCHIVED with the engine, P71.2c; extraction belongs to
+                              the bound agent in v1)
              ──► [3] Deterministic regex interceptor (Rust everyaios-guard)
              ──► [4] Path/scope floors (Rust everyaios-guard)
              ──► [5] Human diff-card (Rust — escalated ops only, real click)
              ──► [6] Sandbox execution (mechanism: enforces isolation, decides nothing)
              ──► [7] Append-only audit (Rust everyaios-audit)
 ```
+
+> **Layers [1] and [2] are archived, not live.** Both were `packages/core-engine` components removed by
+> `P71.2c` (moved to `ARCH/archive/core-engine/`); they have no code in the v1 tree. The ladder itself
+> survives only as the **policy input** §6.2 describes, and v1 makes no model call of its own, so nothing
+> in the sidecar extracts structure from model output. The live path is [3]–[7]. Annotated 2026-09-25
+> against source.
 
 **Authorization provenance — the three values on every mutation audit row** (CORE §5.1; the obsolete
 "every mutation is ticketed" phrasing must not be used):
@@ -170,6 +178,16 @@ sequenceDiagram
 
 ## 6.12 Profile-Gated Hooks (ECC Pattern, doc 46)
 
+> **Partly specified — not implemented. Corrected 2026-09-25 against source.** What **is** implemented is
+> `everyaios-guard::profiles`: `Profile::{Minimal, Standard, Strict}` with
+> `human_approval_threshold` / `enforce_path_floor` / `scan_tool_output` / `require_red_team_gate` /
+> `ask_on_new_domain` and a deterministic `gate(profile, hook) -> {Allow, Ask, Block}`
+> (`crates/everyaios-guard/src/profiles.rs:11,67`; the `09-FEATURE-MATRIX.md` J18 row). What does **not**
+> exist: the `[guard] hook_profile` / `disabled_hooks` keys — no TOML file in the repo carries a `[guard]`
+> table, so there is no configuration surface and no per-hook opt-out. The 5-event lifecycle names below
+> are I6 **executor hooks** (`everyaios-core::hooks`, a separate row) and are not the profile-gated
+> security gates of this section. Owning TODO row: `P69.G7` (the `everyaios.toml` control-plane surface).
+
 > Source: affaan-m/ECC (238K⭐, MIT) — hook enforcement profiles.
 
 Instead of all-or-nothing security hooks, enforcement is gated by **profile level**:
@@ -265,6 +283,15 @@ External agent CLIs bring their **own auth** — OAuth tokens from the user's te
 
 ## 6.17 Control-Plane Rate Limiting (SEC-2 / OpenClaw Pattern)
 
+> **Specified — not implemented. Corrected 2026-09-25 against source.** There is no rate limiting on
+> `src-tauri`'s `nativeCall` entry points and no `RateLimitExceeded` error anywhere in the tree (zero
+> hits; the UI's `rate_limited` code is a provider-error mapping, not this gate). There is also no
+> authentication/ticket-failure lockout and no per-workspace-session bucket. The one real rate limiter in
+> the repository is `everyaios-desktop::policy::RateLimiter` — a 60-second sliding window over **desktop
+> CUA actions** (`crates/everyaios-desktop/src/policy.rs:504-537`), which returns a retry-after `Duration`
+> rather than a `RateLimitExceeded` refusal and is not on the IPC control plane. Owning TODO row:
+> `P69.G7`.
+
 To defeat automated denial-of-service, ticket-exhaustion loops, and brute-force bypass attempts against native commands, `src-tauri` enforces sliding-window rate limiting on all `nativeCall` IPC entry points:
 - **Authentication & Ticket Gate:** 5 consecutive ticket validation failures or malformed permission requests trigger an immediate 60-second exponential lockout.
 - **Write Operations:** Mutating commands (file write, terminal spawn, connector dispatch) are bucketed with a sliding-window token bucket capped at 60 operations per minute per workspace session.
@@ -290,6 +317,14 @@ Every operation requested by an agent or capability pack is evaluated across two
 
 ## 6.21 Pre-Persistence Secret Scrubbing & Transcript Redaction (Atlas-Checkpoint Pattern)
 
+> **Specified — not implemented. Corrected 2026-09-25 against source.** There is **no** pre-persistence
+> redaction pass: no Aho-Corasick scanner, no Regex credential scanner, and no `[REDACTED_SECRET:<hash:8>]`
+> substitution anywhere in the tree (the token appears in this document only). Messages, tool output, and
+> session snapshots are persisted without a scrub stage. The related fact that *is* implemented is
+> **masking, not redaction** — `everyaios-vault` keeps keys out of reads/UI/logs, and
+> `everyaios-audit` stores `args` hashed + bounded — but neither replaces a pre-persistence scrub, and
+> neither may be cited as one. Owning TODO row: `P69.G7`.
+
 Before any message, tool output, or memory snapshot is persisted to disk (SQLite `ui_sessions.db`, NDJSON audit logs, or checkpoint blobs):
 - **Streaming Redaction Engine:** High-performance Aho-Corasick and Regex scanners redact known credential formats:
   - AWS Access Keys (`AKIA[0-9A-Z]{16}`)
@@ -309,13 +344,35 @@ When spawning subprocesses for MCP stdio servers, ACP harnesses, or scripting sa
 
 ## 6.23 Credential Manager Hard Denylist (Open-Codex-Computer-Use Pattern)
 
+> **Partly specified — not implemented. Corrected 2026-09-25 against source.** A hard app denylist
+> **does** exist — `HARD_DENY_APP` + `EVERYAIOS_APP_NAMES` + `HARD_DENY_KEY`, checked by
+> `AppPolicy::hard_deny` (`crates/everyaios-desktop/src/policy.rs:106-133,405-431`) — and the `E-STOP`
+> action below is real (`engine.emergency_stop()`, `src-tauri/src/desktop_cmds.rs:608-614`, plus the
+> GuardService estop stage). But the **names are wrong here**: the real list is
+> `terminal · windows terminal · command prompt · powershell · run · uac · user account control ·
+> password manager · keepass · bitwarden · 1password · lastpass · lock screen · sign in · login`, matched by
+> substring on the app name. `consent.exe`, `CredentialUIBroker.exe`, macOS `SecurityAgent`, and Linux
+> `polkit` are **specified — not implemented** — they have zero hits in the tree, and the password managers
+> are matched as bare names, not `.exe` filenames. "Guard approval cards and Vault settings screens" are
+> covered only by the coarse `everyaios` / `everyaios desktop` self-puppetry rule, not by a per-surface
+> entry. Owning TODO row: `P69.G7`.
+
 Computer Use Agents (CUA) driving native OS desktop interactions are bounded by an inviolable process and window class hard denylist:
-- **Blocked Password Managers:** Bitwarden (`bitwarden.exe`), 1Password (`1Password.exe`), KeePass (`KeePass.exe`), LastPass.
-- **Blocked System Auth Dialogs:** Windows User Account Control (UAC consent dialogs, `consent.exe`), Windows Security Credential Prompt (`CredentialUIBroker.exe`), macOS SecurityAgent Keychain dialogs, Linux polkit agents.
-- **Blocked App Surfaces:** EveryAIOS Guard approval cards and Vault settings screens.
+- **Blocked Password Managers:** Bitwarden (`bitwarden.exe`), 1Password (`1Password.exe`), KeePass (`KeePass.exe`), LastPass. — *real, as substring names `bitwarden` / `1password` / `keepass` / `lastpass`.*
+- **Blocked System Auth Dialogs:** Windows User Account Control (UAC consent dialogs, `consent.exe`), Windows Security Credential Prompt (`CredentialUIBroker.exe`), macOS SecurityAgent Keychain dialogs, Linux polkit agents. — *only `uac` and `user account control` are real; `consent.exe`, `CredentialUIBroker.exe`, `SecurityAgent`, and `polkit` are **specified — not implemented**.*
+- **Blocked App Surfaces:** EveryAIOS Guard approval cards and Vault settings screens. — *covered only by the coarse `everyaios` / `everyaios desktop` no-self-puppetry rule, not per surface.*
 - **Action:** Any attempt by CUA vision or tree walkers to target, capture, or inject keystrokes into a denylisted window immediately triggers an emergency stop (`E-STOP`), invalidates the run lease, and records a security incident receipt.
 
 ## 6.24 Single-Use Parameter-Bound Nonces with TTL (Vibe-Kanban Pattern)
+
+> **Specified — not implemented. Corrected 2026-09-25 against source.** There is no
+> `claim_refresh_nonce` (or any claim-and-burn nonce store) anywhere in the tree, and no
+> `args_hash`-bound nonce store. The real nonce behaviour is narrower and lives elsewhere: the Guard-2
+> approval card is bound to a **card-minted cryptographic nonce** that a response must carry, and
+> `guard/extend_ttl` **re-mints that nonce on every extend so the previously displayed card dies
+> immediately** (§6.1, §6.4). That is genuine replay hardening on the control plane, but it is a
+> re-mint-on-extend rule, not a single-use claim-and-burn transaction, and the parameter-hash binding
+> below is a requirement. Owning TODO row: `P69.G7`.
 
 To guarantee replay protection across distributed relays, local IPC, and ticket authorizations:
 - **Claim-and-Burn Execution:** Nonce claims (`claim_refresh_nonce`) must be single-use. The token store validates that the nonce exists, has not expired (`TTL <= 60s`), and immediately burns the record within an atomic transaction.

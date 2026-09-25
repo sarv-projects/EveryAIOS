@@ -496,7 +496,7 @@ You have direct access to EveryAIOS native cowork tools via the connected MCP se
 ```
 
 ### 11.2 Guard-1 Deflection & Recovery Nudge
-If an external agent attempts a shell command to manipulate office files (e.g. `python -c "import openpyxl..."` or `soffice --headless`) or perform unisolated web crawling, Guard-1 detects the pattern via Tree-Sitter AST inspection (`SEC-4`) and blocks the shell command with an actionable deflection nudge:
+If an external agent attempts a shell command to manipulate office files (e.g. `python -c "import openpyxl..."` or `soffice --headless`) or perform unisolated web crawling, Guard-1 is specified to detect the pattern and block the shell command with an actionable deflection nudge:
 
 ```json
 {
@@ -505,6 +505,19 @@ If an external agent attempts a shell command to manipulate office files (e.g. `
 }
 ```
 This forces the model's reasoning loop to gracefully pivot and invoke the shared plane tool.
+
+> **Corrected 2026-09-25 against source — this mechanism is specified, not implemented.** The block above is
+> the *target* contract. What exists is `crates/everyaios-guard/src/deflection.rs`:
+> `deflect_shell_bias` is a **lowercased substring scan** over a fixed needle list (`openpyxl`,
+> `python-docx`, `pptx`, `xlsxwriter`, `libreoffice --headless`, `puppeteer`, `playwright`, `selenium`,
+> `chromedriver`, `pyautogui`, `xdotool`, `sendinput`, `cliclick`) — **not** Tree-Sitter AST inspection, and
+> `everyaios-guard` has no `tree-sitter` dependency. Its return type is
+> `DeflectionNudge { target, matched, message }`; it has **no** `ok`/`error`/`suggested_tool`/`suggested_args`
+> fields, so the JSON above is not the implemented shape. Worse, the nudge is **unwired**: the only other
+> reference is the re-export `shell_bias_nudge` at `crates/everyaios-guard/src/toctou.rs:234`, which has no
+> caller, and the live pre-exec scan (`prescan.rs` `scan_shell`) does not consult it. **No deflection card
+> reaches an agent today.** Row: `P69.G2` (and `P62.5`). The same defect was corrected in
+> [`RECOVERY.md`](RECOVERY.md) §13 and [`DIAGRAMS.md`](DIAGRAMS.md) §29.
 
 ---
 

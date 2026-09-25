@@ -197,6 +197,15 @@ To achieve mathematical 100% prompt cache hit rates across Anthropic, DeepSeek, 
 
 ## 5.12 Content-Addressed Blob Spooling (CCR / MEM-15 Pattern)
 
+> **Specified — not implemented (renderer card only). Corrected 2026-09-25 against source.** There is **no
+> spool writer in the tree**: no `~/.everyaios/spool/`, no `TOOL_OUTPUT_SERIALIZE_CAP`, no `retrieve_original`,
+> no `tool_output_ref`. The only real thing is `ui/src/components/chat/tool-chip.tsx:219`
+> (`SPOOL_TOKEN_BUDGET = 2000`) + `SpooledBlobCard`, which *decides to draw a "spooled" card* and opens the
+> right rail's `tool-output` view (`ui/src/components/views/tool-output-view.tsx`) over the **in-memory**
+> payload — it never writes a blob. Owning TODO rows: `P64.11` (the row that names the >2,000-token disk
+> spool) and `P69.G5` (the `retrieve_original(hash)` surface). The specification below is kept as the
+> design decision it is; nothing in it may be described as delivered.
+
 When tool executions produce bulk outputs exceeding `TOOL_OUTPUT_SERIALIZE_CAP = 2_000` tokens:
 - **Disk Spooling:** Full raw outputs are spooled to `~/.everyaios/spool/{sha256}.blob` with 7-day retention.
 - **Model Projection:** The context receives a compact reference handle:
@@ -238,4 +247,4 @@ When historical turns must be evicted to prevent window exhaustion:
 Before dispatching an LLM request:
 1. The engine computes `projected_tokens = current_tokens + reserve_output_budget`.
 2. If `projected_tokens > model.context_window - 5000`, the engine fires `MidTurnPrecheckSignal`.
-3. Deterministic reduction (blob spooling, tombstone compaction, RTK filtering) runs *before* the network call, preventing wasteful HTTP 400 `ContextWindowExceeded` failures.
+3. Deterministic reduction (blob spooling, tombstone compaction, RTK filtering) runs *before* the network call, preventing wasteful HTTP 400 `ContextWindowExceeded` failures. (Spooling is one of these three named mechanisms and is **specified — not implemented** — see §5.12.)

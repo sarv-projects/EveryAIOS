@@ -113,10 +113,34 @@ pending acceptance rows in [`ADR-0008`](ADR/0008-session-workbench-projection-an
 
 ## 4.6 Surgical XML Invariants & Field-Balance GC (GenOffice Pattern)
 
+> **Corrected 2026-09-25 against source.** The three mechanisms below name **TypeScript files**
+> (`field-balance.ts`, `resource-cleanup.ts`) and a `quick-xml` streaming pipeline. **None of them exists,
+> and the crate is Rust-only** — `crates/everyaios-office` has no `src/*.ts` file and §4.5's own
+> "Shipped reality (P4)" note says the engine is one Rust crate. The real equivalents:
+>
+> - **Field-character balancing → specified — not implemented.** No `w:fldChar` balance check exists
+>   anywhere in the crate (no `fldChar`, `field_balance`, or balance routine under
+>   `crates/everyaios-office/src/`). The patcher edits an anchored block tree without
+>   asserting that field start/separate/end markers stay balanced, so a patch *can* currently produce a
+>   document Word would flag. Owning TODO row: `P69.G5`.
+> - **Orphaned media GC → specified — not implemented.** There is no `word/media/` or `ppt/media/` sweep
+>   and no `_rels/` reaper in the tree; removing an image/shape leaves its payload and rel behind. Owning
+>   TODO row: `P69.G5`.
+> - **`quick-xml` streaming → corrected to the real approach.** The office engine does **not** stream XML.
+>   It parses each part with **`roxmltree`** (a DOM parser) and then patches by **byte range** into the
+>   original part source (`roxmltree::Node::range()`), so untouched bytes are never re-serialized — see
+>   `crates/everyaios-office/src/xml.rs:1-20` and the crate's deps (`roxmltree`; **no `quick-xml`**).
+>   `quick-xml` appears in `Cargo.lock` only as a transitive dependency of unrelated crates. The
+>   "single-pass, <15MB on a 500-page document" property is therefore **not an implemented guarantee**
+>   (owning TODO row: `P69.G5`), though the byte-range discipline below is the real mechanism worth keeping.
+> - What *is* implemented and does enforce round-trip validity is the conformance oracle, not these
+>   invariants: `parts_diff` reports exactly which ZIP parts changed, and `LibreOfficeOracle` runs headless
+>   `soffice` to prove the file reparses without repair warnings (`crates/everyaios-office/src/conformance.rs:1-8`).
+
 To guarantee 100% round-trip document validity without triggering Microsoft Office repair warnings:
-- **Field-Character Balancing (`field-balance.ts`):** When modifying paragraphs containing complex Word fields (`w:fldChar` markers for Page numbers, Table of Contents, or Hyperlinks), the surgical patcher verifies that field start, separate, and end markers remain balanced. Any patch that disrupts field tag balance is rejected prior to ZIP commit.
-- **Orphaned Media Garbage Collection (`resource-cleanup.ts`):** When replacing or removing image/shape elements in DOCX/PPTX files, unreferenced media payloads in `word/media/` (or `ppt/media/`) and obsolete entries in `_rels/` are swept clean, preventing zip bloat.
-- **`quick-xml` Streaming Pipeline:** Rust `quick-xml` streaming events process XML parts in a single pass without loading entire DOM structures into heap memory, keeping memory consumption bounded (<15MB) even on 500-page enterprise documents.
+- **Field-Character Balancing (`field-balance.ts` — specified — not implemented, no such file):** When modifying paragraphs containing complex Word fields (`w:fldChar` markers for Page numbers, Table of Contents, or Hyperlinks), the surgical patcher verifies that field start, separate, and end markers remain balanced. Any patch that disrupts field tag balance is rejected prior to ZIP commit.
+- **Orphaned Media Garbage Collection (`resource-cleanup.ts` — specified — not implemented, no such file):** When replacing or removing image/shape elements in DOCX/PPTX files, unreferenced media payloads in `word/media/` (or `ppt/media/`) and obsolete entries in `_rels/` are swept clean, preventing zip bloat.
+- **Single-Pass XML Processing (specified — not implemented as written; the real mechanism is `roxmltree` DOM + byte-range patch, not `quick-xml` streaming):** XML parts are processed without re-serializing untouched bytes, keeping memory consumption bounded even on 500-page enterprise documents.
 
 ## 4.7 Direct Office API Bypass (Agent-S Pattern)
 

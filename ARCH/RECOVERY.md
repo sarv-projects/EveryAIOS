@@ -170,7 +170,8 @@ opens and replays a durable Work journal and rebuilds binding projections. The e
 `chat.rs:1127`–`1154` "constructs a fresh `ExecutionKernel::new()`" **no longer describes the code**: the
 live relay instead recovers through
 `ExecutionKernel::recover_from_work_gateway_with_checkpoint(&work_gateway, Some(&checkpoint_path))`
-(`crates/everyaios-core/src/chat.rs:1140`), under the in-file rule that *"the journal is authoritative. An
+(`crates/everyaios-core/src/chat.rs:1165`; see also [`ADR/0007`](ADR/0007-windows-first-v1-qualification.md)),
+under the in-file rule that *"the journal is authoritative. An
 ExecutionKernel snapshot is only a cache and is accepted solely after its identities/states validate
 against the replayed Work events."* There is no `ExecutionKernel::new()` call in `chat.rs`.
 
@@ -222,12 +223,30 @@ ExecutionKernel/WorkGateway path and demonstrated on the qualified Windows relea
 
 ## 10. Turn-Atomic Multi-File Snapshots with Pre-Commit Rollback (NextCoWork Pattern)
 
+> **Specified — not implemented. Corrected 2026-09-25 against source.** There is no `file_change_sets`
+> symbol, no `~/.everyaios/snapshots/` writer, and no `outcome: RolledBackDueToFailure` audit verdict
+> anywhere in the tree. The rollback that *is* implemented is **per-file and in-memory**:
+> `crates/everyaios-office/src/rollback.rs` — `Snapshot::capture(original)` before an edit,
+> `record_save(saved)` after a successful write, and `undo()` restoring the pre-edit bytes (the "one-click
+> undo + crash recovery" guarantee named in that file's own header, kept until the edit is confirmed). It
+> covers **one document's bytes**, not a multi-file turn transaction, and it is the only real mechanism
+> behind the name "rollback" in this repository. Owning TODO row: `P69.G2`. The specification below is
+> kept as the target contract.
+
 When an agent executes multi-file modifications across a workspace in a single turn:
 1. **Pre-Mutation Snapshot:** The engine computes SHA-256 hashes and captures full backup copies of all target files into `~/.everyaios/snapshots/{work_id}/{step_id}/`.
 2. **Atomic Change Sets (`file_change_sets`):** Modifications are staged. If any single file write fails, gets rejected by Guard-1 pathfloors, or experiences a syntax error during verification, the entire multi-file change set is transactionally rolled back to its pre-mutation state.
 3. **Rollback Receipts:** Rollback events are appended to `everyaios-audit` with `outcome: RolledBackDueToFailure`, ensuring the filesystem is never left in a half-mutated, broken state.
 
 ## 11. Windows Named Pipe Lifecycle Mutex & PID Identity Verification (Open-Design / ACPX Pattern)
+
+> **Specified — not implemented. Corrected 2026-09-25 against source.** Zero hits: there is no
+> `\\.\pipe\everyaios-core-supervisor-lock` (or any named-pipe mutex), no `GetProcessTimes` call, and no
+> `/proc/sys/kernel/random/boot_id` or `/proc/[pid]/stat` `starttime` read. The only birth-identity
+> *wording* in the tree is a doc comment on a resource-ref type
+> (`crates/everyaios-types/src/workbench.rs:248` — "process birth identity"), not a check. The real
+> supervisor lifecycle is worktree/process provisioning in `everyaios-core::execution`, which has no
+> cross-process singleton lock and no pid-reuse guard. Owning TODO row: `P69.G2`.
 
 To prevent process corruption, multiple sidecar instances, or signaling recycled PIDs:
 - **Windows Named Pipe Mutex:** The Rust core acquires an exclusive cross-process named pipe lock (`\\.\pipe\everyaios-core-supervisor-lock`). If another instance holds the pipe, startup halts with a clear collision error.
@@ -238,15 +257,38 @@ To prevent process corruption, multiple sidecar instances, or signaling recycled
 
 ## 12. Subagent Queue Deadlock Prevention (NextCoWork Pattern)
 
+> **Specified — not implemented. Corrected 2026-09-25 against source.** `CyclicDelegationRefused`,
+> `SUBAGENT_HEARTBEAT_TIMEOUT`, and `InterruptedByTimeout` have zero hits in the tree. What delegation
+> *does* enforce is depth and breadth, not cycle- or heartbeat-based liveness:
+> `P64_MAX_SUBAGENT_DEPTH = 2` (`crates/everyaios-core/src/execution.rs:2142`) and
+> `everyaios_blueprint::SubAgentLimits` (`chat.rs`, the `delegate.*` façade seam). That is a different
+> guarantee — a depth cap cannot detect an `A → B → A` cycle and a limit list carries no heartbeat
+> timeout — so this section must not be read as describing delivered deadlock prevention. Owning TODO
+> row: `P69.G2`.
+
 When parent agents spawn child subagents:
 - **Parent-Child Cycle Detection:** The work scheduler constructs an in-memory directed acyclic graph (DAG) of active delegation leases. Any circular delegation request (A -> B -> A) is rejected immediately with `CyclicDelegationRefused`.
 - **Orphaned Lease Timeout:** If a child run fails to report heartbeat within `SUBAGENT_HEARTBEAT_TIMEOUT = 120s`, the lease is reclaimed, the child marked `InterruptedByTimeout`, and the parent receives a structured timeout receipt.
 
 ## 13. Guard-1 Tool Deflection & Recovery Nudge Loop (Shell-Bias Recovery)
 
+> **Corrected 2026-09-25 against source — the real mechanism is a substring scan, and it is unwired.**
+> `everyaios-guard::deflection::deflect_shell_bias` (`crates/everyaios-guard/src/deflection.rs:50`)
+> lowercases the command and tests it against **hardcoded substring needles** — `OFFICE`
+> (`openpyxl`, `python-docx`, `python_docx`, `pptx`, `xlsxwriter`, `libreoffice --headless`), `BROWSER`
+> (`puppeteer`, `playwright`, `selenium`, `chromedriver`), `DESKTOP` (`pyautogui`, `xdotool`, `sendinput`,
+> `cliclick`) — with no parsing of any kind. **`everyaios-guard` has no `tree-sitter` dependency**, so
+> step 1 below is **specified — not implemented** as written. The return type is
+> `DeflectionNudge { target, matched, message }` — there is no `suggested_tool` and no `suggested_args`
+> field anywhere in the tree; the nudge is a single `deflection_nudge: …` message naming the façade
+> family (`office` / `browser` / `computer_use`). The loop is also **not wired**: the only non-test
+> reference to `deflect_shell_bias` in the whole crate is the uncalled re-export
+> `shell_bias_nudge` (`crates/everyaios-guard/src/toctou.rs:234`), so no denial, card, or redirect is
+> produced today. Owning TODO row: `P69.G2`. The steps below are kept as the target contract.
+
 When an external coding agent falls back to native shell bias and attempts direct script execution on office documents or unisolated web scraping:
-1. **Tree-Sitter AST Interception (`SEC-4`):** Guard-1 inspects the proposed command line (e.g. `python -c "import openpyxl..."`, `libreoffice --headless`, `curl https://...`).
-2. **Actionable Deflection Error:** Instead of a generic permission denial, Guard-1 returns a structured nudge:
+1. **Tree-Sitter AST Interception (`SEC-4`):** Guard-1 inspects the proposed command line (e.g. `python -c "import openpyxl..."`, `libreoffice --headless`, `curl https://...`). **Specified — not implemented** — today this is `deflect_shell_bias`'s substring match (see the note above).
+2. **Actionable Deflection Error:** Instead of a generic permission denial, Guard-1 returns a structured nudge — **target shape, not the implemented one** (the real `DeflectionNudge` is `{ target, matched, message }`; see the note above):
    ```json
    {
      "ok": false,
