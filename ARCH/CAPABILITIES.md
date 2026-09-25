@@ -83,6 +83,8 @@ Because this is an intersection, **an agent that supports less simply receives l
 change and no special case. An agent reporting `MCP ✅ · resources ✅ · prompts ❌` gets MCP tools and
 resources, no prompt templates, and no error.
 
+The local-runtime surface is the `shared:local-runtime` capability pack. Its actions are **inventory · acquire · attach · hand-off**; the effective set is the §4 intersection with the bound agent's `RuntimeControl`, and it never exposes model selection for a `NativeOnly` agent. See [`16-LOCAL-RUNTIME-INTEROP.md`](16-LOCAL-RUNTIME-INTEROP.md) §3.
+
 ---
 
 ## 5. States and scopes

@@ -117,15 +117,25 @@ A policy input is not an authority.
   `scripts/check-arch-invariants.mjs` fail the build if a TS seal/unseal path reappears.
 - Credential-shaped values must be refused in child-process environments; a confined child obtains
   credentials through the vault broker, never by inheritance.
-- **GAP / D1 (P0, verified 2026-09-22) — known defect: a connector OAuth token is readable from the
-  TS sidecar.** `fetchWorkerOAuthToken` is exported at
-  `packages/core-connectors/src/connection-manager.ts:900`, re-exported from
-  `packages/core-connectors/src/index.ts:24`, and compiled into `dist/` — a live **I10 custody
-  violation** (connector OAuth token custody outside `everyaios-vault`). This document records the
-  defect; it does not fix it. Implementation is queued in `../TODO.md` per
-  `REPO-COMPARE/DISPOSITION.md` SEC-1 (P0 — retire the export, move custody fully into the vault,
-  sequenced with the C4 wave). Until that row lands, §5's "and nothing else" claim carries this
-  named exception — no other document may soften it to "keys only in the vault, mostly".
+- **REPAIRED — connector OAuth token custody (was D1, P0; recorded 2026-09-22, repaired in code).**
+  *Defect as recorded:* `fetchWorkerOAuthToken` was exported at
+  `packages/core-connectors/src/connection-manager.ts:900` and re-exported from
+  `packages/core-connectors/src/index.ts:24`, so a connector OAuth token was readable from the TS
+  sidecar — a live **I10 custody violation** (connector OAuth token custody outside
+  `everyaios-vault`).
+  *Current source (re-verified 2026-09-24):* the symbol **no longer exists anywhere under
+  `packages/core-connectors/src/`**. Connector custody is handle-based: the public surface exports
+  `ConnectorCredentialHandle` plus a host-transport seam (`requestConnector` /
+  `setConnectorHostTransport`), and `connection-manager.ts:900` is an ordinary catalog row, not a
+  token accessor. A regression test pins the repair — `src/__tests__/orchestrator.test.ts` asserts
+  *"does not export the raw OAuth token fetcher"* — with a sibling test requiring the
+  host-mediated path to **fail closed** when no Rust transport is attached. The stale compiled copy
+  still visible in `packages/core-connectors/dist/` is gitignored build output (`.gitignore:10`),
+  not source.
+  **Therefore §5's "and nothing else" claim holds with no named exception.** The repair was not
+  executed in the verifying session, so its status is *repaired in code — unverified*. The defect
+  record above is kept deliberately: a removed violation with a pinning test is different evidence
+  from a violation that never existed.
 
 ---
 
@@ -159,6 +169,8 @@ achieved — never a claim.
 - **`netfloor`** — SSRF and egress policy; loopback/link-local and `file://` are refused, and refusal does not
   escalate to a heavier engine in the hope it will succeed.
 - Both are enforced **centrally**, never per-caller (I11).
+
+Starting, stopping, restarting, or configuring a local runtime is a ticketed mutating effect; its endpoint is net-floored like any other outbound call, artifacts are SHA-256 verified, and agent credentials are never injected from the vault. The v1 macOS posture remains **Ambient**; see [`16-LOCAL-RUNTIME-INTEROP.md`](16-LOCAL-RUNTIME-INTEROP.md) §8.
 
 ---
 

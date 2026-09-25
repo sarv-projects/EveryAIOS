@@ -234,3 +234,5 @@ External agents (running via ACP in child processes) discover and invoke desktop
    - Attempts by external agents to run raw OS automation scripts (e.g. `pyautogui`, `xdotool`, `powershell SendKeys`) in bash/python are intercepted by Guard-1 AST inspection and deflected to `computer_use.interact` (`ARCH/RECOVERY.md` §13).
    - Sensitive window targets (credential vaults, system settings, payment gateways) trigger Guard-2 interactive approval cards.
 
+Computer use and inference are both agent-owned at runtime; a local runtime is not a computer-use path and cannot drive Office.
+

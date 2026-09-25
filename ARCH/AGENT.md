@@ -98,8 +98,10 @@ The state exists to keep four different facts apart:
 | serves a turn | `Ready` (or `Degraded`, with the reduction stated) | — |
 
 **Rules.** `Unknown` is never rendered as available. `installed` on the wire is a projection of this state,
-not a parallel field. Only `Ready` is admissible as a **subagent** (`DelegationPolicy::admit` judges it
-first) — `Degraded` serves turns but is not delegable. The state is a runtime fact: user policy (disabled)
+not a parallel field. Only `Ready` is admissible as a **subagent**, and only when the delegation policy on the
+Work gateway admits it (`DelegationPolicy::admit` judges it first; §5.4); `Degraded` serves turns but is not
+delegable, and the handoff in [`16-LOCAL-RUNTIME-INTEROP.md`](16-LOCAL-RUNTIME-INTEROP.md) §7 is downstream of
+this gate. The state is a runtime fact: user policy (disabled)
 and install activity (updating) are UI projections layered on top, never readiness values. EveryAIOS may
 **facilitate** an agent's authentication but never reads or copies its credential store
 ([`ROUTING.md`](ROUTING.md) §4, **I10**).
@@ -164,7 +166,7 @@ contention rules, and edge-case matrix are in ADR-0008 §§2, 3, and 6.
 |---|---|
 | Session identity, Space, Project associations | `provider_session_id` |
 | Workspace references, current objective, Work | provider transcript |
-| Plan, completed steps, findings, artifacts | native prompt state, and the agent's own helpers (for example Claude's task tool). Those helpers are not `delegate.spawn`. `delegate.spawn` is a child Work under EveryAIOS |
+| Plan, completed steps, findings, artifacts | native prompt state; an agent's own private subagent helper (for example a task tool) is not `delegate.spawn`, and `delegate.spawn` creates child Work under EveryAIOS |
 | Memory and context snapshot / passport | agent-specific config and internal summaries |
 | Approvals, capability grants, budget | provider-side context cache |
 | Event history, verification results, receipts, usage | native tool bookkeeping, agent-private memory |
@@ -341,6 +343,10 @@ In **Settings → Agents & Models**, each discovered or configured external agen
 
 5. **Sandbox & Worktree Isolation:**
    - Delegated coding subagents execute inside isolated Git worktrees (`everyaios-core` module `worktrees`) created off the current branch. Subagents cannot mutate the primary workspace branch directly without an explicit merge step and user review.
+
+6. **Handoff, not model selection:** EveryAIOS may offer a compatible local-runtime handoff, but the bound agent remains the model authority; see [`16-LOCAL-RUNTIME-INTEROP.md`](16-LOCAL-RUNTIME-INTEROP.md) §7.
+
+**Runtime compatibility pointer:** derive compatibility from the agent adapter's capabilities rather than hardcoding it in this roster; see [`16-LOCAL-RUNTIME-INTEROP.md`](16-LOCAL-RUNTIME-INTEROP.md) §11.
 
 ---
 

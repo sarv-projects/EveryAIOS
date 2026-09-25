@@ -65,7 +65,7 @@ same interface without an architecture change. Unready agents are not selected, 
 | **External-agent credentials** (subscriptions · provider keys · OAuth) | **the agent** | the agent's own store |
 
 EveryAIOS may **initiate or facilitate** an agent's authentication. It must **never** copy credentials out of
-an agent's native store. The vault remains the single authority for what EveryAIOS owns; the rule is narrowed
+an agent's native store. A Settings **Add key** bar is for keys EveryAIOS itself holds (connectors and EveryAIOS-managed credentials). It is not how an installed agent signs in. Sign-in buttons come only from that agent's `authMethods`. An empty list means no sign-in control. Model choice and provider keys for the thinking loop stay in the agent's own store. OpenCode, Cline, and Pi may expose many providers inside that store. Codex, Claude Code, and Antigravity are account sign-in. EveryAIOS does not keep a parallel model list for them. The vault remains the single authority for what EveryAIOS owns; the rule is narrowed
 from *"all provider keys"* to *"all keys EveryAIOS holds"* — which is what makes it true rather than
 aspirational. See [`SECURITY.md`](SECURITY.md) §5 and ADR-0005 §6.
 
@@ -102,11 +102,9 @@ value as an assumption rather than a measurement.
 
 ---
 
-## 8. Local models are not this document's business
+## 8. Local runtimes are resource management and handoff, not routing
 
-A local runtime (Ollama · llama.cpp server · LM Studio attach · MLX · a served GGUF) is an **agent's provider
-decision**, not an EveryAIOS routing concern. Discovery remains useful as **inventory**, so the user can point
-an agent at what is installed — and it is reported as inventory, never as an EveryAIOS inference path.
+Local runtimes are a **resource-management and handoff concern owned by [`16-LOCAL-RUNTIME-INTEROP.md`](16-LOCAL-RUNTIME-INTEROP.md), not a routing concern**. Routing still never selects a model: the bound external agent remains the model authority, and a runtime is offered only through that contract's control and handoff boundary.
 
 ---
 
