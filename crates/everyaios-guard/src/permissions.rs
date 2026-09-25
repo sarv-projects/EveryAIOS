@@ -365,40 +365,26 @@ impl PermissionsPolicy {
         };
         let mut p = Self::default();
         let t = &raw.permissions;
-        if let Some(s) = &t.delete_files {
-            if let Some(r) = Rule::parse(s) {
-                p.delete_files = r;
-            }
+        if let Some(r) = t.delete_files.as_deref().and_then(Rule::parse) {
+            p.delete_files = r;
         }
-        if let Some(s) = &t.multi_file_edit {
-            if let Some(r) = Rule::parse(s) {
-                p.multi_file_edit = r;
-            }
+        if let Some(r) = t.multi_file_edit.as_deref().and_then(Rule::parse) {
+            p.multi_file_edit = r;
         }
-        if let Some(s) = &t.external_network {
-            if let Some(r) = Rule::parse(s) {
-                p.external_network = r;
-            }
+        if let Some(r) = t.external_network.as_deref().and_then(Rule::parse) {
+            p.external_network = r;
         }
-        if let Some(s) = &t.terminal_shell {
-            if let Some(r) = Rule::parse(s) {
-                p.terminal_shell = r;
-            }
+        if let Some(r) = t.terminal_shell.as_deref().and_then(Rule::parse) {
+            p.terminal_shell = r;
         }
-        if let Some(s) = &t.web_action {
-            if let Some(r) = Rule::parse(s) {
-                p.web_action = r;
-            }
+        if let Some(r) = t.web_action.as_deref().and_then(Rule::parse) {
+            p.web_action = r;
         }
-        if let Some(s) = &t.write {
-            if let Some(r) = Rule::parse(s) {
-                p.write = r;
-            }
+        if let Some(r) = t.write.as_deref().and_then(Rule::parse) {
+            p.write = r;
         }
-        if let Some(s) = &t.read_sensitive {
-            if let Some(r) = Rule::parse(s) {
-                p.read_sensitive = r;
-            }
+        if let Some(r) = t.read_sensitive.as_deref().and_then(Rule::parse) {
+            p.read_sensitive = r;
         }
         if let Some(m) = t.min_confidence_for_auto {
             p.min_confidence_for_auto = m.clamp(0.0, 1.0);

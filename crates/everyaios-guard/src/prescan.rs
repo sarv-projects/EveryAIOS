@@ -62,10 +62,10 @@ impl Guard {
     pub fn categories(&self, indices: &[usize]) -> Vec<BlocklistCategory> {
         let mut out = Vec::new();
         for &i in indices {
-            if let Some(c) = category_of(i) {
-                if !out.contains(&c) {
-                    out.push(c);
-                }
+            if let Some(c) = category_of(i)
+                && !out.contains(&c)
+            {
+                out.push(c);
             }
         }
         out

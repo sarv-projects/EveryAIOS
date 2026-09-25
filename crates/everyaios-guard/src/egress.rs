@@ -165,10 +165,10 @@ impl EgressEngine {
         //    and reserved space have no legitimate desktop use and cannot be
         //    opted into. `NetPolicy::local()` allows loopback + private, so
         //    anything it still refuses is by definition always-refused.
-        if let Some(class) = destination_class(destination) {
-            if !NetPolicy::local().allows(class) {
-                return EgressVerdict::Deny;
-            }
+        if let Some(class) = destination_class(destination)
+            && !NetPolicy::local().allows(class)
+        {
+            return EgressVerdict::Deny;
         }
         // 2) The user's own configured endpoints (provider base URL, local
         //    runtime, paired node) pass without the private/LAN gate — the
