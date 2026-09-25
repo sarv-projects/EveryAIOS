@@ -235,7 +235,7 @@ crates/                          # 21 workspace members (the kernel; everyaios-e
   everyaios-office/              #   IronCalc XLSX, OOXML patchers
   everyaios-desktop/             #   Desktop automation (CUA)
   everyaios-acp/                 #   Agent Communication Protocol + prefix guard
-  everyaios-mcp/                 #   MCP server/client (19 shared façades over 52 native tools)
+  everyaios-mcp/                 #   MCP server/client (19 shared façades over 51 native tools)
   everyaios-agents/              #   Agent plane primitives
   everyaios-search/              #   Kernel search (the one implementation)
   everyaios-script/              #   Sandboxed script runner

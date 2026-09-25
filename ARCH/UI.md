@@ -292,7 +292,7 @@ four classes in §2 is `P69.D24` and is a prerequisite for the timeline rebuild 
 
 ## 9. Drafting Table In-Pane Search Grammar & Viewport Controls
 
-The right-rail Drafting Table provides unified, keyboard-first in-pane discovery across all 19 viewports:
+The right-rail Drafting Table provides unified, keyboard-first in-pane discovery across all 22 viewports:
 - **Search Prefix Grammar:**
   - `/file:<pattern>`: Filters workspace explorer and file tabs by glob.
   - `/symbol:<name>` or `@<name>`: Jumps to AST definitions in code/diff viewports via `everyaios-codeintel`.
@@ -310,4 +310,4 @@ To achieve top-tier visual craft (Linear / Apple standard):
   - `accent-muted`: `#93c5fd` / `#1e3a8a`
   - User-selectable themes (Cool Blue, Slate, Emerald, Violet, Indigo) dynamically bind semantic tokens without hardcoded hex values.
 - **Tabular Numerical Telemetry:** JetBrains Mono tabular figures (`font-variant-numeric: tabular-nums`) format all token counts, latency metrics, line numbers, and financial spend readouts to prevent horizontal jitter during real-time streaming.
-- **WCAG 2.2 Accessibility:** Focus outlines (`ring-2 ring-accent-primary`), ARIA labels, and keyboard tab sequences are strictly validated across all 12 center screens and 19 right-rail viewports.
+- **WCAG 2.2 Accessibility:** Focus outlines (`ring-2 ring-accent-primary`), ARIA labels, and keyboard tab sequences are strictly validated across all 12 center screens and 22 right-rail viewports.

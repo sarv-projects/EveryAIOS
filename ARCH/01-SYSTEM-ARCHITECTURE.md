@@ -61,7 +61,7 @@ Every subsystem placement follows this test (derived from the ownership matrix, 
 
 ### Harness & swarm orchestration (planes 2 + 5)
 
-- **Logic**: `crates/everyaios-acp`, `crates/everyaios-core/src/multirun.rs`, `worktrees.rs`, `packages/coordinator/src/chief.ts` (delegation policy). *`chat.ts` — the built-in turn loop — was **archived 2026-09-22** with the engine (`ARCH/archive/coordinator-loop/`, `P71.2c`).*
+- **Logic**: `crates/everyaios-acp`, `crates/everyaios-core/src/multirun.rs`, `worktrees.rs`, `packages/coordinator/src/primary-agent.ts` (delegation policy). *`chat.ts` — the built-in turn loop — was **archived 2026-09-22** with the engine (`ARCH/archive/coordinator-loop/`, `P71.2c`).*
 - **Submodules & Functions**:
   - `acp_client_server`: Bidirectional stdio JSON-RPC transport driving external agents.
   - `worktree_swarm_manager`: Isolated Git worktrees (`.everyaios/worktrees/task-<id>`) with serialized queue and disk headroom reservations.
@@ -87,8 +87,8 @@ Every subsystem placement follows this test (derived from the ownership matrix, 
   - `prompt_assembler`: 12-segment cache-affine prompt builder with `CACHE_BOUNDARY` markers (I16, I22: serializes Context, owns no policy).
   - `context_compaction_pipeline`: Trims volatile turns, enforces pass-by-ref handles (`refRegistry`), paginates large outputs (50KB cap) — strategies under [`CONTEXT.md`](CONTEXT.md) (I17–I20).
   - `streaming_telemetry_batcher`: 33ms batched token emission with TTFT and token cost tracking.
-  - `tauri_ipc_gateway`: 40 native Tauri command modules bridging Rust to React.
-- **Frontend UI**: Cockpit layout (`Layout.tsx`), `chat` screen with CoT rollups, 19 right-rail viewports with physical spring motion (CLS = 0).
+  - `tauri_ipc_gateway`: 42 native Tauri command modules bridging Rust to React.
+- **Frontend UI**: Cockpit layout (`ui/src/App.tsx` + `components/shell/`), `chat` screen with CoT rollups, 22 right-rail viewports with physical spring motion (CLS = 0).
 
 ### Governed MCP & capability marketplace (plane 4)
 

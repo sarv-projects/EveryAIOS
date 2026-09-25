@@ -10,9 +10,14 @@
 >
 > **v1 scope clarification (2026-09-24):** [`ADR/0007`](ADR/0007-windows-first-v1-qualification.md)
 > keeps the Connect Store and MCP shared plane in v1 as part of Channel B, with one Work-scoped bridge,
-> one Guard/executor/audit path, and no raw OAuth token in a sidecar, agent, or renderer. The live ACP
-> launch currently passes an empty `mcpServers` list, so Channel B is **unverified/open**, not a ready
-> capability. Voice/STT/TTS/wake-word/audio remain post-v1.
+> one Guard/executor/audit path, and no raw OAuth token in a sidecar, agent, or renderer.
+> **Corrected 2026-09-25 against source:** the earlier note here that "the live ACP launch currently
+> passes an empty `mcpServers` list" **no longer describes the code.** `src-tauri/src/acp_cmds.rs`
+> `channel_b_servers` feeds both production `session_new` calls (empty only on a lease failure), so the
+> server list is populated — see [`EXTERNAL-AGENTS.md`](EXTERNAL-AGENTS.md) §3.1 and
+> [`ADR/0007`](ADR/0007-windows-first-v1-qualification.md). Channel B is still **unverified/open**, because
+> no live guarded `tools/list` + `tools/call` round-trip has been recorded — that is the real residual, not
+> an empty list. Voice/STT/TTS/wake-word/audio remain post-v1.
 
 ## Capability-pack contract — connectors under CORE (`P69.D17`)
 

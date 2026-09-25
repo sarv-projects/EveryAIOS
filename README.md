@@ -211,7 +211,7 @@ EveryAIOS is built on 21 Rust core modules, 10 TypeScript coordination packages,
 | **Agent Hosting** | Connects external AI coding agents via open protocols. They keep their own tools; you get a unified cockpit. |
 | **Agent Registry & Keys** | Agent discovery/install/binding plus an encrypted local vault for **EveryAIOS-owned** credentials (connectors, browser sessions, EveryAIOS-managed API keys). External agents keep their own provider and login. |
 | **Desktop Shell** | Fast, native cockpit with 12 center screens and 19 viewports. Built for real work, not demos. |
-| **MCP Tools** | A governed 19-façade shared plane (over a 52-tool native catalog) covering browser, office, memory, search, and storage — external agents see façades, never the primitive dump. |
+| **MCP Tools** | A governed 19-façade shared plane (over a 51-tool native catalog) covering browser, office, memory, search, and storage — external agents see façades, never the primitive dump. |
 | **Office & Browser** | Real spreadsheet engine, surgical document editing, and 3-tier browser automation — all local. |
 | **Memory & Work** | Four-class memory that persists across sessions. Learns your preferences and avoids past mistakes. |
 | **Automations** | Schedule recurring tasks. Background cron daemon runs even when the app is closed. |
