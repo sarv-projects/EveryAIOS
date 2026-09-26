@@ -35,3 +35,9 @@ Keep generated understanding concise. Every non-obvious claim should point back 
 ## Refresh policy
 
 Refresh the machine index after structural changes. Regenerate understanding artifacts after architectural or behavioral changes. Do not treat a stale report as evidence.
+
+## Process documents
+
+- `architecture-and-protocol.md` — the 7-phase repository-understanding protocol.
+- `spec-driven-development.md` — requirement → plan → code → verification loop, IDs, and the spec gate.
+- `installation.md` — dependencies, invocations, and subcommands.

@@ -10,6 +10,8 @@
 > **v1 freeze for review (2026-09-26):** passes P0–P6 complete — 37 `ARCH/` docs + `AGENTCOWORK-SPEC.md` + `AGENTCOWORK-UI.md` + README/AGENTS syncs. Further changes go through `DEC` entries (`ARCH/04-DECISIONS.md`).
 >
 > **Owner reopening (2026-09-26):** absorption wave 2 ✅ complete — provider layer (`DEC-034/035`), async subagents (`DEC-036`), web search (`DEC-037`). Docs re-frozen for review.
+>
+> **SDD pass P7 (in progress, 2026-09-26):** spec-driven layer — `ARCH/08-REQUIREMENTS.md` (REQ registry) + `ARCH/09-FEATURE-MATRIX.md` (traceability) + agent-kit protocol (`.agents/docs/spec-driven-development.md`) + `AGENTS.md` §16.
 
 ---
 
@@ -33,6 +35,8 @@ v0 grew by accretion: 33 ARCH files, 55 research files, a 355 KB spec, a 606 KB 
 | Layer | Document | Authority over |
 |---|---|---|
 | Product | `AGENTCOWORK-SPEC.md` | **WHAT** the product must be: behavior, contracts, acceptance. Root authority. |
+| Requirements | `ARCH/08-REQUIREMENTS.md` | **WHAT must be verified**: testable behaviors (`REQ-*`) derived from the SPEC, each with acceptance + failure cases. |
+| Traceability | `ARCH/09-FEATURE-MATRIX.md` | The `REQ → design → task → test` map. Owns links only, never content. |
 | Architecture | `ARCH/03-HLD.md` | **HOW** the system is structured. Module docs derive from it. Until SPEC lands, HLD + `04-DECISIONS` are the top authorities. |
 | Module LLD | `ARCH/10..34` | Their module only. MUST NOT contradict HLD/SPEC/contracts. |
 | Shared | `ARCH/06-DATA-MODEL.md`, `ARCH/07-CONTRACTS.md` | Canonical shared entities (DM-*) and interfaces (CTR-*). Module docs own local details only. |
@@ -57,6 +61,8 @@ v0 grew by accretion: 33 ARCH files, 55 research files, a 355 KB spec, a 606 KB 
 | 05 | `ARCH/05-INVARIANTS.md` | Meta | Invariants (`INV-*`) + enforcement points + verification | Draft P1 |
 | 06 | `ARCH/06-DATA-MODEL.md` | Shared | Canonical entities and schemas (`DM-*`) | Draft P1 |
 | 07 | `ARCH/07-CONTRACTS.md` | Shared | Canonical cross-module interfaces (`CTR-*`) | Draft P1 |
+| 08 | `ARCH/08-REQUIREMENTS.md` | Requirements | Behavioral registry (`REQ-*`): statements, acceptance, failure cases | Draft P7 (seed) |
+| 09 | `ARCH/09-FEATURE-MATRIX.md` | Requirements | Traceability: `REQ` → `DEC/DM/CTR` → `TASK` → `TEST` | Draft P7 (framework) |
 | 10 | `ARCH/10-KERNEL.md` | Core kernel | ids, errors, config, time, serialization; minimal-kernel rule | Draft P2 (early) |
 | 11 | `ARCH/11-WORK.md` | Work plane | Work · Step · Task · Session · Run · Checkpoint · Scheduler | Draft P2 (early) |
 | 12 | `ARCH/12-TRUST.md` | Trust/Control | Policy · Guard · approvals · tickets · vault · egress · audit · external-agent projections | Draft P2 (early) |
@@ -104,6 +110,7 @@ v0 grew by accretion: 33 ARCH files, 55 research files, a 355 KB spec, a 606 KB 
 | **P4** ✅ | Cross-cutting: 40-FLOWS, 41-EDGE-CASES, 42-EVIDENCE-MAP | Drafted 2026-09-26 — 24 flows · ~50 edges · FIX register |
 | **P5** ✅ | `AGENTCOWORK-SPEC.md`, `AGENTCOWORK-UI.md` | SPEC ✅ + UI ✅ drafted 2026-09-26 (UI: 583 lines, 13 sections) |
 | **P6** ✅ | Viability + evidence sweep; consistency pass; freeze v1; README/AGENTS sync | Sweep run 2026-09-26 (cross-refs/sections/statuses/names clean; `20-WORKFLOW` interop gap fixed); freeze declared for review; README + AGENTS synced |
+| **P7** ⏳ | SDD layer: `08-REQUIREMENTS` + `09-FEATURE-MATRIX`; module Requirements/Acceptance sections; `AGENTS.md` §16 + kit protocol | `REQ-*` registry seeded per domain; matrix traceable; `TODO.md` tasks reference `REQ-*` |
 
 ---
 
@@ -116,6 +123,7 @@ v0 grew by accretion: 33 ARCH files, 55 research files, a 355 KB spec, a 606 KB 
 - [ ] **Flows complete:** start, success, failure, cancel, crash-recovery.
 - [ ] **Edge cases:** enumerated and resolved, or explicitly deferred with a DEC.
 - [ ] **Evidence:** external claims cited (`path:line` / URL); no silent UNVERIFIED claims.
+- [ ] **Traceability:** every `REQ-*` has acceptance + failure cases, an owning module, and a `TEST-*` (or an explicit deferral).
 - [ ] **Token discipline:** deterministic operations never require an LLM.
 - [ ] **Security:** enforcement in Core (Guard) not prompts; vault custody preserved; external agents get projections only.
 - [ ] **No stale v0 terms:** v1 names only (except `01-NAMING` map and history notes).
@@ -125,7 +133,7 @@ v0 grew by accretion: 33 ARCH files, 55 research files, a 355 KB spec, a 606 KB 
 ## 6. Conventions
 
 - **Keywords:** MUST / SHOULD / MAY (RFC-2119 semantics).
-- **IDs:** `DEC-###` decisions · `INV-###` invariants · `DM-###` data-model entities · `CTR-###` contracts · `MOD-###` module anchors · `FLOW-###` flows · `EDGE-###` edge cases · `RISK-###` risks · `OQ-###` open questions.
+- **IDs:** `DEC-###` decisions · `REQ-###` requirements · `TASK-###` tasks · `TEST-###` tests · `INV-###` invariants · `DM-###` data-model entities · `CTR-###` contracts · `MOD-###` module anchors · `FLOW-###` flows · `EDGE-###` edge cases · `RISK-###` risks · `OQ-###` open questions.
 - **Evidence format:** `ev: path:line` (repo) · `ev: URL` (web) · confidence `H/M/L` · `UNVERIFIED` must be temporary and carry what would verify it.
 - **Status labels:** `Planned` → `Draft Pn` → `Review Pn` → `Frozen`.
 - **Cross-references:** use file paths (`ARCH/17-MEMORY.md`), not section numbers, so docs can evolve.

@@ -137,7 +137,7 @@ Keep descriptions factual and tied to the repository. Do not add marketing langu
 
 ## 10. Architecture
 
-> **v1 docs (2026-09-26).** The architecture was rebuilt from scratch; the v0 corpus is archived locally at `ARCHIVE/v0/` (git-ignored). Authority: [`AGENTCOWORK-SPEC.md`](AGENTCOWORK-SPEC.md) (WHAT) → [`ARCH/03-HLD.md`](ARCH/03-HLD.md) (HOW) → module docs; the door is [`ARCH/00-INDEX.md`](ARCH/00-INDEX.md). Working names: product **AgentCowork**, runtime **Core**, native agent **Agent X** ([`ARCH/01-NAMING.md`](ARCH/01-NAMING.md)). Delivery status: [`TODO.md`](TODO.md). Code remains frozen until the v1 freeze lands.
+> **v1 docs (2026-09-26).** The architecture was rebuilt from scratch; the v0 corpus is archived locally at `ARCHIVE/v0/` (git-ignored). Authority: [`AGENTCOWORK-SPEC.md`](AGENTCOWORK-SPEC.md) (WHAT) → [`ARCH/08-REQUIREMENTS.md`](ARCH/08-REQUIREMENTS.md) (testable behaviors) → [`ARCH/03-HLD.md`](ARCH/03-HLD.md) (HOW) → module docs; the door is [`ARCH/00-INDEX.md`](ARCH/00-INDEX.md). Working names: product **AgentCowork**, runtime **Core**, native agent **Agent X** ([`ARCH/01-NAMING.md`](ARCH/01-NAMING.md)). Delivery status: [`TODO.md`](TODO.md). Code remains frozen until the v1 freeze lands.
 >
 > **This section is an orientation summary only** — where it disagrees with the v1 set, the v1 set wins. The invariant list lives in [`ARCH/05-INVARIANTS.md`](ARCH/05-INVARIANTS.md); do not fork it here.
 
@@ -300,3 +300,26 @@ scripts/                         # CI gates, codegen, tools
 - SSRF is blocked by `netfloor` (Guard-2)
 - Sandboxed execution via `sandbox` (Guard-2)
 - Audit trail: every mutating operation is logged to `everyaios-audit`
+
+## 16. Spec-driven development (SDD)
+
+Development here is spec-driven: requirements are testable contracts and code exists
+to satisfy them.
+
+- **The chain.** `REQ-*` (behavioral requirements, [`ARCH/08-REQUIREMENTS.md`](ARCH/08-REQUIREMENTS.md))
+  derive from [`AGENTCOWORK-SPEC.md`](AGENTCOWORK-SPEC.md); designs cite them
+  (`DEC/DM/CTR`); the plan ([`TODO.md`](TODO.md)) turns them into `TASK-*` units; tests
+  (`TEST-*`) verify them; [`ARCH/09-FEATURE-MATRIX.md`](ARCH/09-FEATURE-MATRIX.md) maps
+  the chain; [`ARCH/42-EVIDENCE-MAP.md`](ARCH/42-EVIDENCE-MAP.md) holds acceptance evidence.
+- **The gate.** Before implementing: read the applicable specs → extract the `REQ-*` you
+  will satisfy and the constraints they impose → inspect the current implementation →
+  plan → obtain a decision for any architecture change → implement the smallest change →
+  test every failure case → verify every acceptance criterion → report deviations.
+- **Never silently change a spec.** If code and spec disagree, stop and emit `BLOCKED`
+  with a proposed `DEC`/spec change; do not implement around the conflict.
+- **IDs.** `REQ-*` / `TASK-*` / `TEST-*` are never renumbered or reused; doc status labels
+  move `Planned → Draft Pn → Review Pn → Frozen` ([`ARCH/00-INDEX.md`](ARCH/00-INDEX.md) §6).
+- **Commits.** Keep spec changes (`spec:` / `arch:`) separate from code (`feat:` / `fix:`)
+  and tests (`test:`).
+- **Protocol:** [`.agents/docs/spec-driven-development.md`](.agents/docs/spec-driven-development.md) ·
+  template: [`.agents/templates/SPEC.template.md`](.agents/templates/SPEC.template.md).

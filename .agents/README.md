@@ -12,9 +12,11 @@ repository. Nothing here is specific to a particular IDE, model vendor, or MCP c
 │   ├── README.md                          # index state vs. understanding artifacts
 │   ├── installation.md                    # dependencies and real invocations
 │   ├── architecture-and-protocol.md       # the 7-phase understanding protocol
+│   ├── spec-driven-development.md         # spec → plan → code → verify protocol
 │   └── agent-agnostic-compatibility.md    # capability surface, not product names
 ├── templates/
-│   └── AGENTS.template.md                 # blank project contract for new repos
+│   ├── AGENTS.template.md                 # blank project contract for new repos
+│   └── SPEC.template.md                   # blank spec / requirements template
 └── skills/
     ├── codebase-intelligence/
     │   ├── SKILL.md                       # routing contract for the skill
@@ -71,7 +73,7 @@ exist so the kit matches this repository rather than the other way around:
 - `templates/AGENTS.template.md` is renamed from upstream's `templates/AGENTS.md` so it is
   not auto-loaded as an active instruction file for that directory.
 - The repository root `AGENTS.md` is the single live contract. It merges this kit's
-  universal sections with EveryAIOS-specific sections 10–15; upstream's generic
+  universal sections with EveryAIOS-specific sections 10–16; upstream's generic
   `AGENTS.md` is not installed separately.
 
 Upstream `docs/` and `references/` describe `cbi.py` and its `doctor`/`understand`
