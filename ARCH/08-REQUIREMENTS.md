@@ -958,11 +958,101 @@ This registry answers one question per entry: **what behavior must this system e
 ### Workflow (`WF`)
 
 #### REQ-WF-001 — Runs pinned to their version
-- **Statement:** GIVEN an in-flight workflow run, WHEN the workflow definition is edited, THEN the run continues against its recorded version; a run never mutates underneath itself.
+- **Statement:** GIVEN an in-flight workflow run, WHEN the workflow definition is edited or a new version is published, THEN the run continues against its recorded `workflow_version` + digest, resume after restart uses the same pinned version, nested runs inherit per the declared inheritance rules, and the only exception is an explicit, audited run-upgrade — a run never mutates underneath itself.
 - **Priority:** must
-- **Source:** `AGENTCOWORK-SPEC.md` §10 · `ARCH/05-INVARIANTS.md` INV-16
-- **Acceptance:** edit-during-run test shows the run executes the pinned version; resume after restart still uses it.
-- **Failure cases:** run picking up edited definition → defect; partial state from mixed versions → forbidden.
+- **Source:** `AGENTCOWORK-SPEC.md` §10 · `ARCH/05-INVARIANTS.md` INV-16 · `ARCH/20-WORKFLOW.md` §6 · `ARCH/04-DECISIONS.md` DEC-033
+- **Acceptance:** edit-during-run test shows the run executes the pinned version; resume after restart still uses it; a silent upgrade attempt is rejected; an authorized upgrade is recorded and audited.
+- **Failure cases:** run picking up edited definition → defect; partial state from mixed versions → forbidden; unrecorded upgrade → violation.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-WF-002 — Typed IR is the single definition truth
+- **Statement:** GIVEN a workflow definition, WHEN it is authored or published, THEN it is the typed IR (`DM-021`: typed nodes/edges, variables, vault-ref-only secrets, retry/timeout/concurrency policies, outputs) and only **published**, content-addressed versions (definition digest + input/output schema digests) can trigger or execute; every authoring surface (JSON/YAML · SDK · future visual graph · agent) lands on this same IR.
+- **Priority:** must
+- **Source:** `ARCH/20-WORKFLOW.md` §2 · `ARCH/06-DATA-MODEL.md` DM-021 · `ARCH/04-DECISIONS.md` DEC-008
+- **Acceptance:** IR/schema validation rejects malformed definitions; any declared-content change changes the digest; drafts cannot trigger or execute; all authoring surfaces produce equivalent IR.
+- **Failure cases:** draft execution → defect; non-content-addressed version → defect; secret value in a definition → custody violation (INV-02).
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-WF-003 — Occurrences persist ahead and claim exactly once
+- **Statement:** GIVEN an enabled trigger, WHEN it becomes due, THEN its occurrence row (due time + unique idempotency key) exists before it is due, and a single-transaction claim admits each occurrence to exactly one run; duplicate materialization or claim attempts cannot double-execute.
+- **Priority:** must
+- **Source:** `ARCH/20-WORKFLOW.md` §4 · `ARCH/04-DECISIONS.md` DEC-033
+- **Acceptance:** no execution without a persisted occurrence row; a duplicate-key insert/claim test yields exactly one run; a crash between materialize and claim leaves a reclaimable occurrence.
+- **Failure cases:** execution from an unpersisted occurrence → defect; double claim / double run → violation.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-WF-004 — One wake loop reconciles, claims and executes
+- **Statement:** GIVEN the workflow scheduler, WHEN it runs, THEN exactly one wake-loop actor reconciles expired leases (requeue + `lease_reaped` event), applies `cancel_requested` at the next step boundary, materializes due occurrences, claims them exactly-once, executes step-by-step in transactions, and sleeps until the nearest wake (occurrence due · wait `wake_at` · approval deadline · lease expiry) — no second scheduler or timer queue exists.
+- **Priority:** must
+- **Source:** `ARCH/20-WORKFLOW.md` §4 · `ARCH/04-DECISIONS.md` DEC-033 · `ARCH/07-CONTRACTS.md` CTR-016 · `ARCH/05-INVARIANTS.md` INV-06
+- **Acceptance:** single-writer/single-scheduler inspection; lease-expiry requeue emits the event; cancellation lands only at step boundaries; nearest-wake computation test.
+- **Failure cases:** parallel scheduler → architecture violation; cancelled run executing another step → defect; expired lease blocking a claim → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-WF-005 — Crash resume follows the step matrix; completion is never fabricated
+- **Statement:** GIVEN a crash between steps, WHEN the run resumes, THEN persisted step state decides the action — `pending` → execute · `settled` → reuse result · `started` idempotent/retryable → retry with the **same** idempotency key · `started` side-effecting **keyless** → `needs_attention` (a human decides repair/retry/skip) · attempts exhausted → terminal + repair path — and completion is never fabricated or blindly re-run.
+- **Priority:** must
+- **Source:** `ARCH/20-WORKFLOW.md` §4 · `ARCH/04-DECISIONS.md` DEC-022/033
+- **Acceptance:** resume-matrix test per row; a keyless interrupted side effect never re-runs without a human decision; retries reuse the recorded key.
+- **Failure cases:** fabricated completion → violation; blind re-run of a keyless side effect → verification failure; lost settled result → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-WF-006 — Wake times are "not before"; schedules are timezone-faithful
+- **Statement:** GIVEN persisted timers and calendar schedules, WHEN the app boots or wakes, THEN persisted `wake_at` is treated as "not before" — never as wall-clock precision — and re-checked at every boot and wake, calendar schedules resolve in the stored IANA zone, and clock changes or DST transitions can neither skip nor duplicate a due occurrence.
+- **Priority:** must
+- **Source:** `ARCH/20-WORKFLOW.md` §4 · `ARCH/04-DECISIONS.md` DEC-033
+- **Acceptance:** boot/wake re-check test; DST-boundary and simulated clock-jump tests show no skip and no duplicate.
+- **Failure cases:** wall-clock precision assumed → defect; naive local-time schedule resolution → defect; skip or duplicate on DST → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-WF-007 — Misfire policy is explicit, recorded and bounded
+- **Statement:** GIVEN a missed due time (OS sleep or reboot), WHEN reconcile runs, THEN the default policy is **Skip + record** (a visible missed row, no execution), the optional *run latest missed* never executes the whole backlog, and the grace window is bounded (≤ 24 h desktop policy).
+- **Priority:** should
+- **Source:** `ARCH/20-WORKFLOW.md` §4/§11 · `ARCH/04-DECISIONS.md` DEC-033
+- **Acceptance:** policy tests per trigger class; missed rows visible; backlog test executes at most the latest missed occurrence; grace-bound enforcement.
+- **Failure cases:** silent skip → defect; backlog replay → defect; unbounded grace → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-WF-008 — Approval nodes use the one approval primitive
+- **Statement:** GIVEN a workflow approval node, WHEN it is requested and resolved, THEN it routes through the single approval primitive with `approve · reject · edit · provide-data` (typed form payload for provide-data), an edit records both the editable draft and the immutable original in the receipt, timeout resolves per class (default reject/escalate), and routing conditions live at the IR level.
+- **Priority:** must
+- **Source:** `ARCH/20-WORKFLOW.md` §7 · `ARCH/04-DECISIONS.md` DEC-021 · `ARCH/05-INVARIANTS.md` INV-17 · `ARCH/07-CONTRACTS.md` CTR-012
+- **Acceptance:** node tests per decision kind; timeout default test; edit records both versions; approval audited and evented.
+- **Failure cases:** bespoke approval dialog/path → review failure; timeout leaving a run pending forever → defect; unrecorded approval → receipt verification failure.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-WF-009 — Retry, timeout and concurrency bounds are declared
+- **Statement:** GIVEN node execution and trigger concurrency, WHEN defaults apply, THEN node retry is 2 attempts with exponential backoff (opt-in change), step timeout is 5 min default (overridable; workflow `maximumRuntime` bounded), lease/reaper run at 60 s/30 s, per-workflow overlap defaults to Skip with a declared queue option, and trigger storms are absorbed by backpressure — never unbounded fan-out.
+- **Priority:** should
+- **Source:** `ARCH/20-WORKFLOW.md` §8 · `ARCH/04-DECISIONS.md` DEC-031/033
+- **Acceptance:** defaults test; per-node override test; overlap Skip/queue tests; storm/backpressure test.
+- **Failure cases:** retry beyond declared attempts → defect; unbounded fan-out → defect; step running past `maximumRuntime` → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-WF-010 — Composition: agent nodes, workflows-as-tools, authored definitions
+- **Statement:** GIVEN composition in both directions, WHEN a workflow invokes an agent node, THEN it passes a task + bounded context refs and receives a result/receipt — never the agent's transcript; WHEN an agent invokes a workflow, THEN it resolves through the capability catalog like any other capability; WHEN an agent authors a workflow, THEN the emitted definition passes IR, policy and capability-census validation plus a publish gate before any trigger can run it.
+- **Priority:** must
+- **Source:** `ARCH/20-WORKFLOW.md` §9 · `ARCH/04-DECISIONS.md` DEC-008 · `ARCH/07-CONTRACTS.md` CTR-001/CTR-009
+- **Acceptance:** agent-node handoff carries receipts only; workflow-as-tool resolves through the broker; an unvalidated or unpublished authored definition cannot execute.
+- **Failure cases:** transcript leakage into the run → violation; authored definition executing without validation/publish → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-WF-011 — Run evidence is receipted, evented and replayable
+- **Statement:** GIVEN a workflow run, WHEN it progresses or reaches a terminal state, THEN run-level and per-node receipts plus typed events are recorded in the single event store, every terminal state carries a reason, and the run's evidence is replayable.
+- **Priority:** must
+- **Source:** `ARCH/20-WORKFLOW.md` §10 · `ARCH/05-INVARIANTS.md` INV-07/INV-23 · `ARCH/04-DECISIONS.md` DEC-022 · `ARCH/29-ARTIFACTS.md` §3
+- **Acceptance:** receipt coverage per run and node; event coverage; replay reproduces the run's step ledger; every terminal state has a reason.
+- **Failure cases:** run without receipts → violation; silent terminal state → defect; non-replayable evidence → defect.
 - **Tests:** pending
 - **Status:** seeded
 
@@ -996,11 +1086,12 @@ This registry answers one question per entry: **what behavior must this system e
 | `CTX` (10) | drafted above + expanded in pass `16` | verified during pass `16` ✅ (2026-09-26) |
 | `TRUST` (10), `CAP` (10) | drafted above + expanded in passes `12`/`13` | verified during passes `12` ✅ / `13` ✅ (2026-09-26) |
 | `PROV` (10) | drafted above + expanded in pass `14` | verified during pass `14` ✅ (2026-09-26) |
-| `WF` (1), `AGX` (1), `UI` (1) | drafted above | `20`, Agent X finalisation lane, `AGENTCOWORK-UI.md` |
+| `AGX` (1), `UI` (1) | drafted above | Agent X finalisation lane, `AGENTCOWORK-UI.md` |
 | `KERNEL` (7), `WORK` (8) | drafted above | verified during passes `10` ✅ / `11` ✅ (2026-09-26) |
 | `MEM` (12) | drafted above + expanded in pass `17` | verified during pass `17` ✅ (2026-09-26) |
 | `MODEL` (12) | drafted above + expanded in pass `18` | verified during pass `18` ✅ (2026-09-26) |
 | `RTENV` (11) | drafted above + expanded in pass `19` | verified during pass `19` ✅ (2026-09-26) |
+| `WF` (11) | drafted above + expanded in pass `20` | verified during pass `20` ✅ (2026-09-26) |
 | `WORLD`, `OFFICE`, `BROWSER`, `CUA`, `FILES`, `CODE`, `SEARCH`, `COMMS`, `ART`, `EVENTS`, `SKILL`, `CHAN`, `VERIFY` | pending | seeded during each module's P7 pass |
 
 ## 6. Related

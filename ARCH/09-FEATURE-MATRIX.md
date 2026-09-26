@@ -120,6 +120,17 @@ One row per `REQ-*`. Status only from evidence.
 | `REQ-RTENV-009` | `19-RUNTIME-ENVIRONMENTS` | pending | `INV-16` | — | pending | pending | unplanned |
 | `REQ-RTENV-010` | `19-RUNTIME-ENVIRONMENTS` | pending | `—` | — | pending | pending | unplanned |
 | `REQ-RTENV-011` | `19-RUNTIME-ENVIRONMENTS` | pending | `—` | — | pending | pending | unplanned |
+| `REQ-WF-001` | `20-WORKFLOW` | pending | `INV-16`, `DEC-033` | — | pending | pending | unplanned |
+| `REQ-WF-002` | `20-WORKFLOW` | pending | `DM-021`, `DEC-008` | — | pending | pending | unplanned |
+| `REQ-WF-003` | `20-WORKFLOW` | pending | `DEC-033` | — | pending | pending | unplanned |
+| `REQ-WF-004` | `20-WORKFLOW` | pending | `CTR-016`, `INV-06` | — | pending | pending | unplanned |
+| `REQ-WF-005` | `20-WORKFLOW` | pending | `DEC-033`, `DEC-022` | — | pending | pending | unplanned |
+| `REQ-WF-006` | `20-WORKFLOW` | pending | `DEC-033` | — | pending | pending | unplanned |
+| `REQ-WF-007` | `20-WORKFLOW` | pending | `DEC-033` | — | pending | pending | unplanned |
+| `REQ-WF-008` | `20-WORKFLOW` | pending | `DEC-021`, `INV-17`, `CTR-012` | — | pending | pending | unplanned |
+| `REQ-WF-009` | `20-WORKFLOW` | pending | `DEC-031`, `DEC-033` | — | pending | pending | unplanned |
+| `REQ-WF-010` | `20-WORKFLOW` | pending | `DEC-008`, `CTR-001/CTR-009` | — | pending | pending | unplanned |
+| `REQ-WF-011` | `20-WORKFLOW` | pending | `INV-07`, `INV-23` | — | pending | pending | unplanned |
 
 ## 4. Maintenance
 

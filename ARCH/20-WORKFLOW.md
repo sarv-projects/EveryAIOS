@@ -1,6 +1,7 @@
 # 20 — Workflow Engine
 
 > **Status:** Draft P2 (early — workflow verification integrated 2026-09-26). Must pass the `ARCH/00-INDEX.md` §5 checklist at freeze.
+> **P7 pass (2026-09-26):** line-checked; requirements seeded (`REQ-WF-*`, Requirements section).
 > **Role:** Core infrastructure, a **peer of the agent runtime** (DEC-008). Deterministic processes that can include agent nodes; agents author workflows and invoke them as tools (P-11).
 > **Dependencies:** `11-WORK` (lifecycle/checkpoints/scheduler) · `13`/`14` (action nodes) · `15` (agent nodes) · `12` (approvals/tickets) · `30-EVENTS` · `21-WORLD-MODEL` (trigger sources).
 > **Evidence:** `ARCHIVE/v1-research/workflow-engine-verification.md` (690 lines; Temporal/n8n/Copilot Studio verified high, Agent Builder deprecation verified with one PARTIAL) · `agent-harness-verification.md` §E8 (Grok scheduler) · DEC-008/021/033 · INV-16/23.
@@ -165,3 +166,21 @@ Visual DAG editor (typed IR + JSON/YAML + agent authoring first; graph later) ·
 ## 15. Evidence
 
 `ARCHIVE/v1-research/workflow-engine-verification.md` — §0 (design inputs), §1 (claims A–D verdicts + corrections), §2 (clone evidence: Grok `occurrence_journal.rs:1-12`/`types.rs:7-40`, OpenWork `types/src/automations.ts:346-371`, Open Cowork, NextCoWork, DeepSeek README:128 falsifier, Codex background), §3 (trigger taxonomy), §4 (durability design + resume matrix), §5 (versioning/approvals/retry defaults) · `agent-harness-verification.md` §E8 · DEC-008/021/033 · INV-16/23.
+
+## 16. Requirements (`REQ-WF-*`)
+
+Testable behaviors owned by this module live in `ARCH/08-REQUIREMENTS.md`; the traceability chain is in `ARCH/09-FEATURE-MATRIX.md`. This table is a pointer, not a second copy.
+
+| REQ | Behavior (one line) |
+|---|---|
+| `REQ-WF-001` | In-flight runs execute their pinned version + digest; resume uses it; only an explicit audited upgrade changes it (INV-16) |
+| `REQ-WF-002` | Typed IR (DM-021) is the definition truth; only published, content-addressed versions trigger or execute |
+| `REQ-WF-003` | Occurrence rows persist before due with unique idempotency keys; claims admit exactly one run (DEC-033) |
+| `REQ-WF-004` | One wake loop: reconcile leases → materialize → claim → execute step-by-step → nearest wake; no second scheduler (CTR-016) |
+| `REQ-WF-005` | Crash resume follows the persisted step matrix; keyless side effects go to `needs_attention`; completion is never fabricated |
+| `REQ-WF-006` | `wake_at` is "not before" and re-checked at boot/wake; calendar schedules resolve in stored IANA zones (DST-safe) |
+| `REQ-WF-007` | Missed occurrences: default Skip + record, optional "latest missed" only, grace ≤ 24 h |
+| `REQ-WF-008` | Approval nodes use the one approval primitive (`approve`/`reject`/`edit`/`provide-data`), timeout per class (DEC-021, INV-17) |
+| `REQ-WF-009` | Node retry 2 · step timeout 5 min · lease 60 s/reaper 30 s · overlap Skip default · storm backpressure (DEC-031) |
+| `REQ-WF-010` | Agent nodes return receipts (never transcripts); workflows-as-tools resolve via the catalog; authored definitions pass validation + publish gate |
+| `REQ-WF-011` | Run/node receipts + typed events in the one event store; terminal reasons recorded; evidence replayable (INV-07/23) |
