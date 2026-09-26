@@ -1,7 +1,7 @@
 # CURRENT_RUN — handover log
 
 > Read this first. Working log for agents in `desktop_app`.
-> **v1 docs rebuild in progress — code is frozen until v1 freezes.**
+> **v1 docs built; spec-driven-development finalisation (pass P7) in progress — code is frozen until v1 freezes.**
 > Previous v0 handover content (≈344 KB) was replaced on 2026-09-26; it remains in git history.
 
 ## Active goal
@@ -34,15 +34,24 @@ Rebuild the AgentCowork docs from scratch as **v1**: ARCH set + SPEC + UI + supp
 - Gate state after the re-homing: `check-doc-refs.mjs`, `check-public-surface.mjs` and `gen-release-surface.mjs --check` exit 0.
 - **Pre-existing red (out of scope, left as-is):** `check-doc-sync.mjs` reads archived v0 files (`ARCH/09-FEATURE-MATRIX.md`, `DESKTOP-APP-SPEC.md`, `SPEC-CHANGELOG.md`) and fails on main; it is the only FAIL in release-qualify E3 and is queued for re-homing.
 
-**Working-tree state:** the v0→v1 doc work was committed by the product owner (HEAD `93a30e3`); the 2026-09-26 tracked-doc cleanup (16 deletions + live-doc/script/workflow edits) is committed as one coherent change. `ARCHIVE/**` is git-ignored, so the archive side is never committed. Code tree clean — the code phase has not started.
+**Working-tree state:** the v0→v1 doc work was committed by the product owner; the 2026-09-26 tracked-doc cleanup is committed (`573fff0`). `ARCHIVE/**` is git-ignored, so the archive side is never committed. Code tree clean — the code phase has not started.
+
+**SDD finalisation — pass P7 (2026-09-26, in progress):**
+- `b646cf1 spec: add requirements registry, traceability matrix, and SDD protocol` — new `ARCH/08-REQUIREMENTS.md` (REQ-* registry: 26 domains, 17 seeds, GIVEN/WHEN/THEN + acceptance + failure cases), `ARCH/09-FEATURE-MATRIX.md` (REQ→module→DEC→task→test traceability), `.agents/docs/spec-driven-development.md` (protocol), `.agents/templates/SPEC.template.md`; `AGENTS.md` re-chained authority + new §16 (SDD); `ARCH/00-INDEX.md` doc map/passes/IDs updated.
+- `5ae5f53 arch: flesh HLD failure model, NFR envelope, contract index, and data-model ER` — `ARCH/03` §3.1 contract index + §11 failure/recovery + §12 NFR envelope; `ARCH/06` §1.1 ER diagram; `ARCH/07` domain-contracts note.
+- Batch 1 doc pass complete: `ARCH/00–07` line-checked (`01`/`05` complete as-is; SDD banner links added to `02`/`04`/`05`); agent kit aligned (template §13 SDD; kit docs re-pointed at the retired `docs/codebase/` surface; `codebase-intelligence` skill gained the spec-work section).
+- Lanes: `gen-27` code-state inventory ✅ → `ARCHIVE/v1-research/v1-sdd/code-state-inventory.md` (309 lines: 25 ARCH modules → code paths, 7 checks answered). Key: coordinator is shared-plane only (10 IPC methods; 12 modules test-only); **no World-Model owner and no kernel crate exist in code**; `walk.rs:146-157` Windows dev/ino zeroing confirmed live (FIX-10); 367 Tauri commands, 0 broken, 49 dead; UI 12 centers + 22 rail viewports; `check-arch-invariants`/`ipc-parity`/`check-doc-refs` green. `gen-28` OpenCode harness study ✅ → `ARCHIVE/v1-research/v1-sdd/agentx-opencode-harness-notes.md` (647 lines; pinned clone SHAs; recommendations R-01…R-12). Corrections to carry into the module passes: Codex **does** have a provider-native compaction path — `ARCH/16` §4.3/OQ-CTX-01 must be reframed; OpenCode child permissions inherit only parent *deny* rules — `DEC-029`/Guard must intersect; OpenCode V2 has no `task` subagent and its `prune` config has no execution path.
+- Remaining P7 work: module passes `ARCH/10–19` (Requirements/Acceptance/Interfaces + LLD, extending `08`/`09`), then `20–32`, `34`/`40–44`, `AGENTCOWORK-UI.md` (designer lane), Agent X finalisation (fed by `gen-28`), `TODO.md` rework (TASK-* units from `gen-27` + the REQ registry), final consistency + review pass.
 
 ## Next exact steps
-1. Cleanup gate re-run ✅ 2026-09-26 (`check-doc-refs.mjs` · `check-public-surface.mjs` · `gen-release-surface.mjs --check` exit 0; `release-qualify.mjs` E3 remains red only on the pre-existing `check-doc-sync`) and the cleanup is committed — 16 tracked deletions + the live-doc/script/workflow edits. `ARCHIVE/` is git-ignored, so the archive side is not committed.
-2. Code-phase prep: re-verify `ARCH/42-EVIDENCE-MAP.md` §4 FIX-01…18 → open the P0 wave per §5.
-3. ✅ Docs build complete — P0–P6 done; v1 frozen for review. Product-owner review pending.
-4. Pass P1 ✅ complete: `04` `05` `06` `07` drafted.
-5. Pass P2: module LLDs in dependency order 10 ✅ → 11 ✅ → 12 ✅ → 13 ✅ → 14 ✅ → 15 ✅ → 16 ✅ → 17 ✅ → 18 ✅ → 19 ✅ → 20 ✅ → 21 ✅ → 29 ✅.
-6. Gate every doc with the §5 viability checklist in `ARCH/00-INDEX.md`; update the interop matrix in `ARCH/03-HLD.md` as modules land.
+1. Pass P7 (SDD finalisation) — continue in order:
+   - module doc passes `ARCH/10–19` → `20–32` → `34`/`40–44` (line-by-line; add Requirements/Acceptance/Interfaces/LLD sections; extend `ARCH/08` + `ARCH/09` as modules are passed);
+   - reconcile `gen-28` (OpenCode harness notes) → Agent X finalisation (`ARCH/15` + related `14`/`16`/`17`/`18`/`26`/`27`/`28`/`31`);
+   - `AGENTCOWORK-UI.md` final pass via designer lane;
+   - `TODO.md` rework into TASK-* units from the REQ registry + `gen-27` code-state inventory (keep the useful history, no mishmash);
+   - final consistency check + independent review; commit at each milestone with vendor-neutral messages. Docs remain UNFROZEN until the product owner freezes.
+2. Code-phase prep (after the doc freeze): re-verify `ARCH/42-EVIDENCE-MAP.md` §4 FIX-01…18 → open the P0 wave per §5. Live candidates from `gen-27`: FIX-05 `skill_store.rs:442-449`, FIX-06 `fs_cmds.rs:129-137`, FIX-07 `acp_cmds.rs:1676`, FIX-09 (`tools.rs`/`messaging.rs`/`vault/oauth.rs` direct `ureq`), FIX-10 (`walk.rs:146-157`).
+3. `check-doc-sync.mjs` re-homing decision remains open (pre-existing red; re-home to v1 / retire with the v0 chain / leave until code phase).
 
 ## Decisions & gotchas
 - Names: product **AgentCowork** (working), runtime **Core**, native agent **Agent X** (`ARCH/01-NAMING.md`). Code identifiers (`everyaios-*`) stay until a post-freeze code-phase rename (OQ-003).
@@ -50,3 +59,5 @@ Rebuild the AgentCowork docs from scratch as **v1**: ARCH set + SPEC + UI + supp
 - No-assumptions rule: every external claim needs `path:line` or URL evidence; the lost recon reports must not be cited.
 - Do not restore v0 files into tracked paths without a `DEC` entry in `ARCH/04-DECISIONS.md`.
 - `TODO.md` is exempt; `README.md`/`AGENTS.md` v1 sync ✅ done 2026-09-26.
+- SDD: `REQ-*`/`TASK-*`/`TEST-*` IDs are never renumbered or reused; spec changes land as `spec:`/`arch:` commits, implementation as `feat:`/`fix:`, tests as `test:` (`AGENTS.md` §16).
+- Passes do not rewrite locked decision text (e.g. `DEC-026` still ends at P0–P6); current pass status lives in `ARCH/00-INDEX.md` §4.

@@ -1,6 +1,7 @@
 # 02 — Thesis
 
 > **Status:** Draft P0. This doc sets identity and principles; decisions that need evidence land in `ARCH/04-DECISIONS.md`, invariants in `ARCH/05-INVARIANTS.md`.
+> **SDD:** the success statements (S-01…S-10) are the falsifiable seeds of the requirement registry; REQ traceability accrues in `ARCH/09-FEATURE-MATRIX.md`.
 
 ## 1. Definition (one sentence)
 

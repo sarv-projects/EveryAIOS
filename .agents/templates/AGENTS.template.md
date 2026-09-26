@@ -166,3 +166,16 @@ At the end of a substantial engineering task, summarize:
 - what remains uncertain or was skipped.
 
 Keep the repository itself factual and tool-agnostic.
+
+## 13. Spec-driven development
+
+For non-trivial work, treat requirements as the unit of engineering:
+
+- capture behavior as testable requirements with stable IDs (`REQ-*`) in GIVEN/WHEN/THEN form, each with priority, acceptance criteria, and failure cases;
+- record architecture decisions (`DEC-*`/ADR) with context, alternatives, and consequences; reference them instead of re-arguing in review;
+- keep an implementation plan where each task references the requirements it satisfies and names the paths and tests it touches;
+- derive tests from requirements (`TEST-*`); a requirement without a test is visible debt, not completion;
+- never silently change a spec: if code and spec disagree, stop, report the conflict, and propose a spec or decision change;
+- keep spec and architecture commits separate from feature/fix commits and from test commits.
+
+Use a project-local requirements registry and decision log when present; keep them in-repo so the contract travels with the code.

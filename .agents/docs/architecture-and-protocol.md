@@ -1,6 +1,6 @@
 # Repository Understanding Protocol
 
-This is the conceptual protocol implemented by the `codebase-intelligence` skill.
+This is the conceptual protocol implemented by the `codebase-intelligence` skill. It pairs with `spec-driven-development.md`: understanding precedes spec changes, and spec changes drive implementation.
 
 ## Phase A — Discover
 

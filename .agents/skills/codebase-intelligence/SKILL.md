@@ -439,6 +439,10 @@ Do not build/rebuild a full repository graph for trivial changes that can be ans
 
 For a repository-wide architectural task, migration, refactor, debugging investigation, or unfamiliar codebase, activate this skill early.
 
+## Understanding and spec work
+
+Structural analysis answers where behavior lives and what a change touches; it does not decide what should change. When a task changes behavior, feed the findings into the project's requirement and decision records where the project keeps them, and follow its spec workflow: understand → requirement/decision → plan → implement → verify. If code and the recorded spec disagree, report the conflict rather than implementing around it.
+
 ## Deliverables for repository work
 
 When this skill materially contributes to a coding task, leave behind:
