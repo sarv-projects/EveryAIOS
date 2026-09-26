@@ -1,6 +1,7 @@
 # 34 — Effect Verification
 
 > **Status:** Draft P3 (early). Must pass the `ARCH/00-INDEX.md` §5 checklist at freeze.
+> **P7 pass (2026-09-26):** line-checked; requirements seeded (`REQ-VERIFY-*`, Requirements section).
 > **Role:** the **verification plane** — `observe → validate → render → verify → reconcile` before any receipt. Verification depth scales with the capability’s risk class (INV-19; DEC-022/023). “Implemented but unverified” can never masquerade as complete.
 > **Dependencies:** `13-CAPABILITY` (hooks/risk classes) · domains (`22`–`28` provide validators/renderers) · `19-RUNTIME-ENVIRONMENTS` (execution of checks) · `29-ARTIFACTS` (receipts/records) · `30-EVENTS`. **Consumers:** the governed path itself.
 > **Evidence:** product-owner brief (verification plane; render→inspect→fix loop; “verification loop is critical”) · `ARCH/22-OFFICE.md` §5 (format validation hooks) · `ARCH/29-ARTIFACTS.md` §3 (receipt policy) · `ARCH/26-CODE.md` §7 (tests as verification) · DEC-022/023 · INV-19.
@@ -84,3 +85,23 @@ Formal-method verification engines · a continuous independent audit service · 
 ## 11. Evidence
 
 Product-owner brief (verification plane; render→inspect→fix; “create → render → inspect → verify → revise → deliver”) · `ARCH/22-OFFICE.md` §5 (validators/redact check) · `ARCH/29-ARTIFACTS.md` §3 (receipt policy) · `ARCH/26-CODE.md` §7 (tests) · `ARCH/23-BROWSER.md` §4 (structured assertions) · DEC-022/023 · INV-19.
+
+## 12. Requirements (`REQ-VERIFY-*`)
+
+Testable behaviors owned by this module live in `ARCH/08-REQUIREMENTS.md`; the traceability chain is in `ARCH/09-FEATURE-MATRIX.md`. This table is a pointer, not a second copy.
+
+| REQ | Behavior (one line) |
+|---|---|
+| `REQ-VERIFY-001` | Verification depth scales with risk class; the matrix is a floor, never a ceiling (INV-19, DEC-022) |
+| `REQ-VERIFY-002` | Verification is read-only; repairs are new operations with their own ticket and receipt |
+| `REQ-VERIFY-003` | Pipeline order `observe → validate → render → verify → reconcile` precedes every receipt |
+| `REQ-VERIFY-004` | Receipts state what ran, what was skipped, and why (DEC-022) |
+| `REQ-VERIFY-005` | Verification records are stored once; receipts reference them (CTR-018) |
+| `REQ-VERIFY-006` | Hook contract: idempotent, bounded, read-only, typed failures |
+| `REQ-VERIFY-007` | Missing hook → risk-class default with the gap recorded (EDGE-160) |
+| `REQ-VERIFY-008` | Deterministic validators lead; model/vision only where necessary and consent-gated |
+| `REQ-VERIFY-009` | Reconciliation records `pass`/`fail`/`partial`; failures route — never silent retries |
+| `REQ-VERIFY-010` | Verify–repair cycles are bounded; no progress escalates (EDGE-163) |
+| `REQ-VERIFY-011` | Postconditions are declared per operation and compared; partial batches are explicit |
+| `REQ-VERIFY-012` | Verification runs emit `verification.*` events (INV-23) |
+| `REQ-VERIFY-013` | Verifier crash/absence marks the effect `unverified`; dangerous classes block or ask (EDGE-160) |

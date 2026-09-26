@@ -2407,6 +2407,125 @@ This registry answers one question per entry: **what behavior must this system e
 - **Tests:** pending
 - **Status:** seeded
 
+### Effect Verification (`VERIFY`)
+
+#### REQ-VERIFY-001 — Verification depth scales with risk; the matrix is a floor
+- **Statement:** GIVEN a capability's risk class (`safe`/`sensitive`/`dangerous`), WHEN an effect completes, THEN the declared minimum verification for that class runs, and per-capability descriptor overrides may raise but never lower the floor.
+- **Priority:** must
+- **Source:** `ARCH/34-EFFECT-VERIFICATION.md` §1/§3 · `ARCH/06-DATA-MODEL.md` DM-011 · `ARCH/04-DECISIONS.md` DEC-022 · `ARCH/05-INVARIANTS.md` INV-19
+- **Acceptance:** depth-matrix test per class; an override below the floor is rejected; the receipt cites the depth used.
+- **Failure cases:** a dangerous effect with only `safe`-depth verification → violation; an override lowering the floor → violation.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-VERIFY-002 — Verification is read-only; repairs are new operations
+- **Statement:** GIVEN a verification run, WHEN it observes/validates/renders, THEN it never mutates the effect; a repair is a new work item/operation with its own ticket and receipt — never a silent re-execution.
+- **Priority:** must
+- **Source:** `ARCH/34-EFFECT-VERIFICATION.md` §1/§6 · `ARCH/29-ARTIFACTS.md` §3 · `ARCH/15-AGENT-X.md` §8
+- **Acceptance:** verification makes no write; a repair has a distinct ticket + receipt; no silent re-fire path exists.
+- **Failure cases:** verification mutating state → violation; silent retry → violation.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-VERIFY-003 — The pipeline order precedes every receipt
+- **Statement:** GIVEN any effect entering verification, WHEN it runs, THEN the pipeline order holds (observe context/ticket · deterministic validation · render where applicable · intended-vs-actual postconditions · reconcile outcome) before any receipt.
+- **Priority:** must
+- **Source:** `ARCH/34-EFFECT-VERIFICATION.md` §2
+- **Acceptance:** pipeline-order test; a receipt cannot be emitted before reconcile; each stage's evidence refs are recorded.
+- **Failure cases:** receipt emitted before verification → violation; a skipped stage without a recorded reason → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-VERIFY-004 — Receipts state what ran, was skipped, and why
+- **Statement:** GIVEN a receipt, WHEN it is recorded, THEN it records the verification performed (what passed, what was skipped, why) — including the unavailability of a deep hook.
+- **Priority:** must
+- **Source:** `ARCH/34-EFFECT-VERIFICATION.md` §1/§4 · `ARCH/04-DECISIONS.md` DEC-022
+- **Acceptance:** receipt field-completeness test; skipped checks carry reasons; a receipt cannot omit its verification section.
+- **Failure cases:** a receipt claiming verification never run → violation; an omitted skip reason → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-VERIFY-005 — Verification records are stored once and referenced
+- **Statement:** GIVEN a verification result, WHEN it is stored, THEN one verification record exists (`{id · effect_ref · capability/provider · checks[] · render refs · outcome · duration}`) and receipts reference it rather than duplicating it.
+- **Priority:** must
+- **Source:** `ARCH/34-EFFECT-VERIFICATION.md` §5 · `ARCH/29-ARTIFACTS.md` §3 · `ARCH/07-CONTRACTS.md` CTR-018
+- **Acceptance:** single-record test; receipts contain refs not copies; the record id is stable across reads.
+- **Failure cases:** duplicated verification payloads → defect; a receipt without a record ref → violation.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-VERIFY-006 — The hook contract is idempotent, bounded and read-only
+- **Statement:** GIVEN a verification hook, WHEN it executes, THEN `(effect record) → verification record` is idempotent, bounded and read-only, with typed failures.
+- **Priority:** must
+- **Source:** `ARCH/34-EFFECT-VERIFICATION.md` §4 · `ARCH/10-KERNEL.md` §3
+- **Acceptance:** a repeat-run test yields identical records; time/scope limits are enforced; a hook with side effects is rejected.
+- **Failure cases:** a hook with side effects → violation; an unbounded hook → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-VERIFY-007 — Missing hooks degrade to the risk default with a recorded gap
+- **Statement:** GIVEN a capability without a deep hook, WHEN verification runs, THEN it falls back to the risk-class default (re-read/observe) and the receipt/record notes that the deep hook was unavailable.
+- **Priority:** must
+- **Source:** `ARCH/34-EFFECT-VERIFICATION.md` §4 · `ARCH/41-EDGE-CASES.md` EDGE-055/EDGE-160
+- **Acceptance:** fallback test; the gap is recorded; sensitive/dangerous classes may require human confirmation instead.
+- **Failure cases:** claiming deep verification without a hook → violation; silent degradation without a recorded gap → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-VERIFY-008 — Deterministic validators lead; model/vision is consent-gated
+- **Statement:** GIVEN verification depth, WHEN checks are selected, THEN deterministic validators, re-reads, structural checks and diffs lead; model/vision inspection runs only where necessary and consent-gated.
+- **Priority:** must
+- **Source:** `ARCH/34-EFFECT-VERIFICATION.md` §1/§3 · `ARCH/04-DECISIONS.md` DEC-015
+- **Acceptance:** selection test prefers deterministic checks; vision runs only with consent; token use for vision checks is recorded.
+- **Failure cases:** a routine deterministic operation routed through vision → violation; vision without consent → violation.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-VERIFY-009 — Reconciliation outcomes are explicit; failures route
+- **Statement:** GIVEN an intended-vs-actual comparison, WHEN it completes, THEN the outcome is recorded `pass | fail | partial`; failures route to repair, escalation or `needs_attention` — never a silent retry; partial outcomes are explicit.
+- **Priority:** must
+- **Source:** `ARCH/34-EFFECT-VERIFICATION.md` §2/§6 · `ARCH/41-EDGE-CASES.md` EDGE-162
+- **Acceptance:** an outcome is recorded for every run; a mismatch produces a routed outcome; no silent re-execution.
+- **Failure cases:** a mismatch auto-overwriting state → violation; a silent retry → violation.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-VERIFY-010 — Verify–repair cycles are bounded
+- **Statement:** GIVEN a verify–repair cycle making no progress, WHEN the bound is reached, THEN the system escalates with evidence — never an infinite loop.
+- **Priority:** must
+- **Source:** `ARCH/34-EFFECT-VERIFICATION.md` §7 · `ARCH/41-EDGE-CASES.md` EDGE-163
+- **Acceptance:** a no-progress test terminates with escalation/`needs_attention`; attempts are counted.
+- **Failure cases:** an unbounded cycle → defect; escalation without evidence → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-VERIFY-011 — Postconditions are declared per operation
+- **Statement:** GIVEN an operation, WHEN verification runs, THEN postconditions are declared ("cell B2 = 42", "file exists with hash H", "tab URL = X", "message accepted by provider") and compared; batch atomicity applies where declared.
+- **Priority:** must
+- **Source:** `ARCH/34-EFFECT-VERIFICATION.md` §6 · `ARCH/22-OFFICE.md` §3 · `ARCH/26-CODE.md` §7
+- **Acceptance:** a postcondition-declaration test per capability family; comparison against actual state; partial batch outcomes recorded explicitly.
+- **Failure cases:** verification without declared postconditions → defect; a hidden partial batch → violation.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-VERIFY-012 — Verification runs are observable on the event stream
+- **Statement:** GIVEN a verification run, WHEN it starts/completes, THEN it emits `verification.started` / `verification.completed` events so progress is observable.
+- **Priority:** must
+- **Source:** `ARCH/34-EFFECT-VERIFICATION.md` §5 · `ARCH/30-EVENTS.md` §3 · `ARCH/05-INVARIANTS.md` INV-23
+- **Acceptance:** an event pair is emitted per run; events carry refs not payloads; UI visibility derives from the stream.
+- **Failure cases:** verification invisible to the event stream → defect; payload data in the event → violation.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-VERIFY-013 — Verifier failure degrades honestly
+- **Statement:** GIVEN a crash/absent validator or an unavailable vision pass, WHEN verification cannot complete, THEN the effect is marked `unverified` with the gap recorded, and policy may block dangerous classes entirely (human confirmation instead).
+- **Priority:** must
+- **Source:** `ARCH/34-EFFECT-VERIFICATION.md` §7 · `ARCH/41-EDGE-CASES.md` EDGE-160 · `ARCH/05-INVARIANTS.md` INV-19
+- **Acceptance:** a validator-crash test marks the effect unverified; a dangerous class blocks or asks for confirmation; no silent pass.
+- **Failure cases:** a crash defaulting to pass → violation; an unverified effect delivered as verified → violation.
+- **Tests:** pending
+- **Status:** seeded
+
 ## 5. Seeding status
 
 | Domain | Seeds | Next pass |
@@ -2433,7 +2552,7 @@ This registry answers one question per entry: **what behavior must this system e
 | `EVENTS` (12) | drafted above + expanded in pass `30` | verified during pass `30` ✅ (2026-09-26) |
 | `SKILL` (13) | drafted above + expanded in pass `31` | verified during pass `31` ✅ (2026-09-26) |
 | `CHAN` (13) | drafted above + expanded in pass `32` | verified during pass `32` ✅ (2026-09-26) |
-| `VERIFY` | pending | seeded during each module's P7 pass |
+| `VERIFY` (13) | drafted above + expanded in pass `34` | verified during pass `34` ✅ (2026-09-26) |
 
 ## 6. Related
 

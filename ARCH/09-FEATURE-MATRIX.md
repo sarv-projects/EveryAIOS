@@ -276,6 +276,19 @@ One row per `REQ-*`. Status only from evidence.
 | `REQ-CHAN-011` | `32-CHANNELS` | pending | `—` | `EDGE-075` | pending | pending | unplanned |
 | `REQ-CHAN-012` | `32-CHANNELS` | pending | `—` | `EDGE-079` | pending | pending | unplanned |
 | `REQ-CHAN-013` | `32-CHANNELS` | pending | `INV-16` | `EDGE-077` | pending | pending | unplanned |
+| `REQ-VERIFY-001` | `34-EFFECT-VERIFICATION` | pending | `DEC-022`, `INV-19`, `DM-011` | — | pending | pending | unplanned |
+| `REQ-VERIFY-002` | `34-EFFECT-VERIFICATION` | pending | `—` | `EDGE-162` | pending | pending | unplanned |
+| `REQ-VERIFY-003` | `34-EFFECT-VERIFICATION` | pending | `—` | — | pending | pending | unplanned |
+| `REQ-VERIFY-004` | `34-EFFECT-VERIFICATION` | pending | `DEC-022` | — | pending | pending | unplanned |
+| `REQ-VERIFY-005` | `34-EFFECT-VERIFICATION` | pending | `CTR-018` | — | pending | pending | unplanned |
+| `REQ-VERIFY-006` | `34-EFFECT-VERIFICATION` | pending | `—` | — | pending | pending | unplanned |
+| `REQ-VERIFY-007` | `34-EFFECT-VERIFICATION` | pending | `—` | `EDGE-055`, `EDGE-160` | pending | pending | unplanned |
+| `REQ-VERIFY-008` | `34-EFFECT-VERIFICATION` | pending | `DEC-015` | — | pending | pending | unplanned |
+| `REQ-VERIFY-009` | `34-EFFECT-VERIFICATION` | pending | `—` | `EDGE-162` | pending | pending | unplanned |
+| `REQ-VERIFY-010` | `34-EFFECT-VERIFICATION` | pending | `—` | `EDGE-163` | pending | pending | unplanned |
+| `REQ-VERIFY-011` | `34-EFFECT-VERIFICATION` | pending | `—` | — | pending | pending | unplanned |
+| `REQ-VERIFY-012` | `34-EFFECT-VERIFICATION` | pending | `INV-23` | — | pending | pending | unplanned |
+| `REQ-VERIFY-013` | `34-EFFECT-VERIFICATION` | pending | `INV-19` | `EDGE-160` | pending | pending | unplanned |
 
 ## 4. Maintenance
 
