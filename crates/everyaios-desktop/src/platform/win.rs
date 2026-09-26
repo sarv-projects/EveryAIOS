@@ -1,7 +1,13 @@
 //! Windows backend (E9) — cross-compile-checked against x86_64-pc-windows-msvc.
 //!
-//! - **Read:** UI Automation tree via `RawViewWalker` (indexes + click-by-name),
-//!   window/app list via EnumWindows.
+//! - **Read:** UI Automation via a **control view** tree walker (the raw view
+//!   contains control-only duplicates that inflate every count), window/app list
+//!   via `EnumWindows`. `FIX-17` moved the whole collector into
+//!   [`crate::uia`]: bounded (nodes · depth · text · per-call budget), run on a
+//!   **worker** with incremental output so a hung provider yields a *partial*
+//!   read instead of stalling the agent, `AutomationId` treated as a **hint**,
+//!   elevation limits degrading to a typed `Unknown`, protected fields masked,
+//!   and ambiguity **rejected** rather than guessed.
 //! - **Act:** UIA Invoke/SetValue **first**; SendInput fallback for
 //!   click/type/scroll/drag (winappCli / deploymenttheory order).
 //!   **P57.3:** activation (`SetForegroundWindow` + `ShowWindow`) and
@@ -15,12 +21,20 @@
 //!   focus. If no element is invokable and the app ignores the message, the
 //!   action fails honestly instead of silently moving the user's pointer.
 //!   **P57.1:** launch goes through `ShellExecuteExW` on the canonical path.
-//! - **See:** PrintWindow (PW_RENDERFULLCONTENT) → screen-DC BitBlt fallback.
-//!   Windows.Graphics.Capture (WGC, captures occluded windows) is the
-//!   documented follow-on: WinRT interop is a seam here (see `capabilities()`).
+//! - **See:** capture readiness is **verified before any capture** (`FIX-18`,
+//!   [`crate::capture`]): WinRT graphics-capture support, a live BGRA-capable
+//!   D3D11 device, a compositor, and a live window handle with non-zero extent.
+//!   Then Windows.Graphics.Capture (WGC) → PrintWindow (`PW_RENDERFULLCONTENT`)
+//!   → screen-DC BitBlt, with every skip recorded as a typed degrade on the
+//!   result instead of a bare `None`.
 //!
-//! All COM/UIA code is behind `#[cfg(windows)]`; this module compiles but is
-//! never linked on non-Windows targets.
+//! All COM/UIA/WinRT code is behind `#[cfg(windows)]`; this module compiles but
+//! is never linked on non-Windows targets. Its **runtime** behaviour is therefore
+//! unverified on this host: what is verified here is that the collector's
+//! identity, ambiguity, elevation, timeout and readiness *rules* hold (they live
+//! in the platform-neutral [`crate::uia`] / [`crate::capture`] modules and are
+//! tested with fakes), not that a real UIA provider answers the way the Windows
+//! client expects.
 
 use windows::Win32::Foundation::{BOOL, HWND, LPARAM, POINT, RECT, WPARAM};
 use windows::Win32::Graphics::Gdi::{
@@ -46,6 +60,13 @@ use windows::Win32::UI::HiDpi::{
     DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2, GetDpiForWindow,
     LogicalToPhysicalPointForPerMonitorDPI, SetProcessDpiAwarenessContext,
 };
+// `FIX-18` — the capture-readiness probe: a live window handle (`IsWindow`) and
+// the window's extent (`GetWindowRect`). The DWM composition flag is **not**
+// probed on this build: the `windows` crate's `Win32_Graphics_Dwm` feature is not
+// enabled in this crate's manifest, and adding one is a dependency decision, not a
+// silent edit. The graphics-capture side of the same question is covered by
+// `GraphicsCaptureSession::IsSupported()` plus a live BGRA-capable D3D11 device
+// (see `platform/wgc.rs`). Recorded as a limitation rather than asserted.
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_EXTENDEDKEY, KEYEVENTF_KEYUP,
     KEYEVENTF_SCANCODE, MAPVK_VK_TO_VSC, MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP,
@@ -56,7 +77,7 @@ use windows::Win32::UI::Shell::{
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     CWP_SKIPINVISIBLE, ChildWindowFromPointEx, EnumWindows, GetClassNameW, GetForegroundWindow,
-    GetWindowRect, GetWindowTextW, GetWindowThreadProcessId, IsWindowVisible, PostMessageW,
+    GetWindowRect, GetWindowTextW, GetWindowThreadProcessId, IsWindow, IsWindowVisible, PostMessageW,
     SW_RESTORE, SW_SHOWNOACTIVATE, SW_SHOWNORMAL, SetCursorPos, SetForegroundWindow, ShowWindow,
     WM_LBUTTONDOWN, WM_LBUTTONUP,
 };
@@ -67,11 +88,17 @@ use windows::Win32::UI::WindowsAndMessaging::{
 const MK_LBUTTON: usize = 0x0001;
 
 use crate::DesktopError;
+use crate::capture::{
+    CaptureCheck, CaptureFault, CapturePipeline, CaptureProbe, CaptureReadiness,
+};
 use crate::geometry::{DpiScale, DpiSource};
 use crate::ladder::{ClickProfile, ClickRung, LadderTarget, RungDelivery};
 use crate::launch;
 use crate::policy::InteractionMode;
 use crate::types::{ActKind, ReadNode, ReadResult, Region, SeeMethod, SeeResult, WindowInfo};
+use crate::uia::{
+    Coverage, SnapshotEpoch, UiaAnswer, UiaCall, UiaFault, UiaHandle, UiaNode, UiaProvider,
+};
 
 /// The Windows click ladder, as data.
 ///
@@ -124,76 +151,77 @@ fn control_type_name(id: i32) -> String {
     }
 }
 
-/// Windows UIA element → our ReadNode (bounded depth + node budget).
-unsafe fn element_to_node(
-    walker: &IUIAutomationTreeWalker,
-    element: &IUIAutomationElement,
-    path: &str,
-    depth: u32,
-    budget: &mut u32,
-) -> Option<ReadNode> {
-    if depth > 8 || *budget == 0 {
-        return None;
-    }
-    *budget -= 1;
-    let name = element
-        .CurrentName()
-        .map(|b| b.to_string())
-        .unwrap_or_default();
-    let role = control_type_name(element.CurrentControlType().map(|c| c.0).unwrap_or(0));
-    let automation_id = element
-        .CurrentAutomationId()
-        .map(|b| {
-            let s = b.to_string();
-            if s.is_empty() { None } else { Some(s) }
-        })
-        .unwrap_or(None);
-    let mut rect: RECT = std::mem::zeroed();
-    if let Ok(r) = element.CurrentBoundingRectangle() {
-        rect = r;
-    }
-    let actionable = role != "Text" && role != "Pane" && role != "Group";
-    let mut node = ReadNode {
-        index_path: path.to_string(),
-        role,
-        name,
-        automation_id,
-        x: rect.left,
-        y: rect.top,
-        width: (rect.right - rect.left).max(0) as u32,
-        height: (rect.bottom - rect.top).max(0) as u32,
-        actionable,
-        children: vec![],
-    };
-    let mut child = match walker.GetFirstChildElement(element) {
-        Ok(c) => c,
-        Err(_) => return Some(node),
-    };
-    let mut i = 0usize;
-    while !child.as_raw().is_null() && *budget > 0 {
-        if let Some(child_node) = element_to_node(
-            walker,
-            &child,
-            &format!("{path}.{}", i + 1),
-            depth + 1,
-            budget,
-        ) {
-            node.children.push(child_node);
-        }
-        i += 1;
-        match walker.GetNextSiblingElement(&child) {
-            Ok(next) => child = next,
-            Err(_) => break,
-        }
-    }
-    Some(node)
-}
-
-pub struct WinUia {
+/// The real UI Automation client behind [`crate::uia::UiaProvider`].
+///
+/// Three decisions here are load-bearing for `FIX-17` and were not in the v0 code:
+///
+/// - **Control view, not raw view.** The raw view contains control-only and
+///   content-only duplicates of the same element, so a raw walk inflates every
+///   count and can make one button look like two — which is exactly how a
+///   "click the Save button" query becomes ambiguous. The control view is the
+///   view a control's identity is expressed in.
+/// - **Properties on request.** Name/bounds/IsPassword/IsOffscreen are read in
+///   [`Self::call`] when the collector asks, not cached on a struct, so a
+///   protected field's text is never held anywhere but the call that masks it.
+/// - **Typed failures.** `UIAccess`-style refusals come back as
+///   [`UiaFault::ElevationBlocked`], not as an absent child.
+///
+/// Cloning is how a read reaches its worker: the COM wrappers are reference
+/// counted, and every walk gets its own per-walk handle maps.
+#[derive(Clone)]
+pub struct WinUiaClient {
     automation: IUIAutomation,
+    walker: IUIAutomationTreeWalker,
+    /// The snapshot generation this client stamps on its observations. Advances
+    /// on every read, because a UIA tree is lazy and changes.
+    snapshot: std::sync::atomic::AtomicU64,
+    /// Per-process integrity level, cached: it cannot change while the process
+    /// runs, and it is what decides whether an elevated target is readable.
+    integrity: IntegrityLevel,
+    /// Root elements by window id for the current walk, so a handle is only ever
+    /// meaningful inside the walk that produced it.
+    roots: std::collections::BTreeMap<u64, IUIAutomationElement>,
+    /// Children by parent handle for the current walk, populated lazily.
+    children: std::collections::BTreeMap<u64, Vec<IUIAutomationElement>>,
+    /// The runtime id assigned to each element of the current walk.
+    runtime: std::collections::BTreeMap<u64, IUIAutomationElement>,
 }
 
-impl WinUia {
+/// How elevated this process is — the fact that decides whether an elevated
+/// target's UI can be read at all.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IntegrityLevel {
+    /// Medium integrity: the default for a normal desktop app.
+    Medium,
+    /// High integrity: the process is elevated.
+    High,
+    /// System integrity.
+    System,
+}
+
+impl IntegrityLevel {
+    /// May this level read a target at `target`?
+    ///
+    /// A medium-integrity client cannot read elevated UI at all without the
+    /// UIAccess flag, and SYSTEM UI is unreachable even for an elevated client
+    /// unless it is itself UIAccess-enabled. We are not UIAccess-enabled (that
+    /// needs a signed binary in a secure location, which is a deployment decision
+    /// `ARCH/21` §5 rule 4 defers), so the rule here is the strict one.
+    pub fn may_read(&self, target: IntegrityLevel) -> bool {
+        match (self, target) {
+            (IntegrityLevel::High, _) => true,
+            // SYSTEM UI needs UIAccess regardless of elevation.
+            (IntegrityLevel::Medium, IntegrityLevel::High) => false,
+            (IntegrityLevel::Medium, IntegrityLevel::System) => false,
+            (IntegrityLevel::Medium, IntegrityLevel::Medium) => true,
+            (IntegrityLevel::System, _) => true,
+        }
+    }
+}
+
+impl WinUiaClient {
+    /// Create the client. COM is initialised MTA, which is what the collector's
+    /// worker thread wants.
     pub fn init() -> Result<Self, DesktopError> {
         unsafe {
             let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
@@ -202,95 +230,217 @@ impl WinUia {
             CoCreateInstance::<_, IUIAutomation>(&CUIAutomation, None, CLSCTX_ALL)
                 .map_err(|e| DesktopError::Platform(format!("UIA init: {e}")))?
         };
-        Ok(Self { automation })
+        // `FIX-17` — the **control** view walker. The raw view duplicates
+        // elements (a control-only node plus a content-only node for the same
+        // control), so a raw walk makes one button look like two and turns every
+        // name-addressed click into a coin flip.
+        let walker = unsafe {
+            automation
+                .ControlViewWalker()
+                .map_err(|e| DesktopError::Platform(format!("ControlViewWalker: {e}")))?
+        };
+        Ok(Self {
+            automation,
+            walker,
+            snapshot: std::sync::atomic::AtomicU64::new(0),
+            integrity: Self::integrity_level(),
+            roots: Default::default(),
+            children: Default::default(),
+            runtime: Default::default(),
+        })
     }
 
-    fn walker(&self) -> Result<IUIAutomationTreeWalker, DesktopError> {
+    /// This process's integrity level.
+    ///
+    /// `GetTokenInformation(TokenIntegrityLevel)` + `GetSidSubAuthority` is the
+    /// documented way to read it. It is read once and cached: a process's
+    /// integrity level cannot be lowered without exiting, so re-reading it per
+    /// call would cost a syscall for a constant.
+    pub fn integrity_level() -> IntegrityLevel {
+        use windows::Win32::Foundation::{LocalFree, HLOCAL};
+        use windows::Win32::Security::Authorization::TOKEN_QUERY;
+        use windows::Win32::Security::{
+            GetSidSubAuthority, GetTokenInformation, TOKEN_ELEVATION, TokenElevation,
+            TokenIntegrityLevel,
+        };
+        use windows::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
         unsafe {
-            self.automation
-                .RawViewWalker()
-                .map_err(|e| DesktopError::Platform(format!("RawViewWalker: {e}")))
+            let mut token = windows::Win32::Foundation::HANDLE::default();
+            if OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token).is_err() {
+                return IntegrityLevel::Medium;
+            }
+            // An elevated token is the direct, unambiguous answer; fall back to
+            // the integrity SID when the elevation class is not available.
+            let mut elevated = 0u32;
+            let mut returned = 0u32;
+            let ok = GetTokenInformation(
+                token,
+                TokenElevation,
+                (&mut elevated as *mut u32).cast(),
+                std::mem::size_of::<u32>() as u32,
+                &mut returned,
+            )
+            .is_ok();
+            if ok {
+                let _ = LocalFree(Some(HLOCAL(token.0)));
+                return if elevated != 0 {
+                    IntegrityLevel::High
+                } else {
+                    IntegrityLevel::Medium
+                };
+            }
+            let mut sid = std::ptr::null_mut();
+            let mut size = 0u32;
+            let ok = GetTokenInformation(
+                token,
+                TokenIntegrityLevel,
+                (&mut sid as *mut _).cast(),
+                0,
+                &mut size,
+            )
+            .is_ok()
+                && size > 0;
+            let mut level = IntegrityLevel::Medium;
+            if ok {
+                let mut buffer = vec![0u8; size as usize];
+                let ok = GetTokenInformation(
+                    token,
+                    TokenIntegrityLevel,
+                    buffer.as_mut_ptr().cast(),
+                    size,
+                    &mut returned,
+                )
+                .is_ok();
+                if ok {
+                    let sid_ptr = buffer.as_mut_ptr().cast();
+                    let rid = GetSidSubAuthority(sid_ptr, 4); // RID 4 = integrity
+                    if !rid.is_null() {
+                        level = match *rid {
+                            r if r >= 0x4000 => IntegrityLevel::System,
+                            r if r >= 0x2000 => IntegrityLevel::High,
+                            _ => IntegrityLevel::Medium,
+                        };
+                    }
+                }
+            }
+            let _ = LocalFree(Some(HLOCAL(token.0)));
+            level
         }
     }
 
-    /// Build the a11y tree for a window (None when no elements are exposed).
-    pub fn tree_for(&self, window: &WindowInfo) -> Option<ReadNode> {
+    /// This client's integrity level (cached at construction).
+    pub fn integrity(&self) -> IntegrityLevel {
+        self.integrity
+    }
+
+    /// A live `IUIAutomationElement` for a handle from the current walk.
+    fn element(&self, handle: UiaHandle) -> Option<IUIAutomationElement> {
+        self.runtime.get(&handle.0).cloned()
+    }
+
+    /// The root element for a window, read once per walk.
+    fn root_for(&mut self, window: &WindowInfo) -> Option<IUIAutomationElement> {
+        if let Some(r) = self.roots.get(&window.id) {
+            return Some(r.clone());
+        }
         let element = unsafe { self.automation.ElementFromHandle(hwnd_of(window)) }.ok()?;
         if element.as_raw().is_null() {
             return None;
         }
-        let walker = self.walker().ok()?;
-        let mut budget = 400;
-        unsafe { element_to_node(&walker, &element, "1", 0, &mut budget) }
+        self.roots.insert(window.id, element.clone());
+        Some(element)
     }
 
-    pub fn read(&self, window: &WindowInfo) -> Result<ReadResult, DesktopError> {
-        let tree = self.tree_for(window);
-        Ok(ReadResult {
-            window_id: window.id,
-            tree,
-            dpi_scale: WinBackend::dpi_scale(window).factor,
-            windows: WinBackend::list_windows()?,
-        })
-    }
-
-    pub fn send_click(&self, x: i32, y: i32) -> Result<(), DesktopError> {
-        unsafe {
-            SetCursorPos(x, y).map_err(|e| DesktopError::Platform(format!("SetCursorPos: {e}")))?;
-            mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0);
-            mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0);
+    /// The children of an element, walked once per walk.
+    fn children_of(&mut self, parent: UiaHandle) -> Vec<IUIAutomationElement> {
+        if let Some(c) = self.children.get(&parent.0) {
+            return c.clone();
         }
-        Ok(())
-    }
-
-    /// UIA-first invoke/click-by-name (InvokePattern when actionable, else a
-    /// center-click on the resolved bounding rect).
-    pub fn click_by_name(&self, window: &WindowInfo, name: &str) -> Result<(), DesktopError> {
-        let tree = self
-            .tree_for(window)
-            .ok_or_else(|| DesktopError::Platform("no a11y tree for window".into()))?;
-        let node = tree
-            .find_by_name(name)
-            .ok_or_else(|| DesktopError::Platform(format!("no UIA element named {name:?}")))?;
-        let element = unsafe { self.automation.ElementFromHandle(hwnd_of(window)) }
-            .map_err(|e| DesktopError::Platform(format!("UIA handle: {e}")))?;
-        // InvokePattern first, SendInput click as the fallback.
-        if let Ok(pattern) = unsafe { element.GetCurrentPattern(UIA_InvokePatternId) } {
-            if let Ok(invoke) = pattern.cast::<IUIAutomationInvokePattern>() {
-                if !invoke.as_raw().is_null() {
-                    unsafe {
-                        invoke
-                            .Invoke()
-                            .map_err(|e| DesktopError::Platform(format!("UIA Invoke: {e}")))?;
+        let mut out: Vec<IUIAutomationElement> = Vec::new();
+        if let Some(element) = self.element(parent) {
+            if let Ok(mut child) = unsafe { self.walker.GetFirstChildElement(&element) } {
+                let mut guard = 0;
+                while !child.as_raw().is_null() && guard < crate::uia::MAX_NODES {
+                    guard += 1;
+                    let next = unsafe { self.walker.GetNextSiblingElement(&child) }.ok();
+                    out.push(child.clone());
+                    match next {
+                        Ok(n) if !n.as_raw().is_null() => child = n,
+                        _ => break,
                     }
-                    return Ok(());
                 }
             }
         }
-        let (x, y) = node.center();
-        // `node.center()` is already in screen coordinates (UIA bounding rects
-        // are screen-space), so this is the raw pointer painter — not the
-        // window-relative entry point.
-        self.send_click(x, y)
+        self.children.insert(parent.0, out.clone());
+        out
     }
 
-    /// P57.4 — activate the control **at the point** via UIA, without moving the
-    /// cursor. Returns `Ok(false)` when there is no invokable element there (a
-    /// canvas, a game surface, an occluding window) — a normal answer that lets
-    /// the caller fall back to a message click.
-    pub fn invoke_at(&self, window: &WindowInfo, x: i32, y: i32) -> Result<bool, DesktopError> {
-        let (sx, sy) = screen_point(window, x, y);
-        self.invoke_at_screen(window, sx, sy)
-    }
-
-    /// [`Self::invoke_at`] at an absolute **screen** point — the form the
-    /// name-addressed ladder uses, where the point comes from a UIA bounding
-    /// rectangle (already screen-space, physical pixels).
+    /// Assign (or reuse) the runtime id for an element of this walk.
     ///
-    /// The same-process check is the load-bearing part: a hit-test is a
-    /// screen-space lookup, so an overlapping window can answer for a point
-    /// inside our target. The click is only ever activated on an element that
-    /// really belongs to the process we were asked to act on.
+    /// The handle the collector sees is a small integer we assign, not the UIA
+    /// `RuntimeId` array: the array is opaque, not stable over time, and
+    /// comparing it is not a supported operation. A per-walk index is honest,
+    /// epoch-scoped identity, which is exactly what `DM-026` asks for.
+    fn assign(&mut self, element: &IUIAutomationElement) -> UiaHandle {
+        if let Some((handle, _)) = self
+            .runtime
+            .iter()
+            .find(|(_, e)| std::ptr::eq(e.as_raw(), element.as_raw()))
+        {
+            return UiaHandle(*handle);
+        }
+        let handle = UiaHandle(self.runtime.len() as u64 + 1);
+        self.runtime.insert(handle.0, element.clone());
+        handle
+    }
+
+    /// Read an element's properties into the collector's node shape.
+    fn node_of(&self, handle: UiaHandle, element: &IUIAutomationElement) -> UiaNode {
+        let role = control_type_name(
+            unsafe { element.CurrentControlType() }
+                .map(|c| c.0)
+                .unwrap_or(0),
+        );
+        // `IsPassword` is read **before** the name: a protected field's text is
+        // never put into a node at all, only the mask (`REQ-CUA-009`,
+        // `ARCH/21` §5.3). The collector's `sanitize` enforces the rule again, so
+        // a second implementation cannot leak it.
+        let is_password = unsafe { element.CurrentIsPassword() }.unwrap_or(false);
+        let name = if is_password {
+            crate::uia::MASKED.to_string()
+        } else {
+            unsafe { element.CurrentName() }
+                .map(|b| b.to_string())
+                .unwrap_or_default()
+        };
+        let automation_id = unsafe { element.CurrentAutomationId() }
+            .map(|b| b.to_string())
+            .filter(|s| !s.is_empty());
+        let mut rect: RECT = std::mem::zeroed();
+        if let Ok(r) = unsafe { element.CurrentBoundingRectangle() } {
+            rect = r;
+        }
+        UiaNode {
+            handle,
+            role,
+            name,
+            automation_id,
+            bounds: Region {
+                x: rect.left,
+                y: rect.top,
+                width: (rect.right - rect.left).max(0) as u32,
+                height: (rect.bottom - rect.top).max(0) as u32,
+            },
+            is_password,
+            is_offscreen: unsafe { element.CurrentIsOffscreen() }.unwrap_or(false),
+            is_enabled: unsafe { element.CurrentIsEnabled() }.unwrap_or(true),
+            truncated: false,
+        }
+    }
+
+    /// Invoke the control at a screen point, refusing anything not owned by the
+    /// target's process (the hit-test is a screen-space lookup, so an overlapping
+    /// window can answer for a point inside our target).
     pub fn invoke_at_screen(
         &self,
         window: &WindowInfo,
@@ -304,9 +454,6 @@ impl WinUia {
             Ok(e) if !e.as_raw().is_null() => e,
             _ => return Ok(false),
         };
-        // The hit-test is a screen-space lookup, so an overlapping window can
-        // answer for a point inside our target. Only invoke when the element
-        // really belongs to the window we were asked to act on.
         let same_process = unsafe { element.CurrentProcessId() }
             .map(|pid| pid as u32 == target_pid && target_pid != 0)
             .unwrap_or(false);
@@ -327,6 +474,548 @@ impl WinUia {
                 .map_err(|e| DesktopError::Platform(format!("UIA Invoke at ({sx},{sy}): {e}")))?;
         }
         Ok(true)
+    }
+
+    /// Set an element's value through `ValuePattern` — the pattern-first rung
+    /// (`REQ-CUA-005`).
+    pub fn set_value_at_screen(&self, sx: i32, sy: i32, value: &str) -> Result<bool, DesktopError> {
+        let element = match unsafe { self.automation.ElementFromPoint(POINT { x: sx, y: sy }) } {
+            Ok(e) if !e.as_raw().is_null() => e,
+            _ => return Ok(false),
+        };
+        let pattern = match unsafe { element.GetCurrentPattern(UIA_ValuePatternId) } {
+            Ok(p) => p,
+            Err(_) => return Ok(false),
+        };
+        let value_pattern = match pattern.cast::<IUIAutomationValuePattern>() {
+            Ok(v) if !v.as_raw().is_null() => v,
+            _ => return Ok(false),
+        };
+        unsafe {
+            value_pattern
+                .SetValue(&windows::core::BSTR::from(value))
+                .map_err(|e| DesktopError::Platform(format!("UIA SetValue: {e}")))?;
+        }
+        Ok(true)
+    }
+}
+
+impl crate::uia::UiaProvider for WinUiaClient {
+    fn epoch(&self) -> SnapshotEpoch {
+        SnapshotEpoch(self.snapshot.load(std::sync::atomic::Ordering::SeqCst))
+    }
+
+    /// `FIX-17` — coverage comes from the process's **integrity level** and the
+    /// target's, never from the emptiness of a result.
+    ///
+    /// The target's level is read from the UIA element itself when it can be
+    /// resolved; a window we cannot resolve at all is reported by
+    /// [`Self::call`] as `TargetUnavailable`, not as an empty tree.
+    fn coverage(&mut self, window: &WindowInfo) -> Coverage {
+        if let Some(element) = self.root_for(window) {
+            let target_pid = unsafe { element.CurrentProcessId() }
+                .map(|p| p as u32)
+                .unwrap_or(0);
+            if target_pid != 0
+                && let Some(level) = process_integrity(target_pid)
+                && !self.integrity.may_read(level)
+            {
+                return Coverage::Restricted { elevated: true };
+            }
+        }
+        Coverage::Complete
+    }
+
+    fn call(
+        &mut self,
+        _window: &WindowInfo,
+        call: crate::uia::UiaCall,
+    ) -> std::result::Result<crate::uia::UiaAnswer, UiaFault> {
+        use crate::uia::{UiaAnswer, UiaCall};
+        match call {
+            UiaCall::Root => {
+                let element = self.root_for(_window).ok_or(UiaFault::TargetUnavailable {
+                    detail: "ElementFromHandle returned no element (closed window, reused handle, or \
+                              another desktop)"
+                        .into(),
+                })?;
+                let handle = self.assign(&element);
+                Ok(UiaAnswer::Element(Box::new(UiaNode {
+                    handle,
+                    role: "Pane".into(),
+                    name: String::new(),
+                    automation_id: None,
+                    bounds: Region::full(0, 0),
+                    is_password: false,
+                    is_offscreen: false,
+                    is_enabled: true,
+                    truncated: false,
+                })))
+            }
+            UiaCall::Properties(handle) => {
+                let element = self.element(handle).ok_or(UiaFault::TargetUnavailable {
+                    detail: format!("element {handle:?} is not part of this walk"),
+                })?;
+                Ok(UiaAnswer::Element(Box::new(self.node_of(handle, &element))))
+            }
+            UiaCall::FirstChild(handle) => {
+                let children = self.children_of(handle);
+                let Some(first) = children.first().cloned() else {
+                    return Ok(UiaAnswer::Absent);
+                };
+                let h = self.assign(&first);
+                Ok(UiaAnswer::Element(Box::new(UiaNode {
+                    handle: h,
+                    role: "Pane".into(),
+                    name: String::new(),
+                    automation_id: None,
+                    bounds: Region::full(0, 0),
+                    is_password: false,
+                    is_offscreen: false,
+                    is_enabled: true,
+                    truncated: false,
+                })))
+            }
+            UiaCall::NextSibling(handle) => {
+                // The sibling list is materialised on the first-child call, so a
+                // sibling is looked up by position in it.
+                let Some((parent, index)) = self.sibling_position(handle) else {
+                    return Ok(UiaAnswer::Absent);
+                };
+                let children = self.children_of(parent);
+                let Some(next) = children.get(index + 1).cloned() else {
+                    return Ok(UiaAnswer::Absent);
+                };
+                let h = self.assign(&next);
+                Ok(UiaAnswer::Element(Box::new(UiaNode {
+                    handle: h,
+                    role: "Pane".into(),
+                    name: String::new(),
+                    automation_id: None,
+                    bounds: Region::full(0, 0),
+                    is_password: false,
+                    is_offscreen: false,
+                    is_enabled: true,
+                    truncated: false,
+                })))
+            }
+        }
+    }
+}
+
+impl WinUiaClient {
+    /// The (parent, index) of a handle inside its parent's materialised child
+    /// list, or `None` for a root.
+    fn sibling_position(&self, handle: UiaHandle) -> Option<(UiaHandle, usize)> {
+        for (parent, children) in self.children.iter() {
+            if let Some(index) = children
+                .iter()
+                .position(|c| std::ptr::eq(c.as_raw(), self.runtime.get(&handle.0)?.as_raw()))
+            {
+                return Some((UiaHandle(*parent), index));
+            }
+        }
+        None
+    }
+}
+
+/// The integrity level of another process, when it can be read.
+///
+/// A failure is `None`, which the caller treats as "cannot tell" — never as
+/// "medium", so a target we cannot inspect is not asserted to be readable.
+fn process_integrity(pid: u32) -> Option<IntegrityLevel> {
+    use windows::Win32::Foundation::HANDLE;
+    use windows::Win32::Security::Authorization::TOKEN_QUERY;
+    use windows::Win32::Security::{
+        GetSidSubAuthority, GetTokenInformation, TokenIntegrityLevel,
+    };
+    use windows::Win32::System::Threading::{OpenProcess, OpenProcessToken};
+    unsafe {
+        let process = OpenProcess(
+            windows::Win32::Foundation::PROCESS_QUERY_LIMITED_INFORMATION,
+            false,
+            pid,
+        )
+        .ok()?;
+        let mut token = HANDLE::default();
+        if OpenProcessToken(process, TOKEN_QUERY, &mut token).is_err() {
+            let _ = windows::Win32::Foundation::CloseHandle(process);
+            return None;
+        }
+        let mut sid = std::ptr::null_mut();
+        let mut size = 0u32;
+        let first = GetTokenInformation(
+            token,
+            TokenIntegrityLevel,
+            (&mut sid as *mut _).cast(),
+            0,
+            &mut size,
+        )
+        .is_ok()
+            && size > 0;
+        let mut level = None;
+        if first {
+            let mut buffer = vec![0u8; size as usize];
+            if GetTokenInformation(
+                token,
+                TokenIntegrityLevel,
+                buffer.as_mut_ptr().cast(),
+                size,
+                &mut size,
+            )
+            .is_ok()
+            {
+                let sid_ptr = buffer.as_mut_ptr().cast();
+                let rid = GetSidSubAuthority(sid_ptr, 4);
+                if !rid.is_null() {
+                    level = Some(match *rid {
+                        r if r >= 0x4000 => IntegrityLevel::System,
+                        r if r >= 0x2000 => IntegrityLevel::High,
+                        _ => IntegrityLevel::Medium,
+                    });
+                }
+            }
+        }
+        let _ = windows::Win32::Foundation::CloseHandle(process);
+        level
+    }
+}
+
+/// The Windows façade the rest of the crate talks to.
+///
+/// `FIX-17` changed what this type is allowed to do:
+///
+/// - `read` goes through [`crate::uia::read_window`] — bounded, worker-isolated,
+///   epoch-stamped, and **typed** about what it could not see. It no longer
+///   returns a bare `Option<ReadNode>` where "not allowed to look" and "there is
+///   nothing there" were the same answer.
+/// - `click_by_name` / `set_value` resolve through [`crate::uia::resolve`] and
+///   **reject an ambiguous match** instead of invoking whichever element the
+///   first `contains` hit returned.
+/// - a read whose status is not conclusive refuses to act, because a coordinate
+///   derived from an unknown region is a blind input attempt.
+pub struct WinUia {
+    client: WinUiaClient,
+    tracker: crate::uia::UiaEpochTracker,
+}
+
+impl WinUia {
+    pub fn init() -> Result<Self, DesktopError> {
+        Ok(Self {
+            client: WinUiaClient::init()?,
+            tracker: crate::uia::UiaEpochTracker::new(),
+        })
+    }
+
+    /// The UIA client, for the point-addressed rungs (which do not walk a tree).
+    pub fn client(&self) -> &WinUiaClient {
+        &self.client
+    }
+
+    /// `FIX-17` — one bounded, isolated, epoch-stamped structured read.
+    ///
+    /// This is the only read path. There is deliberately no "quick tree" variant:
+    /// an unbounded synchronous UIA walk is the failure `REQ-CUA-004` names, and
+    /// a second path would be a way back to it.
+    pub fn structured_read(&self, window: &WindowInfo) -> crate::uia::UiaRead {
+        let cfg = crate::uia::CollectConfig::default();
+        let snapshot = self.client.snapshot.load(std::sync::atomic::Ordering::SeqCst) + 1;
+        self.client
+            .snapshot
+            .store(snapshot, std::sync::atomic::Ordering::SeqCst);
+        let read = crate::uia::read_window_with(
+            self.client.clone(),
+            window,
+            &cfg,
+            &self.tracker,
+        );
+        self.client
+            .runtime
+            .clear();
+        self.client.children.clear();
+        self.client.roots.clear();
+        read
+    }
+
+    /// The bounded tree of one window, for a caller that only needs the shape.
+    ///
+    /// Returns `None` only when the read genuinely found no structural UI; an
+    /// unreadable (elevated) window returns `None` **and** an `Unknown` status in
+    /// [`Self::read`], which is where the difference is observable.
+    pub fn tree_for(&self, window: &WindowInfo) -> Option<ReadNode> {
+        self.structured_read(window).read.tree
+    }
+
+    pub fn read(&self, window: &WindowInfo) -> Result<ReadResult, DesktopError> {
+        let observed = self.structured_read(window);
+        let read = &observed.read;
+        Ok(ReadResult {
+            window_id: window.id,
+            tree: read.tree.clone(),
+            dpi_scale: WinBackend::dpi_scale(window).factor,
+            windows: WinBackend::list_windows()?,
+            epoch: read.epoch,
+            observed_at_ms: read.observed_at_ms,
+            status: read.status.clone(),
+            guidance: read.guidance(window),
+            anomalies: read.anomalies.clone(),
+        })
+    }
+
+    pub fn send_click(&self, x: i32, y: i32) -> Result<(), DesktopError> {
+        unsafe {
+            SetCursorPos(x, y).map_err(|e| DesktopError::Platform(format!("SetCursorPos: {e}")))?;
+            mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0);
+            mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0);
+        }
+        Ok(())
+    }
+
+    /// UIA-first click on a **named** control.
+    ///
+    /// `FIX-17`: the name is resolved against a fresh bounded read and an
+    /// ambiguous match is **rejected** with every candidate named — never
+    /// resolved to "the first one that contains the text". A read whose status
+    /// does not permit inferring absence refuses outright, because there is no
+    /// evidence the control is there at all.
+    pub fn click_by_name(&self, window: &WindowInfo, name: &str) -> Result<(), DesktopError> {
+        let point = self.resolve_point(window, &crate::uia::ElementQuery::named(name))?;
+        let (cx, cy) = point;
+        // `InvokePattern` first (the highest-fidelity rung), then a raw click on
+        // the resolved bounds. The point comes from a UIA bounding rectangle, so
+        // it is already screen-space physical pixels.
+        if self.client.invoke_at_screen(window, cx, cy)? {
+            return Ok(());
+        }
+        self.send_click(cx, cy)
+    }
+
+    /// `ValuePattern::SetValue` on a **named** control, with the same
+    /// ambiguity/elevation discipline as [`Self::click_by_name`].
+    pub fn set_value_by_name(
+        &self,
+        window: &WindowInfo,
+        name: &str,
+        value: &str,
+    ) -> Result<(), DesktopError> {
+        let (cx, cy) = self.resolve_point(window, &crate::uia::ElementQuery::named(name))?;
+        if self.client.set_value_at_screen(cx, cy, value)? {
+            return Ok(());
+        }
+        // No `ValuePattern` on the resolved control: the honest fallback is the
+        // ladder's message rung, then typing — and both need a point the resolver
+        // already proved unique.
+        post_screen_click(window, cx, cy)?;
+        send_input_type(value)
+    }
+
+    /// Resolve a name to a screen point through a fresh bounded read, or refuse
+    /// with the reason.
+    ///
+    /// The single place `FIX-17`'s identity rules become enforcement: a
+    /// non-conclusive read, an ambiguous match and an absent element each produce
+    /// their own typed refusal, and none of them produces a coordinate.
+    pub fn resolve_point(
+        &self,
+        window: &WindowInfo,
+        query: &crate::uia::ElementQuery,
+    ) -> Result<(i32, i32), DesktopError> {
+        let observed = self.structured_read(window);
+        match crate::uia::resolve_in(&observed.read, query) {
+            crate::uia::Resolution::Resolved(handle) => {
+                // An observation is valid for one action; this is that action.
+                // The check is here so a future cached handle cannot be actuated.
+                let validity = handle.validate(observed.read.current_epoch(), crate::now_ms());
+                if !validity.is_current {
+                    return Err(DesktopError::Platform(
+                        validity.reason.unwrap_or_else(|| "stale observation".into()),
+                    ));
+                }
+                Ok(handle.element.bounds.center())
+            }
+            crate::uia::Resolution::Ambiguous { reason, .. } => Err(DesktopError::Platform(
+                format!(
+                    "ambiguous element, refusing to guess: {reason} — re-read the window and \
+                     narrow the query (role, or the bounds you believe it has)"
+                ),
+            )),
+            crate::uia::Resolution::NotFound { reason, .. } => Err(DesktopError::Platform(
+                format!("no element to act on: {reason}"),
+            )),
+        }
+    }
+
+    /// P57.4 — activate the control **at the point** via UIA, without moving the
+    /// cursor. Returns `Ok(false)` when there is no invokable element there (a
+    /// canvas, a game surface, an occluding window) — a normal answer that lets
+    /// the caller fall back to a message click.
+    pub fn invoke_at(&self, window: &WindowInfo, x: i32, y: i32) -> Result<bool, DesktopError> {
+        let (sx, sy) = screen_point(window, x, y);
+        self.client.invoke_at_screen(window, sx, sy)
+    }
+
+    /// [`Self::invoke_at`] at an absolute **screen** point — the form the
+    /// name-addressed ladder uses, where the point comes from a UIA bounding
+    /// rectangle (already screen-space, physical pixels).
+    ///
+    /// The same-process check is the load-bearing part: a hit-test is a
+    /// screen-space lookup, so an overlapping window can answer for a point
+    /// inside our target. The click is only ever activated on an element that
+    /// really belongs to the process we were asked to act on.
+    pub fn invoke_at_screen(
+        &self,
+        window: &WindowInfo,
+        sx: i32,
+        sy: i32,
+    ) -> Result<bool, DesktopError> {
+        self.client.invoke_at_screen(window, sx, sy)
+    }
+}
+
+/// The Windows capture-readiness probe (`FIX-18`).
+///
+/// Declared in fidelity order, exactly the order `see()` will try: graphics
+/// capture → `PrintWindow` → screen DC. Declaring the order *here* (and only
+/// here) is what makes "the highest-fidelity usable pipeline" a fact rather than
+/// a preference expressed twice.
+pub struct WinCaptureProbe {
+    hwnd: HWND,
+    /// Screen DC available for a `ScreenDc` capture.
+    screen_dc: bool,
+}
+
+impl WinCaptureProbe {
+    pub fn new(hwnd: HWND) -> Self {
+        Self {
+            hwnd,
+            // A screen DC is available on any interactive desktop; the *honest*
+            // use of it (a screen capture of an occluded window) is the caller's
+            // decision, which is why `is_occluded` is asked separately.
+            screen_dc: true,
+        }
+    }
+}
+
+impl crate::capture::CaptureProbe for WinCaptureProbe {
+    fn pipelines(&self) -> Vec<CapturePipeline> {
+        vec![
+            CapturePipeline::WindowsGraphicsCapture,
+            CapturePipeline::PrintWindow,
+            CapturePipeline::ScreenDc,
+        ]
+    }
+
+    /// Host-scoped checks: an interactive session, WinRT graphics-capture
+    /// support, and a live BGRA-capable D3D11 device.
+    fn host(&mut self) -> Result<Vec<CaptureCheck>, CaptureFault> {
+        if !WinBackend::interactive_desktop() {
+            return Err(CaptureFault::NoInteractiveSession {
+                detail: "SESSIONNAME=Services — this process is in Session 0, which has no \
+                         interactive desktop"
+                    .into(),
+            });
+        }
+        let mut verified = vec![CaptureCheck::SessionAvailable];
+        if !crate::platform::wgc::session_supported() {
+            return Err(CaptureFault::SessionUnsupported {
+                detail: "GraphicsCaptureSession::IsSupported() is false on this host (pre-1803 \
+                         Windows, or the feature is disabled)"
+                    .into(),
+            });
+        }
+        verified.push(CaptureCheck::GraphicsDevice);
+        if !crate::platform::wgc::device_available() {
+            return Err(CaptureFault::NoGraphicsDevice {
+                detail: "a BGRA-capable D3D11 device could not be created (headless GPU, or a \
+                         session with no adapter)"
+                    .into(),
+            });
+        }
+        Ok(verified)
+    }
+
+    /// A conservative occlusion test: the target's own rectangle is not fully
+    /// covered by the foreground window. False means "probably visible", which is
+    /// the direction that never blocks a legitimate capture.
+    fn is_occluded(&mut self, window: &WindowInfo) -> bool {
+        let Some(foreground) = (unsafe { GetForegroundWindow() }) else {
+            return false;
+        };
+        if foreground == self.hwnd {
+            return false;
+        }
+        let mut target: RECT = std::mem::zeroed();
+        let mut front: RECT = std::mem::zeroed();
+        unsafe {
+            if GetWindowRect(self.hwnd, &mut target).is_err()
+                || GetWindowRect(foreground, &mut front).is_err()
+            {
+                return false;
+            }
+        }
+        front.left >= target.left
+            && front.top >= target.top
+            && front.right <= target.right
+            && front.bottom <= target.bottom
+    }
+
+    /// Per-target checks for one named pipeline.
+    fn target(
+        &mut self,
+        _window: &WindowInfo,
+        pipeline: CapturePipeline,
+    ) -> Result<Vec<CaptureCheck>, CaptureFault> {
+        // A live handle is a precondition for every pipeline, so it is checked
+        // first and reported as such.
+        if unsafe { IsWindow(self.hwnd) }.as_bool() == false {
+            return Err(CaptureFault::InvalidWindowHandle {
+                detail: "IsWindow is false — the window was closed, or the handle was reused since \
+                         it was listed"
+                    .into(),
+            });
+        }
+        let mut verified = vec![CaptureCheck::WindowHandleValid];
+        let mut rect: RECT = std::mem::zeroed();
+        unsafe {
+            GetWindowRect(self.hwnd, &mut rect)
+                .map_err(|e| CaptureFault::ProbeFailed { detail: format!("GetWindowRect: {e}") })?;
+        }
+        if rect.right <= rect.left || rect.bottom <= rect.top {
+            return Err(CaptureFault::ZeroExtent {
+                detail: format!(
+                    "GetWindowRect returned {}x{} — the window is minimized or has no visible \
+                     extent",
+                    rect.right - rect.left,
+                    rect.bottom - rect.top
+                ),
+            });
+        }
+        verified.push(CaptureCheck::NonZeroExtent);
+        match pipeline {
+            CapturePipeline::WindowsGraphicsCapture => {
+                // The real per-target check: a capture item must exist for this
+                // HWND. A minimized-to-shell-icon, protected or compositor-refused
+                // window has none, and that is exactly the case the v0 code
+                // collapsed into `None`.
+                crate::platform::wgc::item_available(self.hwnd).map_err(|detail| {
+                    CaptureFault::CaptureItemUnavailable { detail }
+                })?;
+                verified.push(CaptureCheck::CaptureItem);
+                Ok(verified)
+            }
+            CapturePipeline::PrintWindow => Ok(verified),
+            CapturePipeline::ScreenDc => {
+                if !self.screen_dc {
+                    return Err(CaptureFault::ProbeFailed {
+                        detail: "no screen device context is available".into(),
+                    });
+                }
+                Ok(verified)
+            }
+            other => Err(CaptureFault::PipelineUnsupported {
+                detail: format!("{} is not a Windows pipeline", other.as_str()),
+            }),
+        }
     }
 }
 
@@ -537,16 +1226,34 @@ fn deliver_named(
         Ok(u) => u,
         Err(e) => return RungDelivery::Unavailable(format!("UI Automation unavailable: {e}")),
     };
-    let Some(tree) = uia.tree_for(window) else {
-        return RungDelivery::Unavailable(format!(
-            "no accessibility tree for this window, so \"{name}\" cannot be resolved"
-        ));
-    };
-    let Some(node) = tree.find_by_name(name) else {
-        return RungDelivery::Unavailable(format!("no UIA element named \"{name}\""));
+    // `FIX-17` — the name is resolved against a fresh **bounded, isolated** read
+    // and an ambiguous match is a hard stop, not a fall-through to a lower rung:
+    // delivering the act to one of two "Save" buttons is a guess, and guessing
+    // twice (once for the message rung, once for raw input) is worse. A read that
+    // could not see the region returns `Unknown` so the ladder stops with
+    // guidance instead of synthesising input into an unknown area.
+    let observed = uia.structured_read(window);
+    let query = crate::uia::ElementQuery::named(name);
+    let point = match crate::uia::resolve_in(&observed.read, &query) {
+        crate::uia::Resolution::Resolved(h) => h.element.bounds.center(),
+        crate::uia::Resolution::Ambiguous { .. } => {
+            return RungDelivery::Unknown(
+                crate::uia::resolve_in(&observed.read, &query).describe(),
+            );
+        }
+        crate::uia::Resolution::NotFound { reason, .. } => {
+            return match observed.read.status {
+                crate::uia::UiaReadStatus::Complete | crate::uia::UiaReadStatus::Absent { .. } => {
+                    RungDelivery::Unavailable(format!("no UIA element named \"{name}\" ({reason})"))
+                }
+                _ => RungDelivery::Unknown(format!(
+                    "no UIA element named \"{name}\" could be established: {reason}"
+                )),
+            };
+        }
     };
     // UIA bounding rectangles are screen-space, physical pixels.
-    let (cx, cy) = node.center();
+    let (cx, cy) = point;
     match rung {
         ClickRung::AccessibilityInvoke => match uia.invoke_at_screen(window, cx, cy) {
             Ok(true) => RungDelivery::Delivered(format!(
@@ -607,23 +1314,52 @@ impl WinBackend {
         Ok(out)
     }
 
+    /// `FIX-18` — capture with the readiness gate **in front of** the capture.
+    ///
+    /// The order is the fix. The v0 code asked WGC for a frame, took `None` for
+    /// any reason at all, and fell through to PrintWindow → screen-DC, so a
+    /// target that graphics capture can never see came back as a *successful*
+    /// capture with no record of why. Now:
+    ///
+    /// 1. [`WinCaptureProbe`] verifies host readiness (Session 0, WinRT
+    ///    graphics-capture support, a live BGRA-capable D3D11 device) and
+    ///    per-target readiness (live handle, non-zero extent, a creatable capture
+    ///    item) through [`crate::capture::verify_capture`];
+    /// 2. the verdict names the pipeline that will run, the one that was skipped
+    ///    and the fault that skipped it;
+    /// 3. an `Unavailable` verdict is a **typed** [`DesktopError::CaptureNotReady`]
+    ///    — no capture is attempted, and the guidance is actionable;
+    /// 4. the verdict travels on the result, so a degrade is a recorded fact
+    ///    rather than something a reader has to infer.
     pub fn see(window: &WindowInfo, region: Region) -> Result<SeeResult, DesktopError> {
         let hwnd = hwnd_of(window);
         let dpi = WinBackend::dpi_scale(window);
-        let mut rect: RECT = RECT::default();
+        let mut probe = WinCaptureProbe::new(hwnd);
+        let readiness = crate::capture::verify_capture(&mut probe, window);
+        if !readiness.is_capturable() {
+            return Err(DesktopError::CaptureNotReady {
+                state: readiness.state.as_str(),
+                guidance: readiness.guidance.clone(),
+                failed_check: readiness
+                    .failed_check
+                    .map(|c| c.as_str())
+                    .unwrap_or("pipeline_supported"),
+            });
+        }
+        let mut rect: RECT = std::mem::zeroed();
         unsafe {
             GetWindowRect(hwnd, &mut rect)
                 .map_err(|e| DesktopError::Platform(format!("GetWindowRect: {e}")))?;
         }
         let width = (rect.right - rect.left).max(0) as u32;
         let height = (rect.bottom - rect.top).max(0) as u32;
-        if width == 0 || height == 0 {
-            return Err(DesktopError::Platform("window has zero size".into()));
-        }
-        // P57.6 — prefer Windows.Graphics.Capture: it composites the window's
-        // own surface, so occlusion is irrelevant. Its capture size is the
-        // item's, not the rect's, so take the dimensions back from it.
-        if let Some((png, w, h)) = crate::platform::wgc::capture(hwnd) {
+
+        // WGC is compositor-native: it composites the window's own surface, so
+        // occlusion is irrelevant. Its capture size is the item's, not the rect's,
+        // so the dimensions come back from it.
+        if readiness.pipeline == Some(CapturePipeline::WindowsGraphicsCapture)
+            && let Ok((png, w, h)) = crate::platform::wgc::capture(hwnd)
+        {
             let region = if region.is_full(w, h) {
                 Region::full(w, h)
             } else {
@@ -641,14 +1377,52 @@ impl WinBackend {
                 // The engine (`DesktopEngine::see`) applies the output budget;
                 // a direct backend call has had none applied.
                 budget: None,
+                readiness,
             });
         }
 
         // Fallback: PrintWindow renders the window directly (independent of
-        // screen occlusion), then BitBlt from the screen DC for popups.
-        let png = unsafe { capture_print_window(hwnd, width, height) }
-            .or_else(|| unsafe { capture_screen_dc(hwnd, width, height) })
-            .ok_or_else(|| DesktopError::Platform("all capture methods failed".into()))?;
+        // screen occlusion), then BitBlt from the screen DC for popups. The
+        // screen-DC leg is only taken when the readiness verdict named it — a
+        // screen capture of an occluded window would be a capture of the
+        // occluder, and the verdict refuses that case rather than returning
+        // another application's pixels.
+        let print_window = unsafe { capture_print_window(hwnd, width, height) };
+        let (png, method) = match print_window {
+            Some(png) => (png, SeeMethod::PrintWindow),
+            None if readiness.pipeline == Some(CapturePipeline::ScreenDc) => (
+                unsafe { capture_screen_dc(hwnd, width, height) }.ok_or_else(|| {
+                    DesktopError::CaptureNotReady {
+                        state: "unavailable",
+                        guidance: format!(
+                            "neither graphics capture nor PrintWindow could return pixels for this \
+                             window{}",
+                            readiness
+                                .fault
+                                .as_ref()
+                                .map(|f| format!(" ({})", f.guidance()))
+                                .unwrap_or_default()
+                        ),
+                        failed_check: "capture_item",
+                    }
+                })?,
+                SeeMethod::ScreenDc,
+            ),
+            None => {
+                return Err(DesktopError::CaptureNotReady {
+                    state: "unavailable",
+                    guidance: format!(
+                        "no capture pipeline returned pixels for this window; the verified \
+                         pipeline was {}",
+                        readiness
+                            .pipeline
+                            .map(|p| p.describe())
+                            .unwrap_or_else(|| "none".into())
+                    ),
+                    failed_check: "capture_item",
+                });
+            }
+        };
         let region = if region.is_full(width, height) {
             Region::full(width, height)
         } else {
@@ -659,11 +1433,12 @@ impl WinBackend {
             png,
             width,
             height,
-            method: SeeMethod::PrintWindow,
+            method,
             region,
             scale: dpi.factor,
             dpi,
             budget: None,
+            readiness,
         })
     }
 
@@ -966,32 +1741,11 @@ pub fn act(
                 Some(u) => u,
                 None => &WinUia::init()?,
             };
-            let tree = u
-                .tree_for(window)
-                .ok_or_else(|| DesktopError::Platform("no a11y tree for window".into()))?;
-            let node = tree
-                .find_by_name(name)
-                .ok_or_else(|| DesktopError::Platform(format!("no UIA element named {name:?}")))?;
-            let element = unsafe { u.automation.ElementFromHandle(hwnd_of(window)) }
-                .map_err(|e| DesktopError::Platform(format!("UIA handle: {e}")))?;
-            if let Ok(pattern) = unsafe { element.GetCurrentPattern(UIA_ValuePatternId) } {
-                if let Ok(value_pattern) = pattern.cast::<IUIAutomationValuePattern>() {
-                    if !value_pattern.as_raw().is_null() {
-                        unsafe {
-                            value_pattern
-                                .SetValue(&windows::core::BSTR::from(value.as_str()))
-                                .map_err(|e| {
-                                    DesktopError::Platform(format!("UIA SetValue: {e}"))
-                                })?;
-                        }
-                        return Ok(());
-                    }
-                }
-            }
-            // ValuePattern unavailable → click + select-all + type.
-            let (x, y) = node.center();
-            u.send_click(x, y)?;
-            send_input_type(value)
+            // `FIX-17` — `ValuePattern::SetValue` on a name resolved through the
+            // bounded collector, with the same ambiguity/elevation discipline as a
+            // click: an ambiguous name is refused, and a read that could not see
+            // the region produces no coordinate at all.
+            u.set_value_by_name(window, name, value)
         }
         ActKind::Click { .. } => {
             // P69.G4 — a coordinate click is now **ladder-owned**

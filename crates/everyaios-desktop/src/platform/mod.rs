@@ -24,11 +24,15 @@ pub mod win;
 #[cfg(windows)]
 pub mod wgc;
 
+use crate::capture::{CaptureProbe, CaptureReadiness};
 use crate::geometry::DpiScale;
 use crate::ladder::{ClickProfile, ClickRung, LadderTarget, RungDelivery};
 use crate::policy::InteractionMode;
-use crate::types::{ActKind, ReadResult, Region, SeeMethod, SeeResult, WindowInfo};
-use crate::{Capabilities, DesktopError};
+use crate::types::{
+    ActKind, Capabilities, CaptureReadinessSummary, ReadResult, Region, SeeMethod, SeeResult,
+    WindowInfo,
+};
+use crate::DesktopError;
 
 /// The click ladder each platform really has, declared as data.
 ///
@@ -255,9 +259,59 @@ impl PlatformBackend {
         }
     }
 
+    /// `FIX-18` — verify the capture path for a window **before** capturing.
+    ///
+    /// The host-scoped half of the verdict, which is what a capability chip can
+    /// show: "graphics capture unavailable — PrintWindow fallback". The
+    /// per-target half (a live handle, a creatable capture item) needs a window
+    /// and is verified per capture; its verdict travels on
+    /// [`SeeResult::readiness`].
+    pub fn capture_readiness(&self, window: &WindowInfo) -> CaptureReadiness {
+        let mut probe = self.capture_probe(window);
+        crate::capture::verify_capture(&mut *probe, window)
+    }
+
+    /// The platform's capture probe — the injectable boundary `FIX-18` verifies
+    /// through.
+    fn capture_probe(&self, _window: &WindowInfo) -> Box<dyn CaptureProbe> {
+        #[cfg(target_os = "linux")]
+        {
+            Box::new(crate::platform::linux::X11CaptureProbe::new(
+                matches!(self, PlatformBackend::X11(_)),
+            ))
+        }
+        #[cfg(windows)]
+        {
+            Box::new(crate::platform::win::WinCaptureProbe::new(
+                crate::platform::win::hwnd_of(window),
+            ))
+        }
+        #[cfg(all(target_os = "macos", not(windows)))]
+        {
+            Box::new(crate::platform::macos::MacCaptureProbe)
+        }
+        #[cfg(not(any(target_os = "linux", windows, target_os = "macos")))]
+        {
+            Box::new(NoCaptureProbe)
+        }
+    }
+
     /// Honest per-platform capability surface.
     pub fn capabilities(&self) -> Capabilities {
         let ocr_available = crate::ocr::TesseractCli::default().available();
+        // `FIX-18` — the readiness chip is a real probe, not a promise: an
+        // unattached backend reports `unavailable` with a sentence rather than a
+        // green dot over a dead path.
+        let capture = self.capture_readiness(&WindowInfo {
+            id: 0,
+            title: String::new(),
+            app: String::new(),
+            x: 0,
+            y: 0,
+            width: 0,
+            height: 0,
+            has_a11y_tree: false,
+        });
         match self {
             #[cfg(target_os = "linux")]
             PlatformBackend::X11(_) => Capabilities {
@@ -283,6 +337,7 @@ impl PlatformBackend {
                 ocr: ocr_available,
                 window_list: true,
                 launch_app: true,
+                capture_readiness: CaptureReadinessSummary::from_readiness(&capture),
             },
             #[cfg(windows)]
             PlatformBackend::Win => Capabilities {
@@ -316,6 +371,9 @@ impl PlatformBackend {
                 ocr: ocr_available,
                 window_list: true,
                 launch_app: true,
+                // `FIX-18` — the probe, not the `see_occluded_wgc` bool: the
+                // verdict names the pipeline and the reason it degraded.
+                capture_readiness: CaptureReadinessSummary::from_readiness(&capture),
             },
             #[cfg(target_os = "macos")]
             PlatformBackend::Mac => Capabilities {
@@ -343,6 +401,7 @@ impl PlatformBackend {
                 ocr: ocr_available,
                 window_list: true,
                 launch_app: true,
+                capture_readiness: CaptureReadinessSummary::from_readiness(&capture),
             },
             PlatformBackend::Unsupported => Capabilities::default(),
         }

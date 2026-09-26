@@ -4,6 +4,9 @@
 //! - [`frame`] — newline-delimited JSON-RPC framing (the ACP stdio wire).
 //! - [`messages`] — ACP v1 message types (initialize, session/new, prompt,
 //!   stop reasons, tool kinds, session/update, request_permission).
+//! - [`permission_bridge`] — FIX-03: the `session/request_permission` bridge
+//!   (once/always/reject onto offered options, bound single-use ticket, bounded
+//!   redacted diff preview, fail-closed).
 //! - [`client`] — the [`AcpSession`] client lifecycle (spawn → initialize →
 //!   session/new → prompt → permission → cancel) with a testable transport.
 //! - [`registry`] — the agent **launch registry** (the `ollama launch`
@@ -26,6 +29,7 @@ pub mod frame;
 pub mod harness_config;
 pub mod installer;
 pub mod messages;
+pub mod permission_bridge;
 pub mod prefix_guard;
 pub mod registry;
 pub mod registry_client;
@@ -74,6 +78,10 @@ pub use messages::{
     MAX_MCP_SERVER_HEADER_NAME_BYTES, MAX_MCP_SERVER_HEADER_VALUE_BYTES, MAX_MCP_SERVER_HEADERS,
     MAX_MCP_SERVER_NAME_BYTES, MAX_MCP_SERVER_URL_BYTES, MAX_MCP_SERVERS_PER_REQUEST,
     MAX_SESSION_ID_BYTES, SseMcpServer, StdioMcpServer,
+};
+pub use permission_bridge::{
+    AcpApprovalChoice, BridgeAnswer, BridgeError, PermissionBridge, PermissionPreview, REDACTION,
+    TicketBinding, TicketFacts, TrustOutcome, redact_secret_shapes, require_once_ticket,
 };
 pub use prefix_guard::{PrefixEvent, PrefixGuard, fingerprint_stable_prefix};
 pub use registry::{

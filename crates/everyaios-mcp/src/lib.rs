@@ -37,18 +37,30 @@ pub use npx::{
     resolve_stdio_launch_with, trusted_npx_package,
 };
 pub use remote::{
-    AuthServerMetadata, ClientRegistration, HttpTransport, PkceFlow, ProtectedResource,
-    RemoteError, RemoteTarget, TokenResponse, UreqTransport, build_authorize_url, connect,
-    discover_authorization_server, discover_protected_resource, exchange_code, refresh_token,
-    register_dynamic_client, rpc,
+    AuthServerMetadata, ClientRegistration, EraCache, EraVerdict, HttpTransport,
+    LEGACY_PROTOCOL_VERSION, MODERN_PROTOCOL_VERSION, McpEra, McpResponse, PkceFlow,
+    ProtectedResource, RemoteError, RemoteTarget, TokenResponse, UreqTransport,
+    build_authorize_url, build_request, cache_era, cached_era, classify_era, clear_era_cache,
+    connect, discover_authorization_server, discover_protected_resource, exchange_code,
+    modern_headers, negotiate_era, origin_of, refresh_token, register_dynamic_client, rpc,
+    rpc_in_era, tool_name,
 };
 pub use server::{
-    ExternalTool, McpHttpLease, McpHttpListener, McpServer, McpServerLease, MrtrHandle,
-    SUPPORTED_PROTOCOL_VERSION, SUPPORTED_PROTOCOL_VERSIONS, StatelessRequest, ToolCallError,
-    ToolCallErrorKind, ToolCallHandler, ToolCatalog, ToolListEntry, ToolListResponse,
-    start_http_listener, tool_list, tool_list_shared_facades, tool_list_shared_plane,
+    DISCOVER_METHOD_NAME, DiscoverCapabilities, DiscoverToolCapability, ExternalTool, FacadeError,
+    McpHttpLease, McpHttpListener, McpServer, McpServerLease, MrtrHandle,
+    SUPPORTED_PROTOCOL_VERSION, SUPPORTED_PROTOCOL_VERSIONS, ServerDiscoverResponse, ServerInfo,
+    StatelessRequest, ToolAdmission, ToolCallError, ToolCallErrorKind, ToolCallHandler,
+    ToolCatalog, ToolListEntry, ToolListResponse, server_discover, start_http_listener, tool_list,
+    tool_list_shared_facades, tool_list_shared_plane,
 };
 pub use store::{ConnectConsent, ConnectFlow, StoreEntry, StoreIndex, StoreKind};
+
+/// The shared wire constants for the dual-era MCP contract (DEC-030). Re-exported
+/// so a client and this façade cannot drift on a revision or a header name.
+pub use protocol::{
+    DISCOVER_METHOD, LEGACY_PROTOCOL_REVISION, METHOD_HEADER, MODERN_PROTOCOL_REVISION,
+    NAME_HEADER, PROTOCOL_VERSION_HEADER,
+};
 
 /// ACP tool-kind taxonomy (F9 — doc 45 §4.3): a shared vocabulary that maps
 /// onto our F9 permission classes.

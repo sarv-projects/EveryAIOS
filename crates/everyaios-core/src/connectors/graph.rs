@@ -5,16 +5,15 @@
 //! [`HttpTransport`] seam so the full protocol logic is tested with mock
 //! responses. Tokens come from the vault Auth Bridge (user OAuth, `VaultTokenRef`
 //! — the connector holds a key id, never the bytes); 401 → refresh → retry
-//! once via the [`TokenRefresher`] seam.
+//! once via the [`TokenSource`] seam.
 //!
 //! Posture (P42.3): **read-only-first**. Reads pass through; writes
 //! (`send_mail`, `create_calendar_event`) require a Guard-2-shaped
 //! [`SendApproval`] verified by [`ReadFirstPolicy`] — single-use, bound to the
 //! exact payload hash, never auto-approved.
 
-use super::gmail::TokenRefresher;
 use super::read_first::{ReadFirstPolicy, SendAction, SendApproval, SendBlocked, SendKind};
-use super::{HttpTransport, TransportError, TransportErrorKind};
+use super::{HttpTransport, TokenSource, TransportError, TransportErrorKind, VaultTokenRef};
 
 /// Simplified mail message for agent consumption.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -68,20 +67,24 @@ pub struct GraphChatMessage {
 const GRAPH_API_BASE: &str = "https://graph.microsoft.com/v1.0";
 
 /// Microsoft Graph connector — stateless protocol logic over injected seams.
-pub struct GraphConnector<T: HttpTransport, R: TokenRefresher> {
+///
+/// FIX-01: holds a [`VaultTokenRef`] + [`TokenSource`], never the token. The
+/// value exists only inside the closure the transport is called from.
+pub struct GraphConnector<T: HttpTransport, S: TokenSource> {
     transport: T,
-    refresher: R,
-    access_token: String,
+    tokens: S,
+    token_ref: VaultTokenRef,
     /// `me` or a user id / tenant-scoped principal.
     principal: String,
 }
 
-impl<T: HttpTransport, R: TokenRefresher> GraphConnector<T, R> {
-    pub fn new(transport: T, refresher: R, access_token: String) -> Self {
+impl<T: HttpTransport, S: TokenSource> GraphConnector<T, S> {
+    /// Bind the connector to a **vault reference**, not a token.
+    pub fn new(transport: T, tokens: S, token_ref: VaultTokenRef) -> Self {
         Self {
             transport,
-            refresher,
-            access_token,
+            tokens,
+            token_ref,
             principal: "me".into(),
         }
     }
@@ -91,19 +94,23 @@ impl<T: HttpTransport, R: TokenRefresher> GraphConnector<T, R> {
         self
     }
 
-    fn auth_headers(&self) -> Vec<(&str, &str)> {
-        vec![("Authorization", &self.access_token)]
+    /// Run `f` with the live access token, in-custody (never returned).
+    fn authenticated<R>(
+        &self,
+        f: &mut dyn FnMut(&str) -> Result<R, TransportError>,
+    ) -> Result<R, TransportError> {
+        self.tokens.with_token(&self.token_ref, f)
     }
 
     /// Execute a GET with 401 → refresh → retry once.
     fn get_with_refresh(&mut self, url: &str) -> Result<Vec<u8>, TransportError> {
-        let headers = self.auth_headers();
-        match self.transport.get(url, &headers) {
-            Err(e) if e.kind == TransportErrorKind::Auth => {
-                self.access_token = self.refresher.refresh()?;
-                let headers = self.auth_headers();
-                self.transport.get(url, &headers)
-            }
+        let transport = &self.transport;
+        match self.authenticated(&mut |t| transport.get(url, &[("Authorization", t)])) {
+            Err(e) if e.kind == TransportErrorKind::Auth => self
+                .tokens
+                .refresh(&self.token_ref, &mut |t| {
+                    transport.get(url, &[("Authorization", t)])
+                }),
             other => other,
         }
     }
@@ -113,13 +120,15 @@ impl<T: HttpTransport, R: TokenRefresher> GraphConnector<T, R> {
         url: &str,
         body: &[u8],
     ) -> Result<Vec<u8>, TransportError> {
-        let headers = self.auth_headers();
-        match self.transport.post_json(url, &headers, body) {
-            Err(e) if e.kind == TransportErrorKind::Auth => {
-                self.access_token = self.refresher.refresh()?;
-                let headers = self.auth_headers();
-                self.transport.post_json(url, &headers, body)
-            }
+        let transport = &self.transport;
+        match self.authenticated(&mut |t| {
+            transport.post_json(url, &[("Authorization", t)], body)
+        }) {
+            Err(e) if e.kind == TransportErrorKind::Auth => self
+                .tokens
+                .refresh(&self.token_ref, &mut |t| {
+                    transport.post_json(url, &[("Authorization", t)], body)
+                }),
             other => other,
         }
     }
@@ -391,8 +400,6 @@ impl<T: HttpTransport, R: TokenRefresher> GraphConnector<T, R> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::connectors::gmail::TokenRefresher;
-
     struct MockTransport {
         responses: std::cell::RefCell<std::collections::VecDeque<(Vec<u8>, TransportErrorKind)>>,
         requests: std::sync::Mutex<Vec<String>>,
@@ -460,11 +467,47 @@ mod tests {
         }
     }
 
+    /// FIX-01: the mock is a *source*, not a token holder — it resolves the
+    /// value inside the closure, exactly like the vault-backed source.
     struct NoRefresh;
-    impl TokenRefresher for NoRefresh {
-        fn refresh(&self) -> Result<String, TransportError> {
-            Ok("new-token".into())
+    impl TokenSource for NoRefresh {
+        fn with_token<R>(
+            &self,
+            _ref_: &VaultTokenRef,
+            f: &mut dyn FnMut(&str) -> Result<R, TransportError>,
+        ) -> Result<R, TransportError> {
+            f("Bearer tok")
         }
+        fn refresh<R>(
+            &self,
+            _ref_: &VaultTokenRef,
+            f: &mut dyn FnMut(&str) -> Result<R, TransportError>,
+        ) -> Result<R, TransportError> {
+            f("Bearer new-token")
+        }
+    }
+
+    /// The stale-token variant: a 401 must still trigger exactly one refresh.
+    struct StaleTokens;
+    impl TokenSource for StaleTokens {
+        fn with_token<R>(
+            &self,
+            _ref_: &VaultTokenRef,
+            f: &mut dyn FnMut(&str) -> Result<R, TransportError>,
+        ) -> Result<R, TransportError> {
+            f("Bearer stale")
+        }
+        fn refresh<R>(
+            &self,
+            _ref_: &VaultTokenRef,
+            f: &mut dyn FnMut(&str) -> Result<R, TransportError>,
+        ) -> Result<R, TransportError> {
+            f("Bearer new-token")
+        }
+    }
+
+    fn graph_tokens() -> VaultTokenRef {
+        VaultTokenRef::new("k-graph", "microsoft-graph")
     }
 
     fn mail_response() -> serde_json::Value {
@@ -484,7 +527,7 @@ mod tests {
     #[test]
     fn graph_mail_list_parses_and_reads_are_free() {
         let t = MockTransport::ok(mail_response());
-        let mut c = GraphConnector::new(t, NoRefresh, "Bearer tok".into());
+        let mut c = GraphConnector::new(t, NoRefresh, graph_tokens());
         let msgs = c.list_mail(10).unwrap();
         assert_eq!(msgs.len(), 1);
         assert_eq!(msgs[0].subject, "Re: Q3 plan");
@@ -495,7 +538,7 @@ mod tests {
     #[test]
     fn graph_401_refreshes_and_retries_once() {
         let t = MockTransport::auth_then_ok(mail_response());
-        let mut c = GraphConnector::new(t, NoRefresh, "Bearer stale".into());
+        let mut c = GraphConnector::new(t, StaleTokens, graph_tokens());
         let msgs = c.list_mail(10).unwrap();
         assert_eq!(msgs.len(), 1);
         assert_eq!(msgs[0].id, "m1");
@@ -504,7 +547,7 @@ mod tests {
     #[test]
     fn graph_send_mail_requires_a_matching_single_use_approval() {
         let t = MockTransport::ok(serde_json::json!({}));
-        let mut c = GraphConnector::new(t, NoRefresh, "Bearer tok".into());
+        let mut c = GraphConnector::new(t, NoRefresh, graph_tokens());
         let mut policy = ReadFirstPolicy::new();
         let to = vec!["a@example.com".into()];
         // no approval → blocked honestly
@@ -558,7 +601,7 @@ mod tests {
             ])),
             requests: std::sync::Mutex::new(Vec::new()),
         };
-        let mut c = GraphConnector::new(t, NoRefresh, "Bearer tok".into());
+        let mut c = GraphConnector::new(t, NoRefresh, graph_tokens());
         assert!(
             c.list_calendar_events("2026-08-01T00:00:00Z", "2026-09-01T00:00:00Z")
                 .unwrap()

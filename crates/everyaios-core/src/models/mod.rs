@@ -249,11 +249,20 @@ impl ManagedServeHandle {
         match self.phase() {
             Ok(Some(_)) | Err(_) => RuntimeHealthState::Down,
             Ok(None) => {
-                let native_health = ureq::get(&format!("{}/health", self.base_url))
-                    .timeout(Duration::from_secs(1))
-                    .call()
-                    .map(|response| response.status() == 200)
-                    .unwrap_or(false);
+                // FIX-09: the health probe's destination is floored before the
+                // socket, so a runtime configured on a LAN/metadata address
+                // reports `Degraded` instead of being dialled.
+                let native_health =
+                    everyaios_guard::netfloor::preflight_url(
+                        &format!("{}/health", self.base_url),
+                        everyaios_guard::NetPolicy::default(),
+                    )
+                    .is_ok()
+                    && ureq::get(&format!("{}/health", self.base_url))
+                        .timeout(Duration::from_secs(1))
+                        .call()
+                        .map(|response| response.status() == 200)
+                        .unwrap_or(false);
                 if native_health || probe_openai_endpoint(&self.base_url) {
                     RuntimeHealthState::Healthy
                 } else {
@@ -379,11 +388,16 @@ impl ModelsRuntime {
                     "managed runtime exited before health: {status}"
                 )));
             }
-            if ureq::get(&format!("{base_url}/health"))
-                .timeout(Duration::from_secs(1))
-                .call()
-                .map(|r| r.status() == 200)
-                .unwrap_or(false)
+            if everyaios_guard::netfloor::preflight_url(
+                &format!("{base_url}/health"),
+                everyaios_guard::NetPolicy::default(),
+            )
+            .is_ok()
+                && ureq::get(&format!("{base_url}/health"))
+                    .timeout(Duration::from_secs(1))
+                    .call()
+                    .map(|r| r.status() == 200)
+                    .unwrap_or(false)
             {
                 return Ok(ManagedServeHandle {
                     child,
@@ -448,11 +462,16 @@ impl ModelsRuntime {
                     "managed runtime exited before health: {status}"
                 )));
             }
-            if ureq::get(&format!("{base_url}/v1/models"))
-                .timeout(Duration::from_secs(1))
-                .call()
-                .map(|r| r.status() == 200)
-                .unwrap_or(false)
+            if everyaios_guard::netfloor::preflight_url(
+                &format!("{base_url}/v1/models"),
+                everyaios_guard::NetPolicy::default(),
+            )
+            .is_ok()
+                && ureq::get(&format!("{base_url}/v1/models"))
+                    .timeout(Duration::from_secs(1))
+                    .call()
+                    .map(|r| r.status() == 200)
+                    .unwrap_or(false)
             {
                 return Ok(ManagedServeHandle {
                     child,

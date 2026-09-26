@@ -8,6 +8,9 @@
 //!
 //! - `walk` — parallel work-stealing disk walker (`crossbeam-deque`) +
 //!   u32-indexed tree arena with bottom-up size aggregation.
+//! - `identity` — incarnation-aware platform file identity
+//!   (`(volume, fileId, incarnation)` / `(dev, ino, nlink)`); explicit
+//!   "unknown" instead of fabricated zeros (`ARCH/25-FILES.md` §2).
 //! - `snapshot` — immutable snapshots behind `arc_swap`, zstd persistence.
 //! - `treemap` — squarified treemap + per-dir aggregation + stable colors.
 //! - `dedup` — 7-stage hash duplicate detection (size → xxHash3 prefix/suffix
@@ -16,6 +19,9 @@
 //! - `cleanup` — Guard-2-ticketed cleanup proposals (never executes).
 //! - `search` — SQLite FTS5 filename index + debounced `notify` watcher.
 //! - `health` — D12 drive-threshold monitoring (90% full flag).
+//! - `usn` / `usn_reader` / `usn_winapi` — the W1 delta source: cursor + epoch
+//!   discipline over the NTFS change journal, with gaps that always force a
+//!   scoped rescan (`ARCH/21-WORLD-MODEL.md` §4).
 
 pub mod checkpoint;
 pub mod cleanup;
@@ -25,6 +31,7 @@ pub mod events;
 pub mod finder;
 pub mod hash_cache;
 pub mod health;
+pub mod identity;
 pub mod pool;
 pub mod pragmas;
 pub mod search;
@@ -50,10 +57,21 @@ pub use finder::{FinderOptions, SortBy, find_large_files};
 pub use health::{
     DriveStats, HealthStatus, check_health, drive_stats, health_from_stats, over_threshold,
 };
+pub use identity::{
+    Discriminator, FileIdentity, FileKey, IdentityPlatform, IdentityPolicy, IdentityVerdict,
+    Incarnation, identity_from_metadata,
+};
 pub use search::{Debouncer, SearchHit, SearchIndex, WatchHandle, watch};
 pub use snapshot::{Snapshot, SnapshotStore};
 pub use treemap::{TreemapRect, color_for, squarify, treemap_for_dir};
-pub use walk::{Arena, FileNode, FileRecord, ROOT_ID, ScanOptions, build_arena, scan};
+pub use usn::{
+    CursorRow, DeltaOutcome, GapAnomaly, GapReason, GapSignal, JournalChunk, JournalError,
+    JournalReader, JournalSink, JournalSource, RescanScope, UsnCursor, UsnDeltaSource, UsnReason,
+    UsnRecord,
+};
+pub use walk::{
+    Arena, FileNode, FileRecord, ROOT_ID, ScanOptions, build_arena, scan, scan_with_policy,
+};
 
 use thiserror::Error;
 

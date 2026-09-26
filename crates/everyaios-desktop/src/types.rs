@@ -6,8 +6,10 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::capture::{CaptureDegrade, CaptureReadiness};
 use crate::geometry::{DpiScale, SeeBudget};
 use crate::ladder::LadderVerdict;
+use crate::uia::{FreshnessAnomaly, SnapshotEpoch, UiaReadStatus};
 
 /// A desktop window as seen by the agent.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -73,6 +75,11 @@ pub struct SeeResult {
     /// [`crate::geometry::enforce_output_budget`] (a direct backend call); an
     /// engine-produced capture always has one.
     pub budget: Option<SeeBudget>,
+    /// `FIX-18` — the readiness verdict this capture was made **under**, verified
+    /// before the capture was attempted. Non-optional on purpose: a capture with no
+    /// readiness record is exactly the `FIX-18` defect, so the type does not allow
+    /// one to be built silently.
+    pub readiness: CaptureReadiness,
 }
 
 impl SeeResult {
@@ -108,10 +115,27 @@ impl SeeResult {
             None => format!("{:?} · {dpi} · no output budget applied", self.method),
         }
     }
+
+    /// `FIX-18` — the capture's readiness/degrade record, for an audit row and a
+    /// receipt. It names the pipeline that ran, the one that was skipped and why,
+    /// and whether the vision rung asked for the capture at all.
+    pub fn degrade(&self, vision_rung: bool) -> CaptureDegrade {
+        CaptureDegrade {
+            readiness: self.readiness.clone(),
+            method: self.method,
+            skipped: self.readiness.degraded_from,
+            reason: self
+                .readiness
+                .fault
+                .as_ref()
+                .map(|f| f.guidance()),
+            vision_rung,
+        }
+    }
 }
 
 /// A rectangular region in window/physical coordinates.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Region {
     pub x: i32,
     pub y: i32,
@@ -182,14 +206,22 @@ impl Region {
 }
 
 /// One node of the a11y/UI-Automation tree.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ReadNode {
     /// Index path like `1.3.2` (ChatGPT `sky` style click-by-name/index).
     pub index_path: String,
     /// Control-type name: "Button", "Edit", "ListItem", "Text"…
     pub role: String,
     pub name: String,
-    /// AutomationId / native id when available (stable locator).
+    /// `AutomationId` / native id — a **hint, never a key**.
+    ///
+    /// `FIX-17`: MS documents `AutomationId` as optional, unique only among
+    /// siblings, and *not stable across builds* (`ARCH/21` §3, DM-026; the v0
+    /// comment here called it a "stable locator", which it is not). It is carried
+    /// for diagnosis and may only narrow an already-unique candidate set — see
+    /// [`crate::uia::resolve`]. Element identity is
+    /// `(runtime_id | role+name+automationId+bounds)` scoped to one observation
+    /// epoch; a tree is never cached as identity.
     pub automation_id: Option<String>,
     pub x: i32,
     pub y: i32,
@@ -231,10 +263,18 @@ impl ReadNode {
 }
 
 /// The result of `read()` — either an a11y tree or an honest absence.
+///
+/// `FIX-17`: the tree alone could not say *which* kind of absence it was. A
+/// window with no accessibility tree (the honest `None` that starts the vision
+/// rung) and a window this process is not allowed to read (elevation/UIAccess)
+/// used to look identical. So the read now carries its **status**, its **epoch**
+/// and its **guidance**: absence may only be inferred from a read that covered
+/// the target (`REQ-CUA-003`, `REQ-CUA-006`).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReadResult {
     pub window_id: u64,
-    /// None when the platform/a11y surface is absent → vision-fallback path.
+    /// None when the platform/a11y surface is genuinely absent → vision-fallback
+    /// path. Read `status` for whether that absence may be trusted.
     pub tree: Option<ReadNode>,
     /// The effective DPI scale for this window (for coordinate math).
     ///
@@ -246,6 +286,54 @@ pub struct ReadResult {
     pub dpi_scale: f64,
     /// The window list snapshot used (apps + windows).
     pub windows: Vec<WindowInfo>,
+    /// The snapshot generation this observation belongs to. An element handle
+    /// from any other generation is stale (`REQ-CUA-003`).
+    pub epoch: SnapshotEpoch,
+    /// When the observation was taken.
+    pub observed_at_ms: u64,
+    /// `complete` (fully walked) · `partial` (a bound, the budget, a lazy or
+    /// elevated region) · `absent` (no structural UI — the vision rung) ·
+    /// `unknown` (this process could not look; no absence may be inferred).
+    pub status: UiaReadStatus,
+    /// The actionable sentence when the read is not clean: elevation guidance,
+    /// the re-read instruction, or the browser-rung (CDP) pointer.
+    pub guidance: Option<String>,
+    /// Freshness anomalies recorded during the read — a gap forces a bounded
+    /// rescan and is never silent (`ARCH/21` §4).
+    pub anomalies: Vec<FreshnessAnomaly>,
+}
+
+impl ReadResult {
+    /// Build the neutral result for a platform with no structured UI (X11 bare,
+    /// macOS without an AX layer): an `absent` read, which is a **positive** fact
+    /// and therefore permits the vision-rung fallback.
+    pub fn absent(window_id: u64, dpi_scale: f64, windows: Vec<WindowInfo>) -> Self {
+        Self {
+            window_id,
+            tree: None,
+            dpi_scale,
+            windows,
+            epoch: SnapshotEpoch(0),
+            observed_at_ms: crate::now_ms(),
+            status: UiaReadStatus::Absent {
+                detail: "this platform exposes no accessibility tree on this build — the OCR / \
+                         vision rung is the documented fallback"
+                    .into(),
+            },
+            guidance: Some(
+                "this platform exposes no accessibility tree on this build — use the OCR / vision \
+                 rung (a capture of the window) for what is on screen"
+                    .into(),
+            ),
+            anomalies: Vec::new(),
+        }
+    }
+
+    /// May absence be inferred from this read? Only a read that covered the whole
+    /// target may say "not present" (`REQ-CUA-006`).
+    pub fn may_infer_absence(&self) -> bool {
+        self.status.may_infer_absence()
+    }
 }
 
 /// A text word + its bounding box (OCR vision fallback).
@@ -484,6 +572,48 @@ pub struct Capabilities {
     pub ocr: bool,
     pub window_list: bool,
     pub launch_app: bool,
+    /// `FIX-18` — the **host-scoped** capture-readiness summary, so the surface
+    /// can say "graphics capture unavailable — PrintWindow fallback" *before* a
+    /// capture is attempted. Per-target readiness is verified on each capture and
+    /// travels on [`SeeResult::readiness`]; this field is the chip.
+    pub capture_readiness: CaptureReadinessSummary,
+}
+
+/// The compact form of a [`CaptureReadiness`] carried on the capability surface.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct CaptureReadinessSummary {
+    /// `ready` · `degraded` · `unavailable`.
+    pub state: String,
+    /// The pipeline that will run when one can.
+    pub pipeline: Option<String>,
+    /// One actionable sentence — never empty, so no green dot over a dead path.
+    pub detail: String,
+}
+
+impl From<CaptureReadiness> for CaptureReadinessSummary {
+    fn from(readiness: CaptureReadiness) -> Self {
+        Self::from_readiness(&readiness)
+    }
+}
+
+impl CaptureReadinessSummary {
+    /// Build the summary from a full readiness verdict.
+    pub fn from_readiness(readiness: &CaptureReadiness) -> Self {
+        Self {
+            state: readiness.state.as_str().to_string(),
+            pipeline: readiness.pipeline.map(|p| p.as_str().to_string()),
+            detail: readiness.guidance.clone(),
+        }
+    }
+
+    /// The state as a typed value, for a caller that wants the enum.
+    pub fn state(&self) -> crate::capture::CaptureState {
+        match self.state.as_str() {
+            "ready" => crate::capture::CaptureState::Ready,
+            "degraded" => crate::capture::CaptureState::Degraded,
+            _ => crate::capture::CaptureState::Unavailable,
+        }
+    }
 }
 
 /// P57.4 — why a Background act cannot be delivered, and what escalating to
@@ -605,6 +735,11 @@ mod tests {
             scale: 1.0,
             dpi: DpiScale::from_dpi(120, crate::geometry::DpiSource::PerMonitorV2),
             budget: Some(budget),
+            // `FIX-18` — a capture cannot be built without a readiness verdict.
+            readiness: crate::capture::CaptureReadiness::ready(
+                crate::capture::CapturePipeline::PrintWindow,
+                vec![crate::capture::CaptureCheck::PipelineSupported],
+            ),
         }
     }
 

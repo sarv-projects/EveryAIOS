@@ -32,7 +32,9 @@ use everyaios_core::work_gateway::WorkGateway;
 use everyaios_core::chat::{ChatRelay, ChatWireEvent};
 use everyaios_core::connector_hub::{ConnectorHub, Engine};
 use everyaios_core::connectors::gmail::GmailConnector;
-use everyaios_core::connectors::{HttpTransport, TransportError, TransportErrorKind};
+use everyaios_core::connectors::{
+    HttpTransport, TokenSource, TransportError, TransportErrorKind, VaultTokenRef,
+};
 use everyaios_core::guard_service::GuardService;
 use everyaios_core::memory_service::MemoryService;
 use everyaios_core::messaging::{InboundMessage, MessageDispatcher, StubAdapter};
@@ -499,11 +501,29 @@ impl HttpTransport for MockTransport {
     }
 }
 
+/// FIX-01: a use-style token *source* (the connector holds a vault reference,
+/// never the token bytes).
 struct MockRefresher;
-impl everyaios_core::connectors::gmail::TokenRefresher for MockRefresher {
-    fn refresh(&self) -> Result<String, TransportError> {
-        Ok("refreshed-token".into())
+impl TokenSource for MockRefresher {
+    fn with_token<R>(
+        &self,
+        _ref_: &VaultTokenRef,
+        f: &mut dyn FnMut(&str) -> Result<R, TransportError>,
+    ) -> Result<R, TransportError> {
+        f("tok")
     }
+
+    fn refresh<R>(
+        &self,
+        _ref_: &VaultTokenRef,
+        f: &mut dyn FnMut(&str) -> Result<R, TransportError>,
+    ) -> Result<R, TransportError> {
+        f("refreshed-token")
+    }
+}
+
+fn gmail_tokens() -> VaultTokenRef {
+    VaultTokenRef::new("k-gmail-e2e", "gmail")
 }
 
 #[test]
@@ -536,7 +556,7 @@ fn connector_hub_gmail_read_respond() {
         Ok(serde_json::to_vec(&msg_resp).unwrap()),
         Ok(serde_json::to_vec(&search_resp).unwrap()),
     ]);
-    let mut gmail = GmailConnector::new(transport, MockRefresher, "tok".into(), "me".into());
+    let mut gmail = GmailConnector::new(transport, MockRefresher, gmail_tokens(), "me".into());
     let found = gmail.search("from:boss", 5, None).unwrap();
     assert_eq!(found.messages.len(), 1);
     assert_eq!(found.messages[0].subject, "Re: status");
@@ -548,7 +568,7 @@ fn connector_hub_gmail_read_respond() {
     // Respond: send a reply through the same connector.
     let send_resp = serde_json::json!({ "id": "sent-1", "threadId": "t1" });
     let send_transport = MockTransport::new(vec![Ok(serde_json::to_vec(&send_resp).unwrap())]);
-    let mut gmail2 = GmailConnector::new(send_transport, MockRefresher, "tok".into(), "me".into());
+    let mut gmail2 = GmailConnector::new(send_transport, MockRefresher, gmail_tokens(), "me".into());
     let sent = gmail2
         .send_message("boss@example.com", "Re: status", "report attached")
         .unwrap();

@@ -21,7 +21,7 @@ pub mod workspace;
 
 pub use browser_session::BrowserSessionConnector;
 pub use calendar::CalendarConnector;
-pub use gmail::{GmailConnector, TokenRefresher};
+pub use gmail::GmailConnector;
 pub use graph::{
     GraphCalendarEvent, GraphChat, GraphChatMessage, GraphConnector, GraphDriveItem,
     GraphMailMessage,
@@ -34,8 +34,7 @@ pub use native::{
 };
 pub use read_first::{
     ReadFirstPolicy, SendAction, SendApproval, SendBlocked, SendClass, SendKind, VaultTokenRef,
-};
-pub use scopes::{
+};pub use scopes::{
     ConnectorScopeManifest, GOOGLE_WORKSPACE_SCOPES, MICROSOFT_GRAPH_SCOPES, SCOPE_MANIFEST,
     ScopeEntry, attach_scopes,
 };
@@ -57,9 +56,41 @@ pub trait HttpTransport {
     fn get(&self, url: &str, headers: &[(&str, &str)]) -> Result<Vec<u8>, TransportError>;
 }
 
+/// Use-style credential access (INV-02, CTR-013, `ARCH/12-TRUST.md` §6).
+///
+/// FIX-01: a connector used to hold the access token as a `String` field, which
+/// is a *read-value* API outside the vault — it could be cloned, serialized,
+/// logged, returned from any method, or captured by a closure, and it outlived
+/// the call in the connector's own state. This trait is the replacement: the
+/// connector holds a [`VaultTokenRef`] (a key id + service) and the value is
+/// only reachable **inside** the closure `with_token` / `refresh` hands it to,
+/// for the duration of one call. Enumeration by agent code is therefore
+/// impossible, the connector struct itself contains no secret, and the only
+/// implementation that touches bytes lives in the vault.
+pub trait TokenSource: Send + Sync {
+    /// Perform `f` with the live access token for `token_ref`.
+    ///
+    /// `f` returns the *transport* result, so a vault failure (no token, vault
+    /// unavailable) stays distinguishable from a provider failure — the two
+    /// carry different taxonomy codes and must not be collapsed.
+    fn with_token<T>(
+        &self,
+        token_ref: &VaultTokenRef,
+        f: &mut dyn FnMut(&str) -> Result<T, TransportError>,
+    ) -> Result<T, TransportError>;
+
+    /// Perform `f` with a freshly refreshed access token (the vault's exchange).
+    /// A connector calls this exactly once after a `401`, then retries — it
+    /// never caches the refreshed value.
+    fn refresh<T>(
+        &self,
+        token_ref: &VaultTokenRef,
+        f: &mut dyn FnMut(&str) -> Result<T, TransportError>,
+    ) -> Result<T, TransportError>;
+}
+
 /// Injectable CDP session seam for browser-session connectors.
-pub trait CdpSession {
-    /// Evaluate a JavaScript expression in the page context.
+pub trait CdpSession {    /// Evaluate a JavaScript expression in the page context.
     fn evaluate(&self, expression: &str) -> Result<String, TransportError>;
 
     /// Navigate to a URL and wait for load.

@@ -123,8 +123,19 @@ pub fn find_runtime_processes() -> Vec<DiscoveredRuntime> {
 }
 
 /// OpenAI-compatible endpoint probe: `GET {base}/v1/models` must 200.
+///
+/// FIX-09: the destination floor is enforced before the socket. `base` reaches
+/// this function from the renderer's runtime-discovery form, so it is
+/// caller-supplied: the desktop default policy still refuses the LAN and the
+/// always-refused ranges (a `http://169.254.169.254/` "local runtime" is the
+/// SSRF this closes), while a loopback runtime keeps working. A denial is
+/// simply "not reachable" — the probe never falls back to a direct client.
 pub fn probe_openai_endpoint(base: &str) -> bool {
     let url = format!("{base}/v1/models");
+    if everyaios_guard::netfloor::preflight_url(&url, everyaios_guard::NetPolicy::default()).is_err()
+    {
+        return false;
+    }
     ureq::get(&url)
         .timeout(Duration::from_secs(2))
         .call()
@@ -238,7 +249,9 @@ fn parse_ollama_models(body: &str) -> Option<Vec<String>> {
 }
 
 fn probe_ollama_models(probe_base: &str) -> Option<Vec<String>> {
-    let response = ureq::get(&format!("{probe_base}/api/tags"))
+    let url = format!("{probe_base}/api/tags");
+    everyaios_guard::netfloor::preflight_url(&url, everyaios_guard::NetPolicy::default()).ok()?;
+    let response = ureq::get(&url)
         .timeout(Duration::from_secs(2))
         .call()
         .ok()?;
@@ -246,7 +259,9 @@ fn probe_ollama_models(probe_base: &str) -> Option<Vec<String>> {
 }
 
 fn fetch_openai_models(probe_base: &str) -> Option<Vec<String>> {
-    let response = ureq::get(&format!("{probe_base}/v1/models"))
+    let url = format!("{probe_base}/v1/models");
+    everyaios_guard::netfloor::preflight_url(&url, everyaios_guard::NetPolicy::default()).ok()?;
+    let response = ureq::get(&url)
         .timeout(Duration::from_secs(2))
         .call()
         .ok()?;

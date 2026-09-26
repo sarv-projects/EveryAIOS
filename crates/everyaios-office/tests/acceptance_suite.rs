@@ -29,6 +29,9 @@ use everyaios_office::xlsx::patch::apply_batch;
 use everyaios_office::xlsx::read::CellValue;
 use everyaios_office::xlsx::recalc::recalc;
 use everyaios_office::zip::OoxmlArchive;
+use everyaios_office::atomic::{CommitStage, commit_bytes, fsync_calls, recover_orphans, verify_readback};
+use everyaios_office::pdf::redact::{RedactOptions, RedactRequest, Residual, redact_checked};
+use everyaios_office::resident::{DocFormat, DocRoots, ResidentRegistry};
 use everyaios_office::{
     DocxEngine, LimitKind, OfficeError, PatchLimits, PptxEngine, Snapshot, extract_pages, inspect,
     page_count, parts_diff, replace_text, rotate_pages,
@@ -640,4 +643,199 @@ fn repack_body(pkg: &[u8], body: &str) -> Vec<u8> {
     let mut a = OoxmlArchive::open(pkg.to_vec()).unwrap();
     a.save(&[("word/document.xml".to_string(), body.as_bytes().to_vec())])
         .unwrap()
+}
+
+// ---------------------------------------------------------------------------
+// W0 / FIX-14 · FIX-15 · FIX-16 — resident leases, true PDF redaction, and the
+// fsynced commit path, exercised over real files through the public API.
+// ---------------------------------------------------------------------------
+
+/// A one-page PDF whose single line of text sits at a known place: 12pt
+/// Courier at (72, 720), so the run is 43.2pt wide and 12pt tall.
+fn pdf_with_one_line(text: &str) -> Vec<u8> {
+    author_pages(&[text]).expect("author a one-line PDF")
+}
+
+#[test]
+fn acceptance_pdf_redaction_removes_the_content_from_the_file() {
+    // FIX-15 (REQ-OFFICE-006/007/008). The oracle is the **file**, not the
+    // drawing: the literal must be gone from the extracted text *and* from the
+    // saved bytes. A pass that only annotated or covered the region fails here.
+    let original = pdf_with_one_line("ACCOUNT-9911-SSN");
+    let before = everyaios_office::pdf::redact::extract_page_text(&original, 1).unwrap();
+    assert!(before.contains("ACCOUNT-9911-SSN"), "fixture: {before:?}");
+
+    let request = RedactRequest::new(vec![(1, [70.0, 716.0, 122.0, 724.0])])
+        .with_verify_absent(["ACCOUNT-9911-SSN".to_string()]);
+    let report = redact_checked(&original, &request, &RedactOptions::default())
+        .expect("a full-coverage redaction succeeds");
+
+    assert!(report.removed_anything());
+    assert_eq!(report.removed_chars(), "ACCOUNT-9911-SSN".len());
+    assert!(report.unremovable.is_empty(), "{:?}", report.unremovable);
+    // The post-op extraction evidence a receipt would carry.
+    let after = &report.surviving_text[&1];
+    assert!(!after.contains("ACCOUNT-9911-SSN"), "{after:?}");
+    // Not merely covered: the literal is gone from the bytes on disk too.
+    assert!(
+        !contains_bytes(&report.bytes, b"ACCOUNT-9911-SSN"),
+        "the redacted literal is still in the saved file"
+    );
+    // The declared re-serialization is disclosed, not silent.
+    assert!(report.residuals.contains(&Residual::ReserializedContentStream));
+    // The result is still a readable PDF.
+    assert_eq!(page_count(&report.bytes).unwrap(), 1);
+
+    // The marking API is still available, and is explicitly not redaction.
+    let marked =
+        everyaios_office::pdf::redact::mark_for_redaction(&original, &[(1, [70.0, 716.0, 122.0, 724.0])])
+            .unwrap();
+    assert!(contains_bytes(&marked, b"ACCOUNT-9911-SSN"));
+}
+
+#[test]
+fn acceptance_resident_lease_refuses_a_second_writer_and_expires() {
+    // FIX-14 (REQ-OFFICE-003). One resident context per document, one
+    // exclusive writer lease bound to the work item, and a crash-safe expiry.
+    let dir = std::env::temp_dir().join(format!(
+        "everyaios-acceptance-lease-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0)
+    ));
+    std::fs::create_dir_all(&dir).unwrap();
+    let doc = dir.join("report.xlsx");
+    std::fs::write(&doc, b"workbook-v1").unwrap();
+
+    let mut registry = ResidentRegistry::new(DocRoots::undeclared());
+    let t0 = 1_000_000u64;
+
+    // Writer one takes the lease.
+    registry
+        .open(&doc, "work-A", "session-A", 30_000, t0)
+        .expect("the first writer takes the lease");
+
+    // Writer two is refused with the explicit "in use" result and the two
+    // options v1 supports — never a silent overwrite, never a merge.
+    let err = registry
+        .open(&doc, "work-B", "session-B", 30_000, t0 + 1)
+        .expect_err("a second writer must be refused");
+    let conflict = err.conflict().expect("an InUse carries a conflict");
+    assert_eq!(conflict.holder.work_id, "work-A");
+    assert_eq!(conflict.options, vec!["read_only", "wait"]);
+    assert_eq!(registry.contexts(), 1, "one document, one resident context");
+
+    // `read_only` is one of the offered options and does work.
+    let reader = registry
+        .open_read_only(&doc, "session-B", t0 + 2)
+        .expect("read-only is always available");
+    assert!(reader.is_read_only());
+    assert!(reader.lease.is_none());
+
+    // Writer one crashes: nothing is released. At expiry the lease lapses and
+    // the document becomes acquirable with no recovery action.
+    assert!(
+        registry
+            .open(&doc, "work-B", "session-B", 30_000, t0 + 29_999)
+            .is_err(),
+        "still held before expiry"
+    );
+    registry
+        .open(&doc, "work-B", "session-B", 30_000, t0 + 30_000)
+        .expect("a lapsed lease is reclaimed, not resurrected");
+    assert_eq!(registry.contexts(), 1);
+
+    // Writer two commits — through the fsynced path (FIX-16).
+    {
+        let ctx = registry.table(DocFormat::Xlsx).get_mut(&doc).unwrap();
+        ctx.set_working(b"workbook-v2".to_vec());
+    }
+    let receipt = registry
+        .table(DocFormat::Xlsx)
+        .flush(&doc, "work-B", t0 + 30_001)
+        .unwrap()
+        .expect("a dirty context commits");
+    assert_eq!(std::fs::read(&doc).unwrap(), b"workbook-v2");
+    assert!(receipt.verification.durable, "the swap was made durable");
+    assert_eq!(
+        receipt.verification.stages,
+        vec![
+            CommitStage::Staged,
+            CommitStage::Fsynced,
+            CommitStage::Swapped,
+            CommitStage::DurablyRenamed
+        ]
+    );
+    assert_eq!(receipt.effect_ref(), format!("{}#1", doc.display()));
+
+    // Session end flushes and releases.
+    let report = registry.close_session("session-B", t0 + 31_000).unwrap();
+    assert!(report.receipts.is_empty(), "nothing left dirty");
+    assert!(report.retained.is_empty());
+    assert_eq!(registry.contexts(), 0);
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn acceptance_commit_path_is_fsynced_before_the_swap() {
+    // FIX-16 (REQ-OFFICE-004, EDGE-050). The stage order is recorded from the
+    // real call sites, so a commit that swapped before fsyncing — or skipped
+    // the fsync — fails here.
+    let dir = std::env::temp_dir().join(format!(
+        "everyaios-acceptance-commit-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0)
+    ));
+    std::fs::create_dir_all(&dir).unwrap();
+    let doc = dir.join("workbook.xlsx");
+    std::fs::write(&doc, b"v1").unwrap();
+
+    let before = fsync_calls();
+    let trace = commit_bytes(&doc, b"v2-committed").expect("the commit lands");
+    assert!(fsync_calls() >= before + 1, "the staging file was fsynced");
+    assert_eq!(
+        trace.stages,
+        vec![
+            CommitStage::Staged,
+            CommitStage::Fsynced,
+            CommitStage::Swapped,
+            CommitStage::DurablyRenamed
+        ]
+    );
+    assert!(trace.is_ordered());
+    assert!(trace.is_durable());
+    assert_eq!(std::fs::read(&doc).unwrap(), b"v2-committed");
+    verify_readback(&doc, b"v2-committed".len()).expect("the read-back matches");
+
+    // A commit that cannot swap leaves the original bytes and no orphan.
+    let blocked = dir.join("blocked.xlsx");
+    std::fs::create_dir(&blocked).unwrap();
+    std::fs::write(blocked.join("keep"), b"precious").unwrap();
+    let err = commit_bytes(&blocked, b"replacement").expect_err("the swap fails");
+    assert_eq!(err.stage(), Some(CommitStage::Swapped));
+    assert!(blocked.join("keep").exists());
+
+    // A crash before the swap leaves a discoverable staging package and an
+    // untouched target.
+    let orphan = dir.join(".workbook.xlsx.tmp-9999-0");
+    std::fs::write(&orphan, b"half-committed").unwrap();
+    let orphans = recover_orphans(&dir);
+    assert_eq!(orphans.len(), 1);
+    assert_eq!(orphans[0].target, doc);
+    assert_eq!(std::fs::read(&doc).unwrap(), b"v2-committed");
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Plain byte-subsequence search (the redaction oracle uses the same helper).
+fn contains_bytes(haystack: &[u8], needle: &[u8]) -> bool {
+    !needle.is_empty()
+        && needle.len() <= haystack.len()
+        && haystack.windows(needle.len()).any(|w| w == needle)
 }

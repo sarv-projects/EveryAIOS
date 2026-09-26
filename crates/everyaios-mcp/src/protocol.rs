@@ -8,6 +8,34 @@
 
 use serde::{Deserialize, Serialize};
 
+/// The modern MCP spec revision this crate speaks first (DEC-030, ARCH/14 §4).
+///
+/// It is stateless: no `initialize` session is required, request context rides
+/// in `_meta`, and the protocol version travels in a request header.
+pub const MODERN_PROTOCOL_REVISION: &str = "2026-07-28";
+
+/// The fallback revision whose contract is `initialize` + session state.
+///
+/// It is a *supported* fallback, not the default: a modern server is always
+/// probed first (ARCH/14 §4).
+pub const LEGACY_PROTOCOL_REVISION: &str = "2025-11-25";
+
+/// The mandatory modern discovery method (DEC-030, ARCH/14 §4).
+///
+/// A stateless client has no handshake to hang discovery off, so
+/// `server/discover` answers with everything `initialize` + `tools/list` used
+/// to carry.
+pub const DISCOVER_METHOD: &str = "server/discover";
+
+/// The header carrying the negotiated revision on a modern request.
+pub const PROTOCOL_VERSION_HEADER: &str = "MCP-Protocol-Version";
+
+/// The header that must agree with the JSON-RPC `method` of a modern request.
+pub const METHOD_HEADER: &str = "Mcp-Method";
+
+/// The header that must agree with `params.name` of a modern `tools/call`.
+pub const NAME_HEADER: &str = "Mcp-Name";
+
 /// An MCP resource — the wire form of C10 (pass-by-reference): a uri, a
 /// mime type, and a **bounded preview**, never a blob dump.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

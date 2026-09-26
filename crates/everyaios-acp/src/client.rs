@@ -47,6 +47,12 @@ pub enum AcpError {
     McpSseUnsupported,
     #[error("inbound ACP frame belongs to a different provider session")]
     CrossSessionFrame,
+    /// A `session/request_permission` request could not be answered with an
+    /// option the agent actually offered (FIX-03). The bridge fails closed: the
+    /// agent receives a typed error and the turn ends — no synthesized option
+    /// id, no implicit allow.
+    #[error("permission request could not be answered fail-closed: {0}")]
+    PermissionUnanswerable(String),
     #[error("ACP pending frame queue reached its bounded capacity")]
     PendingQueueFull,
     #[error("ACP frame exceeds the {MAX_ACP_FRAME_BYTES}-byte limit")]
@@ -89,6 +95,10 @@ pub enum AcpError {
 
 /// ACP protocol-specific error codes (official schema).
 const ERROR_AUTH_REQUIRED: i64 = -32000;
+/// The client could not answer a permission request with an offered option
+/// (FIX-03). JSON-RPC reserves -32000..-32099 for implementation-defined
+/// server errors; the agent must treat this as a refusal, never as consent.
+const ERROR_PERMISSION_UNANSWERABLE: i64 = -32001;
 /// Bound the interleaving queue so a peer cannot make a blocked client grow
 /// memory without limit. Overflow is surfaced as a cancellation/shutdown gap,
 /// never silently discarded.
@@ -1956,7 +1966,30 @@ impl<T: AcpTransport> AcpSession<T> {
                                 return Err(AcpError::CrossSessionFrame);
                             }
                             let decision = on_permission(&params);
-                            let option_id = resolve_option(&params, &decision);
+                            // FIX-03: the reply must name an option the agent
+                            // actually offered. When the bridge cannot express
+                            // the decision, the request is refused with a typed
+                            // JSON-RPC error and the turn fails closed — never a
+                            // synthesized option id and never a silent allow.
+                            let option_id = match resolve_option(&params, &decision) {
+                                Ok(option_id) => option_id,
+                                Err(error) => {
+                                    outcome.permissions.push(params);
+                                    outcome.permission_decisions.push(decision);
+                                    let reply = json!({
+                                        "jsonrpc": "2.0", "id": rid,
+                                        "error": {
+                                            "code": ERROR_PERMISSION_UNANSWERABLE,
+                                            "message": error.to_string()
+                                        }
+                                    });
+                                    self.send_frame(&reply.to_string())?;
+                                    self.mark_quarantined(
+                                        "permission request could not be answered fail-closed",
+                                    );
+                                    return Err(error);
+                                }
+                            };
                             outcome.permissions.push(params);
                             outcome.permission_decisions.push(decision);
                             let result = PermissionResult {
@@ -2585,37 +2618,21 @@ fn map_error(err: &Value) -> AcpError {
     AcpError::ServerError(err.to_string())
 }
 
-/// Choose the option id that realizes a [`PermissionDecision`], synthesizing a
-/// default when the decision carries no explicit option.
-fn resolve_option(params: &PermissionRequestParams, decision: &PermissionDecision) -> String {
-    let (wanted, allow) = match decision {
-        PermissionDecision::Allow { option_id } => (option_id.as_deref(), true),
-        PermissionDecision::Deny { option_id } => (option_id.as_deref(), false),
-    };
-    if let Some(id) = wanted {
-        return id.to_string();
-    }
-    for opt in &params.options {
-        let matches = if allow {
-            matches!(
-                opt.kind,
-                PermissionOptionKind::AllowOnce | PermissionOptionKind::AllowAlways
-            )
-        } else {
-            matches!(
-                opt.kind,
-                PermissionOptionKind::RejectOnce | PermissionOptionKind::RejectAlways
-            )
-        };
-        if matches {
-            return opt.option_id.clone();
-        }
-    }
-    if allow {
-        "allow_once".to_string()
-    } else {
-        "reject_once".to_string()
-    }
+/// Choose the option id that realizes a [`PermissionDecision`], refusing when
+/// the decision cannot be expressed (FIX-03 / `TASK-CHAN-001`).
+///
+/// The strict resolver lives in [`crate::permission_bridge`] so the bridge and
+/// the wire agree by construction: an unpinned allow is a `once` (never an
+/// `allow_always` the user never chose), an explicit id must be one the agent
+/// offered, and an unanswerable decision is an error instead of a synthesized
+/// `allow_once` / `reject_once`.
+fn resolve_option(
+    params: &PermissionRequestParams,
+    decision: &PermissionDecision,
+) -> Result<String, AcpError> {
+    crate::permission_bridge::PermissionBridge::new()
+        .resolve(params, decision)
+        .map_err(|error| AcpError::PermissionUnanswerable(error.to_string()))
 }
 
 #[cfg(test)]

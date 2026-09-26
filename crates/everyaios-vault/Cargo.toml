@@ -11,6 +11,11 @@ rusqlite = { workspace = true }
 thiserror = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+# FIX-09: the oauth transport is a custody path, so its destinations are
+# floored by the one implementation in `everyaios-guard::netfloor` rather than
+# a private copy. Direction is Trust → vault (guard does not depend on the
+# vault), so this adds no cycle; `check-arch-invariants` has no rule against it.
+everyaios-guard = { path = "../everyaios-guard" }
 ureq = { workspace = true }
 zeroize = { workspace = true }
 rand = { workspace = true }

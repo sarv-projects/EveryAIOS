@@ -758,3 +758,76 @@ fn client_id_env_override_supplies_empty_provider() {
         std::env::remove_var("EVERYAIOS_OAUTH_CLIENT_ID_GHOST");
     }
 }
+
+// ---------------------------------------------------------------------------
+// FIX-09 — the custody egress is floored before the socket
+// ---------------------------------------------------------------------------
+
+#[test]
+fn custody_egress_refuses_the_always_blocked_ranges() {
+    for url in [
+        "http://169.254.169.254/latest/meta-data/",
+        "http://10.0.0.5/token",
+        "http://192.168.1.10/token",
+        "http://[fe80::1]/token",
+        "http://0.0.0.0/token",
+    ] {
+        let err = post_form(url, &[("grant_type", "authorization_code")]).unwrap_err();
+        match err {
+            OAuthError::EgressDenied { reason, url: u } => {
+                assert_eq!(u, url);
+                assert!(!reason.is_empty());
+            }
+            other => panic!("expected an egress denial for {url}, got {other:?}"),
+        }
+    }
+}
+
+#[test]
+fn custody_egress_refuses_non_http_schemes_and_garbage() {
+    for url in ["file:///etc/passwd", "gopher://127.0.0.1:11211/", "not a url", ""] {
+        assert!(
+            matches!(
+                post_form(url, &[]),
+                Err(OAuthError::EgressDenied { .. })
+            ),
+            "{url} must be refused"
+        );
+    }
+}
+
+/// The credentialed exchange is the strongest case: it carries a live token in
+/// the `Authorization` header, so a refused destination must be refused before
+/// the header is ever built.
+#[test]
+fn credentialed_exchange_is_floored_too() {
+    let err = get_json_with_auth("http://169.254.169.254/token", "gh-secret").unwrap_err();
+    assert!(matches!(err, OAuthError::EgressDenied { .. }), "{err:?}");
+    let err = get_json_with_auth("http://192.168.1.10/token", "gh-secret").unwrap_err();
+    assert!(matches!(err, OAuthError::EgressDenied { .. }), "{err:?}");
+}
+
+/// A re-pointed endpoint cannot escape the floor: `with_token_url` is public,
+/// so the check has to live at the client and not at the call site.
+#[test]
+fn a_repointed_token_url_cannot_escape_the_floor() {
+    let vault = vault();
+    let om = OAuthManager::with_enabled(vault, true)
+        .with_token_url(CHATGPT_PRO, "http://169.254.169.254/oauth/token");
+    let start = om.start_pkce(CHATGPT_PRO).unwrap();
+    let err = om
+        .complete_pkce(CHATGPT_PRO, "auth-code", &start.state)
+        .unwrap_err();
+    assert!(matches!(err, OAuthError::EgressDenied { .. }), "{err:?}");
+    // No token row was written: the effect could not complete.
+    assert!(om.accounts(CHATGPT_PRO).unwrap().is_empty());
+}
+
+/// Loopback stays reachable: a loopback OAuth endpoint is a legitimate desktop
+/// setup (and the test suite's own mock), so the custody path is not narrowed
+/// into uselessness by the fix.
+#[test]
+fn loopback_endpoints_still_pass_the_floor() {
+    assert!(egress_preflight("http://127.0.0.1:8080/oauth/token").is_ok());
+    assert!(egress_preflight("https://auth0.openai.com/oauth/token").is_ok());
+}

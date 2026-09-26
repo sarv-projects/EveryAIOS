@@ -222,6 +222,13 @@ mod tests {
             ocr,
             window_list: true,
             launch_app: true,
+            // `FIX-18` — the capture chip is a separate fact from the read
+            // surface; these tests are about the read surface.
+            capture_readiness: crate::capture::CaptureReadiness::ready(
+                crate::capture::CapturePipeline::X11GetImage,
+                vec![crate::capture::CaptureCheck::PipelineSupported],
+            )
+            .into(),
         }
     }
 
@@ -246,6 +253,14 @@ mod tests {
             ocr: true,
             window_list: true,
             launch_app: true,
+            // `FIX-18` — a screen-only pipeline: ready when the session is, and
+            // the verdict would refuse an occluded target rather than capture the
+            // occluder.
+            capture_readiness: crate::capture::CaptureReadiness::ready(
+                crate::capture::CapturePipeline::MacScreenCapture,
+                vec![crate::capture::CaptureCheck::PipelineSupported],
+            )
+            .into(),
         };
         let background = derive(Some(&c), &AppPolicy::default(), false, None);
         assert_eq!(background.state, ReadinessState::Ready);

@@ -13,11 +13,32 @@
 //! VARIANCE/MOTION/DENSITY dials, distinct from C9 learned preferences);
 //! [`grow_from_task`] implements the GenericAgent skill-tree discipline —
 //! every solved task becomes a versioned skill with ownership markers.
+//!
+//! **Every path into the store is confined** (FIX-05 / `REQ-SKILL-011`,
+//! `ARCH/12-TRUST.md` §7 · `ARCH/25-FILES.md` §7): an id must be a single
+//! `[a-z0-9-]+` segment, the joined path is measured against the canonical
+//! store root through Guard's pathfloor, and the recursive delete goes through
+//! [`confined_fs`] (bounded walk, no link followed out of the root, a
+//! registered package only). A package's own content is untrusted input, so
+//! nothing in a package can steer a read, a write, or a delete out of the
+//! store.
 
 use ::sha2::{Digest, Sha256};
+use everyaios_guard::pathfloor::{self, FloorVerdict};
 use serde::{Deserialize, Serialize};
+use std::fmt;
 use std::path::{Path, PathBuf};
 use thiserror::Error;
+
+// FIX-05 / TASK-SKILL-001 — the bounded, link-aware removal primitive. It is
+// declared here (rather than in `lib.rs`) because this module is its only
+// caller and it is the crate's single recursive-filesystem surface.
+#[path = "confined_fs.rs"]
+mod confined_fs;
+pub use confined_fs::{
+    ConfinedError, MAX_SCAN_DEPTH, MAX_SCAN_ENTRIES, RemovalReport, canonical_root,
+    check_removal, remove_confined,
+};
 
 /// The max number of skills injected into any single planner context
 /// (Agent Zero / MAX_ACTIVE_SKILLS pattern).
@@ -101,6 +122,35 @@ pub struct Skill {
     pub body: String,
 }
 
+/// Why a store-relative path was refused. Every variant is a decision the
+/// caller can surface; none of them delete anything.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PathRefusal {
+    /// The id is not a single `[a-z0-9-]+` path segment (so it can carry a
+    /// separator, a drive root, or `..`).
+    NotASegment,
+    /// A `..` component walks above the store root.
+    ParentEscape,
+    /// The target resolves outside the store root.
+    OutsideRoot,
+    /// A symlink/junction sits where the package directory must be.
+    SymlinkedPackageDir,
+}
+
+impl fmt::Display for PathRefusal {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let s = match self {
+            PathRefusal::NotASegment => "the id is not a single [a-z0-9-]+ path segment",
+            PathRefusal::ParentEscape => "the id walks above the store root with `..`",
+            PathRefusal::OutsideRoot => "the target resolves outside the skill store root",
+            PathRefusal::SymlinkedPackageDir => {
+                "a symlink/junction sits where the package directory must be"
+            }
+        };
+        f.write_str(s)
+    }
+}
+
 /// Errors from the skill registry.
 #[derive(Debug, Error)]
 pub enum SkillError {
@@ -124,6 +174,21 @@ pub enum SkillError {
     },
     #[error("skill `{name}` failed the tests gate: {msg}")]
     TestsGate { name: String, msg: String },
+    /// FIX-05 — a read/write/delete target is not a confined store path
+    /// (pathfloor: `ARCH/12-TRUST.md` §7 · `ARCH/25-FILES.md` §7). Nothing was
+    /// touched.
+    #[error("refused `{path}`: {refusal}")]
+    PathRefused { path: String, refusal: PathRefusal },
+    /// FIX-05 — the id is well-formed but the directory is not a registered
+    /// package (no `SKILL.md` at its root), so a recursive delete there would
+    /// sweep unrelated store content. Nothing was touched.
+    #[error("`{0}` is not a registered skill package (no SKILL.md under the store root)")]
+    NotRegistered(String),
+    /// FIX-05 — the bounded, link-aware tree walk refused the removal (the
+    /// target escapes the root, a link inside the tree leaves it, or the
+    /// traversal bound was exceeded). Nothing was touched.
+    #[error(transparent)]
+    Confined(#[from] ConfinedError),
 }
 
 impl SkillManifest {
@@ -406,6 +471,11 @@ impl SkillStore {
     /// Crush/Zed-style line budget keeps skills focused and readable (a
     /// bloated skill is a maintenance + prompt-cost liability, not a
     /// capability).
+    ///
+    /// FIX-05 (install side): the package directory is refused when a
+    /// symlink/junction sits where it must be — `create_dir_all` is a no-op on
+    /// a link, so the `SKILL.md` write would otherwise land wherever the link
+    /// points, outside the store root.
     pub fn save(&self, skill: &Skill, overwrite: bool) -> Result<PathBuf, SkillError> {
         let name = skill.manifest.name.clone();
         if !SkillManifest::valid_name(&name) {
@@ -425,28 +495,123 @@ impl SkillStore {
         if path.exists() && !overwrite {
             return Err(SkillError::Exists(name));
         }
+        if std::fs::symlink_metadata(&dir)
+            .map(|m| m.file_type().is_symlink())
+            .unwrap_or(false)
+        {
+            return Err(SkillError::PathRefused {
+                path: dir.display().to_string(),
+                refusal: PathRefusal::SymlinkedPackageDir,
+            });
+        }
         std::fs::create_dir_all(&dir)?;
         std::fs::write(&path, md)?;
         Ok(path)
     }
 
     /// Load one skill by name.
+    ///
+    /// FIX-05: the name must be a single `[a-z0-9-]+` segment, so it can never
+    /// carry a separator or `..` into a read outside the store root.
     pub fn load(&self, name: &str) -> Result<Skill, SkillError> {
+        if !SkillManifest::valid_name(name) {
+            return Err(SkillError::InvalidName(name.into()));
+        }
         let path = self.root.join(name).join("SKILL.md");
         let source =
             std::fs::read_to_string(&path).map_err(|_| SkillError::NotFound(name.into()))?;
         Skill::from_skill_md(&source, &path.display().to_string())
     }
 
-    /// Remove a skill directory.
+    /// Remove a skill directory (FIX-05).
+    ///
+    /// Path-safe by construction, in this order and with nothing deleted on any
+    /// refusal:
+    ///
+    /// 1. the id must be a single `[a-z0-9-]+` segment ([`SkillError::InvalidName`]);
+    /// 2. `<root>/<id>` must pass Guard's pathfloor against the **canonical**
+    ///    store root — no `..` walk, no absolute target, no symlinked package
+    ///    dir ([`SkillError::PathRefused`], [`ConfinedError::TargetIsLink`]);
+    /// 3. the target must be a *registered package*: a real directory carrying
+    ///    a real `SKILL.md` ([`SkillError::NotRegistered`]) — an arbitrary
+    ///    directory under the store root is never a delete target;
+    /// 4. the tree is pre-flighted by [`remove_confined`]: links that leave the
+    ///    root are a typed refusal and the walk is bounded
+    ///    ([`ConfinedError::LinkEscape`], [`ConfinedError::BoundExceeded`]).
+    ///
+    /// The install-time pin is dropped on success (uninstall, not a data wipe —
+    /// the Library and its receipts are untouched).
     pub fn delete(&self, name: &str) -> Result<(), SkillError> {
-        let dir = self.root.join(name);
-        if !dir.exists() {
-            return Err(SkillError::NotFound(name.into()));
-        }
-        std::fs::remove_dir_all(dir)?;
+        let dir = self.package_dir(name)?;
+        remove_confined(&self.root, &dir)?;
         self.unpin(name);
         Ok(())
+    }
+
+    /// Resolve `<root>/<id>` to a registered package directory inside the
+    /// canonical store root, or fail typed. Shared by [`SkillStore::delete`]
+    /// and anything else that needs a trustworthy package path.
+    fn package_dir(&self, id: &str) -> Result<PathBuf, SkillError> {
+        if !SkillManifest::valid_name(id) {
+            return Err(SkillError::InvalidName(id.into()));
+        }
+        let dir = self.root.join(id);
+        let path_str = dir.display().to_string();
+        // The store root is the boundary: canonicalize it once so a symlinked
+        // store root behaves like a normal directory and a `..`/absolute id
+        // can never become the delete target.
+        let root_real = canonical_root(&self.root).map_err(|e| match e {
+            ConfinedError::NotFound { .. } => SkillError::NotFound(id.into()),
+            other => SkillError::Confined(other),
+        })?;
+        let root_str = root_real.display().to_string();
+        // pathfloor is the one decider for containment (lexical + symlink).
+        match pathfloor::enforce_floor(&path_str, &[root_str.as_str()]) {
+            FloorVerdict::Allowed => {}
+            FloorVerdict::ParentEscape => {
+                return Err(SkillError::PathRefused {
+                    path: path_str,
+                    refusal: PathRefusal::ParentEscape,
+                });
+            }
+            FloorVerdict::OutsideRoot => {
+                return Err(SkillError::PathRefused {
+                    path: path_str,
+                    refusal: PathRefusal::OutsideRoot,
+                });
+            }
+            FloorVerdict::SymlinkEscape => {
+                return Err(SkillError::Confined(ConfinedError::TargetIsLink {
+                    path: path_str.clone(),
+                    resolved: std::fs::read_link(&dir)
+                        .map(|p| p.display().to_string())
+                        .unwrap_or_else(|_| path_str.clone()),
+                }));
+            }
+        }
+        // Must exist as a real directory: a link (even one that stays inside
+        // the root) is not a package, and `symlink_metadata` never follows it.
+        let meta = std::fs::symlink_metadata(&dir).map_err(|e| {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                SkillError::NotFound(id.into())
+            } else {
+                SkillError::Io(e)
+            }
+        })?;
+        if !meta.is_dir() {
+            return Err(SkillError::NotRegistered(id.into()));
+        }
+        // Registered package = the manifest is a real file at its root. A
+        // package's own content is untrusted input, so a symlinked `SKILL.md`
+        // does not make the directory a package.
+        let manifest = dir.join("SKILL.md");
+        if !std::fs::symlink_metadata(&manifest)
+            .map(|m| m.is_file())
+            .unwrap_or(false)
+        {
+            return Err(SkillError::NotRegistered(id.into()));
+        }
+        Ok(dir)
     }
 
     // --- Per-install content pinning (doc 75 sha-pinned marketplace model) ---
@@ -1252,5 +1417,294 @@ mod tests {
         let retrieved = store.load(&grown.manifest.name).unwrap();
         assert_eq!(retrieved, grown);
         assert_eq!(retrieved.manifest.version, "2.0.0");
+    }
+
+    // --- FIX-05 / TASK-SKILL-001 — confined uninstall -----------------------
+    //
+    // `delete` used to `remove_dir_all(root.join(caller_supplied_name))` with
+    // no confinement: an absolute name replaced the root entirely and `..`
+    // walked out of it. These tests pin the refusals and the one success
+    // shape (exactly the registered package goes, siblings stay).
+
+    /// A store root plus a sibling "outside" tree that must never be touched.
+    fn confined_fixture(tag: &str) -> (PathBuf, PathBuf, PathBuf) {
+        let base = tmpdir().join(tag);
+        let root = base.join("skills");
+        let outside = base.join("outside");
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::create_dir_all(&outside).unwrap();
+        // A decoy package outside the store: a recursive delete that escapes
+        // would take this with it.
+        std::fs::write(outside.join("SKILL.md"), "precious\n").unwrap();
+        std::fs::write(outside.join("precious.txt"), "do not delete me").unwrap();
+        (base, root, outside)
+    }
+
+    fn sibling_skill() -> Skill {
+        let mut s = sample_skill();
+        s.manifest.name = "note-taker".into();
+        s
+    }
+
+    #[test]
+    fn delete_rejects_traversal_ids() {
+        let (_base, root, outside) = confined_fixture("traversal");
+        let store = SkillStore::new(&root);
+        store.save(&sample_skill(), false).unwrap();
+        store.save(&sibling_skill(), false).unwrap();
+
+        for id in [
+            "..",
+            "../outside",
+            "../../",
+            "refactor-helper/../../outside",
+            "./..",
+            "",
+        ] {
+            let err = store
+                .delete(id)
+                .expect_err("a traversal id must be refused");
+            assert!(
+                matches!(
+                    err,
+                    SkillError::InvalidName(_) | SkillError::PathRefused { .. }
+                ),
+                "`{id}` → {err}"
+            );
+        }
+
+        // Nothing moved: the decoy and both packages are intact.
+        assert!(outside.join("precious.txt").exists());
+        assert!(root.join("refactor-helper/SKILL.md").exists());
+        assert!(root.join("note-taker/SKILL.md").exists());
+    }
+
+    #[test]
+    fn delete_rejects_an_absolute_path_outside_the_root() {
+        let (_base, root, outside) = confined_fixture("absolute");
+        let store = SkillStore::new(&root);
+        store.save(&sample_skill(), false).unwrap();
+
+        let abs = outside.display().to_string();
+        let err = store
+            .delete(&abs)
+            .expect_err("an absolute path must be refused");
+        assert!(matches!(err, SkillError::InvalidName(_)), "{err}");
+
+        assert!(outside.join("precious.txt").exists(), "decoy survives");
+        assert!(root.join("refactor-helper/SKILL.md").exists());
+
+        // The store root itself is never a delete target either.
+        let root_abs = root.display().to_string();
+        assert!(matches!(
+            store.delete(&root_abs),
+            Err(SkillError::InvalidName(_))
+        ));
+        assert!(root.exists());
+    }
+
+    #[test]
+    fn delete_rejects_a_symlinked_package_that_escapes_the_root() {
+        let (_base, root, outside) = confined_fixture("symescape");
+        let store = SkillStore::new(&root);
+        // A link where a package directory must be, pointing at a real
+        // package-shaped tree outside the root.
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(&outside, root.join("evil")).unwrap();
+
+        #[cfg(unix)]
+        {
+            let err = store
+                .delete("evil")
+                .expect_err("a symlinked package dir must be refused");
+            assert!(
+                matches!(err, SkillError::Confined(_)),
+                "typed refusal, got {err}"
+            );
+            assert!(
+                outside.join("precious.txt").exists(),
+                "the link target is never swept"
+            );
+            assert!(outside.join("SKILL.md").exists());
+            assert!(
+                std::fs::symlink_metadata(root.join("evil"))
+                    .unwrap()
+                    .file_type()
+                    .is_symlink(),
+                "the link itself is left in place for an operator to inspect"
+            );
+        }
+        #[cfg(not(unix))]
+        {
+            let _ = (store, outside);
+        }
+    }
+
+    #[test]
+    fn delete_rejects_a_link_inside_the_package_that_escapes_the_root() {
+        let (_base, root, outside) = confined_fixture("innerlink");
+        let store = SkillStore::new(&root);
+        store.save(&sample_skill(), false).unwrap();
+        let pkg = root.join("refactor-helper");
+        std::fs::create_dir_all(pkg.join("references")).unwrap();
+        std::fs::write(pkg.join("references/note.md"), "shipped").unwrap();
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(&outside, pkg.join("references/escape")).unwrap();
+
+        #[cfg(unix)]
+        {
+            let err = store
+                .delete("refactor-helper")
+                .expect_err("a hostile package tree must be refused");
+            assert!(
+                matches!(err, SkillError::Confined(ConfinedError::LinkEscape { .. })),
+                "{err}"
+            );
+            // Refusal is total: the package and the link target both survive.
+            assert!(pkg.join("SKILL.md").exists());
+            assert!(pkg.join("references/note.md").exists());
+            assert!(outside.join("precious.txt").exists());
+        }
+        #[cfg(not(unix))]
+        {
+            let _ = (store, outside);
+        }
+    }
+
+    #[test]
+    fn delete_refuses_unknown_and_unregistered_ids() {
+        let (_base, root, _outside) = confined_fixture("unregistered");
+        let store = SkillStore::new(&root);
+        store.save(&sample_skill(), false).unwrap();
+
+        // Never installed.
+        assert!(matches!(
+            store.delete("not-installed"),
+            Err(SkillError::NotFound(_))
+        ));
+        // A directory under the root that is not a package (a cache, a
+        // half-written install, hand-made scratch space) is never a target.
+        let cache = root.join("cache");
+        std::fs::create_dir_all(cache.join("blobs")).unwrap();
+        std::fs::write(cache.join("blobs/b.bin"), "bytes").unwrap();
+        let err = store
+            .delete("cache")
+            .expect_err("a non-package directory must be refused");
+        assert!(matches!(err, SkillError::NotRegistered(_)), "{err}");
+        assert!(cache.join("blobs/b.bin").exists(), "cache is intact");
+
+        // A plain file under the root is not a package either.
+        std::fs::write(root.join("stray.md"), "x").unwrap();
+        assert!(matches!(
+            store.delete("stray.md"),
+            Err(SkillError::InvalidName(_))
+        ));
+        assert!(root.join("stray.md").exists());
+
+        // A package whose manifest is a link is not a registered package.
+        #[cfg(unix)]
+        {
+            let fake = root.join("fake-pkg");
+            std::fs::create_dir_all(&fake).unwrap();
+            std::os::unix::fs::symlink(root.join("refactor-helper/SKILL.md"), fake.join("SKILL.md"))
+                .unwrap();
+            assert!(matches!(
+                store.delete("fake-pkg"),
+                Err(SkillError::NotRegistered(_))
+            ));
+            assert!(fake.exists());
+        }
+    }
+
+    #[test]
+    fn delete_removes_exactly_the_registered_package() {
+        let (_base, root, _outside) = confined_fixture("success");
+        let store = SkillStore::new(&root);
+        store.save(&sample_skill(), false).unwrap();
+        store.save(&sibling_skill(), false).unwrap();
+        // Package content beyond SKILL.md (a package is a directory).
+        let gone = root.join("refactor-helper");
+        std::fs::create_dir_all(gone.join("scripts")).unwrap();
+        std::fs::write(gone.join("scripts/run.sh"), "#!/bin/sh\n").unwrap();
+        let kept = root.join("note-taker");
+        std::fs::create_dir_all(kept.join("references")).unwrap();
+        std::fs::write(kept.join("references/notes.md"), "keep me").unwrap();
+        // Pins for both (the ledger is store metadata, not package data).
+        store.pin("refactor-helper", "everyaios-store", "1.2.0", b"a");
+        store.pin("note-taker", "everyaios-store", "0.9.0", b"b");
+
+        store.delete("refactor-helper").unwrap();
+
+        // Exactly the package went — directory and every file under it.
+        assert!(!gone.exists(), "the package directory is gone");
+        assert!(!root.join("refactor-helper/SKILL.md").exists());
+        // The sibling is untouched, content included, and still loadable.
+        assert!(kept.join("SKILL.md").exists());
+        assert!(kept.join("references/notes.md").exists());
+        assert_eq!(store.load("note-taker").unwrap(), sibling_skill());
+        // The store root and the ledger survive; only the removed pin went.
+        assert!(root.exists());
+        let pins = store.pins();
+        assert!(!pins.contains_key("refactor-helper"), "pin dropped");
+        assert!(pins.contains_key("note-taker"), "sibling pin kept");
+        // A second delete is a typed NotFound, not a silent success.
+        assert!(matches!(
+            store.delete("refactor-helper"),
+            Err(SkillError::NotFound(_))
+        ));
+    }
+
+    #[test]
+    fn load_and_delete_reject_non_segment_names() {
+        let (_base, root, outside) = confined_fixture("load");
+        let store = SkillStore::new(&root);
+        store.save(&sample_skill(), false).unwrap();
+        for id in ["../outside", "..", "/etc/passwd", "a/b", ""] {
+            assert!(
+                matches!(store.load(id), Err(SkillError::InvalidName(_))),
+                "load(`{id}`) must be refused"
+            );
+            assert!(
+                matches!(store.delete(id), Err(SkillError::InvalidName(_))),
+                "delete(`{id}`) must be refused"
+            );
+        }
+        assert!(outside.join("precious.txt").exists());
+    }
+
+    #[test]
+    fn save_refuses_to_write_through_a_symlinked_package_dir() {
+        let (_base, root, outside) = confined_fixture("save-link");
+        let store = SkillStore::new(&root);
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(&outside, root.join("evil")).unwrap();
+
+        #[cfg(unix)]
+        {
+            let mut s = sample_skill();
+            s.manifest.name = "evil".into();
+            let err = store.save(&s, true).expect_err("a symlinked dir is refused");
+            assert!(
+                matches!(
+                    err,
+                    SkillError::PathRefused {
+                        refusal: PathRefusal::SymlinkedPackageDir,
+                        ..
+                    }
+                ),
+                "{err}"
+            );
+            // The write never landed where the link points.
+            assert_eq!(
+                std::fs::read_to_string(outside.join("SKILL.md")).unwrap(),
+                "precious\n",
+                "the link target is untouched"
+            );
+            assert!(!outside.join("evil").exists());
+        }
+        #[cfg(not(unix))]
+        {
+            let _ = (store, outside);
+        }
     }
 }

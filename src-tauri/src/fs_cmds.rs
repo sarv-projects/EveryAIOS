@@ -124,17 +124,47 @@ pub fn fs_read_file(path: String) -> Result<serde_json::Value, String> {
 }
 
 /// Write UTF-8 text to a file (creates/overwrites). Used by the code view's
-/// Save. The parent must already exist.
+/// "New untitled file" and the Save path.
+///
+/// FIX-06: this is a **human-gesture** effect, and it is now recorded as one.
+/// Before this change the command performed a real, externally visible disk
+/// write with no ticket, no audit row and no authority record at all — a
+/// silent effect (INV-24) whose provenance could not be reconstructed. It stays
+/// human-gesture rather than becoming ticketed for two reasons: the caller is
+/// the user's own click, and a self-minted ticket would be theatre — the
+/// default `write = always_ask` policy would return `Ask`, and approving it
+/// inside the same call would launder a *considered* human decision into an
+/// automatic one. The ticketed path for an agent/automation write is
+/// [`fs_write_ticket`] + [`fs_write_commit`], and the same rule already governs
+/// [`fs_undo_restore`], which is why the two agree.
+///
+/// The path is still path-floored, and the write lands on the Merkle chain with
+/// `authorization: human_gesture` before the response returns.
 #[tauri::command]
-pub fn fs_write_file(path: String, content: String) -> Result<serde_json::Value, String> {
+pub fn fs_write_file(
+    state: State<'_, AppState>,
+    path: String,
+    content: String,
+) -> Result<serde_json::Value, String> {
     let p = crate::control::floor_user_file(&path)?;
     if let Some(parent) = p.parent() {
         if !parent.as_os_str().is_empty() && !parent.exists() {
             return Err(format!("{path}: parent directory does not exist"));
         }
     }
+    let write_path = p.display().to_string();
+    let bytes = content.len();
     std::fs::write(&p, content.as_bytes()).map_err(|e| format!("{path}: {e}"))?;
-    Ok(serde_json::json!({ "path": path, "bytes": content.len() }))
+    let audit_seq = crate::control::record_mutation(
+        &state,
+        crate::control::AuthKind::HumanGesture,
+        "fs.write_file",
+        serde_json::json!({
+            "path": write_path,
+            "bytes": bytes,
+        }),
+    );
+    Ok(serde_json::json!({ "path": path, "bytes": content.len(), "auditSeq": audit_seq }))
 }
 
 /// P41.3 — Ticketed editor write, request half: mints a Guard-2 ticket for a
@@ -212,6 +242,13 @@ pub fn fs_write_ticket(
 /// single-use ticket (`use_ticket` — approval + args-hash match), then
 /// writes. No ticket, no write: the editor never silently autosaves into the
 /// workspace.
+///
+/// FIX-06: the consumed ticket now reaches the audit chain. The write was
+/// correctly ticketed but *silent* — the effect executed with no audit row, so
+/// the ticket that authorized it existed only in the caller's hands and the
+/// provenance could not be reconstructed afterwards (INV-24, REQ-PROD-001: the
+/// receipt/audit must reference its ticket). The row is stamped
+/// `authorization: agent_ticket` with the real `ticketId`.
 #[tauri::command]
 pub fn fs_write_commit(
     state: State<'_, AppState>,
@@ -234,8 +271,24 @@ pub fn fs_write_commit(
     drop(guard); // never hold the guard lock across a disk write
 
     let p = std::path::PathBuf::from(&path);
+    let bytes = content.len();
     std::fs::write(&p, content.as_bytes()).map_err(|e| format!("{path}: {e}"))?;
-    Ok(serde_json::json!({ "path": path, "bytes": content.len(), "ticketId": ticket_id }))
+    let audit_seq = crate::control::record_mutation(
+        &state,
+        crate::control::AuthKind::AgentTicket,
+        "fs.write_commit",
+        serde_json::json!({
+            "path": path,
+            "bytes": bytes,
+            "ticketId": ticket_id,
+        }),
+    );
+    Ok(serde_json::json!({
+        "path": path,
+        "bytes": content.len(),
+        "ticketId": ticket_id,
+        "auditSeq": audit_seq,
+    }))
 }
 
 /// A bounded before/after diff preview for the approval card (first 12 lines

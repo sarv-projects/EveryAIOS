@@ -29,6 +29,11 @@
 
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
+/// Schemes the floor will pre-flight. Anything else (`file:`, `gopher:`,
+/// `javascript:`, …) is refused before a socket is opened — the same
+/// allowlist [`crate::urlfloor`] applies one layer up.
+const ALLOWED_SCHEMES: &[&str] = &["http", "https"];
+
 /// Names that are loopback without needing DNS.
 const LOOPBACK_NAMES: &[&str] = &[
     "localhost",
@@ -265,6 +270,90 @@ pub fn class_reason(class: NetClass) -> &'static str {
     }
 }
 
+/// A destination the floor refuses. Carries the classification and a stable
+/// reason token so the audit row, the card and the typed boundary error all
+/// name the same fact (one decision, three views).
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[error("egress denied ({reason}) for {url}")]
+pub struct NetFloorDenied {
+    /// The refused destination, verbatim, for the audit row.
+    pub url: String,
+    /// The class that decided it, when the URL parsed and had a host.
+    pub class: NetClass,
+    /// Stable reason token: a [`class_reason`], `scheme`, or `malformed`.
+    pub reason: &'static str,
+}
+
+impl NetFloorDenied {
+    /// The canonical boundary code for a floor denial.
+    ///
+    /// `ARCH/10-KERNEL.md` §3 makes the taxonomy canonical and states that
+    /// extensions require a `DEC`, so a Guard denial maps onto the existing
+    /// `AuthorizationDenied` code rather than inventing a rate/deny variant.
+    pub const CODE: &'static str = "AuthorizationDenied";
+
+    /// Denials are decisions, not transients — retrying cannot change them.
+    pub const RETRYABLE: bool = false;
+
+    /// [`Self::CODE`] as a method, for call sites that build the error value
+    /// dynamically.
+    pub const fn code(&self) -> &'static str {
+        Self::CODE
+    }
+
+    /// [`Self::RETRYABLE`] as a method, for the same reason.
+    pub const fn retryable(&self) -> bool {
+        Self::RETRYABLE
+    }
+}
+
+/// Pre-flight one destination against the floor — the **single egress
+/// adapter** every outbound call must pass through before it opens a socket
+/// (INV-05, REQ-TRUST-001).
+///
+/// This is deliberately *not* a second classifier: it parses the URL, then
+/// delegates to [`classify_url_host`] + [`NetPolicy::allows`], so the
+/// destination rules stay in exactly one place. It is still pure and
+/// synchronous — no DNS, no syscalls, no I/O — so it can sit in front of every
+/// fetch.
+///
+/// Fails closed: an unparseable URL, a non-`http(s)` scheme, or a missing host
+/// is a denial, never a pass. The caller is expected to abort the request on
+/// `Err` and never to fall back to a direct client.
+pub fn preflight_url(url: &str, policy: NetPolicy) -> Result<(), NetFloorDenied> {
+    let parsed = url::Url::parse(url).map_err(|_| NetFloorDenied {
+        url: url.to_string(),
+        class: NetClass::Reserved,
+        reason: "malformed",
+    })?;
+    if !ALLOWED_SCHEMES.contains(&parsed.scheme()) {
+        return Err(NetFloorDenied {
+            url: url.to_string(),
+            class: NetClass::Reserved,
+            reason: "scheme",
+        });
+    }
+    // A hierarchical URL with no host (`http:/path`) cannot be classified, so
+    // it is refused rather than handed to a client that would resolve it.
+    let Some(host) = parsed.host() else {
+        return Err(NetFloorDenied {
+            url: url.to_string(),
+            class: NetClass::Unspecified,
+            reason: "malformed",
+        });
+    };
+    let class = classify_url_host(&host);
+    if policy.allows(class) {
+        Ok(())
+    } else {
+        Err(NetFloorDenied {
+            url: url.to_string(),
+            class,
+            reason: class_reason(class),
+        })
+    }
+}
+
 fn eq_ascii_ci(a: &str, b: &str) -> bool {
     a.len() == b.len()
         && a.bytes()
@@ -411,8 +500,7 @@ mod tests {
     /// deliberately generous (it fails only on an order-of-magnitude
     /// regression, not on CI jitter).
     #[test]
-    fn verdict_is_sub_microsecond_and_allocation_free_on_the_hot_path() {
-        use std::time::Instant;
+    fn verdict_is_sub_microsecond_and_allocation_free_on_the_hot_path() {        use std::time::Instant;
         let hosts = [
             "https://example.com/a/b?c=d",
             "169.254.169.254",
@@ -435,5 +523,107 @@ mod tests {
             per_check < 5_000,
             "network floor averaged {per_check}ns per check ({elapsed:?} for {N}) — budget is 5µs"
         );
+    }
+
+    // ------------------------------------------------------------------
+    // preflight_url — the one egress adapter (INV-05 / REQ-TRUST-001)
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn preflight_allows_public_and_granted_local_destinations() {
+        for u in [
+            "https://api.openai.com/v1/chat/completions",
+            "https://html.duckduckgo.com/html/?q=test",
+            "http://127.0.0.1:11434/v1/models",
+            "http://localhost:1234/v1",
+        ] {
+            assert!(preflight_url(u, NetPolicy::default()).is_ok(), "{u}");
+        }
+    }
+
+    /// The fail-closed half: every destination the floor refuses must be
+    /// refused *before* the socket, under the default desktop policy.
+    #[test]
+    fn preflight_fails_closed_on_the_ssrf_prize() {
+        for u in [
+            "http://169.254.169.254/latest/meta-data/",
+            "http://[::ffff:169.254.169.254]/",
+            "http://metadata.google.internal/computeMetadata/v1/",
+            "http://10.0.0.5/admin",
+            "http://192.168.1.1/",
+            "http://100.64.0.1/",
+            "http://0.0.0.0/",
+            "http://255.255.255.255/",
+            "http://[fe80::1]/",
+        ] {
+            let err = preflight_url(u, NetPolicy::default())
+                .expect_err("must be refused before the socket");
+            assert_eq!(err.url, u);
+            assert!(!err.reason.is_empty(), "{u}");
+        }
+    }
+
+    /// A destination the agent could shape is judged strictly: loopback is
+    /// refused even though the desktop default permits it for user-configured
+    /// endpoints.
+    #[test]
+    fn preflight_strict_refuses_loopback_and_local_names() {
+        for u in [
+            "http://127.0.0.1:11434/v1/models",
+            "http://[::1]:1234/v1",
+            "http://localhost:8080/",
+        ] {
+            assert!(preflight_url(u, NetPolicy::strict()).is_err(), "{u}");
+            // The desktop default keeps loopback (local runtimes, the CDP
+            // endpoint) but still refuses the discovery names.
+            assert!(preflight_url(u, NetPolicy::default()).is_ok(), "{u}");
+        }
+        for u in ["http://nas.local/", "http://printer.internal/", "http://box.lan/"] {
+            assert!(preflight_url(u, NetPolicy::strict()).is_err(), "{u}");
+            assert!(preflight_url(u, NetPolicy::default()).is_err(), "{u}");
+        }
+        // The explicit LAN opt-in still reaches a user-owned node.
+        assert!(preflight_url("http://192.168.1.50:11434/v1", NetPolicy::local()).is_ok());
+    }
+
+    #[test]
+    fn preflight_refuses_non_http_schemes_and_garbage() {
+        for u in [
+            "file:///etc/passwd",
+            "gopher://127.0.0.1:11211/",
+            "javascript:alert(1)",
+            "not a url",
+            "",
+            "//protocol-relative",
+        ] {
+            let err = preflight_url(u, NetPolicy::local())
+                .expect_err("must be refused before the socket");
+            assert!(
+                matches!(err.reason, "scheme" | "malformed"),
+                "{u} → {}",
+                err.reason
+            );
+        }
+    }
+
+    /// The typed boundary contract: a canonical code, not a new one, and not
+    /// retryable (a decision does not change by asking again).
+    #[test]
+    fn preflight_denial_carries_the_canonical_error_code() {
+        let err = preflight_url("http://169.254.169.254/", NetPolicy::local()).unwrap_err();
+        assert_eq!(err.code(), "AuthorizationDenied");
+        assert!(!err.retryable());
+        assert_eq!(err.class, NetClass::LinkLocal);
+        assert_eq!(err.reason, "link_local");
+    }
+
+    /// Documented limit, pinned as a test: a single-label name (`http://intranet`)
+    /// cannot be classified without DNS, so it is judged as a name. The
+    /// resolve-and-pin half of SSRF defense is [`crate::toctou`]'s job and is
+    /// deliberately not on this pure path.
+    #[test]
+    fn a_single_label_name_is_judged_as_a_name() {
+        assert!(preflight_url("http://intranet/api", NetPolicy::default()).is_ok());
+        assert_eq!(classify_host("intranet"), NetClass::Public);
     }
 }

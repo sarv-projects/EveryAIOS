@@ -4,7 +4,7 @@
 //! Calendar REST API. Full protocol logic tested with a mock [`HttpTransport`]
 //! seam — the live implementation uses Auth Bridge OAuth tokens.
 
-use super::{HttpTransport, TransportError, TransportErrorKind};
+use super::{HttpTransport, TokenSource, TransportError, TransportErrorKind, VaultTokenRef};
 
 const CALENDAR_API_BASE: &str = "https://www.googleapis.com/calendar/v3";
 
@@ -79,17 +79,26 @@ pub struct CreateResult {
 }
 
 /// Google Calendar connector.
-pub struct CalendarConnector<T: HttpTransport> {
+///
+/// FIX-01: holds a [`VaultTokenRef`] + [`TokenSource`], never the access
+/// token. The value is only reachable inside the closure
+/// [`CalendarConnector::authenticated`] hands to the transport, so it cannot be
+/// read back out of this struct, cloned, serialized or logged (INV-02,
+/// CTR-013).
+pub struct CalendarConnector<T: HttpTransport, S: TokenSource> {
     transport: T,
-    access_token: String,
+    tokens: S,
+    token_ref: VaultTokenRef,
     calendar_id: String,
 }
 
-impl<T: HttpTransport> CalendarConnector<T> {
-    pub fn new(transport: T, access_token: String, calendar_id: &str) -> Self {
+impl<T: HttpTransport, S: TokenSource> CalendarConnector<T, S> {
+    /// Bind the connector to a **vault reference**, not a token.
+    pub fn new(transport: T, tokens: S, token_ref: VaultTokenRef, calendar_id: &str) -> Self {
         Self {
             transport,
-            access_token,
+            tokens,
+            token_ref,
             calendar_id: calendar_id.to_string(),
         }
     }
@@ -101,8 +110,13 @@ impl<T: HttpTransport> CalendarConnector<T> {
         )
     }
 
-    fn auth_headers(&self) -> Vec<(&str, &str)> {
-        vec![("Authorization", &self.access_token)]
+    /// Run `f` with the live access token, in-custody. The token is never
+    /// returned: the only way out of this method is whatever `f` computes.
+    fn authenticated<R>(
+        &self,
+        f: &mut dyn FnMut(&str) -> Result<R, TransportError>,
+    ) -> Result<R, TransportError> {
+        self.tokens.with_token(&self.token_ref, f)
     }
 
     /// List upcoming events.
@@ -121,8 +135,8 @@ impl<T: HttpTransport> CalendarConnector<T> {
         if let Some(max) = time_max {
             url = format!("{url}&timeMax={max}");
         }
-        let headers = self.auth_headers();
-        let resp = self.transport.get(&url, &headers)?;
+        let transport = &self.transport;
+        let resp = self.authenticated(&mut |t| transport.get(&url, &[("Authorization", t)]))?;
         let json: serde_json::Value =
             serde_json::from_slice(&resp).map_err(|e| TransportError {
                 kind: TransportErrorKind::InvalidResponse,
@@ -139,8 +153,8 @@ impl<T: HttpTransport> CalendarConnector<T> {
     pub fn get_event(&self, event_id: &str) -> Result<CalendarEvent, TransportError> {
         let base = self.base_url();
         let url = format!("{base}/events/{event_id}");
-        let headers = self.auth_headers();
-        let resp = self.transport.get(&url, &headers)?;
+        let transport = &self.transport;
+        let resp = self.authenticated(&mut |t| transport.get(&url, &[("Authorization", t)]))?;
         let json: serde_json::Value =
             serde_json::from_slice(&resp).map_err(|e| TransportError {
                 kind: TransportErrorKind::InvalidResponse,
@@ -188,8 +202,10 @@ impl<T: HttpTransport> CalendarConnector<T> {
         })?;
         let base = self.base_url();
         let url = format!("{base}/events");
-        let headers = self.auth_headers();
-        let resp = self.transport.post_json(&url, &headers, &body_bytes)?;
+        let transport = &self.transport;
+        let resp = self.authenticated(&mut |t| {
+            transport.post_json(&url, &[("Authorization", t)], &body_bytes)
+        })?;
         let json: serde_json::Value =
             serde_json::from_slice(&resp).map_err(|e| TransportError {
                 kind: TransportErrorKind::InvalidResponse,
@@ -229,8 +245,10 @@ impl<T: HttpTransport> CalendarConnector<T> {
         })?;
         let base = self.base_url();
         let url = format!("{base}/events/{event_id}");
-        let headers = self.auth_headers();
-        self.transport.post_json(&url, &headers, &body_bytes)?;
+        let transport = &self.transport;
+        self.authenticated(&mut |t| {
+            transport.post_json(&url, &[("Authorization", t)], &body_bytes)
+        })?;
         Ok(())
     }
 
@@ -240,10 +258,10 @@ impl<T: HttpTransport> CalendarConnector<T> {
         let body = b"";
         let base = self.base_url();
         let url = format!("{base}/events/{event_id}");
-        let headers = self.auth_headers();
         // For a real implementation, this would be an HTTP DELETE.
         // The mock transport just accepts it.
-        self.transport.post_json(&url, &headers, body)?;
+        let transport = &self.transport;
+        self.authenticated(&mut |t| transport.post_json(&url, &[("Authorization", t)], body))?;
         Ok(())
     }
 
@@ -263,8 +281,10 @@ impl<T: HttpTransport> CalendarConnector<T> {
             message: e.to_string(),
         })?;
         let url = format!("{CALENDAR_API_BASE}/freeBusy");
-        let headers = self.auth_headers();
-        let resp = self.transport.post_json(&url, &headers, &body_bytes)?;
+        let transport = &self.transport;
+        let resp = self.authenticated(&mut |t| {
+            transport.post_json(&url, &[("Authorization", t)], &body_bytes)
+        })?;
         let json: serde_json::Value =
             serde_json::from_slice(&resp).map_err(|e| TransportError {
                 kind: TransportErrorKind::InvalidResponse,
@@ -390,6 +410,29 @@ mod tests {
     use super::*;
     use std::cell::RefCell;
 
+    /// FIX-01: a *source*, not a token holder.
+    struct MockTokens;
+    impl TokenSource for MockTokens {
+        fn with_token<R>(
+            &self,
+            _ref_: &VaultTokenRef,
+            f: &mut dyn FnMut(&str) -> Result<R, TransportError>,
+        ) -> Result<R, TransportError> {
+            f("tok")
+        }
+        fn refresh<R>(
+            &self,
+            _ref_: &VaultTokenRef,
+            f: &mut dyn FnMut(&str) -> Result<R, TransportError>,
+        ) -> Result<R, TransportError> {
+            f("tok")
+        }
+    }
+
+    fn cal_tokens() -> VaultTokenRef {
+        VaultTokenRef::new("k-cal", "google-calendar")
+    }
+
     struct MockTransport {
         responses: RefCell<Vec<Result<Vec<u8>, TransportError>>>,
     }
@@ -441,7 +484,7 @@ mod tests {
             }]
         });
         let transport = MockTransport::new(vec![Ok(serde_json::to_vec(&resp).unwrap())]);
-        let cal = CalendarConnector::new(transport, "tok".into(), "primary");
+        let cal = CalendarConnector::new(transport, MockTokens, cal_tokens(), "primary");
         let events = cal.list_events(None, None, 10).unwrap();
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].summary, "Team Standup");
@@ -453,7 +496,7 @@ mod tests {
         let resp =
             serde_json::json!({"id": "new-ev", "htmlLink": "https://calendar.google.com/event"});
         let transport = MockTransport::new(vec![Ok(serde_json::to_vec(&resp).unwrap())]);
-        let cal = CalendarConnector::new(transport, "tok".into(), "primary");
+        let cal = CalendarConnector::new(transport, MockTokens, cal_tokens(), "primary");
         let result = cal
             .create_event(
                 "New Meeting",
@@ -479,7 +522,7 @@ mod tests {
             }
         });
         let transport = MockTransport::new(vec![Ok(serde_json::to_vec(&resp).unwrap())]);
-        let cal = CalendarConnector::new(transport, "tok".into(), "primary");
+        let cal = CalendarConnector::new(transport, MockTokens, cal_tokens(), "primary");
         let fb = cal
             .free_busy("2026-08-21T00:00:00Z", "2026-08-22T00:00:00Z")
             .unwrap();
@@ -499,7 +542,7 @@ mod tests {
             }]
         });
         let transport = MockTransport::new(vec![Ok(serde_json::to_vec(&resp).unwrap())]);
-        let cal = CalendarConnector::new(transport, "tok".into(), "primary");
+        let cal = CalendarConnector::new(transport, MockTokens, cal_tokens(), "primary");
         let ics = cal.export_ics().unwrap();
         assert!(ics.contains("BEGIN:VCALENDAR"));
         assert!(ics.contains("SUMMARY:Lunch"));

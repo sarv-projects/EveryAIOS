@@ -287,6 +287,12 @@ fn stream_frames(
 }
 
 /// Shared spawn tail: record authority, start the reader, and return the id.
+///
+/// `ticket_id` is the Guard-2 ticket that authorized this spawn, when the
+/// caller holds one. FIX-06: the row must name the ticket that actually
+/// authorized the effect, so the provenance is checkable rather than asserted
+/// (`ARCH/10-KERNEL.md` §7 — the envelope's idempotency key is
+/// `<work_id>:<ticket>`; the audit row carries the same link).
 fn finish_spawn(
     app: &AppHandle,
     state: &State<'_, AppState>,
@@ -295,6 +301,7 @@ fn finish_spawn(
     origin: TerminalOrigin,
     label: Option<&str>,
     audit_subject: serde_json::Value,
+    ticket_id: Option<&str>,
 ) -> Result<String, String> {
     stream_frames(app.clone(), pty_id.clone(), output)?;
     // v3.59 governance decision — the audit kind tracks who acted: a user
@@ -312,6 +319,9 @@ fn finish_spawn(
         payload["label"] = serde_json::json!(l);
     }
     payload["origin"] = serde_json::json!(origin_label(origin));
+    if let Some(tid) = ticket_id {
+        payload["ticketId"] = serde_json::json!(tid);
+    }
     crate::control::record_mutation(state, kind, subject, payload);
     Ok(pty_id)
 }
@@ -371,6 +381,8 @@ pub fn terminal_spawn(
             "rows": rows,
             "cols": cols,
         }),
+        // A human tab is authorized by the user's own gesture, not a ticket.
+        None,
     )
 }
 
@@ -411,6 +423,7 @@ fn spawn_agent_command(
     origin: TerminalOrigin,
     rows: Option<u16>,
     cols: Option<u16>,
+    ticket_id: Option<&str>,
 ) -> Result<(String, Arc<Mutex<CommandTracker>>), String> {
     let cfg = Config::load().map_err(|e| e.to_string())?;
     // Prefer the automation profile; fall back to the interactive default so a
@@ -468,8 +481,95 @@ fn spawn_agent_command(
             "rows": rows,
             "cols": cols,
         }),
+        ticket_id,
     )?;
     Ok((pty_id, tracker))
+}
+
+/// FIX-06 — the Guard-2 pre-flight for a renderer-initiated agent/task
+/// command.
+///
+/// `terminal_run` used to spawn the command and then stamp the audit row
+/// `authorization: agent_ticket` while **no ticket existed** — a false
+/// provenance claim on a real shell effect (INV-01, INV-03, REQ-TRUST-003,
+/// REQ-TRUST-005). Any renderer JS could run an arbitrary command line with a
+/// forged authority record and no policy decision at all.
+///
+/// Now the command goes through the same decider as every other effect:
+///
+/// 1. Guard-1 prescan of the command line (the deterministic destructive
+///    blocklist) — a hit is refused outright.
+/// 2. A Guard-2 ticket is minted for `Operation::TerminalShell` and consumed
+///    immediately. The consumed `ticketId` is what the audit row names, so the
+///    provenance is true by construction rather than asserted.
+///
+/// A `Deny` blocks, and an `Ask` is refused: this command has no approval card,
+/// so the only honest answer is to refuse and point the caller at the governed
+/// path (the `script.run` tool, which mints a real card). Failing closed is
+/// the contract (`ARCH/12-TRUST.md` §11) — an approval is never auto-granted
+/// here to make the call succeed.
+fn ticket_for_agent_command(
+    state: &State<'_, AppState>,
+    command: &str,
+    origin: TerminalOrigin,
+) -> Result<String, String> {
+    use everyaios_guard::{DecisionPackage, Operation as GuardOp, RiskLevel, prescan};
+    use std::hash::{Hash, Hasher};
+
+    // 1) Guard-1: the deterministic blocklist, on the exact command line.
+    let hits = prescan::scan_shell(command);
+    if !hits.is_empty() {
+        return Err(format!(
+            "terminal_run refused: Guard-1 blocked: {}",
+            hits.join("; ")
+        ));
+    }
+
+    let mut decision = DecisionPackage::new(format!("terminal {}", origin_label(origin)));
+    decision.risk = RiskLevel::High;
+    decision.script_lines = vec![command.to_string()];
+
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    "terminal.command".hash(&mut h);
+    command.hash(&mut h);
+    origin_label(origin).hash(&mut h);
+    let args_hash = format!("{:016x}", h.finish());
+
+    let mut guard = state.guard_service.lock().map_err(|e| e.to_string())?;
+    let verdict = guard.evaluate(
+        "terminal",
+        "everyaios",
+        "terminal.run",
+        // `destructive` carries the Guard-1 flag (permissions §
+        // `ask_if_destructive`). Every command Guard-1 flags was already
+        // refused above, so the flag reaching the policy layer is false here
+        // — which is exactly right: the default rule then admits a benign
+        // command, while a user's own `terminal_shell = always_ask` /
+        // `block` rule in `permissions.toml` still tightens or refuses it.
+        GuardOp::TerminalShell { destructive: false },
+        decision,
+        &args_hash,
+        0,
+    );
+    let ticket_id = match verdict {
+        everyaios_core::GuardDecision::Allow { ticket_id } => ticket_id,
+        everyaios_core::GuardDecision::Ask { .. } => {
+            return Err(
+                "terminal_run refused: this command needs an approval card — run it through the \
+                 governed `script.run` tool so the decision is recorded"
+                    .into(),
+            );
+        }
+        everyaios_core::GuardDecision::Block { reason } => {
+            return Err(format!("terminal_run refused: {reason}"));
+        }
+    };
+    // Consume it here so the spawn below runs on a spent, args-bound ticket.
+    // A losing concurrent execution cannot reuse it (`EDGE-039`).
+    guard
+        .use_ticket(&ticket_id, &args_hash)
+        .map_err(|e| format!("terminal_run refused: ticket refused: {e}"))?;
+    Ok(ticket_id)
 }
 
 /// P67 — run a command for the agent / a durable task in a real PTY, on the
@@ -503,8 +603,19 @@ pub fn terminal_run(
         // a *human* session through this path (that would launder authority).
         _ => TerminalOrigin::Agent,
     };
-    let (pty_id, _tracker) =
-        spawn_agent_command(&app, &state, trimmed, label.as_deref(), origin, rows, cols)?;
+    // FIX-06: the ticket is minted and consumed *before* the spawn, and its id
+    // is the provenance the audit row records.
+    let ticket_id = ticket_for_agent_command(&state, trimmed, origin)?;
+    let (pty_id, _tracker) = spawn_agent_command(
+        &app,
+        &state,
+        trimmed,
+        label.as_deref(),
+        origin,
+        rows,
+        cols,
+        Some(&ticket_id),
+    )?;
     Ok(pty_id)
 }
 
@@ -648,6 +759,13 @@ impl everyaios_core::tools::TerminalExecutor for TerminalPlaneExecutor {
             origin,
             Some(label),
             serde_json::json!({ "profileId": profile_id, "command": trimmed }),
+            // The `script.run` ticket was already minted, consumed and audited
+            // by the tool executor (`tool/exec` → `tool/commit` → the
+            // `tool.exec` Merkle row, which names it). The trait hands the
+            // executor no ticket id, so this PTY-lifecycle row does not repeat
+            // it — the link lives on the effect row, which is the row that
+            // records the effect.
+            None,
         )?;
 
         // Without shell integration no completion record will ever arrive, so

@@ -170,10 +170,18 @@ pub trait SolverHttp {
 }
 
 /// The real transport (ureq, same stack as the vault broker/oauth).
+///
+/// FIX-09: the solver destination is pre-flighted through
+/// [`everyaios_guard::netfloor::preflight_url`] before the socket. The base URL
+/// comes from the [`ByoProvider`] enum, but the seam is a trait a caller can
+/// implement and re-point, so the floor is enforced at the client — a BYO
+/// solver can never be steered at cloud metadata or the LAN.
 pub struct UreqHttp;
 
 impl SolverHttp for UreqHttp {
     fn post_json(&self, url: &str, body: &serde_json::Value) -> Result<serde_json::Value, String> {
+        everyaios_guard::netfloor::preflight_url(url, everyaios_guard::NetPolicy::default())
+            .map_err(|e| e.to_string())?;
         let resp = ureq::post(url)
             .set("Content-Type", "application/json")
             .send_json(body.clone())

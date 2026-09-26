@@ -79,6 +79,75 @@ use tauri::{AppHandle, Emitter, Manager, State};
 /// Event name the UI listens to for chat stream updates.
 pub const CHAT_EVENT: &str = "chat-event";
 
+/// FIX-02 / `TASK-TRUST-001` — the process-wide control-plane limiter.
+///
+/// One instance guards the whole `nativeCall`/Tauri IPC surface
+/// (`everyaios-guard::ratelimit`). It is a `OnceLock` singleton rather than
+/// managed state because the gate has to be callable *before* a command's state
+/// is resolved, and because a limiter that could be swapped out from under the
+/// gate would be a limiter that can be turned off.
+fn control_plane_limiter() -> &'static everyaios_guard::RateLimiter {
+    static LIMITER: std::sync::OnceLock<everyaios_guard::RateLimiter> =
+        std::sync::OnceLock::new();
+    LIMITER.get_or_init(everyaios_guard::RateLimiter::with_defaults)
+}
+
+/// Wrap the IPC handler with the control-plane admission gate.
+///
+/// Trust infrastructure fails closed (`ARCH/12-TRUST.md` §11,
+/// `REQ-TRUST-009`): a throttled caller is **refused with a typed error**,
+/// never queued, never silently allowed, and never served by a second path.
+/// The refusal is the canonical taxonomy's `Unavailable` code (retryable, with
+/// `retry_after_ms`) — `ARCH/10-KERNEL.md` §3 makes the taxonomy canonical and
+/// requires a `DEC` to extend it, so no `RateLimited` code is invented here.
+///
+/// The gate is deliberately *thin*: it reads the invoke's command name and
+/// answers with an error reply, so a throttled call never reaches a command
+/// body, a state lock, or the disk. `inner` is the single `generate_handler!`
+/// closure from [`commands`]; wrapping (rather than replacing) it keeps
+/// `tests/registration_sync.rs` authoritative for the command list.
+fn control_plane_gate<F>(inner: F) -> impl Fn(tauri::ipc::Invoke) -> bool
+where
+    F: Fn(tauri::ipc::Invoke) -> bool,
+{
+    move |invoke: tauri::ipc::Invoke| {
+        let command = invoke.message.command();
+        let caller = invoke.message.headers().get("x-everyaios-caller");
+        // The header is an attribution hint for the audit row only. It is never
+        // trusted for authorization (a caller can set it), it is bounded, and a
+        // missing one falls back to the single renderer identity — so the
+        // per-caller tier degrades to the per-command tier instead of
+        // inventing a bucket per spoofed name.
+        let caller = caller
+            .and_then(|v| v.to_str())
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty() && s.len() <= 64)
+            .unwrap_or("renderer");
+        match control_plane_limiter().check(caller, command) {
+            Ok(()) => inner(invoke),
+            Err(denied) => {
+                // A typed, structured refusal: the canonical `Unavailable` code,
+                // the stable reason token, and the backoff the caller needs.
+                // No command body, no state lock and no disk are reached.
+                let payload = serde_json::json!({
+                    "code": denied.code(),
+                    "reason": denied.reason,
+                    "scope": denied.scope.as_str(),
+                    "retryable": denied.retryable(),
+                    "retryAfterMs": denied.retry_after_ms,
+                    "message": denied.to_string(),
+                });
+                invoke
+                    .resolver
+                    .respond::<()>(Err(tauri::ipc::InvokeError(payload)));
+                // `true` = the invoke is handled, so Tauri does not fall through
+                // to a "command not found" that would hide the real reason.
+                true
+            }
+        }
+    }
+}
+
 /// P52.x (guard-UX wave) — push-style Guard-2 lifecycle event
 /// (`{ kind: minted|approved|rejected|expired, ticketId, batch }`).
 /// Emitted from the shared `GuardService` lifecycle hook so both the Guard
@@ -773,7 +842,7 @@ pub fn run() {
         // P70.C3 — the slot holding a downloaded-but-not-installed update
         // artifact between the background download and the explicit restart.
         .manage(updater_cmds::PendingUpdateSlot(Default::default()))
-        .invoke_handler(commands::handler())
+        .invoke_handler(control_plane_gate(commands::handler()))
         // P8.8: auto-updater (checks + downloads against the configured
         // endpoints; signing key is the release secret).
         .plugin(tauri_plugin_updater::Builder::new().build())
@@ -866,4 +935,64 @@ pub fn run() {
         })
         .run(tauri::generate_context!())
         .expect("error while running EveryAIOS");
+}
+
+#[cfg(test)]
+mod tests {
+    //! FIX-02 — the control-plane gate's decision contract.
+    //!
+    //! The gate wraps a real `tauri::ipc::Invoke`, which cannot be constructed
+    //! in a unit test, so what is pinned here is the pure part: the caller
+    //! attribution rule and the failure mode of the limiter itself. The
+    //! limiter's token-bucket behaviour is covered in
+    //! `everyaios_guard::ratelimit`'s own tests.
+
+    use super::control_plane_limiter;
+    use everyaios_guard::{RateLimitConfig, RateLimiter};
+
+    /// A missing / oversized / blank caller header collapses to the single
+    /// renderer identity, so a spoofed header cannot mint a fresh bucket per
+    /// request (which would defeat the per-caller tier entirely).
+    #[test]
+    fn caller_attribution_is_bounded_and_never_trusted_for_authorization() {
+        // The rule the gate applies, mirrored here so it is pinned.
+        let attribute = |raw: Option<&str>| -> &str {
+            raw.map(str::trim)
+                .filter(|s| !s.is_empty() && s.len() <= 64)
+                .unwrap_or("renderer")
+        };
+        assert_eq!(attribute(None), "renderer");
+        assert_eq!(attribute(Some("   ")), "renderer");
+        assert_eq!(attribute(Some("")), "renderer");
+        assert_eq!(attribute(Some(&"x".repeat(65))), "renderer");
+        assert_eq!(attribute(Some("agent-a")), "agent-a");
+    }
+
+    /// Fail closed: with the budget spent, the gate's limiter refuses rather
+    /// than allowing, and the refusal carries the canonical code.
+    #[test]
+    fn the_gate_limiter_fails_closed_with_the_canonical_code() {
+        let rl = RateLimiter::new(RateLimitConfig {
+            global: everyaios_guard::Limit::new(2, 0.0),
+            per_caller_command: everyaios_guard::Limit::new(2, 0.0),
+            ttl_ms: 60_000,
+            max_entries: 8,
+        });
+        assert!(rl.check("renderer", "fs_read_file").is_ok());
+        assert!(rl.check("renderer", "fs_read_file").is_ok());
+        let err = rl
+            .check("renderer", "fs_read_file")
+            .expect_err("fail closed");
+        assert_eq!(err.code(), "Unavailable");
+        assert!(err.retryable());
+    }
+
+    /// The process-wide limiter is a singleton, so two command paths share one
+    /// budget instead of each getting its own.
+    #[test]
+    fn the_limiter_is_one_shared_instance() {
+        let a = control_plane_limiter() as *const RateLimiter;
+        let b = control_plane_limiter() as *const RateLimiter;
+        assert_eq!(a, b);
+    }
 }

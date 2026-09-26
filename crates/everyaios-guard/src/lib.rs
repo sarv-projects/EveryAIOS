@@ -14,6 +14,9 @@
 //! - [`urlfloor`] — URL floors: `file://` only inside granted roots, scheme
 //!   guard.
 //! - [`ticket`] — the authorization ticket contract (doc 53 §3).
+//! - [`ratelimit`] — control-plane admission control: a bounded, per-caller and
+//!   per-command token bucket that fails closed with the canonical taxonomy
+//!   (`ARCH/12-TRUST.md` §11, `REQ-TRUST-009`).
 //! - [`redteam`] — the cyber red-team corpus (doc 26) as an adversarial test
 //!   suite; the 100%-blocked gate.
 //! - [`injection`] — P7.6 prompt-injection defense: context scan,
@@ -56,6 +59,7 @@ pub mod permissions;
 pub mod prescan;
 pub mod profiles;
 pub mod protected_paths;
+pub mod ratelimit;
 pub mod redteam;
 pub mod release;
 pub mod reviewer;
@@ -92,7 +96,8 @@ pub use granter::{
 };
 pub use injection::Estop;
 pub use netfloor::{
-    NetClass, NetPolicy, classify_host, classify_ip, host_allowed, is_always_blocked,
+    NetClass, NetFloorDenied, NetPolicy, classify_host, classify_ip, host_allowed,
+    is_always_blocked, preflight_url,
 };
 pub use path_seal::{PathSeal, SealError, SealState};
 pub use pathfloor::{
@@ -102,6 +107,7 @@ pub use pathfloor::{
 pub use permissions::{AutonomyPreset, Operation, PermissionsPolicy, PolicyAction, Rule};
 pub use prescan::{PreExecScan, ScanTarget, scan_path, scan_shell, scan_url};
 pub use profiles::{GateAction, Hook, Profile};
+pub use ratelimit::{Limit, RateLimitConfig, RateLimitError, RateLimitScope, RateLimiter};
 pub use release::{
     EgressPolicy, EgressPolicyEngine, EnforcementZone, ReleaseDecision, ReleaseReceipt,
 };

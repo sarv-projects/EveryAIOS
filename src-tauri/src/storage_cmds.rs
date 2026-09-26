@@ -8,6 +8,14 @@
 //! suppressed while the device is on battery. The lighter reads (health,
 //! cached treemap) stay available. `storage_battery` is driven by the same
 //! OS power event the scheduler uses.
+//!
+//! FIX-10 / `REQ-FILES-001`: every response that carries a size-derived number
+//! also carries the identity evidence behind it (`identityUnknown`,
+//! `reclaimableBytesBacked`, per-group `identityBacked`). The walker used to
+//! answer `dev = 0, ino = 0` on non-Unix hosts, which made every Windows
+//! duplicate look like a hardlink twin of the first one and reported
+//! `reclaimableBytes: 0` — a fabricated number the UI could not tell apart from
+//! a real one.
 
 use std::path::PathBuf;
 use std::sync::atomic::Ordering;
@@ -91,6 +99,11 @@ pub fn storage_scan(
         "files": files,
         "root": root.to_string_lossy(),
         "treemap": treemap,
+        // FIX-10: how many records the OS would not give an identity for.
+        // Surfaced as a count (never a silent zero-filled id) so the UI can
+        // stay honest about hardlink/reclaim numbers derived from it.
+        "identityUnknown": records.iter().filter(|r| r.identity.is_unknown()).count(),
+        "identityPlatform": everyaios_storage::IdentityPlatform::current().as_str(),
     }))
 }
 
@@ -131,6 +144,13 @@ pub fn storage_large_files(
 
 /// D10 — duplicate-file groups (7-stage hash). The heaviest op (BLAKE3);
 /// battery-gated like scan.
+///
+/// FIX-10 / `REQ-FILES-001`: candidates are built from the scan record's
+/// resolved platform identity, so hardlink grouping is real on every host and
+/// an identity the OS would not give us is reported as *unknown* instead of a
+/// zero that collapsed every file into one "copy" (`wastedBytes: 0`). The
+/// response carries `identityUnknown` and each group carries `identityBacked`
+/// so the UI cannot present an upper bound as a measurement.
 #[tauri::command]
 pub fn storage_duplicates(
     state: State<'_, AppState>,
@@ -141,21 +161,21 @@ pub fn storage_duplicates(
         return Ok(serde_json::json!({ "deferred": true, "groups": [] }));
     }
     let records = everyaios_storage::scan(&root, &scan_opts()).map_err(|e| e.to_string())?;
+    let identity_unknown = records.iter().filter(|r| r.identity.is_unknown()).count();
     let cands: Vec<everyaios_storage::DupCandidate> = records
-        .into_iter()
+        .iter()
         .filter(|r| !r.is_dir)
-        .map(|r| everyaios_storage::DupCandidate {
-            path: r.path,
-            size: r.size,
-            dev: r.dev,
-            ino: r.ino,
-            nlink: r.nlink,
-        })
+        .map(everyaios_storage::DupCandidate::from_record)
         .collect();
     let groups =
         everyaios_storage::find_duplicates(&cands, &everyaios_storage::DedupOptions::default())
             .map_err(|e| e.to_string())?;
     let reclaimable: u64 = groups.iter().map(|g| g.wasted_bytes).sum();
+    let reclaimable_backed: u64 = groups
+        .iter()
+        .filter(|g| g.identity_backed)
+        .map(|g| g.wasted_bytes)
+        .sum();
     let listed: Vec<serde_json::Value> = groups
         .iter()
         .map(|g| {
@@ -163,6 +183,9 @@ pub fn storage_duplicates(
                 "size": g.size,
                 "wastedBytes": g.wasted_bytes,
                 "copies": g.files.len(),
+                "hardlinkGroups": g.hardlink_groups,
+                "reflinkEligible": g.reflink_eligible,
+                "identityBacked": g.identity_backed,
                 "files": g.files.iter().map(|f| f.path.to_string_lossy().to_string()).collect::<Vec<_>>(),
             })
         })
@@ -171,6 +194,11 @@ pub fn storage_duplicates(
         "deferred": false,
         "groups": listed,
         "reclaimableBytes": reclaimable,
+        // Bytes we can actually prove; the remainder rests on an identity the
+        // OS refused to give us and is an upper bound only.
+        "reclaimableBytesBacked": reclaimable_backed,
+        "identityUnknown": identity_unknown,
+        "identityPlatform": everyaios_storage::IdentityPlatform::current().as_str(),
     }))
 }
 
@@ -187,10 +215,26 @@ pub fn storage_cleanup_proposals(
         return Ok(serde_json::json!({ "deferred": true, "proposals": [] }));
     }
     let records = everyaios_storage::scan(&root, &scan_opts()).map_err(|e| e.to_string())?;
+    // One scan feeds both proposal sources, so the duplicate pass inherits the
+    // same identity evidence the arena does.
+    let dup_groups = {
+        let cands: Vec<everyaios_storage::DupCandidate> = records
+            .iter()
+            .filter(|r| !r.is_dir)
+            .map(everyaios_storage::DupCandidate::from_record)
+            .collect();
+        everyaios_storage::find_duplicates(&cands, &everyaios_storage::DedupOptions::default())
+            .map_err(|e| e.to_string())?
+    };
     let arena = everyaios_storage::build_arena(records, &root);
-    let proposals = everyaios_storage::propose_large_files_cleanup(&arena, top_n.unwrap_or(10));
+    let mut proposals = everyaios_storage::propose_large_files_cleanup(&arena, top_n.unwrap_or(10));
+    proposals.extend(everyaios_storage::propose_duplicate_cleanup(&dup_groups));
     let listed: Vec<serde_json::Value> = proposals.iter().map(|p| p.decision_package()).collect();
-    Ok(serde_json::json!({ "deferred": false, "proposals": listed }))
+    Ok(serde_json::json!({
+        "deferred": false,
+        "proposals": listed,
+        "unbackedProposals": proposals.iter().filter(|p| !p.identity_backed).count(),
+    }))
 }
 
 /// J16 — set the battery flag (driven by the OS power event; `true` = on

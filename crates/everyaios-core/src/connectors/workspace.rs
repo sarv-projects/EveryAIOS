@@ -9,8 +9,7 @@
 //! an API write from the connector). Scopes: `drive.readonly`,
 //! `documents.readonly`, `spreadsheets.readonly` — see [`super::scopes`].
 
-use super::gmail::TokenRefresher;
-use super::{HttpTransport, TransportError, TransportErrorKind};
+use super::{HttpTransport, TokenSource, TransportError, TransportErrorKind, VaultTokenRef};
 
 const DRIVE_BASE: &str = "https://www.googleapis.com/drive/v3";
 const DOCS_BASE: &str = "https://docs.googleapis.com/v1";
@@ -48,33 +47,40 @@ pub struct WorkspaceSheetValues {
 }
 
 /// Google Workspace connector — Drive/Docs/Sheets reads over injected seams.
-pub struct WorkspaceConnector<T: HttpTransport, R: TokenRefresher> {
+///
+/// FIX-01: holds a [`VaultTokenRef`] + [`TokenSource`], never the access token.
+pub struct WorkspaceConnector<T: HttpTransport, S: TokenSource> {
     transport: T,
-    refresher: R,
-    access_token: String,
+    tokens: S,
+    token_ref: VaultTokenRef,
 }
 
-impl<T: HttpTransport, R: TokenRefresher> WorkspaceConnector<T, R> {
-    pub fn new(transport: T, refresher: R, access_token: String) -> Self {
+impl<T: HttpTransport, S: TokenSource> WorkspaceConnector<T, S> {
+    /// Bind the connector to a **vault reference**, not a token.
+    pub fn new(transport: T, tokens: S, token_ref: VaultTokenRef) -> Self {
         Self {
             transport,
-            refresher,
-            access_token,
+            tokens,
+            token_ref,
         }
     }
 
-    fn auth_headers(&self) -> Vec<(&str, &str)> {
-        vec![("Authorization", &self.access_token)]
+    /// Run `f` with the live access token, in-custody.
+    fn authenticated<R>(
+        &self,
+        f: &mut dyn FnMut(&str) -> Result<R, TransportError>,
+    ) -> Result<R, TransportError> {
+        self.tokens.with_token(&self.token_ref, f)
     }
 
     fn get_with_refresh(&mut self, url: &str) -> Result<Vec<u8>, TransportError> {
-        let headers = self.auth_headers();
-        match self.transport.get(url, &headers) {
-            Err(e) if e.kind == TransportErrorKind::Auth => {
-                self.access_token = self.refresher.refresh()?;
-                let headers = self.auth_headers();
-                self.transport.get(url, &headers)
-            }
+        let transport = &self.transport;
+        match self.authenticated(&mut |t| transport.get(url, &[("Authorization", t)])) {
+            Err(e) if e.kind == TransportErrorKind::Auth => self
+                .tokens
+                .refresh(&self.token_ref, &mut |t| {
+                    transport.get(url, &[("Authorization", t)])
+                }),
             other => other,
         }
     }
@@ -284,11 +290,27 @@ mod tests {
         }
     }
 
+    /// FIX-01: a *source*, not a token holder.
     struct NoRefresh;
-    impl TokenRefresher for NoRefresh {
-        fn refresh(&self) -> Result<String, TransportError> {
-            Ok("new-token".into())
+    impl TokenSource for NoRefresh {
+        fn with_token<R>(
+            &self,
+            _ref_: &VaultTokenRef,
+            f: &mut dyn FnMut(&str) -> Result<R, TransportError>,
+        ) -> Result<R, TransportError> {
+            f("Bearer tok")
         }
+        fn refresh<R>(
+            &self,
+            _ref_: &VaultTokenRef,
+            f: &mut dyn FnMut(&str) -> Result<R, TransportError>,
+        ) -> Result<R, TransportError> {
+            f("Bearer new-token")
+        }
+    }
+
+    fn workspace_tokens() -> VaultTokenRef {
+        VaultTokenRef::new("k-workspace", "google-workspace")
     }
 
     #[test]
@@ -299,7 +321,7 @@ mod tests {
                 { "id": "d2", "name": "Docs", "mimeType": "application/vnd.google-apps.folder" }
             ]
         }));
-        let mut c = WorkspaceConnector::new(t, NoRefresh, "Bearer tok".into());
+        let mut c = WorkspaceConnector::new(t, NoRefresh, workspace_tokens());
         let files = c.list_files(10).unwrap();
         assert_eq!(files.len(), 2);
         assert!(!files[0].folder);
@@ -317,7 +339,7 @@ mod tests {
                 "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "https://docs.google.com/export?id=doc1"
             }
         }));
-        let mut c = WorkspaceConnector::new(t, NoRefresh, "Bearer tok".into());
+        let mut c = WorkspaceConnector::new(t, NoRefresh, workspace_tokens());
         let f = c.get_file("doc1").unwrap();
         assert_eq!(f.name, "Plan");
         let docx = f
@@ -336,7 +358,7 @@ mod tests {
                 { "paragraph": { "elements": [ { "textRun": { "content": "Second para" } } ] } }
             ] }
         }));
-        let mut c = WorkspaceConnector::new(t, NoRefresh, "Bearer tok".into());
+        let mut c = WorkspaceConnector::new(t, NoRefresh, workspace_tokens());
         let doc = c.get_document("doc1").unwrap();
         assert_eq!(doc.title, "Meeting notes");
         assert!(doc.text.contains("Hello world"));
@@ -346,7 +368,7 @@ mod tests {
             "range": "Sheet1!A1:B2",
             "values": [ ["Name", "Qty"], ["Widgets", "3"] ]
         }));
-        let mut c2 = WorkspaceConnector::new(t2, NoRefresh, "Bearer tok".into());
+        let mut c2 = WorkspaceConnector::new(t2, NoRefresh, workspace_tokens());
         let s = c2.get_sheet_values("sp1", "Sheet1!A1:B2").unwrap();
         assert_eq!(s.values[0], vec!["Name", "Qty"]);
         assert_eq!(s.values[1][1], "3");

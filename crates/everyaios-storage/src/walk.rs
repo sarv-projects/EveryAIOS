@@ -19,6 +19,7 @@ use std::time::UNIX_EPOCH;
 use crossbeam_deque::{Steal, Stealer, Worker};
 use serde::{Deserialize, Serialize};
 
+use crate::identity::{FileIdentity, IdentityPolicy, identity_from_metadata};
 use crate::StorageError;
 
 /// Sentinel arena index meaning "no parent" (the arena root's parent).
@@ -32,8 +33,19 @@ pub struct FileRecord {
     pub size: u64,
     pub mtime: u64,
     pub nlink: u32,
+    /// Volume: `st_dev` on POSIX, `VolumeSerialNumber` on Windows. Derived
+    /// from `identity`; `0` only when the identity is unknown.
     pub dev: u64,
+    /// 64-bit file index: `st_ino` on POSIX, `nFileIndexHigh:Low` on Windows.
+    /// `0` **means unknown** — a file id of zero is never valid
+    /// (`ARCH/25-FILES.md` §2, `REQ-FILES-001`).
     pub ino: u64,
+    /// The incarnation-aware identity this record was scanned with
+    /// (`ARCH/25-FILES.md` §2: `(volume, fileId, incarnation)` /
+    /// `(dev, ino, nlink)`). `identity.is_unknown()` is the honest signal that
+    /// the OS would not give us an id; it is never masked by `dev`/`ino`.
+    #[serde(default)]
+    pub identity: FileIdentity,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -74,6 +86,9 @@ pub struct FileNode {
     pub nlink: u32,
     pub dev: u64,
     pub ino: u64,
+    /// The scanned identity (`identity.is_unknown()` when the OS gave none).
+    #[serde(default)]
+    pub identity: FileIdentity,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
@@ -128,41 +143,36 @@ fn is_hidden(path: &Path) -> bool {
         .unwrap_or(false)
 }
 
-#[cfg(unix)]
-fn dev_of(m: &Metadata) -> u64 {
-    use std::os::unix::fs::MetadataExt;
-    m.dev()
-}
-#[cfg(unix)]
-fn ino_of(m: &Metadata) -> u64 {
-    use std::os::unix::fs::MetadataExt;
-    m.ino()
-}
-#[cfg(unix)]
-fn nlink_of(m: &Metadata) -> u32 {
-    use std::os::unix::fs::MetadataExt;
-    m.nlink() as u32
-}
-#[cfg(not(unix))]
-fn dev_of(_: &Metadata) -> u64 {
-    0
-}
-#[cfg(not(unix))]
-fn ino_of(_: &Metadata) -> u64 {
-    0
-}
-#[cfg(not(unix))]
-fn nlink_of(_: &Metadata) -> u32 {
-    1
-}
+// FIX-10 (`REQ-FILES-001`): the pre-fix non-Unix branch answered `dev = 0,
+// ino = 0, nlink = 1` for every entry, which is not an identity — `dedup`
+// keys hardlink groups on `(dev, ino)`, so every Windows file collapsed into
+// one "physical copy" and `wasted_bytes` reported `0`. Identity now comes from
+// the platform (`identity::identity_from_metadata`); when the OS refuses an
+// identity the record says **unknown**, which downstream code treats as
+// "provably its own object" rather than "identical to everything else".
 
 /// Scan `root` with a work-stealing pool, returning flat records.
 pub fn scan(root: &Path, opts: &ScanOptions) -> Result<Vec<FileRecord>, StorageError> {
+    scan_with_policy(root, opts, IdentityPolicy::Full)
+}
+
+/// [`scan`] with an explicit [`IdentityPolicy`]. `IdentityPolicy::MetadataOnly`
+/// is for collectors that already hold the OS file id in the record (the
+/// elevated MFT / `FSCTL_ENUM_USN_DATA` inventory, `ARCH/25-FILES.md` §3), where
+/// a second per-entry identity query would be pure cost; records scanned that
+/// way carry `identity.is_unknown() == true` rather than a fabricated id.
+pub fn scan_with_policy(
+    root: &Path,
+    opts: &ScanOptions,
+    policy: IdentityPolicy,
+) -> Result<Vec<FileRecord>, StorageError> {
     let root = normalize(root);
     let threads = opts.threads.max(1);
 
-    let root_dev = if opts.same_filesystem {
-        fs::metadata(&root).ok().map(|m| dev_of(&m))
+    let root_vol = if opts.same_filesystem {
+        fs::metadata(&root)
+            .ok()
+            .map(|m| identity_from_metadata(&root, &m, policy))
     } else {
         None
     };
@@ -210,7 +220,7 @@ pub fn scan(root: &Path, opts: &ScanOptions) -> Result<Vec<FileRecord>, StorageE
                     match dir {
                         Some(d) => {
                             pending.fetch_sub(1, Ordering::SeqCst);
-                            walk_dir(&d, &opts, root_dev, &sender, &worker, &pending);
+                            walk_dir(&d, &opts, root_vol, policy, &sender, &worker, &pending);
                         }
                         None => {
                             if pending.load(Ordering::SeqCst) == 0 {
@@ -237,7 +247,8 @@ pub fn scan(root: &Path, opts: &ScanOptions) -> Result<Vec<FileRecord>, StorageE
 fn walk_dir(
     dir: &Path,
     opts: &ScanOptions,
-    root_dev: Option<u64>,
+    root_vol: Option<FileIdentity>,
+    policy: IdentityPolicy,
     sender: &mpsc::Sender<FileRecord>,
     worker: &Worker<PathBuf>,
     pending: &AtomicUsize,
@@ -260,11 +271,18 @@ fn walk_dir(
         }
         let is_dir = meta.is_dir();
 
-        // Device-boundary safety.
-        if let Some(rd) = root_dev {
-            if dev_of(&meta) != rd {
-                continue;
-            }
+        // Resolve the platform identity once, and derive the legacy
+        // `(dev, ino, nlink)` fields from it so the two can never disagree.
+        let identity = identity_from_metadata(&path, &meta, policy);
+
+        // Device/volume-boundary safety. An entry whose volume cannot be
+        // established is skipped rather than assumed to be on the root volume:
+        // crossing an unverified boundary silently is what this guard exists to
+        // prevent (`ARCH/25-FILES.md` §7).
+        if let Some(root_id) = root_vol
+            && (identity.is_unknown() || identity.volume() != root_id.volume())
+        {
+            continue;
         }
         if opts.skip_hidden && is_hidden(&path) {
             continue;
@@ -275,14 +293,16 @@ fn walk_dir(
             continue;
         }
 
+        let (dev, ino, nlink) = identity.legacy_parts();
         let rec = FileRecord {
             path: path.clone(),
             is_dir,
             size,
             mtime: mtime_secs(&meta),
-            nlink: nlink_of(&meta),
-            dev: dev_of(&meta),
-            ino: ino_of(&meta),
+            nlink,
+            dev,
+            ino,
+            identity,
         };
         let _ = sender.send(rec);
 
@@ -317,6 +337,7 @@ pub fn build_arena(records: Vec<FileRecord>, root: &Path) -> Arena {
         nlink: 0,
         dev: 0,
         ino: 0,
+        identity: FileIdentity::default(),
     });
     map.insert(root_key.clone(), 0);
 
@@ -347,6 +368,7 @@ pub fn build_arena(records: Vec<FileRecord>, root: &Path) -> Arena {
                 nlink: 0,
                 dev: 0,
                 ino: 0,
+                identity: FileIdentity::default(),
             });
             map.insert(parent_key, id);
             id
@@ -368,6 +390,7 @@ pub fn build_arena(records: Vec<FileRecord>, root: &Path) -> Arena {
             nlink: rec.nlink,
             dev: rec.dev,
             ino: rec.ino,
+            identity: rec.identity,
         });
         map.insert(key, id);
     }
@@ -445,6 +468,94 @@ mod tests {
         let records = scan(&root, &opts).unwrap();
         assert_eq!(records.len(), 1);
         assert!(records[0].path.ends_with("big.bin"));
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    // --- FIX-10: scanned records carry a real identity (REQ-FILES-001) ------
+
+    #[test]
+    fn scan_never_emits_a_zeroed_identity() {
+        let root = tmpdir("identity");
+        fs::create_dir_all(root.join("sub")).unwrap();
+        fs::write(root.join("a.txt"), b"hello").unwrap();
+        fs::write(root.join("sub/b.txt"), b"world").unwrap();
+
+        let records = scan(&root, &ScanOptions::default()).unwrap();
+        assert!(records.len() >= 3);
+        for r in &records {
+            // The pre-fix non-Unix branch answered `dev = 0, ino = 0` here,
+            // which then collapsed every hardlink group in `dedup`.
+            assert!(r.ino != 0, "zeroed id in {}", r.path.display());
+            assert!(r.identity.is_known(), "no id for {}", r.path.display());
+            // The legacy triple must be a faithful projection of the identity.
+            assert_eq!(r.identity.legacy_parts(), (r.dev, r.ino, r.nlink));
+        }
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn scan_detects_hardlinked_paths_as_one_physical_file() {
+        let root = tmpdir("identity-hardlink");
+        fs::write(root.join("orig.bin"), b"payload").unwrap();
+        fs::hard_link(root.join("orig.bin"), root.join("link.bin")).unwrap();
+
+        let records = scan(&root, &ScanOptions::default()).unwrap();
+        let a = records
+            .iter()
+            .find(|r| r.path.ends_with("orig.bin"))
+            .expect("orig");
+        let b = records
+            .iter()
+            .find(|r| r.path.ends_with("link.bin"))
+            .expect("link");
+        assert_eq!(a.identity.nlink(), 2);
+        assert!(a.identity.nlink() > 1, "hardlink must raise nlink");
+        // Both names resolve to the same physical file.
+        assert_eq!(a.identity.hardlink_key(), b.identity.hardlink_key());
+        assert!(a.identity.hardlink_key().is_some());
+        assert_eq!(
+            a.identity.same_file(b.identity),
+            crate::identity::IdentityVerdict::Same
+        );
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn arena_propagates_the_scanned_identity() {
+        let root = tmpdir("identity-arena");
+        fs::write(root.join("a.txt"), b"hello").unwrap();
+        let records = scan(&root, &ScanOptions::default()).unwrap();
+        let arena = build_arena(records, &root);
+        let a = arena
+            .nodes
+            .iter()
+            .find(|n| n.name == "a.txt")
+            .expect("a.txt node");
+        assert!(a.identity.is_known());
+        assert_eq!(a.identity.legacy_parts(), (a.dev, a.ino, a.nlink));
+        assert_eq!(a.size, 5);
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn metadata_only_scan_reports_unknown_rather_than_zeros() {
+        // Where the policy actually skips a query the record must say
+        // "unknown", never carry a fabricated id (and never be mistaken for a
+        // real one downstream).
+        let root = tmpdir("identity-metadata-only");
+        fs::write(root.join("a.txt"), b"hello").unwrap();
+        let records = scan_with_policy(&root, &ScanOptions::default(), IdentityPolicy::MetadataOnly)
+            .unwrap();
+        let a = records.iter().find(|r| r.path.ends_with("a.txt")).unwrap();
+        if !cfg!(unix) {
+            assert!(a.identity.is_unknown());
+            assert_eq!(a.identity.legacy_parts(), (0, 0, 1));
+        }
+        assert_eq!(a.identity.legacy_parts(), (a.dev, a.ino, a.nlink));
 
         let _ = fs::remove_dir_all(&root);
     }

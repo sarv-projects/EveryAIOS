@@ -69,6 +69,14 @@ fn api_base() -> &'static str {
     "https://huggingface.co"
 }
 
+/// FIX-09 — the one destination pre-flight for this module's HTTP client.
+/// Fails closed with a typed [`HfError`]: the download is refused, never
+/// attempted through another path.
+fn egress_preflight(url: &str) -> Result<(), HfError> {
+    everyaios_guard::netfloor::preflight_url(url, everyaios_guard::NetPolicy::default())
+        .map_err(|e| HfError::Network(e.to_string()))
+}
+
 /// Client over the public Hub API (base URL injectable for tests).
 pub struct HfClient {
     base: String,
@@ -98,8 +106,15 @@ impl HfClient {
     }
 
     /// Live `tree/main` of a repo (no hardcoded ids — `repo` is caller data).
+    ///
+    /// FIX-09: the Hub base is pre-flighted through
+    /// [`everyaios_guard::netfloor::preflight_url`] before the socket. `base`
+    /// is injectable (test mock), so the floor lives at the client; the shipped
+    /// default is `https://huggingface.co`, and a re-pointed client still
+    /// cannot reach the LAN or cloud metadata.
     pub fn repo_files(&self, repo: &str) -> Result<Vec<HfFile>, HfError> {
         let url = format!("{}/api/models/{repo}/tree/main", self.base);
+        egress_preflight(&url)?;
         let resp = self
             .agent
             .get(&url)
@@ -206,6 +221,7 @@ impl HfClient {
         let resume_from = std::fs::metadata(&part).map(|m| m.len()).unwrap_or(0);
 
         let url = format!("{}/{repo}/resolve/main/{filename}", self.base);
+        egress_preflight(&url)?;
         let mut req = self.agent.get(&url);
         if resume_from > 0 && resume_from < expected_size {
             req = req.set("Range", &format!("bytes={resume_from}-"));

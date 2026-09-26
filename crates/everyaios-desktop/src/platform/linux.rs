@@ -25,6 +25,7 @@ use x11rb::protocol::xtest;
 use x11rb::rust_connection::RustConnection;
 
 use crate::DesktopError;
+use crate::capture::{CaptureCheck, CaptureFault, CapturePipeline, CaptureReadiness};
 use crate::geometry::{DpiScale, DpiSource};
 use crate::ladder::{ClickRung, LadderTarget, RungDelivery};
 use crate::launch;
@@ -254,12 +255,16 @@ impl X11Backend {
 
     pub fn read(&self, window: &WindowInfo) -> Result<ReadResult, DesktopError> {
         let windows = self.list_windows()?;
-        Ok(ReadResult {
-            window_id: window.id,
-            tree: None, // no UIA equivalent on bare X11 → OCR fallback
-            dpi_scale: self.dpi_scale().factor,
+        // `FIX-17` — the honest shape of "this platform exposes no structured UI":
+        // an `Absent` read, which is a **positive** fact (so the vision/OCR rung
+        // is the documented next step) rather than an `Unknown` that would mean
+        // "I was not allowed to look". Bare X11 has no AT-SPI client in the
+        // dependency set, so there is nothing to be blocked from.
+        Ok(ReadResult::absent(
+            window.id,
+            self.dpi_scale().factor,
             windows,
-        })
+        ))
     }
 
     /// The measured X11 scale, with its provenance.
@@ -432,6 +437,19 @@ impl X11Backend {
             // The engine (`DesktopEngine::see`) applies the output budget; a
             // direct backend call has had none applied, and says so via `None`.
             budget: None,
+            // `FIX-18` — X11 offers exactly one pipeline and the backend verified
+            // it before calling `get_image`: the connection is live, the window
+            // resolved to a drawable, and the extent is non-zero. The verdict
+            // travels with the capture so a later reader can tell "captured" from
+            // "captured despite a degrade".
+            readiness: CaptureReadiness::ready(
+                CapturePipeline::X11GetImage,
+                vec![
+                    CaptureCheck::PipelineSupported,
+                    CaptureCheck::WindowHandleValid,
+                    CaptureCheck::NonZeroExtent,
+                ],
+            ),
         })
     }
 
@@ -804,5 +822,58 @@ impl X11Backend {
                 "launch was not handled on the pre-input path".into(),
             )),
         }
+    }
+}
+
+/// The X11 capture-readiness probe (`FIX-18`).
+///
+/// X11 offers exactly one pipeline (`XGetImage` over the window drawable), so the
+/// verdict is a one-check host story plus a two-check target story: a live display
+/// connection, and a window with extent. There is no WGC equivalent to verify
+/// here, and the probe says so rather than pretending a fallback exists.
+pub struct X11CaptureProbe {
+    /// Is a live X11 backend attached? A detached host has no display to capture,
+    /// and says so instead of promising `XGetImage`.
+    attached: bool,
+}
+
+impl X11CaptureProbe {
+    pub fn new(attached: bool) -> Self {
+        Self { attached }
+    }
+}
+
+impl crate::capture::CaptureProbe for X11CaptureProbe {
+    fn pipelines(&self) -> Vec<CapturePipeline> {
+        vec![CapturePipeline::X11GetImage]
+    }
+
+    fn host(&mut self) -> Result<Vec<CaptureCheck>, CaptureFault> {
+        match self.attached {
+            true => Ok(vec![CaptureCheck::PipelineSupported]),
+            false => Err(CaptureFault::NoInteractiveSession {
+                detail: "no X11 backend is attached (no DISPLAY)".into(),
+            }),
+        }
+    }
+
+    /// X11 has no occlusion concept this backend can answer cheaply, and the only
+    /// pipeline reads the window's own drawable, so this is always "not occluded"
+    /// — the direction that never blocks a legitimate capture.
+    fn is_occluded(&mut self, _window: &WindowInfo) -> bool {
+        false
+    }
+
+    fn target(
+        &mut self,
+        window: &WindowInfo,
+        _pipeline: CapturePipeline,
+    ) -> Result<Vec<CaptureCheck>, CaptureFault> {
+        if window.width == 0 || window.height == 0 {
+            return Err(CaptureFault::ZeroExtent {
+                detail: format!("the listed window is {}x{}", window.width, window.height),
+            });
+        }
+        Ok(vec![CaptureCheck::WindowHandleValid, CaptureCheck::NonZeroExtent])
     }
 }

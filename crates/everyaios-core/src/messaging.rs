@@ -22,6 +22,13 @@ pub trait HttpTransport {
 
 /// `ureq`-backed transport — the production path (outbound network is the
 /// adapter's only network touch; credentials never enter the sidecar).
+///
+/// FIX-09: the destination floor is enforced here, at the socket. The webhook
+/// URL is user-configured (a channel the user connected), so the desktop
+/// default policy applies — loopback and public hosts pass, the LAN and the
+/// always-refused ranges (link-local/cloud metadata, multicast, reserved) do
+/// not. A denial is returned as a delivery failure with the floor's reason and
+/// there is no direct-client fallback.
 #[derive(Debug, Default)]
 pub struct UreqTransport;
 
@@ -32,6 +39,11 @@ impl HttpTransport for UreqTransport {
         content_type: &str,
         body: &str,
     ) -> Result<String, MessagingError> {
+        if let Err(denied) =
+            everyaios_guard::netfloor::preflight_url(url, everyaios_guard::NetPolicy::default())
+        {
+            return Err(MessagingError::EgressDenied(denied.to_string()));
+        }
         let resp = ureq::post(url)
             .set("Content-Type", content_type)
             .send_string(body)
@@ -520,6 +532,11 @@ impl<M: crate::email::Mailbox> MessageAdapter for EmailAdapter<M> {
 pub enum MessagingError {
     #[error("message delivery failed")]
     DeliveryFailed,
+    /// FIX-09: the destination floor refused the outbound webhook. The reason
+    /// is the floor's own stable token, so the failure is auditable and never
+    /// degrades into a silent retry through another client.
+    #[error("egress denied: {0}")]
+    EgressDenied(String),
 }
 
 #[cfg(test)]

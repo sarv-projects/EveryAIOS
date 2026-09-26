@@ -1018,7 +1018,16 @@ impl<'a> OAuthManager<'a> {
 // ---------------------------------------------------------------------------
 
 /// POST a urlencoded form; returns parsed JSON (any HTTP status).
+///
+/// FIX-09: this is the vault's custody egress — the moment a provider hands us
+/// a token. The destination is pre-flighted by the one implementation in
+/// [`everyaios_guard::netfloor`] before the socket opens, so a re-pointed
+/// endpoint (via `with_token_url` / `with_device_code_url` /
+/// `with_exchange_url`) can never aim a token request at cloud metadata, the
+/// LAN, or a non-`http(s)` scheme. A denial is typed and the request is not
+/// made; there is no direct-client fallback.
 fn post_form(url: &str, form: &[(&str, &str)]) -> Result<serde_json::Value, OAuthError> {
+    egress_preflight(url)?;
     match ureq::post(url)
         .set("Accept", "application/json")
         .send_form(form)
@@ -1043,7 +1052,12 @@ fn post_form(url: &str, form: &[(&str, &str)]) -> Result<serde_json::Value, OAut
 }
 
 /// GET with `Authorization: token <tok>` (Copilot internal exchange).
+///
+/// FIX-09: same pre-flight as [`post_form`]. This call carries a live
+/// credential, so it is the one place where an unchecked destination would be
+/// a credential leak rather than a policy miss.
 fn get_json_with_auth(url: &str, token: &str) -> Result<serde_json::Value, OAuthError> {
+    egress_preflight(url)?;
     // The internal endpoint checks editor headers; mirror copilot clients.
     match ureq::get(url)
         .set("Authorization", &format!("token {token}"))
@@ -1066,6 +1080,23 @@ fn get_json_with_auth(url: &str, token: &str) -> Result<serde_json::Value, OAuth
         )),
         Err(ureq::Error::Transport(t)) => Err(OAuthError::Transport(t.to_string())),
     }
+}
+
+/// The destination pre-flight for every outbound call in this module.
+///
+/// The policy is [`everyaios_guard::NetPolicy::default`]: loopback stays
+/// reachable (the tests point the endpoints at a loopback mock, and a
+/// loopback OAuth endpoint is a legitimate desktop setup) while the LAN, the
+/// always-refused ranges and non-`http(s)` schemes are denied. The stricter
+/// [`everyaios_guard::NetPolicy::strict`] is deliberately *not* used here: it
+/// would refuse loopback, and a custody path must not be weakened or widened by
+/// a fix to an unrelated surface — the hard floor is what protects it here.
+fn egress_preflight(url: &str) -> Result<(), OAuthError> {
+    everyaios_guard::netfloor::preflight_url(url, everyaios_guard::NetPolicy::default())
+        .map_err(|denied| OAuthError::EgressDenied {
+            reason: denied.reason,
+            url: denied.url,
+        })
 }
 
 #[derive(Debug, Clone)]
@@ -1257,6 +1288,11 @@ pub enum OAuthError {
     Http(u16, String),
     #[error("transport error: {0}")]
     Transport(String),
+    /// FIX-09: the destination floor refused an outbound custody request. The
+    /// reason is the floor's stable token; the URL is carried for the audit
+    /// row. No request was made.
+    #[error("egress denied ({reason}) for {url}")]
+    EgressDenied { reason: &'static str, url: String },
     #[error("vault error: {0}")]
     Sqlite(#[from] rusqlite::Error),
 }

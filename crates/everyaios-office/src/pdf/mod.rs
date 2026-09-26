@@ -6,8 +6,10 @@
 //! 2. **Text swap** — exact-match single-token replacement in a page's `Tj`
 //!    text (`replace_text`) — layout preserved because glyph positions are
 //!    untouched; never reflow.
-//! 3. **Redaction** — mark-for-redact `/Redact` annotations over a rect
-//!    (`redact::redact`).
+//! 3. **Redaction** — **removal** of the drawing operators that render into a
+//!    rectangle (`redact::redact`), with a post-op text-extraction proof
+//!    (`redact::redact_checked`). The marking half is available separately as
+//!    `redact::mark_for_redaction` and is explicitly *not* redaction.
 //! 4. **Re-author** — build a brand-new PDF from text (`author::author_pages`)
 //!    for structural edits instead of corrupting the source.
 //!
@@ -32,6 +34,23 @@ pub enum PdfError {
     NoAcroForm,
     #[error("page not found: {0}")]
     PageNotFound(u32),
+    #[error("nothing to redact: no rectangles were supplied")]
+    NothingToRedact,
+    #[error("redaction rectangle on page {0} is not finite: {1:?}")]
+    InvalidRect(u32, [f32; 4]),
+    #[error(
+        "the document is encrypted; redaction needs decrypted content streams and this engine does not drive decryption"
+    )]
+    Encrypted,
+    #[error("the content stream of page {page} could not be decoded, so nothing on it was examined")]
+    UndecodableContent { page: u32 },
+    #[error(
+        "redaction refused: {} item(s) intersect the redaction area but cannot be removed by this engine",
+        .0.len()
+    )]
+    Unremovable(Vec<redact::Unremovable>),
+    #[error("redaction refused: {} target string(s) survived the removal", .0.len())]
+    RemovalUnproven(Vec<(String, u32)>),
 }
 
 /// Exact-match text swap on one page's content stream (`Tj` text only).
@@ -212,15 +231,26 @@ mod tests {
     }
 
     #[test]
-    fn redact_adds_annotations() {
+    fn redact_removes_content_rather_than_annotating() {
+        // The v0 defect: `redact` annotated and left the text extractable.
+        // The proof is the extraction oracle, not the presence of a shape.
         let original = author::author_pages(&["secret"]).unwrap();
-        let redacted = redact::redact(&original, &[(1, [10.0, 20.0, 30.0, 40.0])]).unwrap();
-        let doc = Document::load_mem(&redacted).unwrap();
+        let doc = Document::load_mem(&original).unwrap();
         let page_id = *doc.get_pages().get(&1).unwrap();
-        let annots = doc.get_page_annotations(page_id).unwrap();
-        assert_eq!(annots.len(), 1);
-        let subtype = annots[0].get(b"Subtype").unwrap().as_name().unwrap();
-        assert_eq!(subtype, b"Redact");
+        let content = String::from_utf8_lossy(&doc.get_page_content(page_id).unwrap()).into_owned();
+        // 12pt Courier at (72,720): "secret" is 43.2pt wide, 12pt tall.
+        let redacted = redact::redact(&original, &[(1, [70.0, 716.0, 120.0, 724.0])]).unwrap();
+
+        let after = Document::load_mem(&redacted).unwrap();
+        let text = after.extract_text(&[1]).unwrap();
+        assert!(!text.contains("secret"), "redaction left text behind: {text:?}");
+        let after_content =
+            String::from_utf8_lossy(&after.get_page_content(page_id).unwrap()).into_owned();
+        assert!(
+            !after_content.contains("(secret)"),
+            "the show operator survived: {after_content}"
+        );
+        assert!(content.contains("(secret)"), "fixture sanity");
     }
 
     #[test]
@@ -228,5 +258,19 @@ mod tests {
         let original = author::author_pages(&["one"]).unwrap();
         let err = redact::redact(&original, &[(9, [0.0, 0.0, 1.0, 1.0])]).unwrap_err();
         assert!(matches!(err, PdfError::PageNotFound(9)));
+    }
+
+    #[test]
+    fn mark_for_redaction_adds_an_annotated_mark_without_removing() {
+        let original = author::author_pages(&["secret"]).unwrap();
+        let marked = redact::mark_for_redaction(&original, &[(1, [10.0, 20.0, 30.0, 40.0])])
+            .unwrap();
+        let doc = Document::load_mem(&marked).unwrap();
+        let page_id = *doc.get_pages().get(&1).unwrap();
+        let annots = doc.get_page_annotations(page_id).unwrap();
+        assert_eq!(annots.len(), 1);
+        assert_eq!(annots[0].get(b"Subtype").unwrap().as_name().unwrap(), b"Redact");
+        // The mark is not a redaction: the text is still there.
+        assert!(doc.extract_text(&[1]).unwrap().contains("secret"));
     }
 }

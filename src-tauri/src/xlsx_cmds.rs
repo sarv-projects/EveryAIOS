@@ -8,6 +8,7 @@ use everyaios_core::GuardDecision;
 use everyaios_guard::{
     change_set_hash, BatchOperation, DecisionPackage, Operation as GuardOp, RiskLevel,
 };
+use everyaios_office::CommitReceipt;
 use everyaios_office::xlsx::address::{parse_range, parse_ref};
 use everyaios_office::xlsx::dsl::{
     pivot_result, Operation as XlsxOp, PivotAgg, Scalar, WorkbookCommandBatch,
@@ -175,7 +176,7 @@ pub fn xlsx_edit_commit(
     });
 
     let outcome = apply_batch(&bytes, &batch, &sheet).map_err(|e| e.to_string())?;
-    atomic_write(&path, &outcome.bytes).map_err(|e| e.to_string())?;
+    let receipt = commit_workbook(&path, &outcome.bytes, &ticket_id)?;
 
     let audit_seq = crate::control::record_mutation(
         &state,
@@ -186,6 +187,8 @@ pub fn xlsx_edit_commit(
             "sheet": sheet,
             "address": address,
             "ticketId": ticket_id,
+            "commitStages": receipt.verification.stages,
+            "commitDurable": receipt.verification.durable,
         }),
     );
 
@@ -194,6 +197,7 @@ pub fn xlsx_edit_commit(
         "sheet": sheet,
         "changedParts": outcome.changed_parts,
         "auditSeq": audit_seq,
+        "commitStages": receipt.verification.stages,
     }))
 }
 
@@ -274,7 +278,7 @@ pub fn xlsx_batch_commit(
     crate::control::snapshot_file(&state, "office", &path);
     let bytes = std::fs::read(PathBuf::from(&path)).map_err(|e| e.to_string())?;
     let outcome = apply_batch(&bytes, &batch, &sheet).map_err(|e| e.to_string())?;
-    atomic_write(&path, &outcome.bytes).map_err(|e| e.to_string())?;
+    let receipt = commit_workbook(&path, &outcome.bytes, &ticket_id)?;
 
     let audit_seq = crate::control::record_mutation(
         &state,
@@ -285,6 +289,8 @@ pub fn xlsx_batch_commit(
             "sheet": sheet,
             "summary": batch.summary,
             "ticketId": ticket_id,
+            "commitStages": receipt.verification.stages,
+            "commitDurable": receipt.verification.durable,
         }),
     );
 
@@ -293,22 +299,38 @@ pub fn xlsx_batch_commit(
         "sheet": sheet,
         "changedParts": outcome.changed_parts,
         "auditSeq": audit_seq,
+        "commitStages": receipt.verification.stages,
     }))
 }
 
-/// Write bytes atomically: temp file + rename in the same directory (never a
-/// half-written workbook on crash/error).
-fn atomic_write(path: &str, bytes: &[u8]) -> Result<(), std::io::Error> {
+/// P47.6 — the commit path (FIX-16).
+///
+/// A workbook commit must be **staging package → fsync → atomic swap**, not
+/// "write + rename": without the fsync the bytes can be renamed into place and
+/// still be lost on power failure, which is the OfficeCLI trade-off
+/// `ARCH/22` §4 explicitly refuses to copy. `everyaios_office::commit_bytes`
+/// is the single crash-safe commit path in the runtime — it records the stages
+/// it actually ran, and a failure names the stage it died in, so there is no
+/// partial commit and no bare io error.
+///
+/// The commit also runs under a short-lived exclusive writer lease
+/// (`ARCH/22` §4, REQ-OFFICE-003): a second writer is refused with the
+/// `in use` result instead of silently overwriting.
+fn commit_workbook(path: &str, bytes: &[u8], ticket_id: &str) -> Result<CommitReceipt, String> {
     let p = PathBuf::from(path);
-    let dir = p.parent().ok_or_else(|| {
-        std::io::Error::new(std::io::ErrorKind::InvalidInput, "path has no parent")
-    })?;
-    let file_name = p.file_name().and_then(|n| n.to_str()).ok_or_else(|| {
-        std::io::Error::new(std::io::ErrorKind::InvalidInput, "path has no file name")
-    })?;
-    let tmp = dir.join(format!(".{file_name}.tmp-{}", std::process::id()));
-    std::fs::write(&tmp, bytes)?;
-    std::fs::rename(&tmp, p)
+    let work_id = format!("office.xlsx:{ticket_id}");
+    everyaios_office::commit_under_lease(
+        p.as_path(),
+        bytes,
+        &work_id,
+        "tauri:xlsx_cmds",
+        everyaios_office::now_ms(),
+    )
+    .map_err(|e| match e {
+        // The typed "in use" result: name the holder and the two options.
+        everyaios_office::ResidentError::InUse(c) => c.message(),
+        other => other.to_string(),
+    })
 }
 
 /// P4.7 — read-only pivot: group a source range and return the in-memory
@@ -498,6 +520,96 @@ mod tests {
             range: parse_range("C2:C5").unwrap().1,
         });
         assert_ne!(h1, change_set_hash(&batch_operations("Sheet1", &b3)));
+    }
+
+    #[test]
+    fn the_workbook_commit_path_is_the_fsynced_one() {
+        // FIX-16: the old local `atomic_write` was write + rename with **no
+        // fsync**, so a power loss could lose the just-committed bytes. This
+        // asserts the shell's commit helper routes through the single
+        // crash-safe path and that the stages it reports are the required
+        // order — which fails if the fsync is ever dropped from that path.
+        let dir = std::env::temp_dir().join(format!(
+            "everyaios-xlsx-commit-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("book.xlsx");
+        std::fs::write(&path, b"v1").unwrap();
+
+        let before = everyaios_office::fsync_calls();
+        let receipt = commit_workbook(
+            path.to_str().unwrap(),
+            b"v2-with-fsync",
+            "ticket-1",
+        )
+        .expect("the commit lands");
+        assert!(
+            everyaios_office::fsync_calls() >= before + 1,
+            "the shell's workbook commit did not fsync its staging package"
+        );
+        assert_eq!(
+            receipt.verification.stages,
+            vec![
+                everyaios_office::CommitStage::Staged,
+                everyaios_office::CommitStage::Fsynced,
+                everyaios_office::CommitStage::Swapped,
+                everyaios_office::CommitStage::DurablyRenamed
+            ]
+        );
+        assert!(receipt.verification.durable);
+        assert_eq!(std::fs::read(&path).unwrap(), b"v2-with-fsync");
+        // The lease is released after the commit, so the next edit re-acquires.
+        assert_eq!(receipt.work_id, "office.xlsx:ticket-1");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn the_workbook_commit_refuses_a_second_concurrent_writer() {
+        // REQ-OFFICE-003: two writers on one document must produce the explicit
+        // "in use" result, never a silent overwrite.
+        let dir = std::env::temp_dir().join(format!(
+            "everyaios-xlsx-lease-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("busy.xlsx");
+        std::fs::write(&path, b"v1").unwrap();
+        let p = path.to_str().unwrap().to_string();
+
+        // A long-lived lease held by another work item (as an open document
+        // would hold) blocks the shell's commit with a named conflict.
+        {
+            let mut registry =
+                everyaios_office::resident::process_registry().lock().unwrap();
+            let table = registry.table(everyaios_office::DocFormat::Xlsx);
+            table
+                .open(std::path::Path::new(&p), "other-work", "other-session", 60_000, everyaios_office::now_ms())
+                .unwrap();
+        }
+        let err = commit_workbook(&p, b"v2", "ticket-2").unwrap_err();
+        assert!(
+            err.contains("in use by work other-work"),
+            "expected the typed in-use result, got: {err}"
+        );
+        // The document is untouched.
+        assert_eq!(std::fs::read(&path).unwrap(), b"v1");
+
+        {
+            let mut registry =
+                everyaios_office::resident::process_registry().lock().unwrap();
+            let table = registry.table(everyaios_office::DocFormat::Xlsx);
+            let _ = table.close(std::path::Path::new(&p), "other-work", everyaios_office::now_ms());
+        }
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

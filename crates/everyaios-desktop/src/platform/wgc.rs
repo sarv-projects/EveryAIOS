@@ -54,34 +54,84 @@ const FRAME_POLL_MS: u64 = 25;
 
 /// Is WGC usable on this host right now? WinRT support plus a real BGRA-capable
 /// D3D11 device. Cached: the probe creates a device, which is not free.
+///
+/// Retained as a `bool` for the capability surface; the *reasons* live in
+/// [`session_supported`] / [`device_available`] / [`item_available`], which
+/// `FIX-18` needs so a refusal can name what failed (see `WinCaptureProbe` in
+/// [`crate::platform::win`]).
 pub fn available() -> bool {
     static AVAILABLE: OnceLock<bool> = OnceLock::new();
-    *AVAILABLE.get_or_init(|| {
-        if !GraphicsCaptureSession::IsSupported().unwrap_or(false) {
-            return false;
-        }
-        // A device that cannot be created is a device WGC cannot use either.
-        unsafe { create_device().is_ok() }
-    })
+    *AVAILABLE.get_or_init(|| session_supported() && device_available())
 }
 
-/// Capture `hwnd` through WGC. `Some((png, width, height))` on success — the
-/// dimensions are the capture item's own (WGC renders the window's client
-/// surface, which is authoritative), so the caller uses them rather than the
-/// window rect. `None` means "use the fallback chain".
-pub fn capture(hwnd: HWND) -> Option<(Vec<u8>, u32, u32)> {
+/// Is `GraphicsCaptureSession` supported on this host?
+///
+/// The WinRT session check on its own. Separate from [`device_available`] so the
+/// readiness verdict can say *which* of the two failed — "graphics capture is not
+/// supported here" and "no BGRA-capable device" need different remedies.
+pub fn session_supported() -> bool {
+    static SUPPORTED: OnceLock<bool> = OnceLock::new();
+    *SUPPORTED.get_or_init(|| GraphicsCaptureSession::IsSupported().unwrap_or(false))
+}
+
+/// Can a BGRA-capable D3D11 device be created right now?
+///
+/// A device that cannot be created is a device graphics capture cannot use
+/// either (headless GPU, a session with no adapter, WARP disabled).
+pub fn device_available() -> bool {
+    static DEVICE: OnceLock<bool> = OnceLock::new();
+    *DEVICE.get_or_init(|| unsafe { create_device().is_ok() })
+}
+
+/// Can a capture item be created for this window? (`FIX-18`'s per-target check.)
+///
+/// This is the check the v0 code did not have: `GraphicsCaptureItem::
+/// TryCreateFromWindowId` failing is the difference between "graphics capture is
+/// unavailable on this host" and "graphics capture cannot see *this* window", and
+/// only the first is worth falling back from silently.
+///
+/// `Err(detail)` names the HRESULT so a receipt can say what the compositor
+/// refused.
+pub fn item_available(hwnd: HWND) -> Result<(), String> {
+    GraphicsCaptureItem::TryCreateFromWindowId(WindowId {
+        Value: hwnd.0 as u64,
+    })
+    .map(|item| {
+        // The item is dropped here on purpose: creating it *is* the check, and
+        // holding one per probe would leak a compositor reference per readiness
+        // call.
+        drop(item);
+    })
+    .map_err(|e| format!("GraphicsCaptureItem::TryCreateFromWindowId failed: {e}"))
+}
+
+/// Capture `hwnd` through WGC.
+///
+/// `FIX-18`: the return type is a typed `Result`, not `Option`. `None` used to
+/// mean six different things at once (no session, no device, no item, no frame,
+/// a bad map, an encode failure), and every one of them silently degraded to
+/// PrintWindow. The verdict is now computed by `WinCaptureProbe` *before* this is
+/// called, so a failure here is a real failure rather than a fallback trigger.
+///
+/// The capture size is the item's own (WGC renders the window's client surface,
+/// which is authoritative), so the caller uses those dimensions rather than the
+/// window rect.
+pub fn capture(hwnd: HWND) -> Result<(Vec<u8>, u32, u32), String> {
     unsafe { capture_inner(hwnd) }
 }
 
-unsafe fn capture_inner(hwnd: HWND) -> Option<(Vec<u8>, u32, u32)> {
-    let (device, context, rt_device) = create_device().ok()?;
+unsafe fn capture_inner(hwnd: HWND) -> Result<(Vec<u8>, u32, u32), String> {
+    let (device, context, rt_device) = create_device().map_err(|e| format!("D3D11 device: {e}"))?;
     let item = GraphicsCaptureItem::TryCreateFromWindowId(WindowId {
         Value: hwnd.0 as u64,
     })
-    .ok()?;
-    let size = item.Size().ok()?;
+    .map_err(|e| format!("GraphicsCaptureItem: {e}"))?;
+    let size = item.Size().map_err(|e| format!("capture item size: {e}"))?;
     if size.Width <= 0 || size.Height <= 0 {
-        return None;
+        return Err(format!(
+            "the capture item reports no extent ({}x{})",
+            size.Width, size.Height
+        ));
     }
     let width = size.Width as u32;
     let height = size.Height as u32;
@@ -95,11 +145,15 @@ unsafe fn capture_inner(hwnd: HWND) -> Option<(Vec<u8>, u32, u32)> {
             Height: size.Height,
         },
     )
-    .ok()?;
-    let session: GraphicsCaptureSession = pool.CreateCaptureSession(&item).ok()?;
+    .map_err(|e| format!("Direct3D11CaptureFramePool: {e}"))?;
+    let session: GraphicsCaptureSession = pool
+        .CreateCaptureSession(&item)
+        .map_err(|e| format!("CreateCaptureSession: {e}"))?;
     // A capture is for content, not for the user's cursor.
     let _ = session.SetIsCursorCaptureEnabled(false);
-    session.StartCapture().ok()?;
+    session
+        .StartCapture()
+        .map_err(|e| format!("StartCapture: {e}"))?;
 
     let mut frame = None;
     for _ in 0..FRAME_ATTEMPTS {
@@ -109,16 +163,28 @@ unsafe fn capture_inner(hwnd: HWND) -> Option<(Vec<u8>, u32, u32)> {
         }
         std::thread::sleep(std::time::Duration::from_millis(FRAME_POLL_MS));
     }
-    let frame = frame?;
-    let surface: IDirect3DSurface = frame.Surface().ok()?;
+    let Some(frame) = frame else {
+        return Err(format!(
+            "no frame arrived within {} attempts \u{d7} {}ms",
+            FRAME_ATTEMPTS, FRAME_POLL_MS
+        ));
+    };
+    let surface: IDirect3DSurface = frame
+        .Surface()
+        .map_err(|e| format!("frame surface: {e}"))?;
     let _ = frame.Close();
     let _ = session.Close();
     let _ = pool.Close();
 
-    let access: IDirect3DDxgiInterfaceAccess = surface.cast().ok()?;
-    let texture: ID3D11Texture2D = access.GetInterface().ok()?;
-    let png = copy_and_encode(&device, &context, &texture, width, height)?;
-    Some((png, width, height))
+    let access: IDirect3DDxgiInterfaceAccess = surface
+        .cast()
+        .map_err(|e| format!("surface \u{2192} DXGI access: {e}"))?;
+    let texture: ID3D11Texture2D = access
+        .GetInterface()
+        .map_err(|e| format!("DXGI access \u{2192} ID3D11Texture2D: {e}"))?;
+    let png = copy_and_encode(&device, &context, &texture, width, height)
+        .ok_or_else(|| "the captured surface could not be read back or encoded".to_string())?;
+    Ok((png, width, height))
 }
 
 /// A BGRA-capable D3D11 device + immediate context, wrapped as the WinRT

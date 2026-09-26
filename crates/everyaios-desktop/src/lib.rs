@@ -22,6 +22,7 @@
 //! effect in the product.
 
 pub mod apps;
+pub mod capture;
 pub mod geometry;
 pub mod launch;
 pub mod ladder;
@@ -31,6 +32,7 @@ pub mod policy;
 pub mod readiness;
 pub mod router;
 pub mod types;
+pub mod uia;
 pub mod verify;
 
 use std::sync::Arc;
@@ -38,6 +40,10 @@ use std::sync::Arc;
 use thiserror::Error;
 
 pub use apps::{AppSource, InstalledApp, annotate_inventory, installed_apps, search_apps};
+pub use capture::{
+    CaptureCheck, CaptureDegrade, CaptureFault, CapturePipeline, CaptureProbe, CaptureReadiness,
+    CaptureState, NoCaptureProbe, SharedHostProbe, verify_capture,
+};
 pub use geometry::{
     DpiScale, DpiSource, IMAGE_FACTOR, OutputBudget, SEE_MAX_BYTES, SEE_MAX_DIMENSION_PX,
     SeeBudget, enforce_output_budget,
@@ -58,15 +64,21 @@ pub use types::{
     ActKind, ActOutcome, Capabilities, EscalationRequest, ForegroundSnapshot, ReadNode, ReadResult,
     Region, SeeMethod, SeeResult, VerifyOutcome, WindowInfo,
 };
+pub use uia::{
+    Coverage, ElementHandle, ElementQuery, NameMatch, ObservationHandle, ObservedElement,
+    Resolution, SnapshotEpoch, StructuredRead, UiaFault, UiaNode, UiaProvider, UiaRead,
+    UiaReadStatus, resolve, resolve_in,
+};
+pub use verify::{Locator, Observer, ReadConfidence, Verifier};
 
-/// Milliseconds since the Unix epoch (ForegroundSnapshot timestamps).
-fn now_ms() -> u64 {
+/// Milliseconds since the Unix epoch (observation freshness, capture receipts,
+/// `ForegroundSnapshot` timestamps).
+pub(crate) fn now_ms() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_millis() as u64)
         .unwrap_or(0)
 }
-pub use verify::{Locator, Observer, Verifier};
 
 /// Every failure mode of the desktop engine.
 #[derive(Debug, Error)]
@@ -85,6 +97,20 @@ pub enum DesktopError {
     /// over-budget payload with a quiet nod.
     #[error("output budget: {0}")]
     OutputBudget(String),
+    /// `FIX-18` — the capture path was **verified before use** and is not ready
+    /// for this target, so no capture was attempted. Typed on purpose: the old
+    /// code answered with a bare `Option::None` and then `"all capture methods
+    /// failed"`, which is indistinguishable from a platform bug. The guidance is
+    /// the sentence a card shows.
+    #[error("capture not ready ({state}): {guidance}")]
+    CaptureNotReady {
+        /// `degraded` or `unavailable`.
+        state: &'static str,
+        /// The actionable sentence from the readiness verdict.
+        guidance: String,
+        /// Which readiness check failed, named.
+        failed_check: &'static str,
+    },
 }
 
 pub type Result<T> = std::result::Result<T, DesktopError>;
@@ -352,7 +378,11 @@ impl DesktopEngine {
                 error: None,
             }),
             LadderVerdict::NeedsAuthorization { reason, .. }
-            | LadderVerdict::Refused { reason, .. } => {
+            | LadderVerdict::Refused { reason, .. }
+            // `FIX-17` — an unknown region is a refusal too, and it carries the
+            // same actionable sentence: no lower rung ran, and nothing was
+            // synthesized into a region nobody could see.
+            | LadderVerdict::Unknown { reason, .. } => {
                 // A refusal must name what the user could do, and the
                 // foreground escalation request is exactly that (P57.4).
                 let escalation = self.escalation_for(window, act);
@@ -639,6 +669,28 @@ impl<'a> Observer for EngineObserver<'a> {
             has_a11y_tree: false,
         };
         self.engine.read(&window).ok()?.tree
+    }
+
+    /// `FIX-17` — the engine's read knows whether it covered the target, so the
+    /// cascade gets the real confidence instead of guessing it from a tree's
+    /// emptiness. This is what stops an elevation-blocked read from being
+    /// verified as "the dialog is gone".
+    fn read_confidence(&self, _window_id: u64) -> verify::ReadConfidence {
+        let window = WindowInfo {
+            id: self.window_id,
+            title: String::new(),
+            app: String::new(),
+            x: 0,
+            y: 0,
+            width: 0,
+            height: 0,
+            has_a11y_tree: false,
+        };
+        match self.engine.read(&window) {
+            Ok(read) => verify::ReadConfidence::from_status(&read.status),
+            // The read itself failed: nothing was observed at all.
+            Err(_) => verify::ReadConfidence::Unknown,
+        }
     }
 
     fn ocr(&self, _window_id: u64) -> Vec<types::OcrWord> {

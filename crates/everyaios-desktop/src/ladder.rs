@@ -154,6 +154,11 @@ pub enum RungAttemptOutcome {
     Unavailable,
     /// The rung was attempted and did not work. The ladder may try the next.
     Failed,
+    /// `FIX-17` — the rung could not be evaluated: the region is **unknown**, not
+    /// empty (elevated, a dead handle, an ambiguous element). The ladder stops
+    /// rather than fall through, because a lower rung would be a blind input
+    /// attempt into a region nobody verified (`REQ-CUA-006`).
+    Unknown,
 }
 
 impl RungAttemptOutcome {
@@ -162,6 +167,7 @@ impl RungAttemptOutcome {
             RungAttemptOutcome::Delivered => "delivered",
             RungAttemptOutcome::Unavailable => "unavailable",
             RungAttemptOutcome::Failed => "failed",
+            RungAttemptOutcome::Unknown => "unknown",
         }
     }
 }
@@ -197,6 +203,18 @@ pub enum RungDelivery {
     /// A hard stop (kill switch, Guard refusal surfaced from inside the rung).
     /// The ladder does **not** continue past this.
     Blocked(String),
+    /// `FIX-17` — the rung **cannot be evaluated**: the region is unknown, not
+    /// empty. An elevated window, a dead handle, or an ambiguous name are all
+    /// cases where falling through to a lower rung would mean acting on a point
+    /// nobody verified.
+    ///
+    /// This is deliberately a hard stop like [`Self::Blocked`] and deliberately
+    /// *not* `Unavailable`: `Unavailable` means "this platform has no such
+    /// mechanism here, try the next rung", which is exactly the wrong answer when
+    /// the next rung would synthesize input into a region we were not allowed to
+    /// read (`REQ-CUA-006`: "no partial-input attempt"; `ARCH/24` §8 "Elevation
+    /// blocked → mark unknown; surface guidance; no blind synthetic input").
+    Unknown(String),
 }
 
 /// The verdict of one ladder walk: which rung ran, or why none did.
@@ -226,6 +244,14 @@ pub enum LadderVerdict {
     Exhausted {
         attempts: Vec<RungAttempt>,
     },
+    /// `FIX-17` — a rung reported the region **unknown** (elevated, dead handle,
+    /// ambiguous element), so the walk stopped instead of falling through. Nothing
+    /// after that rung ran: no message click, no raw input.
+    Unknown {
+        rung: ClickRung,
+        reason: String,
+        attempts: Vec<RungAttempt>,
+    },
     /// The platform's declared ladder violates the ordering invariant. Fail
     /// closed rather than run an undeclared escalation.
     Misconfigured { reason: String },
@@ -250,12 +276,21 @@ impl LadderVerdict {
         matches!(self, LadderVerdict::NeedsAuthorization { .. })
     }
 
+    /// Did the walk stop because the region was **unknown** rather than absent?
+    ///
+    /// `FIX-17`: this is the elevation/dead-handle/ambiguity stop. A caller that
+    /// sees it must re-read or escalate to a human — never retry a lower rung.
+    pub fn is_unknown_region(&self) -> bool {
+        matches!(self, LadderVerdict::Unknown { .. })
+    }
+
     /// Every rung that was attempted, in order.
     pub fn attempts(&self) -> &[RungAttempt] {
         match self {
             LadderVerdict::Delivered { attempts, .. }
             | LadderVerdict::NeedsAuthorization { attempts, .. }
             | LadderVerdict::Refused { attempts, .. }
+            | LadderVerdict::Unknown { attempts, .. }
             | LadderVerdict::Exhausted { attempts } => attempts,
             LadderVerdict::Misconfigured { .. } => &[],
         }
@@ -308,6 +343,17 @@ impl LadderVerdict {
                 rung.as_str(),
                 attempts.len()
             ),
+            LadderVerdict::Unknown {
+                rung,
+                reason,
+                attempts,
+            } => format!(
+                "stopped at rung {} ({}): the region is unknown, not empty — {reason}; no lower \
+                 rung ran ({} attempt(s) first)",
+                rung.rank(),
+                rung.as_str(),
+                attempts.len()
+            ),
             LadderVerdict::Exhausted { attempts } => {
                 let trail = attempts
                     .iter()
@@ -329,6 +375,7 @@ impl LadderVerdict {
                 LadderVerdict::Delivered { .. } => "delivered",
                 LadderVerdict::NeedsAuthorization { .. } => "needs_authorization",
                 LadderVerdict::Refused { .. } => "refused",
+                LadderVerdict::Unknown { .. } => "unknown_region",
                 LadderVerdict::Exhausted { .. } => "exhausted",
                 LadderVerdict::Misconfigured { .. } => "misconfigured",
             },
@@ -481,6 +528,12 @@ pub trait ClickLadderDriver {
 ///   [`LadderVerdict::NeedsAuthorization`] carrying the authority's reason —
 ///   the ladder never runs it itself and never continues past it;
 /// - a hard stop inside a rung ([`RungDelivery::Blocked`]) also stops the walk;
+/// - `FIX-17`: a rung that reports the region **unknown**
+///   ([`RungDelivery::Unknown`] — elevated window, dead handle, ambiguous
+///   element) also stops the walk, and returns
+///   [`LadderVerdict::Unknown`]. This is the difference between "this platform has
+///   no such mechanism here" (`Unavailable`, try the next rung) and "nobody can
+///   see this region" (stop: a lower rung would be a blind input attempt);
 /// - every attempt is recorded, so a fall-through is always visible in the
 ///   result rather than inferred from behaviour;
 /// - a profile that violates the ordering invariant fails closed.
@@ -522,6 +575,24 @@ pub fn walk_ladder<D: ClickLadderDriver + ?Sized>(
             RungDelivery::Blocked(detail) => {
                 attempts.push(RungAttempt::new(rung, RungAttemptOutcome::Failed, detail.clone()));
                 return LadderVerdict::Refused {
+                    rung,
+                    reason: detail,
+                    attempts,
+                };
+            }
+            RungDelivery::Unknown(detail) => {
+                // `FIX-17` — a hard stop, like `Blocked`. The distinction is that
+                // nothing was refused: the rung simply could not be *evaluated*,
+                // because the region is unknown (elevated, dead handle, ambiguous
+                // element). Falling through to a message click or raw input here
+                // would be a blind input attempt into an unverified region, which
+                // `REQ-CUA-006` forbids outright.
+                attempts.push(RungAttempt::new(
+                    rung,
+                    RungAttemptOutcome::Unknown,
+                    detail.clone(),
+                ));
+                return LadderVerdict::Unknown {
                     rung,
                     reason: detail,
                     attempts,
@@ -818,6 +889,87 @@ mod tests {
                 .iter()
                 .all(|a| a.rung != ClickRung::RawInput)
         );
+    }
+
+    /// `FIX-17` — a rung that reports the region **unknown** is a hard stop, not a
+    /// fall-through. This is the `REQ-CUA-006` rule: falling through to a message
+    /// click or raw input after "I could not read this window" would be a blind
+    /// input attempt into an unverified region, and at the pointer-moving rung it
+    /// would also mean moving the user's cursor for something nobody saw.
+    #[test]
+    fn an_unknown_region_stops_the_walk_and_never_reaches_a_lower_rung() {
+        let mut d = FakeDriver::windows_full(
+            vec![
+                (
+                    ClickRung::AccessibilityInvoke,
+                    RungDelivery::Unknown(
+                        "this window runs elevated and this process is not UIAccess-enabled".into(),
+                    ),
+                ),
+                (
+                    ClickRung::SyntheticEvent,
+                    RungDelivery::Delivered("SHOULD NEVER RUN".into()),
+                ),
+                (
+                    ClickRung::RawInput,
+                    RungDelivery::Delivered("SHOULD NEVER RUN".into()),
+                ),
+            ],
+            Some(Ok(())),
+        );
+        let v = walk_ladder(&d, &target());
+        assert!(!v.delivered());
+        assert!(v.is_unknown_region(), "{v:?}");
+        assert!(!v.is_authorization_gap(), "an unknown region is not an auth gap");
+        match &v {
+            LadderVerdict::Unknown { rung, reason, attempts } => {
+                assert_eq!(*rung, ClickRung::AccessibilityInvoke);
+                assert!(reason.contains("UIAccess"), "{reason}");
+                assert_eq!(attempts.len(), 1);
+                assert_eq!(attempts[0].outcome, RungAttemptOutcome::Unknown);
+                assert_eq!(attempts[0].outcome.as_str(), "unknown");
+            }
+            other => panic!("expected Unknown, got {other:?}"),
+        }
+        // Only the first rung ran: no message click, and the gated rung was never
+        // even consulted.
+        assert_eq!(*d.calls.borrow(), vec![ClickRung::AccessibilityInvoke]);
+        assert!(d.authorized.borrow().is_empty());
+        let summary = v.describe();
+        assert!(summary.contains("the region is unknown, not empty"), "{summary}");
+        assert!(summary.contains("no lower rung ran"), "{summary}");
+        // And it is visible in the JSON a card/audit row reads.
+        assert_eq!(v.to_json()["verdict"], "unknown_region");
+    }
+
+    /// A lower rung may be the one that discovers the region is unknown — the stop
+    /// happens there, and still nothing after it runs.
+    #[test]
+    fn an_unknown_region_at_a_lower_rung_still_stops_before_the_gated_rung() {
+        let d = FakeDriver::windows_full(
+            vec![
+                (
+                    ClickRung::AccessibilityInvoke,
+                    RungDelivery::Unavailable("no invokable element at the point".into()),
+                ),
+                (
+                    ClickRung::SyntheticEvent,
+                    RungDelivery::Unknown("the target window handle is gone".into()),
+                ),
+                (
+                    ClickRung::RawInput,
+                    RungDelivery::Delivered("SHOULD NEVER RUN".into()),
+                ),
+            ],
+            Some(Ok(())),
+        );
+        let v = walk_ladder(&d, &target());
+        assert!(v.is_unknown_region());
+        assert!(!v.delivered());
+        // Both ungated rungs were tried; the gated one never ran.
+        assert_eq!(v.attempts().len(), 2);
+        assert!(!d.calls.borrow().contains(&ClickRung::RawInput));
+        assert!(d.authorized.borrow().is_empty());
     }
 
     // ---- the profile invariant ----------------------------------------

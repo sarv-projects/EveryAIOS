@@ -91,10 +91,19 @@ pub fn search_endpoints_from_config() -> Vec<String> {
 }
 
 /// The live feed transport: one `ureq` GET of the `searx.space` JSON document.
+///
+/// FIX-09: the feed destination is pre-flighted through
+/// [`everyaios_guard::netfloor::preflight_url`] immediately before the socket,
+/// so a Settings refresh can never be steered at link-local/cloud-metadata or
+/// LAN space. The feed URL is a shipped constant, but the seam is
+/// caller-supplied, so the check lives at the client rather than at the one
+/// call site.
 pub struct UreqInstanceFeed;
 
 impl InstanceFeedTransport for UreqInstanceFeed {
     fn get_json(&self, url: &str) -> Result<serde_json::Value, String> {
+        everyaios_guard::netfloor::preflight_url(url, everyaios_guard::NetPolicy::default())
+            .map_err(|e| e.to_string())?;
         let body = ureq::get(url)
             .timeout(std::time::Duration::from_secs(15))
             .call()

@@ -6,22 +6,22 @@
 //! landed in `everyaios-vault::auth_bridge`).
 //!
 //! Token refresh happens transparently: if a 401 is returned, the
-//! [`TokenRefresher`] trait is invoked once before surfacing the error.
+//! [`TokenSource`] is asked for a refreshed value once before surfacing the
+//! error. The token itself is never held here — see [`TokenSource`].
 
-use super::{HttpTransport, TransportError, TransportErrorKind};
-
-/// OAuth token refresher — the caller (Auth Bridge) provides the
-/// implementation that hits Google's token endpoint.
-pub trait TokenRefresher {
-    /// Refresh the access token. Returns the new token on success.
-    fn refresh(&self) -> Result<String, TransportError>;
-}
+use super::{HttpTransport, TokenSource, TransportError, TransportErrorKind, VaultTokenRef};
 
 /// Gmail connector — stateless protocol logic over injected seams.
-pub struct GmailConnector<T: HttpTransport, R: TokenRefresher> {
+///
+/// FIX-01: the connector holds a [`VaultTokenRef`] and a [`TokenSource`], never
+/// the access token. The value exists only inside the closure
+/// [`GmailConnector::authenticated`] hands to the transport, so it cannot be
+/// read back out of this struct, cloned, serialized, or logged (INV-02,
+/// CTR-013).
+pub struct GmailConnector<T: HttpTransport, S: TokenSource> {
     transport: T,
-    refresher: R,
-    access_token: String,
+    tokens: S,
+    token_ref: VaultTokenRef,
     user_id: String,
 }
 
@@ -73,12 +73,13 @@ pub struct DraftDraft {
 
 const GMAIL_API_BASE: &str = "https://gmail.googleapis.com/gmail/v1";
 
-impl<T: HttpTransport, R: TokenRefresher> GmailConnector<T, R> {
-    pub fn new(transport: T, refresher: R, access_token: String, user_id: String) -> Self {
+impl<T: HttpTransport, S: TokenSource> GmailConnector<T, S> {
+    /// Bind the connector to a **vault reference**, not a token.
+    pub fn new(transport: T, tokens: S, token_ref: VaultTokenRef, user_id: String) -> Self {
         Self {
             transport,
-            refresher,
-            access_token,
+            tokens,
+            token_ref,
             user_id,
         }
     }
@@ -88,21 +89,26 @@ impl<T: HttpTransport, R: TokenRefresher> GmailConnector<T, R> {
         format!("{GMAIL_API_BASE}/users/{}", self.user_id)
     }
 
-    /// Build auth headers for the current access token.
-    fn auth_headers(&self) -> Vec<(&str, &str)> {
-        vec![("Authorization", &self.access_token)]
+    /// Run `f` with the live access token, in-custody. The token is never
+    /// returned: the only way out of this method is whatever `f` computes.
+    fn authenticated<R>(
+        &self,
+        f: &mut dyn FnMut(&str) -> Result<R, TransportError>,
+    ) -> Result<R, TransportError> {
+        self.tokens.with_token(&self.token_ref, f)
     }
 
     /// GET with automatic 401→refresh→retry once. Every read path routes
     /// through here so an expired access token is transparently refreshed
     /// (spec F14: read/send/modify all recover from a 401).
     fn get_with_refresh(&mut self, url: &str) -> Result<Vec<u8>, TransportError> {
-        match self.transport.get(url, &self.auth_headers()) {
-            Err(e) if e.kind == TransportErrorKind::Auth => {
-                // Token expired — refresh once and retry.
-                self.access_token = self.refresher.refresh()?;
-                self.transport.get(url, &self.auth_headers())
-            }
+        let transport = &self.transport;
+        match self.authenticated(&mut |t| transport.get(url, &[("Authorization", t)])) {
+            Err(e) if e.kind == TransportErrorKind::Auth => self
+                .tokens
+                .refresh(&self.token_ref, &mut |t| {
+                    transport.get(url, &[("Authorization", t)])
+                }),
             other => other,
         }
     }
@@ -110,11 +116,15 @@ impl<T: HttpTransport, R: TokenRefresher> GmailConnector<T, R> {
     /// POST (JSON) with automatic 401→refresh→retry once. Every mutation
     /// path (send/modify/trash) routes through here.
     fn post_with_refresh(&mut self, url: &str, body: &[u8]) -> Result<Vec<u8>, TransportError> {
-        match self.transport.post_json(url, &self.auth_headers(), body) {
-            Err(e) if e.kind == TransportErrorKind::Auth => {
-                self.access_token = self.refresher.refresh()?;
-                self.transport.post_json(url, &self.auth_headers(), body)
-            }
+        let transport = &self.transport;
+        match self.authenticated(&mut |t| {
+            transport.post_json(url, &[("Authorization", t)], body)
+        }) {
+            Err(e) if e.kind == TransportErrorKind::Auth => self
+                .tokens
+                .refresh(&self.token_ref, &mut |t| {
+                    transport.post_json(url, &[("Authorization", t)], body)
+                }),
             other => other,
         }
     }
@@ -251,7 +261,10 @@ impl<T: HttpTransport, R: TokenRefresher> GmailConnector<T, R> {
         subject: &str,
         body: &str,
     ) -> Result<SendResult, TransportError> {
-        let raw = build_mime_raw(to, subject, body, &self.access_token);
+        // FIX-01: the MIME body never needed the token (the old
+        // `_sender_email` parameter was already ignored), so the raw message is
+        // built without any credential in scope at all.
+        let raw = build_mime_raw(to, subject, body);
         let encoded = base64_encode_urlsafe(raw.as_bytes());
         let body_json = serde_json::json!({ "raw": encoded });
         let body_bytes = serde_json::to_vec(&body_json).map_err(|e| TransportError {
@@ -331,7 +344,7 @@ fn extract_body(part: &serde_json::Value, mime_type: &str) -> Option<String> {
 }
 
 /// Build a simple MIME raw message.
-fn build_mime_raw(to: &str, subject: &str, body: &str, _sender_email: &str) -> String {
+fn build_mime_raw(to: &str, subject: &str, body: &str) -> String {
     format!(
         "To: {to}\r\nSubject: {subject}\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n{body}"
     )
@@ -410,13 +423,30 @@ mod tests {
         }
     }
 
-    /// Mock token refresher.
-    struct MockRefresher;
+    /// Mock token source (FIX-01): it resolves the value inside the closure,
+    /// exactly like the real vault-backed source.
+    struct MockTokens;
 
-    impl TokenRefresher for MockRefresher {
-        fn refresh(&self) -> Result<String, TransportError> {
-            Ok("refreshed-token".into())
+    impl TokenSource for MockTokens {
+        fn with_token<R>(
+            &self,
+            _ref_: &VaultTokenRef,
+            f: &mut dyn FnMut(&str) -> Result<R, TransportError>,
+        ) -> Result<R, TransportError> {
+            f("test-token")
         }
+
+        fn refresh<R>(
+            &self,
+            _ref_: &VaultTokenRef,
+            f: &mut dyn FnMut(&str) -> Result<R, TransportError>,
+        ) -> Result<R, TransportError> {
+            f("refreshed-token")
+        }
+    }
+
+    fn tokens() -> VaultTokenRef {
+        VaultTokenRef::new("k-gmail", "gmail")
     }
 
     #[test]
@@ -468,7 +498,7 @@ mod tests {
             Ok(serde_json::to_vec(&search_resp).unwrap()),
         ]);
         let mut gmail =
-            GmailConnector::new(transport, MockRefresher, "test-token".into(), "me".into());
+            GmailConnector::new(transport, MockTokens, tokens(), "me".into());
         let result = gmail.search("test", 10, None).unwrap();
         assert_eq!(result.messages.len(), 2);
         assert_eq!(result.messages[0].id, "msg1");
@@ -486,7 +516,7 @@ mod tests {
         });
         let transport = MockTransport::new(vec![Ok(serde_json::to_vec(&send_resp).unwrap())]);
         let mut gmail =
-            GmailConnector::new(transport, MockRefresher, "test-token".into(), "me".into());
+            GmailConnector::new(transport, MockTokens, tokens(), "me".into());
         let result = gmail
             .send_message("bob@example.com", "Hello", "Hi there")
             .unwrap();
@@ -508,12 +538,7 @@ mod tests {
                 message: "401 Unauthorized".into(),
             }),
         ]);
-        let mut gmail = GmailConnector::new(
-            transport,
-            MockRefresher,
-            "expired-token".into(),
-            "me".into(),
-        );
+        let mut gmail = GmailConnector::new(transport, MockTokens, tokens(), "me".into());
         let result = gmail.send_message("bob@example.com", "Test", "Body");
         assert!(result.is_ok());
         assert_eq!(result.unwrap().message_id, "sent-ok");
@@ -536,12 +561,7 @@ mod tests {
                 message: "401 Unauthorized".into(),
             }),
         ]);
-        let mut gmail = GmailConnector::new(
-            transport,
-            MockRefresher,
-            "expired-token".into(),
-            "me".into(),
-        );
+        let mut gmail = GmailConnector::new(transport, MockTokens, tokens(), "me".into());
         let result = gmail.get_message("m1");
         assert!(
             result.is_ok(),
@@ -562,12 +582,7 @@ mod tests {
                 message: "401 Unauthorized".into(),
             }),
         ]);
-        let mut gmail = GmailConnector::new(
-            transport,
-            MockRefresher,
-            "expired-token".into(),
-            "me".into(),
-        );
+        let mut gmail = GmailConnector::new(transport, MockTokens, tokens(), "me".into());
         let result = gmail.list_labels();
         assert!(
             result.is_ok(),
@@ -586,12 +601,7 @@ mod tests {
                 message: "401 Unauthorized".into(),
             }),
         ]);
-        let mut gmail = GmailConnector::new(
-            transport,
-            MockRefresher,
-            "expired-token".into(),
-            "me".into(),
-        );
+        let mut gmail = GmailConnector::new(transport, MockTokens, tokens(), "me".into());
         let result = gmail.modify_labels(&["m1"], &["TRASH"], &["INBOX"]);
         assert!(
             result.is_ok(),
@@ -602,9 +612,21 @@ mod tests {
     #[test]
     fn gmail_read_401_without_refresh_still_fails() {
         // If refresh also fails, the error surfaces (no infinite retry).
-        struct FailRefresher;
-        impl TokenRefresher for FailRefresher {
-            fn refresh(&self) -> Result<String, TransportError> {
+        struct FailingTokens;
+        impl TokenSource for FailingTokens {
+            fn with_token<R>(
+                &self,
+                _ref_: &VaultTokenRef,
+                f: &mut dyn FnMut(&str) -> Result<R, TransportError>,
+            ) -> Result<R, TransportError> {
+                f("expired-token")
+            }
+
+            fn refresh<R>(
+                &self,
+                _ref_: &VaultTokenRef,
+                _f: &mut dyn FnMut(&str) -> Result<R, TransportError>,
+            ) -> Result<R, TransportError> {
                 Err(TransportError {
                     kind: TransportErrorKind::Auth,
                     message: "refresh failed".into(),
@@ -615,12 +637,7 @@ mod tests {
             kind: TransportErrorKind::Auth,
             message: "401 Unauthorized".into(),
         })]);
-        let mut gmail = GmailConnector::new(
-            transport,
-            FailRefresher,
-            "expired-token".into(),
-            "me".into(),
-        );
+        let mut gmail = GmailConnector::new(transport, FailingTokens, tokens(), "me".into());
         assert!(gmail.get_message("m1").is_err());
     }
 
@@ -628,7 +645,7 @@ mod tests {
     fn gmail_modify_labels() {
         let transport = MockTransport::new(vec![Ok(b"{}".to_vec())]);
         let mut gmail =
-            GmailConnector::new(transport, MockRefresher, "test-token".into(), "me".into());
+            GmailConnector::new(transport, MockTokens, tokens(), "me".into());
         let result = gmail.modify_labels(&["msg1"], &["TRASH"], &["INBOX"]);
         assert!(result.is_ok());
     }
@@ -637,7 +654,7 @@ mod tests {
     fn gmail_trash() {
         let transport = MockTransport::new(vec![Ok(b"{}".to_vec())]);
         let mut gmail =
-            GmailConnector::new(transport, MockRefresher, "test-token".into(), "me".into());
+            GmailConnector::new(transport, MockTokens, tokens(), "me".into());
         let result = gmail.trash("msg1");
         assert!(result.is_ok());
     }
@@ -669,5 +686,83 @@ mod tests {
         let encoded = base64_encode_urlsafe(data);
         let decoded = base64_decode_urlsafe(&encoded);
         assert_eq!(decoded, "Hello, world!");
+    }
+
+    /// FIX-01 — the custody contract, asserted on the struct itself.
+    ///
+    /// The connector must carry no credential: only a vault key id and a
+    /// source that hands the value to a closure. A `Debug`/`Display`/
+    /// `Serialize` surface that could print a token does not exist, and the
+    /// token is not reachable from any public method — the transport sees it
+    /// exactly once, inside the call.
+    #[test]
+    fn the_connector_holds_a_reference_not_a_token() {
+        let transport = MockTransport::new(vec![
+            Ok(serde_json::to_vec(&serde_json::json!({"labels": []})).unwrap()),
+        ]);
+        let gmail = GmailConnector::new(transport, MockTokens, tokens(), "me".into());
+        // The reference is the only credential-shaped state, and it is a
+        // key id + service, not bytes.
+        assert_eq!(gmail.token_ref, VaultTokenRef::new("k-gmail", "gmail"));
+        assert!(!format!("{:?}", gmail.token_ref).contains("test-token"));
+        // No public method returns a token.
+        let json = serde_json::json!({
+            "tokenRef": gmail.token_ref,
+            "userId": gmail.user_id,
+        })
+        .to_string();
+        assert!(!json.contains("test-token"), "leak: {json}");
+    }
+
+    /// The value reaches the transport and nothing else: a recording transport
+    /// proves the header carried the token, and the connector's own state still
+    /// holds only the reference afterwards.
+    #[test]
+    fn the_token_reaches_the_transport_and_nowhere_else() {
+        #[derive(Default)]
+        struct Seen {
+            headers: std::cell::RefCell<Vec<(String, String)>>,
+        }
+        struct Recording<'a> {
+            seen: &'a Seen,
+        }
+        impl HttpTransport for Recording<'_> {
+            fn post_json(
+                &self,
+                _url: &str,
+                headers: &[(&str, &str)],
+                _body: &[u8],
+            ) -> Result<Vec<u8>, TransportError> {
+                self.record(headers);
+                Ok(b"{}".to_vec())
+            }
+            fn get(&self, _url: &str, headers: &[(&str, &str)]) -> Result<Vec<u8>, TransportError> {
+                self.record(headers);
+                Ok(serde_json::to_vec(&serde_json::json!({"labels": []})).unwrap())
+            }
+        }
+        impl Recording<'_> {
+            fn record(&self, headers: &[(&str, &str)]) {
+                self.seen
+                    .headers
+                    .borrow_mut()
+                    .extend(headers.iter().map(|(k, v)| (k.to_string(), v.to_string())));
+            }
+        }
+
+        let seen = Seen::default();
+        let mut gmail = GmailConnector::new(
+            Recording { seen: &seen },
+            MockTokens,
+            tokens(),
+            "me".into(),
+        );
+        gmail.list_labels().unwrap();
+        let headers = seen.headers.borrow();
+        assert_eq!(headers.len(), 1);
+        assert_eq!(headers[0].0, "Authorization");
+        assert_eq!(headers[0].1, "test-token");
+        // …and the connector kept only the reference.
+        assert_eq!(gmail.token_ref.key_id, "k-gmail");
     }
 }

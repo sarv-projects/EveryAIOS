@@ -914,6 +914,21 @@ pub struct ToolService {
     /// (a larger context, never a lost result). Attached by the boot path so
     /// the *decision to compact* is kernel-side, never the renderer's.
     spool: Option<Arc<crate::spool::Spool>>,
+    /// FIX-02 / `TASK-TRUST-001` — the tool path's admission control. The
+    /// same limiter shape as the shell's IPC gate: bounded, per caller and per
+    /// method, failing closed with the canonical taxonomy.
+    rate_limiter: Arc<everyaios_guard::RateLimiter>,
+    /// FIX-08 — the per-effect receipts this executor emitted, keyed by
+    /// receipt id. Bounded: the oldest index entry is dropped once the cap is
+    /// reached (the receipt itself is immutable and was already returned in the
+    /// commit response, and the append-only `tool.exec` row remains the durable
+    /// record of the same fact).
+    receipts: BTreeMap<String, everyaios_audit::EffectReceipt>,
+    /// Insertion order for the bounded index above, so eviction drops the
+    /// genuinely oldest receipt rather than whichever id sorts first.
+    receipt_order: std::collections::VecDeque<String>,
+    /// How many receipts the in-memory index retains.
+    receipt_index_cap: usize,
 }
 
 /// P48.3 — one attached external MCP server: its backend dispatcher plus the
@@ -980,6 +995,10 @@ impl ToolService {
             ),
             search_transport: Arc::new(UreqSearchTransport),
             spool: None,
+            rate_limiter: Arc::new(everyaios_guard::RateLimiter::with_defaults()),
+            receipts: BTreeMap::new(),
+            receipt_order: std::collections::VecDeque::new(),
+            receipt_index_cap: RECEIPT_INDEX_CAP,
         }
     }
 
@@ -1155,6 +1174,22 @@ impl ToolService {
     }
 
     pub fn handle(&mut self, method: &str, params: &Value) -> Result<Value, String> {
+        // FIX-02 / `TASK-TRUST-001` — control-plane admission control. The
+        // tool surface is a control plane like the shell's IPC: a caller that
+        // floods `tool/list` or `tool/exec` would otherwise saturate the Guard
+        // policy engine, the ticket store and the Merkle chain. The refusal is
+        // the canonical `Unavailable` code with a `retry_after_ms` backoff and
+        // it happens before any work, so a throttled call never mints a ticket.
+        // Fail-closed: there is no fallback path around this check.
+        let caller = str_param(params, "sessionId")
+            .or_else(|| str_param(params, "agentId"))
+            .unwrap_or("tool-anonymous");
+        if let Err(denied) = self.rate_limiter.check(caller, method) {
+            return Err(format!(
+                "{} ({}, retry after {}ms)",
+                denied, denied.scope.as_str(), denied.retry_after_ms
+            ));
+        }
         match method {
             "tool/list" => {
                 let plane = params.get("plane").and_then(Value::as_str).unwrap_or("all");
@@ -1175,6 +1210,17 @@ impl ToolService {
             }
             "tool/exec" => self.exec(params),
             "tool/commit" => self.commit(params),
+            // FIX-08 — evidence replay: read back the receipt a committed
+            // effect emitted. It reconstructs inputs and states what was
+            // authorized; it never re-executes the effect (`ARCH/29` §3).
+            "tool/receipt" => {
+                let id = str_param(params, "receiptId")
+                    .ok_or("tool/receipt requires receiptId")?;
+                match self.receipts.get(id) {
+                    Some(r) => Ok(json!({ "ok": true, "receipt": r })),
+                    None => Err(format!("no receipt for {id}")),
+                }
+            }
             _ => Err(format!("method not found: {method}")),
         }
     }
@@ -1594,17 +1640,103 @@ impl ToolService {
         };
         self.audit.push(event);
 
+        // FIX-08 — the effect's receipt, emitted inside the governed path
+        // (`ARCH/29-ARTIFACTS.md` §3, INV-07, REQ-ART-003/012).
+        //
+        // `ARCH/29` §1 is explicit that the security audit chain is *not* the
+        // receipt: receipts are product evidence, audit is the security record.
+        // The `tool.exec` row above is the audit view; this is the receipt
+        // view of the same fact, and the two share the id so a reader can join
+        // them. The receipt is mandatory and it references the ticket that
+        // authorized the effect (`REQ-PROD-001`: every receipt cites a ticket).
+        //
+        // Fail-closed (REQ-ART-012): the receipt is built *before* the response
+        // is produced, so a mutating effect can never be reported as completed
+        // without one. `has_gap` is the honesty flag — a failed or uncertain
+        // mutating effect is recorded as a gap, never as a clean success.
+        let receipt = self.record_effect_receipt(
+            seq,
+            &spec,
+            ticket_id,
+            &hash,
+            &result_hash,
+            ok,
+            uncertain,
+            &operation,
+        );
+        let receipt_value =
+            serde_json::to_value(&receipt).map_err(|e| format!("receipt encode: {e}"))?;
+
         let mut out = result;
         if let Value::Object(map) = &mut out {
             map.insert("durationMs".into(), json!(duration_ms));
             map.insert("auditSeq".into(), json!(seq));
             map.insert("ticketId".into(), json!(ticket_id));
             map.insert("idempotencyKey".into(), json!(idem));
+            map.insert("receiptId".into(), json!(receipt.effect_id));
+            map.insert("receipt".into(), receipt_value);
             if uncertain {
                 map.insert("state".into(), json!("uncertain"));
             }
         }
         Ok(out)
+    }
+
+    /// Build and index the per-effect receipt for one committed effect.
+    ///
+    /// The id is derived from the audit sequence, so the receipt and its
+    /// `tool.exec` row are the same fact under two views (`ARCH/29` §3: "three
+    /// views of one fact, never duplicated state"). The index is bounded; an
+    /// overflow drops the *oldest index entry* only — the receipt itself is
+    /// immutable, was returned in its commit response, and remains derivable
+    /// from the append-only audit row.
+    #[allow(clippy::too_many_arguments)]
+    fn record_effect_receipt(
+        &mut self,
+        seq: u64,
+        spec: &RegisteredTool,
+        ticket_id: &str,
+        args_hash: &str,
+        result_hash: &str,
+        ok: bool,
+        uncertain: bool,
+        operation: &Operation,
+    ) -> everyaios_audit::EffectReceipt {
+        let receipt_id = format!("rcpt:{seq}");
+        let mut receipt = everyaios_audit::EffectReceipt::new(
+            receipt_id.clone(),
+            spec.id.clone(),
+            ticket_id,
+            args_hash,
+            operation.name(),
+            // The authorized operation is the one the ticket was minted for;
+            // the executor binds the ticket to `spec.id` + operation + args
+            // hash, so a mismatch here would mean a bypass and must be visible.
+            operation.name(),
+        )
+        .with_refs(args_hash.to_string(), result_hash.to_string());
+        if uncertain || !ok {
+            // EV1 honesty: a mutating effect that could not be fully observed
+            // is recorded as a gap, with the reason, so a reader never assumes
+            // it landed exactly as claimed.
+            receipt.has_gap = true;
+            receipt.uncertainty = Some(if uncertain {
+                "effect state uncertain — the dispatch did not report success".to_string()
+            } else {
+                "effect dispatch reported failure".to_string()
+            });
+        }
+        while self.receipts.len() >= self.receipt_index_cap {
+            match self.receipt_order.pop_front() {
+                Some(oldest) => {
+                    self.receipts.remove(&oldest);
+                }
+                None => break,
+            }
+        }
+        self.receipt_order.push_back(receipt_id.clone());
+        self.receipts.insert(receipt_id, receipt.clone());
+        receipt
     }
 
     /// P64.11/P69.G5 — the compaction step for one committed result.
@@ -2401,6 +2533,19 @@ impl ToolService {
             Some(u) if !u.is_empty() => u,
             _ => return json!({"ok": false, "error": "url required"}),
         };
+        // FIX-09: the pre-flight is here, at the socket, not only in
+        // `tool/exec`. `dispatch` is also reachable from any in-process caller
+        // of `ToolService`, so the destination floor is enforced immediately
+        // before the request — one egress path, no reliance on a caller having
+        // gone through the executor. The URL is user-supplied (a download the
+        // user asked for), so the desktop default policy applies: loopback and
+        // public hosts pass, the LAN and link-local/metadata floor does not.
+        if let Err(denied) = everyaios_guard::netfloor::preflight_url(
+            url,
+            everyaios_guard::NetPolicy::default(),
+        ) {
+            return json!({"ok": false, "error": denied.to_string()});
+        }
         let dir = args
             .get("dir")
             .and_then(Value::as_str)
@@ -2817,6 +2962,14 @@ fn atomic_office_write(path: &Path, bytes: &[u8]) -> Result<(), String> {
 }
 
 /// Live HTTP seam for G8: SearXNG JSON at `{endpoint}/search?format=json`, DDG HTML fallback.
+///
+/// FIX-09: both methods pre-flight the destination through
+/// [`everyaios_guard::netfloor::preflight_url`] immediately before the socket.
+/// The search *endpoint* is user-configured (local-first SearXNG, then the
+/// public instances the user opted into) so the desktop default policy applies;
+/// the page `fetch` carries URLs that came out of search results — untrusted
+/// content — so it is judged strictly (no loopback, no LAN). There is no
+/// fallback to a direct client when the floor denies: the tier simply fails.
 struct UreqSearchTransport;
 
 impl everyaios_search::SearchTransport for UreqSearchTransport {
@@ -2828,6 +2981,8 @@ impl everyaios_search::SearchTransport for UreqSearchTransport {
         let q = urlencoding::encode(query);
         if endpoint == "ddg" {
             let url = format!("https://html.duckduckgo.com/html/?q={q}");
+            everyaios_guard::netfloor::preflight_url(&url, everyaios_guard::NetPolicy::default())
+                .map_err(|e| e.to_string())?;
             let body = ureq::get(&url)
                 .timeout(std::time::Duration::from_secs(8))
                 .call()
@@ -2838,6 +2993,8 @@ impl everyaios_search::SearchTransport for UreqSearchTransport {
         }
         let base = endpoint.trim_end_matches('/');
         let url = format!("{base}/search?q={q}&format=json");
+        everyaios_guard::netfloor::preflight_url(&url, everyaios_guard::NetPolicy::default())
+            .map_err(|e| e.to_string())?;
         let body = ureq::get(&url)
             .timeout(std::time::Duration::from_secs(8))
             .call()
@@ -2848,6 +3005,10 @@ impl everyaios_search::SearchTransport for UreqSearchTransport {
     }
 
     fn fetch(&self, _tier: &str, url: &str) -> Result<String, String> {
+        // Untrusted destination: the result list named this URL, so the strict
+        // policy applies (loopback and LAN refused, the metadata floor always).
+        everyaios_guard::netfloor::preflight_url(url, everyaios_guard::NetPolicy::strict())
+            .map_err(|e| e.to_string())?;
         ureq::get(url)
             .timeout(std::time::Duration::from_secs(8))
             .call()
@@ -3022,6 +3183,15 @@ fn now_ms() -> u64 {
 
 /// P64.5 — edit payload ceiling (50 KB cap, ARCH/17 edge case 8).
 pub const P64_MAX_EDIT_BYTES: usize = 50 * 1024;
+
+/// FIX-08 — how many per-effect receipts the executor keeps addressable by id.
+///
+/// The receipts themselves are immutable and were returned in their commit
+/// response; this is only the lookup index, and it is bounded so a long session
+/// cannot grow it without limit. The append-only `tool.exec` audit row remains
+/// the durable record of the same fact.
+pub const RECEIPT_INDEX_CAP: usize = 1024;
+
 /// P64.5 — the unified edit tool id (registered in `extra_tools` below).
 pub const EDIT_TOOL_ID: &str = "file_ops.edit";
 
@@ -3848,6 +4018,128 @@ mod tests {
         let path = out["path"].as_str().unwrap();
         assert!(path.ends_with("payload.bin"));
         assert_eq!(fs::read_to_string(path).unwrap(), "hello download");
+    }
+
+    /// FIX-09 — the download path is floored at the socket, not only in
+    /// `tool/exec`. `dispatch` is reachable from any in-process caller, so the
+    /// pre-flight cannot rely on the executor having run first.
+    #[test]
+    fn download_file_refuses_a_floored_destination_before_any_request() {
+        let dir = tempfile();
+        let s = svc(&dir);
+        for url in [
+            "http://169.254.169.254/latest/meta-data/iam/",
+            "http://192.168.1.1/admin",
+            "file:///etc/passwd",
+            "not a url",
+        ] {
+            let out = s.dispatch_download_file(&json!({"url": url, "dir": "downloads"}));
+            assert_eq!(out["ok"], false, "{url} must be refused: {out}");
+            let err = out["error"].as_str().unwrap_or_default();
+            assert!(
+                err.contains("egress denied") || err.contains("path floor"),
+                "{url} → {err}"
+            );
+        }
+        // Nothing was written: the refusal happens before the transfer.
+        let downloads = dir.join("downloads");
+        let written = fs::read_dir(&downloads)
+            .map(|d| d.count())
+            .unwrap_or(0);
+        assert_eq!(written, 0, "a refused download must leave no file");
+    }
+
+    /// FIX-08 — every committed mutating effect emits a receipt that cites the
+    /// ticket that authorized it (REQ-PROD-001 / REQ-ART-003), and the receipt
+    /// is resolvable afterwards (evidence replay, never re-execution).
+    #[test]
+    fn a_committed_effect_emits_a_receipt_that_cites_its_ticket() {
+        let dir = tempfile();
+        let guard = Arc::new(Mutex::new(GuardService::new()));
+        let mut s = ToolService::new(Arc::clone(&guard), dir);
+        let args = json!({"path": "a.txt", "content": "receipted"});
+        let pre = approved_preflight(&mut s, &guard, "file_ops.write", args.clone());
+        let body = json!({
+            "toolId": "file_ops.write",
+            "ticketId": pre["ticketId"],
+            "argsHash": pre["argsHash"],
+            "args": args
+        });
+        let out = s.handle("tool/commit", &body).expect("commit must run");
+        assert_eq!(out["ok"], true, "{out}");
+        let ticket_id = pre["ticketId"].as_str().unwrap();
+
+        let receipt_id = out["receiptId"]
+            .as_str()
+            .expect("REQ-ART-003: a mutating effect must carry a receipt");
+        let receipt = &out["receipt"];
+        assert_eq!(receipt["effectId"], receipt_id);
+        assert_eq!(receipt["ticketId"], ticket_id);
+        assert_eq!(receipt["toolId"], "file_ops.write");
+        assert_eq!(receipt["hasGap"], false);
+        // The receipt is addressable afterwards and reports the same fact.
+        let replay = s
+            .handle("tool/receipt", &json!({"receiptId": receipt_id}))
+            .expect("receipt must be replayable");
+        assert_eq!(replay["receipt"]["ticketId"], ticket_id);
+        // An unknown id is an honest error, never an invented receipt.
+        assert!(s.handle("tool/receipt", &json!({"receiptId": "rcpt:nope"})).is_err());
+    }
+
+    /// REQ-ART-012 — an effect that could not be fully observed is recorded as
+    /// a gap with a reason, never as a clean success.
+    #[test]
+    fn an_unobserved_mutating_effect_is_a_receipt_gap() {
+        let dir = tempfile();
+        let guard = Arc::new(Mutex::new(GuardService::new()));
+        let mut s = ToolService::new(Arc::clone(&guard), dir);
+        // A write to a path whose parent does not exist fails in the dispatch.
+        let args = json!({"path": "no-such-dir/a.txt", "content": "x"});
+        let pre = approved_preflight(&mut s, &guard, "file_ops.write", args.clone());
+        let body = json!({
+            "toolId": "file_ops.write",
+            "ticketId": pre["ticketId"],
+            "argsHash": pre["argsHash"],
+            "args": args
+        });
+        let out = s.handle("tool/commit", &body).expect("commit must answer");
+        assert_eq!(out["ok"], false, "{out}");
+        assert_eq!(out["state"], "uncertain");
+        // The receipt is still emitted (an effect cannot complete without one)
+        // and it is honest about the gap.
+        let receipt = &out["receipt"];
+        assert_eq!(receipt["hasGap"], true);
+        assert!(
+            receipt["uncertainty"].as_str().unwrap().contains("uncertain"),
+            "{receipt}"
+        );
+    }
+
+    /// FIX-02 / `TASK-TRUST-001` — the tool path refuses a flood with the
+    /// canonical taxonomy instead of minting tickets forever.
+    #[test]
+    fn the_tool_path_rate_limits_and_fails_closed() {
+        let dir = tempfile();
+        let mut s = svc(&dir);
+        // A deliberately tiny budget so the assertion is deterministic.
+        s.rate_limiter = Arc::new(everyaios_guard::RateLimiter::new(
+            everyaios_guard::RateLimitConfig {
+                global: everyaios_guard::Limit::new(1_000, 0.0),
+                per_caller_command: everyaios_guard::Limit::new(2, 0.0),
+                ttl_ms: 60_000,
+                max_entries: 16,
+            },
+        ));
+        let params = json!({"sessionId": "s1", "plane": "shared"});
+        assert!(s.handle("tool/list", &params).is_ok());
+        assert!(s.handle("tool/list", &params).is_ok());
+        let err = s
+            .handle("tool/list", &params)
+            .expect_err("the third call must be refused");
+        assert!(err.contains("rate limit exceeded"), "{err}");
+        assert!(err.contains("Unavailable") || err.contains("retry after"), "{err}");
+        // A different caller has its own budget (the refusal is per caller).
+        assert!(s.handle("tool/list", &json!({"sessionId": "s2"})).is_ok());
     }
 
     struct FakeBrowser;

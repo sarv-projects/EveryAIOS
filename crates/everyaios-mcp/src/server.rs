@@ -22,6 +22,7 @@ use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
+use crate::protocol::{DISCOVER_METHOD, LEGACY_PROTOCOL_REVISION, MODERN_PROTOCOL_REVISION};
 use crate::{ArgDef, all_tools};
 
 /// The MCP revision implemented by the supervised HTTP lease.
@@ -29,7 +30,7 @@ use crate::{ArgDef, all_tools};
 /// The repository's transport contract is the 2026-07-28 Streamable-HTTP
 /// shape.  The older wire revisions remain negotiable for initialize clients,
 /// but the HTTP metadata gate below is intentionally tied to this revision.
-pub const SUPPORTED_PROTOCOL_VERSION: &str = "2026-07-28";
+pub const SUPPORTED_PROTOCOL_VERSION: &str = MODERN_PROTOCOL_REVISION;
 
 /// Protocol versions understood by the initialize handshake.
 ///
@@ -39,9 +40,15 @@ pub const SUPPORTED_PROTOCOL_VERSIONS: &[&str] = &[
     "2024-11-05",
     "2025-03-26",
     "2025-06-18",
-    "2025-11-25",
+    LEGACY_PROTOCOL_REVISION,
     SUPPORTED_PROTOCOL_VERSION,
 ];
+
+/// The mandatory modern discovery method (DEC-030, ARCH/14 §4).
+///
+/// Re-exported from [`crate::protocol`] so the client half of the crate and
+/// this façade can never disagree on the spelling.
+pub use crate::protocol::DISCOVER_METHOD as DISCOVER_METHOD_NAME;
 
 const DEFAULT_HTTP_READ_TIMEOUT: Duration = Duration::from_secs(10);
 const LEASE_READ_TIMEOUT: Duration = Duration::from_millis(250);
@@ -230,6 +237,189 @@ pub struct ToolListEntry {
     pub read_only: bool,
     #[serde(rename = "openWorldHint")]
     pub open_world: bool,
+}
+
+/// Which names this façade is willing to dispatch (DEC-047).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ToolAdmission {
+    /// The strict Channel B lease: the declared task-shaped capability ids only.
+    SharedPlane,
+    /// The permissive protocol/stdio surface: façades, the inbuilt catalog, and
+    /// reconciled external tools.
+    Permissive,
+}
+
+/// The modern `server/discover` answer (DEC-030, ARCH/14 §4).
+///
+/// A stateless client never opens a session, so discovery has to return in one
+/// round trip everything the legacy `initialize` + `tools/list` pair used to
+/// carry: identity, the revisions this server speaks, the capability summary,
+/// and the same cacheable tool list `tools/list` serves.  The tool list is
+/// derived from the caller's admission mode, so a strict lease still answers
+/// with the shared façade table and never the native catalog.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ServerDiscoverResponse {
+    /// The revision this answer speaks (the modern revision).
+    pub protocol_version: String,
+    /// Every revision this server negotiates through `initialize`.
+    pub supported_protocol_versions: Vec<String>,
+    pub server_info: ServerInfo,
+    pub capabilities: DiscoverCapabilities,
+    pub instructions: String,
+    /// The cacheable tool list, flattened so `server/discover` answers with
+    /// exactly the `tools/list` result shape plus the discovery header fields.
+    /// A client can therefore compare the two without reshaping either.
+    #[serde(flatten)]
+    pub tool_list: ToolListResponse,
+}
+
+/// The server identity carried by `server/discover` and `initialize`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ServerInfo {
+    pub name: String,
+    pub version: String,
+}
+
+/// The capability summary carried by `server/discover`.
+///
+/// Only the surfaces this façade actually serves are advertised, so a client
+/// never sees a capability the server will not answer.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiscoverCapabilities {
+    pub tools: DiscoverToolCapability,
+}
+
+/// The tool-listing capability shape. `list_changed` is false because the
+/// catalogue is reconciled in place; a client re-reads it after `ttl_ms`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiscoverToolCapability {
+    pub list_changed: bool,
+}
+
+impl ServerInfo {
+    /// This server's identity.
+    pub fn current() -> Self {
+        Self {
+            name: "everyaios-mcp".to_string(),
+            version: env!("CARGO_PKG_VERSION").to_string(),
+        }
+    }
+}
+
+impl DiscoverCapabilities {
+    /// The capability summary this façade serves.
+    pub fn current() -> Self {
+        Self {
+            tools: DiscoverToolCapability {
+                list_changed: false,
+            },
+        }
+    }
+}
+
+/// A typed façade refusal: a request this server will not route or dispatch.
+///
+/// An unknown method and an undeclared tool name are never silently ignored —
+/// a silent no-op is indistinguishable from success — and they are never
+/// answered with the catalogue this façade refused to expose (DEC-047: an
+/// unmapped native tool is guidance, not a listing).  `guidance` is therefore
+/// the reply's `data` field (ARCH/13 §3), pointing the caller at the declared
+/// surface instead of naming internal tools.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FacadeError {
+    /// The JSON-RPC method is not part of this façade's surface.
+    MethodNotFound { method: String },
+    /// `tools/call` named something this façade does not declare.
+    UndeclaredTool {
+        name: String,
+        admission: ToolAdmission,
+    },
+}
+
+impl FacadeError {
+    /// The JSON-RPC error code.
+    pub fn code(&self) -> i64 {
+        match self {
+            Self::MethodNotFound { .. } => -32601,
+            Self::UndeclaredTool { .. } => -32602,
+        }
+    }
+
+    /// The human-facing error message. It echoes only what the caller sent.
+    pub fn message(&self) -> String {
+        match self {
+            Self::MethodNotFound { method } => format!("unknown method `{method}`"),
+            Self::UndeclaredTool { name, .. } => format!("undeclared tool `{name}`"),
+        }
+    }
+
+    /// The protocol-neutral next action for the caller.
+    pub fn guidance(&self) -> &'static str {
+        match self {
+            Self::MethodNotFound { .. } => {
+                "call one of the methods this façade serves: `server/discover`, `initialize`, \
+                 `ping`, `tools/list`, `tools/call`"
+            }
+            Self::UndeclaredTool {
+                admission: ToolAdmission::SharedPlane,
+                ..
+            } => {
+                "this endpoint exposes task-shaped capability ids only; read the declared set \
+                   from `tools/list` (or `server/discover`) and call one of those ids"
+            }
+            Self::UndeclaredTool {
+                admission: ToolAdmission::Permissive,
+                ..
+            } => {
+                "read the declared set from `tools/list` (or `server/discover`) and call one of \
+                   those names"
+            }
+        }
+    }
+
+    /// Render this refusal as a JSON-RPC error response.
+    pub fn into_rpc(self, id: Value) -> String {
+        rpc_error_with_data(
+            id,
+            self.code(),
+            &self.message(),
+            serde_json::json!({"guidance": self.guidance()}),
+        )
+    }
+}
+
+/// Build the `server/discover` answer for one admission mode.
+///
+/// `shared_plane_only` selects the same list `tools/list` would return, so
+/// discovery and listing can never disagree about what is callable.
+pub fn server_discover(
+    catalog: &ToolCatalog,
+    shared_plane_only: bool,
+    ttl_ms: u64,
+) -> ServerDiscoverResponse {
+    let tools = if shared_plane_only {
+        tool_list_shared_facades(ttl_ms)
+    } else {
+        tool_list_shared_plane(catalog, ttl_ms)
+    };
+    ServerDiscoverResponse {
+        protocol_version: SUPPORTED_PROTOCOL_VERSION.to_string(),
+        supported_protocol_versions: SUPPORTED_PROTOCOL_VERSIONS
+            .iter()
+            .map(|version| (*version).to_string())
+            .collect(),
+        server_info: ServerInfo::current(),
+        capabilities: DiscoverCapabilities::current(),
+        instructions: "EveryAIOS shared-plane façades (task-shaped, one per capability \
+                       family). Stateless: no session is created; discovery is \
+                       `server/discover`."
+            .to_string(),
+        tool_list: tools,
+    }
 }
 
 /// Build the stable shared façade list without any reconciled external tools.
@@ -776,11 +966,8 @@ impl<H: ToolCallHandler> McpServer<H> {
                     serde_json::json!({
                         "protocolVersion": negotiated,
                         "capabilities": { "tools": {} },
-                        "serverInfo": {
-                            "name": "everyaios-mcp",
-                            "version": env!("CARGO_PKG_VERSION")
-                        },
-                        "instructions": "EveryAIOS shared-plane façades (task-shaped, one per capability family). Stateless: no session is created."
+                        "serverInfo": ServerInfo::current(),
+                        "instructions": "EveryAIOS shared-plane façades (task-shaped, one per capability family). Stateless: no session is created. Prefer `server/discover` on the 2026-07-28 revision."
                     }),
                 ))
                 .unwrap_or_else(|_| rpc_error(response_id, -32603, "serialization failed"))
@@ -788,6 +975,21 @@ impl<H: ToolCallHandler> McpServer<H> {
             "ping" => {
                 let response_id = id.clone();
                 serde_json::to_string(&rpc_ok(id, serde_json::json!({})))
+                    .unwrap_or_else(|_| rpc_error(response_id, -32603, "serialization failed"))
+            }
+            DISCOVER_METHOD => {
+                if request
+                    .value
+                    .get("params")
+                    .is_some_and(|params| !params.is_object() && !params.is_null())
+                {
+                    return rpc_error(id, -32602, "server/discover params must be an object");
+                }
+                // Discovery and listing must never disagree, so both read the
+                // same admission-scoped list.
+                let discover = server_discover(&self.catalog, self.shared_plane_only, 300_000);
+                let response_id = id.clone();
+                serde_json::to_string(&rpc_ok(id, discover))
                     .unwrap_or_else(|_| rpc_error(response_id, -32603, "serialization failed"))
             }
             "tools/list" => {
@@ -819,6 +1021,11 @@ impl<H: ToolCallHandler> McpServer<H> {
                     Some(value) if value.is_object() => value.clone(),
                     Some(_) => return rpc_error(id, -32602, "tool arguments must be an object"),
                 };
+                let admission = if self.shared_plane_only {
+                    ToolAdmission::SharedPlane
+                } else {
+                    ToolAdmission::Permissive
+                };
                 let known = if self.shared_plane_only {
                     crate::find_facade(name).is_some()
                 } else {
@@ -827,7 +1034,11 @@ impl<H: ToolCallHandler> McpServer<H> {
                         || self.catalog.origin(name).is_some()
                 };
                 if !known {
-                    return rpc_error(id, -32602, "unknown tool");
+                    return FacadeError::UndeclaredTool {
+                        name: name.to_string(),
+                        admission,
+                    }
+                    .into_rpc(id);
                 }
 
                 let identity = self.mutation_identity(request, name, &arguments);
@@ -844,7 +1055,10 @@ impl<H: ToolCallHandler> McpServer<H> {
                     MutationStart::Reject(outcome) => outcome.into_rpc(id),
                 }
             }
-            _ => rpc_error(id, -32601, "method not found"),
+            _ => FacadeError::MethodNotFound {
+                method: request.method.clone(),
+            }
+            .into_rpc(id),
         }
     }
 
@@ -2634,6 +2848,17 @@ fn rpc_error(id: Value, code: i64, message: &str) -> String {
         .to_string()
 }
 
+/// A JSON-RPC error carrying a machine-readable `data` payload — the wire form
+/// of a first-class `guidance` answer (ARCH/13 §3).
+fn rpc_error_with_data(id: Value, code: i64, message: &str, data: Value) -> String {
+    serde_json::json!({
+        "jsonrpc":"2.0",
+        "id": id,
+        "error":{"code":code,"message":message,"data":data}
+    })
+    .to_string()
+}
+
 fn framing_error_body(status: u16, message: &str) -> String {
     let code = match status {
         408 => -32002,
@@ -3022,5 +3247,248 @@ mod tests {
         assert!(!origin_is_local(""));
         assert!(!origin_is_local("null"));
         assert!(!origin_is_local("ftp://localhost"));
+    }
+}
+
+/// W0 `TASK-PROV-003` / FIX-13 — the modern façade surface: `server/discover`
+/// and typed refusals for what the façade will not route (DEC-030, DEC-047).
+#[cfg(test)]
+mod discover_tests {
+    use super::*;
+    use serde_json::json;
+
+    struct Noop;
+
+    impl ToolCallHandler for Noop {
+        fn call(&mut self, name: &str, arguments: &Value) -> Result<Value, String> {
+            Ok(json!({"tool": name, "arguments": arguments}))
+        }
+    }
+
+    fn ext(name: &str, src: &str) -> ExternalTool {
+        ExternalTool {
+            name: name.into(),
+            description: "ext".into(),
+            input_schema: json!({"type": "object"}),
+            read_only: true,
+            open_world: false,
+            source: src.into(),
+        }
+    }
+
+    fn request(server: &mut McpServer<Noop>, method: &str, params: Value) -> Value {
+        let body = json!({"jsonrpc": "2.0", "id": 1, "method": method, "params": params});
+        let reply = server.handle_json(&body.to_string());
+        assert!(!reply.is_empty(), "{method} must answer, not hang");
+        serde_json::from_str(&reply).expect("JSON-RPC reply")
+    }
+
+    #[test]
+    fn server_discover_advertises_the_modern_revision_and_its_revisions() {
+        let discover = server_discover(&ToolCatalog::new(), false, 300_000);
+        assert_eq!(discover.protocol_version, SUPPORTED_PROTOCOL_VERSION);
+        assert_eq!(discover.protocol_version, "2026-07-28");
+        let supported: Vec<&str> = discover
+            .supported_protocol_versions
+            .iter()
+            .map(String::as_str)
+            .collect();
+        assert!(supported.contains(&"2026-07-28"), "modern is first-class");
+        assert!(
+            supported.contains(&"2025-11-25"),
+            "the legacy revision stays a supported fallback"
+        );
+        assert_eq!(discover.server_info.name, "everyaios-mcp");
+        assert!(!discover.capabilities.tools.list_changed);
+        assert_eq!(discover.tool_list.tools.len(), crate::SHARED_FACADES.len());
+        assert!(discover.instructions.contains("server/discover"));
+    }
+
+    #[test]
+    fn server_discover_dispatches_and_matches_tools_list() {
+        let mut server = McpServer::new(Noop);
+        let discover = request(&mut server, DISCOVER_METHOD, json!({}));
+        let listed = request(&mut server, "tools/list", json!({}));
+
+        assert_eq!(discover["result"]["protocolVersion"], "2026-07-28");
+        // Discovery and listing are one registry, not two: the lists must be
+        // byte-identical or a client cannot trust either.
+        assert_eq!(discover["result"]["tools"], listed["result"]["tools"]);
+        assert_eq!(discover["result"]["ttlMs"], listed["result"]["ttlMs"]);
+        assert_eq!(discover["result"]["etag"], listed["result"]["etag"]);
+        let names: Vec<&str> = discover["result"]["tools"]
+            .as_array()
+            .expect("tools array")
+            .iter()
+            .map(|tool| tool["name"].as_str().expect("tool name"))
+            .collect();
+        assert!(names.contains(&"office.edit"));
+        assert!(
+            !names.contains(&"snapshot"),
+            "the modern surface must not dump native primitives"
+        );
+    }
+
+    #[test]
+    fn server_discover_without_params_is_answered() {
+        let mut server = McpServer::new(Noop);
+        let reply = server.handle_json(
+            &json!({"jsonrpc": "2.0", "id": 4, "method": DISCOVER_METHOD}).to_string(),
+        );
+        let value: Value = serde_json::from_str(&reply).unwrap();
+        assert_eq!(value["id"], 4);
+        assert_eq!(value["result"]["protocolVersion"], "2026-07-28");
+    }
+
+    #[test]
+    fn server_discover_refuses_non_object_params() {
+        let mut server = McpServer::new(Noop);
+        let value = request(&mut server, DISCOVER_METHOD, json!(["cursor"]));
+        assert_eq!(value["error"]["code"], -32602);
+    }
+
+    #[test]
+    fn shared_plane_discovery_advertises_only_facades() {
+        let mut server = McpServer::new(Noop).shared_plane_only();
+        let discover = request(&mut server, DISCOVER_METHOD, json!({}));
+        let names: Vec<&str> = discover["result"]["tools"]
+            .as_array()
+            .expect("tools array")
+            .iter()
+            .map(|tool| tool["name"].as_str().expect("tool name"))
+            .collect();
+        let expected: Vec<&str> = crate::SHARED_FACADES.iter().map(|f| f.name).collect();
+        assert_eq!(names, expected);
+        assert!(!names.contains(&"snapshot"));
+    }
+
+    #[test]
+    fn unknown_method_is_a_typed_method_not_found_with_guidance() {
+        let mut server = McpServer::new(Noop).shared_plane_only();
+        let value = request(&mut server, "resources/read", json!({"uri": "x"}));
+        assert_eq!(value["error"]["code"], -32601);
+        assert!(
+            value["error"]["message"]
+                .as_str()
+                .is_some_and(|message| message.contains("resources/read"))
+        );
+        let guidance = value["error"]["data"]["guidance"]
+            .as_str()
+            .expect("guidance is first-class (ARCH/13 §3)");
+        assert!(guidance.contains("server/discover"));
+        assert!(guidance.contains("tools/list"));
+    }
+
+    #[test]
+    fn undeclared_tool_is_guidance_and_never_exposes_the_native_table() {
+        let mut server = McpServer::new(Noop).shared_plane_only();
+        let value = request(
+            &mut server,
+            "tools/call",
+            json!({"name": "snapshot", "arguments": {}}),
+        );
+        assert_eq!(value["error"]["code"], -32602);
+        let message = value["error"]["message"].as_str().unwrap_or_default();
+        assert!(message.contains("undeclared tool"));
+        // DEC-047: an unmapped native tool is guidance, never a hint at the
+        // internal mapping.
+        assert!(
+            !message.contains("browser.operate"),
+            "the refusal must not hand back the internal mapping"
+        );
+        let guidance = value["error"]["data"]["guidance"]
+            .as_str()
+            .expect("guidance");
+        assert!(guidance.contains("tools/list"));
+        assert!(
+            !guidance.contains("snapshot"),
+            "guidance must not enumerate the undeclared surface"
+        );
+    }
+
+    #[test]
+    fn an_undeclared_external_name_is_also_refused_on_the_strict_lease() {
+        let mut catalog = ToolCatalog::new();
+        assert!(catalog.register(ext("linear_search", "linear-mcp")));
+        let mut server = McpServer::new(Noop)
+            .with_catalog(catalog)
+            .shared_plane_only();
+        let value = request(
+            &mut server,
+            "tools/call",
+            json!({"name": "linear_search", "arguments": {}}),
+        );
+        assert_eq!(value["error"]["code"], -32602);
+    }
+
+    #[test]
+    fn facade_error_shapes_are_stable() {
+        assert_eq!(
+            FacadeError::MethodNotFound { method: "x".into() }.code(),
+            -32601
+        );
+        assert_eq!(
+            FacadeError::UndeclaredTool {
+                name: "y".into(),
+                admission: ToolAdmission::SharedPlane,
+            }
+            .code(),
+            -32602
+        );
+        assert_ne!(
+            FacadeError::UndeclaredTool {
+                name: "y".into(),
+                admission: ToolAdmission::SharedPlane,
+            }
+            .guidance(),
+            FacadeError::UndeclaredTool {
+                name: "y".into(),
+                admission: ToolAdmission::Permissive,
+            }
+            .guidance()
+        );
+    }
+
+    #[test]
+    fn the_permissive_surface_keeps_its_native_call_compatibility() {
+        // Stdio / direct HTTP keep historical native names callable; only the
+        // strict lease narrows admission.
+        let mut server = McpServer::new(Noop);
+        let value = request(
+            &mut server,
+            "tools/call",
+            json!({"name": "snapshot", "arguments": {}}),
+        );
+        assert_eq!(value["result"]["structuredContent"]["tool"], "snapshot");
+    }
+
+    #[test]
+    fn legacy_initialize_compatibility_is_served_on_the_protocol_surface() {
+        let mut server = McpServer::new(Noop);
+        let value = request(
+            &mut server,
+            "initialize",
+            json!({
+                "protocolVersion": "2025-11-25",
+                "capabilities": {},
+                "clientInfo": {"name": "legacy-client", "version": "1"}
+            }),
+        );
+        assert_eq!(value["result"]["protocolVersion"], "2025-11-25");
+        assert_eq!(value["result"]["serverInfo"]["name"], "everyaios-mcp");
+    }
+
+    #[test]
+    fn an_unrecognized_initialize_version_is_never_echoed_back() {
+        let mut server = McpServer::new(Noop);
+        let value = request(
+            &mut server,
+            "initialize",
+            json!({"protocolVersion": "not-a-real-version", "capabilities": {}}),
+        );
+        assert_eq!(
+            value["result"]["protocolVersion"],
+            SUPPORTED_PROTOCOL_VERSION
+        );
     }
 }

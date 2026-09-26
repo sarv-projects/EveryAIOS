@@ -172,6 +172,12 @@ pub fn assemble_path(volume: &str, chain: &[&str]) -> PathBuf {
 /// resolved parent chain (root-first — `["Users", "alice"]` for
 /// `C:\Users\alice\file.txt`). Kept here so path assembly is unit-testable
 /// on any platform.
+///
+/// The record's `file_ref` is carried through: on NTFS the 64-bit file
+/// reference number is `sequence:16 | mft_index:48`, i.e. already
+/// incarnation-aware, which is what lets a delta be correlated with a
+/// [`crate::identity::FileIdentity`] instead of by path alone
+/// (`ARCH/25-FILES.md` §2, `REQ-FILES-002`).
 pub fn to_usn_record(volume: &str, raw: &UsnRawRecord, parent_chain: &[&str]) -> UsnRecord {
     let mut chain: Vec<&str> = parent_chain.to_vec();
     chain.push(&raw.name);
@@ -180,6 +186,7 @@ pub fn to_usn_record(volume: &str, raw: &UsnRawRecord, parent_chain: &[&str]) ->
         usn: raw.usn,
         reason: raw.reason,
         path,
+        file_ref: Some(raw.file_ref),
     }
 }
 
@@ -325,5 +332,8 @@ mod tests {
         );
         assert_eq!(rec.reason, UsnReason::DataExtend);
         assert_eq!(rec.usn, 42);
+        // The FRN rides along so a delta can be correlated with a file
+        // identity rather than by path.
+        assert_eq!(rec.file_ref, Some(7));
     }
 }

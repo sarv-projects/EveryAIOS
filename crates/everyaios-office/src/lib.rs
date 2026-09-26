@@ -78,6 +78,22 @@
 //!   fail-closed ceiling: over it, a patch refuses with a named reason
 //!   instead of attempting a load it cannot bound. Every ceiling is
 //!   configurable (`EVERYAIOS_OFFICE_MAX_*` or an explicit `PatchLimits`).
+//!
+//! W0 (`ARCH/22` §10) closed three more code-phase gaps:
+//! - `atomic` — the single crash-safe commit path (**staging package → fsync →
+//!   atomic swap → durable directory entry**, FIX-16), with a `CommitTrace`
+//!   recording the stages it actually ran and `recover_orphans` for the
+//!   staging package a pre-swap crash leaves behind.
+//! - `resident` — one resident context per open document with an **exclusive
+//!   writer lease** bound to the work item, crash-safe lease expiry, the
+//!   interval + dirty-marker flush policy, and idle eviction under a memory
+//!   bound (FIX-14 / REQ-OFFICE-003). **Op-log replay is not implemented** —
+//!   see the module docs.
+//! - `pdf::redact` — **true content removal** (FIX-15): text-showing operators
+//!   whose glyphs intersect a redaction rectangle are removed from the content
+//!   stream, and a post-op text-extraction check proves the removal. The old
+//!   mark-for-redact behaviour is still available, explicitly, as
+//!   `pdf::redact::mark_for_redaction`.
 
 pub mod atomic;
 pub mod conformance;
@@ -88,12 +104,16 @@ pub mod media_gc;
 pub mod pdf;
 pub mod pptx;
 pub mod provenance;
+pub mod resident;
 pub mod rollback;
 pub mod xlsx;
 pub mod xml;
 pub mod zip;
 
-pub use atomic::write_atomic;
+pub use atomic::{
+    AtomicError, CommitError, CommitStage, CommitTrace, StagedOrphan, commit_bytes, fsync_calls,
+    recover_orphans, verify_readback, write_atomic,
+};
 pub use conformance::{LibreOfficeOracle, PartsDiff, find_soffice, parts_diff};
 pub use docx::field_balance::{FieldBalanceError, FieldCheckError, FieldReport};
 pub use docx::{DocxEngine, OfficeError};
@@ -104,10 +124,16 @@ pub use pdf::pages::{
     PageOpError, delete_pages, extract_pages, merge as merge_pdfs, page_count,
     reorder as reorder_pages, rotate as rotate_pages, split as split_pdf,
 };
+pub use pdf::redact::{RedactOptions, RedactReport, RedactRequest, UnremovablePolicy};
 pub use pdf::{PdfError, PdfInfo, inspect, replace_text};
 pub use pptx::PptxEngine;
 pub use pptx::author::{
     AuthorError, DeckBrief, DeckSlide, author_deck, speaker_notes as deck_speaker_notes,
+};
+pub use resident::{
+    CommitReceipt, CommitVerification, DocFormat, DocRoots, FlushPolicy, LeaseConflict,
+    LeaseHolder, ResidentContext, ResidentError, ResidentRegistry, ResidentTable, WriterLease,
+    commit_under_lease, now_ms,
 };
 pub use rollback::Snapshot;
 

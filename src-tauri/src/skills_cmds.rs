@@ -12,7 +12,8 @@
 //!      tampered index is rejected — no install happens), then write a `SKILL.md`
 //!      into the blueprint `SkillStore`. The caller (UI) renders the consent
 //!      card from `permissions` before invoking; the shell gates the write.
-//!   3. `skills_uninstall(id)` — remove the skill directory.
+//!   3. `skills_uninstall(id)` — remove the skill directory, confined to the
+//!      store root and audited on success and on refusal.
 //!
 //! The app ships only the verifying public key + signed index (never the store
 //! operator's signing key) — the asymmetry from `skillstore`'s trust model.
@@ -270,12 +271,47 @@ pub fn skills_install(id: String) -> Result<serde_json::Value, String> {
 }
 
 /// P9.7 — uninstall a skill (removes its directory from the on-disk registry).
+///
+/// `name` arrives from the renderer, so it is untrusted input. It is *not* a
+/// path: [`SkillStore::delete`] accepts a registered package id only, measures
+/// it against the canonical store root (pathfloor), and removes the tree with
+/// the bounded, link-aware walk. A `..` walk, an absolute path, a symlinked
+/// package dir, an unregistered directory, or a link inside the package that
+/// leaves the root is a typed refusal that deletes nothing. The pin is dropped
+/// by the same call (uninstall, not a data wipe — the Library and its receipts
+/// are preserved; `REQ-SKILL-010`).
 #[tauri::command]
-pub fn skills_uninstall(name: String) -> Result<serde_json::Value, String> {
+pub fn skills_uninstall(
+    #[allow(unused)] state: State<'_, AppState>,
+    name: String,
+) -> Result<serde_json::Value, String> {
     let store = everyaios_blueprint::SkillStore::new(skills_root());
-    store.delete(&name).map_err(|e| e.to_string())?;
-    store.unpin(&name);
-    Ok(serde_json::json!({ "id": name, "installed": false }))
+    // Every delete outcome is a first-class audit entry (`ARCH/12-TRUST.md`
+    // §9, INV-24: denials and delete are logged, never swallowed).
+    match store.delete(&name) {
+        Ok(()) => {
+            let seq = crate::control::record_mutation(
+                &state,
+                crate::control::AuthKind::HumanGesture,
+                "skills.uninstall",
+                serde_json::json!({ "id": name, "result": "removed" }),
+            );
+            Ok(serde_json::json!({ "id": name, "installed": false, "auditSeq": seq }))
+        }
+        Err(e) => {
+            crate::control::record_mutation(
+                &state,
+                crate::control::AuthKind::HumanGesture,
+                "skills.uninstall_refused",
+                serde_json::json!({
+                    "id": name,
+                    "result": "refused",
+                    "reason": e.to_string(),
+                }),
+            );
+            Err(e.to_string())
+        }
+    }
 }
 
 /// Human-readable consent summary for the Guard-2 card (plain-language scopes).
@@ -336,6 +372,55 @@ mod tests {
                 assert!(plain_language_scope(p) != "Request an OS capability");
             }
         }
+    }
+
+    /// FIX-05 — the uninstall path is the one place a renderer-supplied string
+    /// reaches a recursive delete, so the shell asserts the refusals against
+    /// the same store construction `skills_uninstall` uses (`skills_root()` +
+    /// `SkillStore::new`). The command itself is a thin audited wrapper around
+    /// [`everyaios_blueprint::SkillStore::delete`].
+    #[test]
+    fn uninstall_refuses_paths_and_only_removes_a_registered_skill() {
+        let base =
+            std::env::temp_dir().join(format!("everyaios-skills-cmds-{}", std::process::id()));
+        let root = base.join("skills");
+        let outside = base.join("outside");
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::create_dir_all(&outside).unwrap();
+        std::fs::write(outside.join("precious.txt"), "keep").unwrap();
+
+        let skill = everyaios_blueprint::Skill {
+            manifest: everyaios_blueprint::SkillManifest {
+                name: "note-taker".into(),
+                description: "A skill that lives in the store".into(),
+                author: "tester".into(),
+                created: "2026-09-26".into(),
+                version: "0.1.0".into(),
+                ..Default::default()
+            },
+            body: "body".into(),
+        };
+        let store = everyaios_blueprint::SkillStore::new(&root);
+        store.save(&skill, false).unwrap();
+
+        // Traversal and absolute paths are refused, and the decoy survives.
+        for id in [
+            "..".to_string(),
+            "../outside".to_string(),
+            outside.display().to_string(),
+        ] {
+            let err = store.delete(&id).expect_err("must be refused");
+            assert!(err.to_string().contains("refused") || err.to_string().contains("invalid"),
+                "`{id}` → {err}");
+        }
+        assert!(outside.join("precious.txt").exists());
+        assert!(root.join("note-taker/SKILL.md").exists());
+
+        // The registered id still uninstalls.
+        store.delete("note-taker").unwrap();
+        assert!(!root.join("note-taker").exists());
+        assert!(outside.join("precious.txt").exists());
     }
 
     #[test]

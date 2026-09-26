@@ -27,7 +27,7 @@ use std::process::Command;
 use image::GenericImageView;
 
 use crate::DesktopError;
-use crate::geometry::DpiScale;
+use crate::capture::{CaptureCheck, CaptureFault, CapturePipeline, CaptureReadiness};use crate::geometry::DpiScale;
 use crate::ladder::{ClickProfile, ClickRung, LadderTarget, RungDelivery};
 use crate::launch;
 use crate::policy::InteractionMode;
@@ -136,6 +136,37 @@ impl MacBackend {
     }
 
     pub fn see(window: &WindowInfo) -> Result<SeeResult, DesktopError> {
+        // `FIX-18` — verify the capture path *before* attempting it. On macOS the
+        // gate is TCC Screen Recording: without it `screencapture` writes a
+        // desktop-picture placeholder and exits 0, so a readiness check is the
+        // only thing that distinguishes a real capture from a picture of the
+        // desktop. The verdict then travels with the capture.
+        let readiness = if Self::screen_recording_granted() {
+            CaptureReadiness::ready(
+                CapturePipeline::MacScreenCapture,
+                vec![
+                    CaptureCheck::PipelineSupported,
+                    CaptureCheck::SessionAvailable,
+                    CaptureCheck::WindowHandleValid,
+                ],
+            )
+        } else {
+            CaptureReadiness::unavailable(CaptureFault::ConsentMissing {
+                detail: "Screen Recording consent is not granted, so screencapture would return a \
+                         desktop-picture placeholder rather than the app"
+                    .into(),
+            })
+        };
+        if !readiness.is_capturable() {
+            return Err(DesktopError::CaptureNotReady {
+                state: readiness.state.as_str(),
+                guidance: readiness.guidance.clone(),
+                failed_check: readiness
+                    .failed_check
+                    .map(|c| c.as_str())
+                    .unwrap_or("session_available"),
+            });
+        }
         // `screencapture -l <id>` needs a CGWindowID; we carry our own id
         // space, so the caller must pass a real CGWindowID in window.id.
         let tmp = std::env::temp_dir().join(format!("everyaios-see-{}.png", window.id));
@@ -175,6 +206,7 @@ impl MacBackend {
             // The engine (`DesktopEngine::see`) applies the output budget; a
             // direct backend call has had none applied, and says so via `None`.
             budget: None,
+            readiness,
         })
     }
 
@@ -295,12 +327,15 @@ impl MacBackend {
     }
 
     pub fn read(_window: &WindowInfo) -> Result<ReadResult, DesktopError> {
-        Ok(ReadResult {
-            window_id: _window.id,
-            tree: None, // deep AX traversal follow-on → OCR fallback
-            dpi_scale: Self::dpi_scale().factor,
-            windows: Self::list_windows()?,
-        })
+        // `FIX-17` — an `Absent` read: this build exposes no AX traversal layer,
+        // which is a *positive* fact about the platform (so the OCR/vision rung is
+        // the documented next step) rather than an `Unknown` that would claim
+        // permission was refused.
+        Ok(ReadResult::absent(
+            _window.id,
+            Self::dpi_scale().factor,
+            Self::list_windows()?,
+        ))
     }
 
     pub fn act(
@@ -491,5 +526,52 @@ impl MacBackend {
             .output()
             .map(|o| o.status.success())
             .unwrap_or(false)
+    }
+}
+
+/// The macOS capture-readiness probe (`FIX-18`).
+///
+/// One pipeline, one real gate: Screen Recording (TCC). Without it `screencapture`
+/// exits 0 and writes a desktop-picture placeholder, so the readiness check is the
+/// only thing that separates a real capture from a picture of the desktop — the
+/// `FIX-18` case in its purest form.
+pub struct MacCaptureProbe;
+
+impl crate::capture::CaptureProbe for MacCaptureProbe {
+    fn pipelines(&self) -> Vec<CapturePipeline> {
+        vec![CapturePipeline::MacScreenCapture]
+    }
+
+    fn host(&mut self) -> Result<Vec<CaptureCheck>, CaptureFault> {
+        if !MacBackend::screen_recording_granted() {
+            return Err(CaptureFault::ConsentMissing {
+                detail: "Screen Recording consent is not granted for this process".into(),
+            });
+        }
+        Ok(vec![
+            CaptureCheck::PipelineSupported,
+            CaptureCheck::SessionAvailable,
+        ])
+    }
+
+    /// `screencapture -l` is per-window, so an occluded window is still captured
+    /// correctly; the check exists for platforms whose only pipeline is the screen.
+    fn is_occluded(&mut self, _window: &WindowInfo) -> bool {
+        false
+    }
+
+    fn target(
+        &mut self,
+        window: &WindowInfo,
+        _pipeline: CapturePipeline,
+    ) -> Result<Vec<CaptureCheck>, CaptureFault> {
+        if window.id == 0 {
+            return Err(CaptureFault::InvalidWindowHandle {
+                detail: "this backend assigns its own window ids; a capture needs a real \
+                         CGWindowID in window.id"
+                    .into(),
+            });
+        }
+        Ok(vec![CaptureCheck::WindowHandleValid])
     }
 }
