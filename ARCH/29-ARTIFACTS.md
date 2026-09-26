@@ -59,7 +59,7 @@ Distinction: artifacts are scoped to work; the Library is global and durable. Pr
 
 ## 5. Artifact gateway (external agents)
 
-Exchange via refs only: `artifact_id` · `mime_type` · `uri`. Supported verbs (permission-gated): read · write · attach · transform · publish. External agents never see raw storage paths; the gateway maps to the managed store (working URI scheme token `eaios://artifact/<id>`; final scheme renames with the brand, OQ-ART-2).
+Exchange via refs only: `artifact_id` · `mime_type` · `uri`. Supported verbs (permission-gated): read · write · attach · transform · publish. External agents never see raw storage paths; the gateway maps to the managed store (working URI scheme token `eaios://artifact/<id>`; final scheme renames with the brand, OQ-ART-02).
 
 ## 6. Retention & GC (DEC-032)
 

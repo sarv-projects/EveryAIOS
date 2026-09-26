@@ -85,7 +85,7 @@ Each doc’s claims map to a verification class; tests are sized to the claim. (
 
 ## 5. Pass gates
 
-- **P6 freeze conditions:** every doc passes `00-INDEX` §5; the interop matrix is updated; the fix register is owned by the code phase; no `UNVERIFIED` claim remains silent.
+- **v1 freeze conditions (P8):** every doc passes `00-INDEX` §5; the interop matrix is updated; the fix register is owned by the code phase; no `UNVERIFIED` claim remains silent.
 - **Post-freeze:** the code phase re-verifies FIX-01…18, then implements per `TODO.md` (W0–W4); the register's historical sequencing sketch is `MASTER-COMPARISON §5` (Wave 0 P0 → Wave 1 floors → Wave 2 context/token → Wave 3 engine hosting → Wave 4 work/scheduler → Wave 5 polish).
 
 ## 6. Open questions (`OQ-EVID-*`)

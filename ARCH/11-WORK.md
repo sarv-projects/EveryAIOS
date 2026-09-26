@@ -24,7 +24,7 @@ Rules:
 
 **`Step` (DM-002)** — one unit of progress inside a run: `pending → active → done | failed | skipped`; inputs/output refs; tool-call refs; timestamps. Steps are checkpoint boundaries.
 
-**`Task` (DM-003)** — **decision recorded here (OQ-DM-1 resolved for v1):** `Task` is a **projection** over `Work` + `Step` + assignment metadata, not a separate durable entity. Rationale: avoids a second hierarchy beside work/step; delegation already models “task” as the unit passed to workers (`15` §7). Revisit only with evidence (e.g. cross-work task graphs).
+**`Task` (DM-003)** — **decision recorded here (OQ-DM-01 resolved for v1):** `Task` is a **projection** over `Work` + `Step` + assignment metadata, not a separate durable entity. Rationale: avoids a second hierarchy beside work/step; delegation already models “task” as the unit passed to workers (`15` §7). Revisit only with evidence (e.g. cross-work task graphs).
 
 **`Session` (DM-004)** — durable container: `active → hibernated → archived`; `agent_binding`, `workspace_id`, `title`, `log_range` (SessionEvent span), `retention_class`, `last_active`.
 
@@ -124,7 +124,7 @@ Testable behaviors owned by this module live in `ARCH/08-REQUIREMENTS.md`; the t
 | `REQ-WORK-002` | Append-only log, projections only — no mutable session state is authoritative (DEC-027). |
 | `REQ-WORK-003` | Durable work and resume — status-correct recovery; cancellation recorded, not implied (INV-16). |
 | `REQ-WORK-004` | Scheduler lanes and enforced outer bounds — admission rejects over-limit work, never trims silently. |
-| `REQ-WORK-005` | Budgets are maxima — soft warning, hard pause + surface, no silent overrun (DEC-029/031). |
+| `REQ-WORK-005` | Budgets are maxima — soft warning, hard pause + surface, no silent overrun (DEC-031). |
 | `REQ-WORK-006` | Cancellation semantics — interrupt / cancel / dispose, cooperative, parent→child, reason recorded. |
 | `REQ-WORK-007` | Checkpoint cadence and side-effect safety — step boundaries; before waits/compaction/handoff. |
 | `REQ-WORK-008` | Runs projection — work-tree view from typed events; every terminal state has a reason. |

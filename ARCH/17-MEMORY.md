@@ -144,7 +144,7 @@ CREATE TABLE memory_jobs (                           -- extraction bookkeeping (
 
 **Mutation classification (DEC-042).** Memories are **local persistent mutations**: policy-gated per scope, audited, and **not** per-write tickets. Boundary-crossing operations — export/import file IO, sharing, anything leaving the machine — follow the guarded path (pathfloor / egress / tickets as applicable). Every mutation (including forget/wipe/import and policy-driven deletes) is audited, and the audit record carries **no item body**.
 
-**Events emitted:** `memory.item.added` · `memory.item.superseded` · `memory.item.forgotten` · `memory.extraction.run` (counts, model, token cost, failures) — registered in `30-EVENTS` — plus `memory.recall.outcome` (hit / abstain / error, metered; **registration owed to `30-EVENTS`**).
+**Events emitted:** `memory.item.added` · `memory.item.superseded` · `memory.item.forgotten` · `memory.extraction.run` (counts, model, token cost, failures) — registered in `30-EVENTS` — plus `memory.recall.outcome` (hit / abstain / error, metered; registered in `30-EVENTS`).
 
 **External-agent projection** (enforced by `12-TRUST`, surfaced by `32-CHANNELS`): filtered **recall-only** — owning project scope + the agent's own session/task + user preferences; **no** org, no other projects, no `confidential` unless a loadout grants it (v1 default: project + user only). v1 exposes **no write path** to external agents, and Core never writes or mutates an external agent's native memory/config/session stores (DEC-043).
 

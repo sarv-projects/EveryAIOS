@@ -24,7 +24,7 @@
 | **Desktop UI** | Richest projection: sessions, composer, Workbench, approvals, Runs, Context inspector | UI doc owns rendering; this module owns the contract mapping |
 | **CLI** | `agentcowork` (placeholder): `-p "<prompt>"` · `--workspace` · `serve --acp` · status/approvals | Same contracts; no privileged path |
 | **IDE via ACP** | Agent X (or any adapter) as an ACP **server** | Verified pattern: session manager + tool registry + typed updates |
-| **A2A (remote agents)** | Task/message/artifact exchange; remote agents stay **opaque** | Interface defined now; full implementation post-v1 (OQ-CHN-1) |
+| **A2A (remote agents)** | Task/message/artifact exchange; remote agents stay **opaque** | Interface defined now; full implementation post-v1 (OQ-CHN-01) |
 | **AgentCowork API (Work API)** | First-party/advanced automation: create/inspect work, runs, approvals | Same gateway rules as external agents |
 | **Mobile / remote (later)** | Approvals + monitoring + lightweight prompts first; sessions live in Core | Multi-device handoff = same session, different surface |
 

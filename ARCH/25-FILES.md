@@ -45,7 +45,7 @@
 ## 5. Workspace & project identity (DM-024)
 
 - **Workspace:** `folder` · `repo` · `multi-root`; `roots[]`; `trust_level`; policy refs.
-- **Project identity keying (DEC-040; OQ-FILES-1, shared with OQ-MEM-05):** the `project` scope binds to `DM-024 project_identity` — canonical repo root + git remote as identity attributes, never a raw path; explicit re-key on move/clone; worktrees share the parent project identity. Open detail: repo-root vs git-remote precedence.
+- **Project identity keying (DEC-040; OQ-FILES-01, shared with OQ-MEM-05):** the `project` scope binds to `DM-024 project_identity` — canonical repo root + git remote as identity attributes, never a raw path; explicit re-key on move/clone; worktrees share the parent project identity. Open detail: repo-root vs git-remote precedence.
 - Project identity is the anchor for memory scopes (`17`), repo intelligence (`26`), and policy scopes (`12`).
 
 ## 6. Write leases (overlap protection, DEC-029)

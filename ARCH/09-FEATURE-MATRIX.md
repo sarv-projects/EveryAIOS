@@ -56,7 +56,7 @@ One row per `REQ-*`. Status only from evidence.
 | `REQ-TRUST-009` | `12-TRUST` | pending | `INV-05` | — | pending | pending | unplanned |
 | `REQ-TRUST-010` | `12-TRUST` | pending | `—` | — | pending | pending | unplanned |
 | `REQ-CAP-001` | `13-CAPABILITY` | pending | `INV-13`, `DEC-005`, `DM-011` | — | pending | pending | unplanned |
-| `REQ-CAP-002` | `13-CAPABILITY` | pending | `DEC-002`, `DM-012` | — | pending | pending | unplanned |
+| `REQ-CAP-002` | `13-CAPABILITY` | pending | `DM-012`, `13` §4 | — | pending | pending | unplanned |
 | `REQ-CAP-003` | `13-CAPABILITY` | pending | `DEC-004` | — | pending | pending | unplanned |
 | `REQ-CAP-004` | `13-CAPABILITY` | pending | `DM-011`, `INV-19` | — | pending | pending | unplanned |
 | `REQ-CAP-005` | `13-CAPABILITY` | pending | `INV-07` | — | pending | pending | unplanned |
@@ -70,8 +70,8 @@ One row per `REQ-*`. Status only from evidence.
 | `REQ-PROV-003` | `14-PROVIDERS` | pending | `DEC-025` | — | pending | pending | unplanned |
 | `REQ-PROV-004` | `14-PROVIDERS` | pending | `DEC-030` | — | pending | pending | unplanned |
 | `REQ-PROV-005` | `14-PROVIDERS` | pending | `DEC-030` | — | pending | pending | unplanned |
-| `REQ-PROV-006` | `14-PROVIDERS` | pending | `DEC-002`, `DM-013` | — | pending | pending | unplanned |
-| `REQ-PROV-007` | `14-PROVIDERS` | pending | `DM-013`, `CTR-013` | — | pending | pending | unplanned |
+| `REQ-PROV-006` | `14-PROVIDERS` | pending | `DM-012`, `DM-013`, `13` §4 | — | pending | pending | unplanned |
+| `REQ-PROV-007` | `14-PROVIDERS` | pending | `DM-013`, `CTR-013`, `DEC-047` | — | pending | pending | unplanned |
 | `REQ-PROV-008` | `14-PROVIDERS` | pending | `INV-02/05`, `CTR-013` | — | pending | pending | unplanned |
 | `REQ-PROV-009` | `14-PROVIDERS` | pending | `DEC-035` | — | pending | pending | unplanned |
 | `REQ-PROV-010` | `14-PROVIDERS` | pending | `—` | — | pending | pending | unplanned |
@@ -293,7 +293,7 @@ One row per `REQ-*`. Status only from evidence.
 | `REQ-CHAN-013` | `32-CHANNELS` | pending | `INV-16` | `EDGE-077` | pending | pending | unplanned |
 | `REQ-VERIFY-001` | `34-EFFECT-VERIFICATION` | pending | `DEC-022`, `INV-19`, `DM-011` | — | pending | pending | unplanned |
 | `REQ-VERIFY-002` | `34-EFFECT-VERIFICATION` | pending | `—` | `EDGE-162` | pending | pending | unplanned |
-| `REQ-VERIFY-003` | `34-EFFECT-VERIFICATION` | pending | `—` | — | pending | pending | unplanned |
+| `REQ-VERIFY-003` | `34-EFFECT-VERIFICATION` | pending | `DEC-046` | — | pending | pending | unplanned |
 | `REQ-VERIFY-004` | `34-EFFECT-VERIFICATION` | pending | `DEC-022` | — | pending | pending | unplanned |
 | `REQ-VERIFY-005` | `34-EFFECT-VERIFICATION` | pending | `CTR-018` | — | pending | pending | unplanned |
 | `REQ-VERIFY-006` | `34-EFFECT-VERIFICATION` | pending | `—` | — | pending | pending | unplanned |

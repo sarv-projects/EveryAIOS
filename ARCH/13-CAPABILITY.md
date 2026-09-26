@@ -58,7 +58,7 @@ CapabilityHandle {
 }
 ```
 
-- **Lifecycle:** resolve → invoke (validated) → expire. A provider restart (epoch bump) invalidates outstanding handles (DEC-002).
+- **Lifecycle:** resolve → invoke (validated) → expire. A provider restart (epoch bump) invalidates outstanding handles (DM-012; semantics in this section).
 - **Hot path** (why handles exist): handle lookup → Guard → ticket → dispatch → ack — the control path we bound (p50 < 2 ms / p95 < 10 ms / p99 < 25 ms). Cold work (discover, connect, negotiate, enumerate) happens once, behind the registry.
 - **Caching:** per session/agent scope with TTL; `permission_snapshot` is bound into the handle so a policy change mid-session re-validates at ticket time.
 
@@ -99,6 +99,8 @@ Uses: dependency resolution (`requirements` pulls in other capabilities before i
 - **Census gate:** a test gate asserts unique ids, non-empty affordances/verification, and provider coverage; the census outputs a generated capability catalogue (doc generation, not hand-maintained).
 - **Review checklist for a new capability:** id naming · risk class · affordances · requirements/auth · verification hook · default loading mode · provider(s) · exposure scope.
 
+Capability ids stay protocol-neutral; the adapter owns the native-tool ↔ capability-id mapping built at discovery, and unmapped native tools are not invocable — they surface as guidance, never silent exposure (`DEC-047`; `14` §5).
+
 ## 9. Failure modes
 
 | Failure | Behavior |
@@ -135,7 +137,7 @@ Testable behaviors owned by this module live in `ARCH/08-REQUIREMENTS.md`; the t
 | REQ | Behavior (one line) |
 |---|---|
 | `REQ-CAP-001` | No flat dump — the model sees budgeted capability subsets, never raw tool catalogs (INV-13). |
-| `REQ-CAP-002` | Epoch-checked handles — resolve→invoke→expire; provider epoch bump invalidates stale handles (DEC-002, DM-012). |
+| `REQ-CAP-002` | Epoch-checked handles — resolve→invoke→expire; provider epoch bump invalidates stale handles (DM-012, §4). |
 | `REQ-CAP-003` | Capabilities describe what, never who — providers attach to capabilities, never the reverse (DEC-004). |
 | `REQ-CAP-004` | Descriptor contract — every capability has a versioned descriptor with risk class and verification hook (DM-011, INV-19). |
 | `REQ-CAP-005` | Guidance is first-class — `guidance` / `requires_user_action` are results, not failures. |

@@ -23,6 +23,8 @@
 observe → validate → render → verify → reconcile
 ```
 
+The five-stage list is completed by `DEC-046` (`ARCH/04-DECISIONS.md`; DEC-023's rules otherwise unchanged).
+
 1. **Observe:** capture the effect context — request, inputs digest, capability/provider, environment, ticket.
 2. **Validate:** deterministic validators per capability/domain (Office structural checks `22` §5; file identity/size `25`; test results `26`; browser URL/form assertions `23`; delivery/compose checks `28`).
 3. **Render:** produce an inspectable artifact where applicable (preview/render refs, `29` §7) — for humans always; for model vision only when scheduled by the depth matrix.
@@ -60,7 +62,7 @@ Per-capability overrides live in descriptors (`13` §2 `verification` field); th
 | Failure | Behavior |
 |---|---|
 | Validator crash/absent | Verification fails → effect marked **unverified** in the receipt; policy may block the effect entirely for dangerous classes. |
-| Weak validator (false pass) | Sampled audits + drift metrics (OQ-VER-2); misses feed back as new checks. |
+| Weak validator (false pass) | Sampled audits + drift metrics (OQ-VER-02); misses feed back as new checks. |
 | Vision scheduled but unavailable | Degrade with recorded gap; sensitive/dangerous classes may require human confirmation instead. |
 | Reconciliation mismatch | Repair path or `needs_attention`; never auto-overwrite state. |
 | Verification loop with no progress | Bounded retries then escalation (no infinite verify-repair cycles). |
@@ -95,7 +97,7 @@ Testable behaviors owned by this module live in `ARCH/08-REQUIREMENTS.md`; the t
 |---|---|
 | `REQ-VERIFY-001` | Verification depth scales with risk class; the matrix is a floor, never a ceiling (INV-19, DEC-022) |
 | `REQ-VERIFY-002` | Verification is read-only; repairs are new operations with their own ticket and receipt |
-| `REQ-VERIFY-003` | Pipeline order `observe → validate → render → verify → reconcile` precedes every receipt |
+| `REQ-VERIFY-003` | Pipeline order `observe → validate → render → verify → reconcile` precedes every receipt (DEC-046) |
 | `REQ-VERIFY-004` | Receipts state what ran, what was skipped, and why (DEC-022) |
 | `REQ-VERIFY-005` | Verification records are stored once; receipts reference them (CTR-018) |
 | `REQ-VERIFY-006` | Hook contract: idempotent, bounded, read-only, typed failures |

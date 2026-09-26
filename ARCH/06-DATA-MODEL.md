@@ -91,7 +91,7 @@ erDiagram
 **DM-021 `WorkflowDefinition`** — `id` · `version` · `trigger` · `inputs/outputs` · `nodes[]`/`edges[]` (typed) · `variables` · `secrets[]` (vault refs) · `retry/timeout/concurrency policies` · `compensation?`.
 **DM-022 `WorkflowRun`** — `run_id` · `workflow_id` + `workflow_version` · `status` (enum above) · `current_node` · `variables` · `completed_nodes[]`/`pending_nodes[]` · `waiting_until?` · `checkpoints[]` · `artifacts[]` · `approvals[]` · `errors[]` · `retry_state`.
 **DM-023 `LibraryItem`** — `id` · `kind` (`agent|skill|workflow|connector|plugin|template|prompt|saved_artifact`) · `name` · `description` · `saved_from_artifact_id?` · `version` · `usage_count`.
-**DM-024 `Workspace`** — `id` · `kind` (`folder|repo|multi-root`) · `roots[]` · `project_identity` (stable repo identity; DEC-040, shared with OQ-FILES-1) · `policy_refs[]` · `trust_level`.
+**DM-024 `Workspace`** — `id` · `kind` (`folder|repo|multi-root`) · `roots[]` · `project_identity` (stable repo identity; DEC-040, shared with OQ-FILES-01) · `policy_refs[]` · `trust_level`.
 **DM-025 `ModelDescriptor`** — `id` (`provider/model`) · `provider` · `context_window` · `max_output` · `tool_calling` · `reasoning_modes[]` · `vision` · `streaming` · `structured_output` · `cost {in,out}` · `latency_class` · `local|cloud`.
 **DM-026 `WorldObject` / `WorldEdge`** — `id` · `kind` (`app|window|file|process|device|browser_tab|…`) · `identity_key` (per-kind stable key) · `attributes` · `freshness` · `provenance`; edges: `kind` · `from` · `to` · `observed_at`.
 **DM-027 `Skill`** — `id` · `version` · `metadata` · `instructions_ref` · `capability_requirements[]` · `input/output contracts` · `examples_refs[]`.

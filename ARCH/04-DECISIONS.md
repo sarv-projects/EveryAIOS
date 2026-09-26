@@ -235,7 +235,7 @@ Closes PEND-06. The memory store is **whole-DB encrypted at rest** (SQLCipher vi
 
 ### DEC-040 — Memory project identity & re-keying
 The memory `project` scope is keyed by the stable project identity (`DM-024 project_identity`), never a raw path: canonical root + git remote as identity attributes; Windows canonicalization follows the file-identity model (`21` §3) — case-insensitive comparison, junction/short-name/long-path/UNC normalization; POSIX symlinks resolved once and recorded. Re-key rules: move/rename keeps identity when the identity attributes survive (remote match), otherwise the item set is surfaced with explicit re-point guidance; a clone gets a new identity unless the user explicitly adopts the source mapping (recorded); worktrees share the parent identity; a new project at a reused path never inherits memory automatically. Recall can only return identities in the actor's permitted set.
-**Evidence:** `ARCHIVE/v1-research/v1-sdd/memory-agent-deep-dive.md` §6.1 (findings F-09/E-06/E-12); `ARCH/25-FILES.md` §5 (shared with OQ-FILES-1); `ARCH/21-WORLD-MODEL.md` §3.
+**Evidence:** `ARCHIVE/v1-research/v1-sdd/memory-agent-deep-dive.md` §6.1 (findings F-09/E-06/E-12); `ARCH/25-FILES.md` §5 (shared with OQ-FILES-01); `ARCH/21-WORLD-MODEL.md` §3.
 **Status note:** Locked — Windows canonicalization matrix pending a Windows acceptance record.
 **Affects:** `17-MEMORY`, `25-FILES`, `21-WORLD-MODEL`, `06-DATA-MODEL`.
 
@@ -273,14 +273,14 @@ Background extraction defaults to the session's active provider (no *new* disclo
 **Affects:** `16-CONTEXT`, `18-MODEL-ROUTING`.
 
 ### DEC-046 — Verification plane stage completion
-**Completion on record:** DEC-023 summarizes the verification plane as "validate → render → verify → reconcile"; `ARCH/34-EFFECT-VERIFICATION.md` §2 and `REQ-VERIFY-003` define the pipeline as five stages — **observe → validate → render → verify → reconcile** — where observation (capturing the actual effect: render, screenshot, state read) precedes validation. This decision completes the stage list; DEC-023's rules are otherwise unchanged and remain Locked.
+**Completion on record:** DEC-023 summarizes the verification plane as "validate → render → verify → reconcile"; `ARCH/34-EFFECT-VERIFICATION.md` §2 and `REQ-VERIFY-003` define the pipeline as five stages — **observe → validate → render → verify → reconcile** — where observation (capturing the actual effect: render, screenshot, state read) precedes validation. This decision completes the stage list; DEC-023's rules are otherwise unchanged and remain Locked. The DEC-023 register row's three-stage short form (validate / render / reconcile) is superseded by this five-stage list.
 **Status note:** Provisional — completion of DEC-023's stage list; promote at the re-freeze.
 **Evidence:** `ARCH/34-EFFECT-VERIFICATION.md` §2/§7 · `ARCH/08-REQUIREMENTS.md` REQ-VERIFY-003 · P9 verification pass (2026-09-26).
 **Affects:** `34-EFFECT-VERIFICATION`, `12-TRUST`.
 
 ### DEC-047 — Capability id mapping for adapter-native tools
 
-**Completion on record (P9, 2026-09-26):** MCP and adapter tool names are protocol-shaped while capability ids must stay protocol-neutral (`ARCH/13-CAPABILITY.md` §1 rule 1; `ARCH/14-PROVIDERS.md` §2 rule 2). `13` §8 and `14` §5 left the mapping owner unstated; this names it: the provider adapter owns the mapping table (`transport_ref` + native tool name ↔ capability id) built at discovery. Unmapped native tools are not invocable — they surface as guidance, never silent exposure. Mapping changes are registry data (epoch-checked, DEC-002), never contract changes.
+**Completion on record (P9, 2026-09-26):** MCP and adapter tool names are protocol-shaped while capability ids must stay protocol-neutral (`ARCH/13-CAPABILITY.md` §1 rule 1; `ARCH/14-PROVIDERS.md` §2 rule 2). `13` §8 and `14` §5 left the mapping owner unstated; this names it: the provider adapter owns the mapping table (`transport_ref` + native tool name ↔ capability id) built at discovery. Unmapped native tools are not invocable — they surface as guidance, never silent exposure. Mapping changes are registry data (epoch-checked — `DM-012`, `13` §4), never contract changes.
 
 **Status note:** Provisional — promote at the re-freeze.
 

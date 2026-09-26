@@ -372,7 +372,7 @@ This registry answers one question per entry: **what behavior must this system e
 #### REQ-CAP-002 — Epoch-checked handles
 - **Statement:** GIVEN an issued capability handle, WHEN the provider restarts or its epoch advances, THEN the stale handle is rejected and re-resolution is required — never blind retry.
 - **Priority:** must
-- **Source:** `AGENTCOWORK-SPEC.md` §5 · `DEC-002`
+- **Source:** `AGENTCOWORK-SPEC.md` §5 · `ARCH/06-DATA-MODEL.md` DM-012 · `ARCH/13-CAPABILITY.md` §4
 - **Acceptance:** stale-handle test across a simulated provider restart yields a rejection + re-resolution, not a silent reuse.
 - **Failure cases:** stale handle used after restart → error surfaced; retry without re-resolution → forbidden.
 - **Tests:** pending
@@ -500,18 +500,18 @@ This registry answers one question per entry: **what behavior must this system e
 #### REQ-PROV-006 — Epoch discipline and health-first resolution
 - **Statement:** GIVEN adapter instances and provider health, WHEN an adapter restarts or degrades, THEN its `provider_epoch` bumps and outstanding handles are invalidated, and the resolver skips degraded providers before they fail a call; health events publish on the event plane and the UI reads the registry.
 - **Priority:** must
-- **Source:** `ARCH/14-PROVIDERS.md` §5 · `ARCH/04-DECISIONS.md` DEC-002 · `ARCH/30-EVENTS.md`
+- **Source:** `ARCH/14-PROVIDERS.md` §5 · `ARCH/06-DATA-MODEL.md` DM-012 · `ARCH/13-CAPABILITY.md` §4 · `ARCH/30-EVENTS.md`
 - **Acceptance:** restart invalidates handles; degraded-before-fail ordering test; per-capability health isolates partial failure; no second store for provider health.
 - **Failure cases:** stale handle accepted after epoch bump → `InvalidState`; degraded provider attempted first → defect.
 - **Tests:** pending
 - **Status:** seeded
 
 #### REQ-PROV-007 — Registry entry shape and id mapping
-- **Statement:** GIVEN the provider registry, WHEN entries are stored, THEN each follows `DM-013` (id · kind · version · health · capabilities ref · environments · epoch) and carries distinct `catalog_ref` and `transport_ref` alongside the canonical id, with auth modeled as a typed method enum (api · oauth · well-known) that never holds values.
+- **Statement:** GIVEN the provider registry, WHEN entries are stored, THEN each follows `DM-013` (id · kind · version · health · capabilities ref · environments · epoch) and carries distinct `catalog_ref` and `transport_ref` alongside the canonical id, with auth modeled as a typed method enum (api · oauth · well-known) that never holds values; the provider adapter owns the `transport_ref` + native-tool ↔ capability-id mapping built at discovery; unmapped native tools are not invocable — they surface as guidance, never silent exposure; mapping sets are epoch-checked registry data, never contract changes.
 - **Priority:** must
-- **Source:** `ARCH/14-PROVIDERS.md` §5 · `ARCH/06-DATA-MODEL.md` DM-013 · `ARCH/12-TRUST.md` §6
-- **Acceptance:** schema tests; several transports may share one catalog entry; auth-method metadata carries no secret material.
-- **Failure cases:** credential value in registry → custody violation; canonical id aliased with a transport id → defect.
+- **Source:** `ARCH/14-PROVIDERS.md` §5 · `ARCH/06-DATA-MODEL.md` DM-013 · `ARCH/12-TRUST.md` §6 · `ARCH/04-DECISIONS.md` DEC-047
+- **Acceptance:** schema tests; several transports may share one catalog entry; auth-method metadata carries no secret material; a native tool without a capability mapping returns guidance and is never silently exposed.
+- **Failure cases:** credential value in registry → custody violation; canonical id aliased with a transport id → defect; an unmapped native tool invoked silently → exposure violation.
 - **Tests:** pending
 - **Status:** seeded
 
@@ -2790,7 +2790,7 @@ This registry answers one question per entry: **what behavior must this system e
 #### REQ-VERIFY-003 — The pipeline order precedes every receipt
 - **Statement:** GIVEN any effect entering verification, WHEN it runs, THEN the pipeline order holds (observe context/ticket · deterministic validation · render where applicable · intended-vs-actual postconditions · reconcile outcome) before any receipt.
 - **Priority:** must
-- **Source:** `ARCH/34-EFFECT-VERIFICATION.md` §2
+- **Source:** `ARCH/34-EFFECT-VERIFICATION.md` §2 · `ARCH/04-DECISIONS.md` DEC-046
 - **Acceptance:** pipeline-order test; a receipt cannot be emitted before reconcile; each stage's evidence refs are recorded.
 - **Failure cases:** receipt emitted before verification → violation; a skipped stage without a recorded reason → defect.
 - **Tests:** pending

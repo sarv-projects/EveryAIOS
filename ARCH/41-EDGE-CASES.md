@@ -189,7 +189,7 @@
 | EDGE-142 | Worktree merge conflict / parent workspace advanced | Merge is an explicit review step (diff + tests + receipt); conflicts resolve by queue/rebase/ask — never silent overwrite or force (`26` §6, `25` §6, DEC-029). |
 | EDGE-143 | Search serves stale or partial source state | Freshness flag + degraded notice on results; scope and sensitivity filters apply at query time, before scoring; abstention is a valid outcome (`27` §5, §7). |
 | EDGE-144 | `web.fetch` targets an internal host / cross-host redirect | SSRF floor (no localhost/no-dot/private/link-local/metadata; resolve-then-check); cross-host redirects are surfaced, never silently followed; Guard deny is typed (`28` §3, DEC-037, INV-05). |
-| EDGE-145 | Message attachment is huge/hostile/unscannable | Attachments move through the artifact gateway under connector permissions; size/type caps + scan rules gate them (`OQ-COMMS-3`); until that policy lands uploads stay user-gated — never auto-opened (`28` §5, `29` §5). |
+| EDGE-145 | Message attachment is huge/hostile/unscannable | Attachments move through the artifact gateway under connector permissions; size/type caps + scan rules gate them (`OQ-COMMS-03`); until that policy lands uploads stay user-gated — never auto-opened (`28` §5, `29` §5). |
 
 ## O. Multi-agent coexistence (`15`/`32`)
 

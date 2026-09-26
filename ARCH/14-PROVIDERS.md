@@ -15,7 +15,7 @@
 1. **Adapters are interchangeable** — one provider may implement many capabilities; one capability may have many providers (DEC-004).
 2. **No protocol vocabulary above this layer** — callers speak `capability.invoke`; they never see MCP tool names, ACP methods, or HTTP paths.
 3. **Credentials via vault only** (CTR-013, INV-02); **egress via Guard** (INV-05).
-4. **Epoch discipline:** every adapter instance has a `provider_epoch`; a restart bumps it and invalidates outstanding handles (DEC-002).
+4. **Epoch discipline:** every adapter instance has a `provider_epoch`; a restart bumps it and invalidates outstanding handles (DM-012, `13` §4).
 5. **Health is first-class:** degraded providers are skipped by the resolver before they fail a call.
 
 ## 2. Adapter contract (CTR-010)
@@ -67,7 +67,7 @@ Lifecycle: register (discover) → connect → serve → shutdown. `execute` rec
 - **Loading modes** (`eager` / `catalog` / `on-demand`) define what the model sees vs what the catalog exposes vs what resolves on demand — the semantic compression layer that keeps raw tool counts out of context.
 - Health events publish on `30`; the UI provider surface reads the registry (no separate store).
 
-**Id mapping (absorbed, A10):** registry entries carry distinct `catalog_ref` (catalog key) and `transport_ref` (runtime transport id) alongside the canonical provider id — several transports may share one catalog entry.
+**Id mapping (absorbed, A10):** registry entries carry distinct `catalog_ref` (catalog key) and `transport_ref` (runtime transport id) alongside the canonical provider id — several transports may share one catalog entry. The adapter owns the native-tool ↔ capability-id mapping built at discovery; unmapped native tools are not invocable — guidance, never silent exposure (`DEC-047`).
 
 **Auth methods (absorbed, G4):** provider auth is a typed surface — `api` (key) · `oauth` (authorize/callback/refresh/expiry) · `well-known` — with optional prompt/validation metadata. Credentials still land in the vault (`12` §6); only the *method* is modeled here.
 
@@ -129,7 +129,7 @@ Testable behaviors owned by this module live in `ARCH/08-REQUIREMENTS.md`; the t
 | `REQ-PROV-003` | Declared adapter classes (native · mcp · acp · http · cli · plugin · remote); ACP preserves native tools (DEC-025). |
 | `REQ-PROV-004` | MCP client dual-era: modern `2026-07-28` first, legacy `2025-11-25` fallback, detection + force-legacy hatch (DEC-030). |
 | `REQ-PROV-005` | MCP server façade: stateless modern + `initialize` compatibility, mandatory `server/discover`, header validation. |
-| `REQ-PROV-006` | Epoch discipline + health-first resolution; degraded skipped before a call fails (DEC-002). |
+| `REQ-PROV-006` | Epoch discipline + health-first resolution; degraded skipped before a call fails (DM-012, `13` §4). |
 | `REQ-PROV-007` | Registry entry shape + id mapping (`catalog_ref`/`transport_ref`); auth-method enum, no values (DM-013). |
 | `REQ-PROV-008` | Adapter egress + custody compliance; typed denial, no silent fallback (INV-02/05, CTR-013). |
 | `REQ-PROV-009` | Gateway client identity + session affinity headers per conversation; multi-protocol gateways (DEC-035). |

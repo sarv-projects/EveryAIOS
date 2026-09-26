@@ -92,7 +92,7 @@ For privileged collectors (MFT/USN file index, `21` W1) the runtime hosts a smal
 
 ## 11. Open questions (`OQ-RT-*`)
 
-1. Detached semantics across app close vs platform constraints (shared with OQ-WORK-1; helper/service options).
+1. Detached semantics across app close vs platform constraints (shared with OQ-WORK-01; helper/service options).
 2. Helper packaging/update channel + consent UX (with `12`/`21`).
 3. Remote/cloud environment timing (post-v1 path; keep the abstraction only).
 4. Resource-limit defaults per environment kind.

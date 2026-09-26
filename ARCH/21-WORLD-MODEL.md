@@ -62,7 +62,7 @@ Rules:
 1. Deny-by-default; no silent scope expansion; **no persistent “always allow” in v1**.
 2. Visible indicator while any capture collector is active.
 3. **Metadata-first:** collectors never read file content; screenshots only for explicit view, action verification, or W3 miss/verify; `IsPassword`/protected fields excluded or masked.
-4. Elevated file index options (USN/MFT require admin — verified): (a) small privileged helper (Everything pattern, opt-in, no service/autostart by default), (b) per-scan elevation prompt, (c) non-admin mode = walk/RDCW only. Mode is recorded per instance; choice resolved with `12-TRUST` (OQ-WM-2).
+4. Elevated file index options (USN/MFT require admin — verified): (a) small privileged helper (Everything pattern, opt-in, no service/autostart by default), (b) per-scan elevation prompt, (c) non-admin mode = walk/RDCW only. Mode is recorded per instance; choice resolved with `12-TRUST` (OQ-WM-02).
 5. Local-first: no upload path exists in the world-model contract.
 
 ## 6. Query surface & consumers

@@ -84,7 +84,7 @@ Run fields: pinned `workflow_version` + digest · occurrence/trigger ref · inpu
 
 **Misfire policy (desktop):** default **Skip + record** (visible missed row); optional *Run latest missed* (never the whole backlog); grace bounded (≤ 24 h desktop policy).
 
-**Sleep & clocks:** persisted `wake_at` is “not before” (never wall-clock precision); every boot and wake re-checks persisted times; calendar schedules resolve in the stored IANA zone; an OS-level nudge for a *closed* app is a product decision (OQ-WF-4), not a v1 primitive.
+**Sleep & clocks:** persisted `wake_at` is “not before” (never wall-clock precision); every boot and wake re-checks persisted times; calendar schedules resolve in the stored IANA zone; an OS-level nudge for a *closed* app is a product decision (OQ-WF-04), not a v1 primitive.
 
 **Deliberately not built:** server timer queues · multi-worker distribution · unlimited retries · history compaction / continue-as-new (retention + terminal pruning suffice) · Temporal Nexus/cross-namespace and child-workflow `ABANDON` bookkeeping (the declared parent-close policy itself is kept, §2/§6).
 
@@ -107,7 +107,7 @@ Pinned per run (Temporal Pinned / n8n published snapshot / OpenWork `revisionId`
 
 ## 7. Approvals (DEC-021) — with the verified carve-out
 
-- **approve / reject:** proven (Copilot Studio stages). v1: single-approver default; quorum later (OQ-WF-2).
+- **approve / reject:** proven (Copilot Studio stages). v1: single-approver default; quorum later (OQ-WF-02).
 - **provide-data:** proven (typed RFI payloads) — reuse the approval primitive with a typed form payload.
 - **edit:** **design gap** — no surveyed product implements it. Design: an approval carrying an **editable draft payload** while the original stays immutable; both recorded in the receipt.
 - **timeout/escalation:** explicit field; default timeout → reject/escalate.
