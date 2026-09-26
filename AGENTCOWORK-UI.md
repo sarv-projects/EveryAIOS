@@ -327,7 +327,7 @@ Why it must be structured: a chip is removable without regex surgery; the ACP `r
 
 ### 5.7 `/` — one reserved host namespace, agent grammar untouched
 
-**Normative rule (R53):** the host reserves exactly one namespace — **`/eaios:*`** (SPEC §9; `ARCH/02-THESIS.md:41`) — for its own commands. Every other `/name` is the bound agent's native vocabulary, forwarded verbatim as prompt text with no local interception. The shipped behaviour is already right in substance: while an agent is bound, the local table is hidden and the list comes from the agent's live `available_commands` (`ev: ui/src/components/chat/chat-composer.tsx:544-557`; comment `:513-518`; G28 covers the missing host half).
+**Normative rule (R53):** the host reserves exactly one namespace — **`/eaios:*`** (SPEC §9; `ARCH/02-THESIS.md:42`) — for its own commands. Every other `/name` is the bound agent's native vocabulary, forwarded verbatim as prompt text with no local interception. The shipped behaviour is already right in substance: while an agent is bound, the local table is hidden and the list comes from the agent's live `available_commands` (`ev: ui/src/components/chat/chat-composer.tsx:544-557`; comment `:513-518`; G28 covers the missing host half).
 
 Two additions:
 
@@ -347,7 +347,7 @@ Split the single send affordance: **Run now** (default, Enter) · **Run in backg
 ### 5.10 Approvals stack — above the composer, four choices, fail-closed
 
 - The consent card is the focal element while a decision is pending and sits **where the user acts — above the composer** — naming action · data · risk (T4; R56).
-- Vocabulary: **`once · session · always · deny`**, with the available choices driven by what the backend will honour; "always" is hidden when the backend would not honour a permanent grant, and when offered it opens a **second confirmation** because it persists (R56).
+- Vocabulary: **`once · session · always · deny`**, with the available choices driven by what the backend will honour; "always" is hidden when the backend would not honour a permanent grant, and when offered it opens a **second confirmation** because it persists (R56). These are the ticket-scope choices of the one approval primitive; the recorded decision set (`approve/reject/edit/provide-data`, `DM-010`) and the policy enum that decides *when* to ask (`ARCH/12-TRUST.md` §2/§5) are the backend vocabulary this card maps onto.
 - Outcomes map onto the fail-closed set — `allowed-once · rejected · cancelled · unavailable` — and **`unavailable` never reads as a grant**.
 - The **transcript owns the queue**, not each execution row; execution rows never mount or re-home it (R56). Approvals route through the channel that owns the binding and stay durable if the channel disconnects (`32` §7/§8).
 - The shipped `MCQInterrupt` already carries a Guard approval nonce and urgency (`ev: ui/src/lib/store.ts:207-222`); v1 **splits the one card into per-decision-kind components** — the current single card covers six kinds and its `plan` branch is unreachable (G38). Diff decisions use the shared diff component (§4.5); autonomy limits keep the frozen per-task snapshot semantics (`ev: ui/src/lib/store.ts:235-252`).
@@ -412,7 +412,7 @@ Three objects, three names, one lifecycle (R37; `DEC-014`; `43-GLOSSARY.md`):
 
 **Promotion lifecycle (explicit, never automatic — `DEC-014`, `INV-18`):** artifact card → **Save to Library** (or "Save as template") → Library item carrying `saved_from_artifact_id` → usable in later sessions/workspaces. Un-promotion/deprecation is an explicit operation. Version selection and provenance are properties of the surface (R40), not dialogs; receipt-pinned versions are never GC'd (`DEC-032`), and the UI shows provenance chain and promotion origin one expansion away.
 
-**Naming.** "Library" is already defined as the reusable inventory (`43-GLOSSARY.md:35`); the Settings surface that shows local model weights must stop owning that word (its tab is literally named `library`, `ev: ui/src/components/panels/local-models-panel.tsx:97`; G33). Proposal: keep **Library** = inventory; rename the weights surface **Local models**. This is **OQ-UI-001** because it is copy.
+**Naming.** "Library" is already defined as the reusable inventory (`43-GLOSSARY.md:39`); the Settings surface that shows local model weights must stop owning that word (its tab is literally named `library`, `ev: ui/src/components/panels/local-models-panel.tsx:97`; G33). Proposal: keep **Library** = inventory; rename the weights surface **Local models**. This is **OQ-UI-001** because it is copy.
 
 ---
 

@@ -69,5 +69,6 @@
 | **Workflow** | A deterministic process definition (typed IR) that can include agent nodes; runs are pinned to a version (DM-021/022, `20`). |
 | **Worktree** | A git-isolated checkout provisioned per-spawn for concurrent writers (DEC-029). |
 | **World Model** | The continuously updated structural map of the machine + change stream; consumers query it instead of screenshotting (`21`). |
+| **W1…W7** | World Model collector set — W1 file inventory + deltas · W2 process/window registry · W3 UI tree on demand · W4 window capture on demand · W5 browser world · W6 devices/registry/shares (deferred) · W7 content index/OCR (deferred); defined in `ARCH/21-WORLD-MODEL.md` §2. |
 
 **Naming note:** v0 names (EveryAIOS-era) appear only in `ARCH/01-NAMING.md` and archive references.

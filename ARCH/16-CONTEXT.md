@@ -28,7 +28,7 @@ Only Agent X (and every external agent for its own turn) owns this intelligence;
 ### 1.3 Context projection for external agents (DEC-009)
 A scoped slice — workspace root, relevant rules, RepoMap, relevant files, git status, recent task history, relevant artifacts, relevant test failures — never the substrate, never other projects. Contract in `32-CHANNELS`; enforcement in `12-TRUST`.
 
-## 2. ContextItem — `DM-CTX-*` (registered in `06`)
+## 2. ContextItem — `DM-017` (`06`; the local `DM-CTX-*` grouping is informal)
 
 | Field | Meaning |
 |---|---|

@@ -55,7 +55,7 @@ Competitors ship pieces of this: agents, capability catalogs, browser/computer c
 | S-01 | A chat turn, workflow run, subagent task, and background job all materialize as `Work` items visible in one Runs surface. |
 | S-02 | Every externally visible effect produces a `Receipt`; every receipt is replayable to its inputs. |
 | S-03 | The same capability (`office.presentation.edit`) resolves to different providers without the caller changing. |
-| S-04 | An external agent onboards through the Agent Gateway and receives only its projection: identity, capability set, scoped context, workspace paths, artifacts, filtered events. |
+| S-04 | An external agent onboards through the Agent Gateway and receives only its projection: identity, capability set, scoped context, workspace paths, tools, artifacts, filtered events. |
 | S-05 | Context compaction never loses reconstructable facts — they are rebuilt deterministically from Work / Events / Git / Artifacts, not re-invented by the model. |
 | S-06 | A workflow with an 8-hour wait survives app close, logout, and reboot, then resumes at the correct node. |
 | S-07 | Opening and rendering a document (PDF/DOCX/XLSX/PPTX/code) consumes zero model tokens. |

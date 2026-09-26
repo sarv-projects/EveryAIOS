@@ -44,6 +44,7 @@ Guard composes the three into a decision, then issues/validates tickets. Sandbox
 ## 5. Approvals (DM-010, DEC-021)
 
 - One primitive for both agents (questions) and workflows (approval nodes): `request(prompt, options: approve | reject | edit | provide-data, context, timeout)`.
+- **Vocabulary mapping:** the UI card's `once · session · always · deny` choices express the ticket scope of this one primitive (`once` ≈ approve with a single-use ticket; `session` ≈ approve bounded to the session; `always` ≈ approve plus a persisted declarative rule where the backend honours it; `deny` = reject). The policy enum (`unless-trusted · on-request · granular · never`, §2) decides *when* a human is asked; the recorded decision (`DM-010`) carries *what* they decided (`AGENTCOWORK-UI.md` §5.10).
 - Routed through UI/channels (`32`); durable across waits (`11` §4); decisions recorded once and referenced by tickets/receipts.
 - Expiry policy per action class (default: expire ⇒ deny, surfaced).
 

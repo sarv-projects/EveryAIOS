@@ -69,9 +69,9 @@ Each doc’s claims map to a verification class; tests are sized to the claim. (
 | FIX-04 | UI-blob secret scan | SEC-21 |
 | FIX-05 | `skills_uninstall` arbitrary recursive deletion (`skill_store.rs:442`) | v0 audit (re-verify path) |
 | FIX-06 | Unticketed `fs_*`/`terminal_run` with false `AgentTicket` provenance | v0 audit (re-verify) |
-| FIX-07 | Hardcoded governance badge `SelfContained { channel_b: true }` (`acp_cmds.rs:1676`) | v0 audit (re-verify) |
+| FIX-07 | Hardcoded governance badge `SelfContained { channel_b: true }` (`acp_cmds.rs:1676`) — the code comment argues it is correct post-ADR-0005; **annotated close pending a `DEC`/evidence note, not a code patch** | v0 audit + `code-state-inventory` §7.5/§8.6 |
 | FIX-08 | `tool/commit` has no live driver | v0 audit (re-verify) |
-| FIX-09 | netfloor bypasses in catalog/search/vault/MCP egress | v0 audit (re-verify) |
+| FIX-09 | netfloor bypasses: direct `ureq` calls in `core/src/tools.rs:2414`, `core/src/messaging.rs:35`, `core/src/models/*`, `vault/src/oauth.rs:1022-1048` — whether each site is pre-flighted by `netfloor` is unclear from a static read (trust wave) | v0 audit + `code-state-inventory` §7.4 |
 | FIX-10 | Windows file identity: `walk.rs:131-157` zeroes dev/ino → corrupts dedup (`dedup.rs:106-118`) | `world-model-verification.md` §3 |
 | FIX-11 | `usn_winapi.rs` unwired — wire as W1 delta source | same |
 | FIX-12 | MCP remote client sends no `_meta`/modern headers (`remote.rs`) | `mcp-provider-verification.md` |

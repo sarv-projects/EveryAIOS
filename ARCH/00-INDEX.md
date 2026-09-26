@@ -1,13 +1,13 @@
 # AgentCowork — Architecture v1 — Index & Blueprint
 
 > **Doc set:** AgentCowork architecture **v1** — rebuilt from scratch on the shoulders of v0.
-> **Status:** Pass **P0** (blueprint). Foundation docs 00–03 drafted; module docs planned.
+> **Status:** Pass **P7** (SDD layer, in progress). Docs 00–44 drafted; module passes + registry + matrix seeded; final review next.
 > **Date:** 2026-09-26 · **Repo:** `desktop_app` · **Branch:** `main`
 > **Code:** frozen. This set describes the target architecture; no code changes until v1 freezes.
 > **v0 archive:** `ARCHIVE/v0/` (local, git-ignored) — see `ARCHIVE/v0/MANIFEST.md`. Nothing in the archive is a contract.
 > **Exempt:** `TODO.md` stays the live delivery tracker and is not part of this rebuild.
 >
-> **v1 freeze for review (2026-09-26):** passes P0–P6 complete — 37 `ARCH/` docs + `AGENTCOWORK-SPEC.md` + `AGENTCOWORK-UI.md` + README/AGENTS syncs. Further changes go through `DEC` entries (`ARCH/04-DECISIONS.md`).
+> **v1 freeze for review (2026-09-26):** passes P0–P6 complete — 39 `ARCH/` docs + `AGENTCOWORK-SPEC.md` + `AGENTCOWORK-UI.md` + README/AGENTS syncs. Further changes go through `DEC` entries (`ARCH/04-DECISIONS.md`).
 >
 > **Owner reopening (2026-09-26):** absorption wave 2 ✅ complete — provider layer (`DEC-034/035`), async subagents (`DEC-036`), web search (`DEC-037`). Docs re-frozen for review.
 >
@@ -61,8 +61,8 @@ v0 grew by accretion: 33 ARCH files, 55 research files, a 355 KB spec, a 606 KB 
 | 05 | `ARCH/05-INVARIANTS.md` | Meta | Invariants (`INV-*`) + enforcement points + verification | Draft P1 |
 | 06 | `ARCH/06-DATA-MODEL.md` | Shared | Canonical entities and schemas (`DM-*`) | Draft P1 |
 | 07 | `ARCH/07-CONTRACTS.md` | Shared | Canonical cross-module interfaces (`CTR-*`) | Draft P1 |
-| 08 | `ARCH/08-REQUIREMENTS.md` | Requirements | Behavioral registry (`REQ-*`): statements, acceptance, failure cases | Draft P7 (seed) |
-| 09 | `ARCH/09-FEATURE-MATRIX.md` | Requirements | Traceability: `REQ` → `DEC/DM/CTR` → `TASK` → `TEST` | Draft P7 (framework) |
+| 08 | `ARCH/08-REQUIREMENTS.md` | Requirements | Behavioral registry (`REQ-*`): statements, acceptance, failure cases | Draft P7 (seeded; all domains module-verified) |
+| 09 | `ARCH/09-FEATURE-MATRIX.md` | Requirements | Traceability: `REQ` → `DEC/DM/CTR` → `TASK` → `TEST` | Draft P7 (rows seeded) |
 | 10 | `ARCH/10-KERNEL.md` | Core kernel | ids, errors, config, time, serialization; minimal-kernel rule | Draft P2 (early) |
 | 11 | `ARCH/11-WORK.md` | Work plane | Work · Step · Task · Session · Run · Checkpoint · Scheduler | Draft P2 (early) |
 | 12 | `ARCH/12-TRUST.md` | Trust/Control | Policy · Guard · approvals · tickets · vault · egress · audit · external-agent projections | Draft P2 (early) |

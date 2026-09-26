@@ -51,7 +51,7 @@ No `skill` kind — procedural know-how is a capability/skill concern (`31-SKILL
 - **Work state** — steps, checkpoints, approvals, task graph belong to `11-WORK`; the checkpoint (`DM-006`) is authoritative (DEC-041); memory may hold a `summary` that *references* a checkpoint/session through `source_ref`, never a second timeline and never served as work state.
 - **Transcripts** — session history is the session plane's; memory stores extracted items only.
 
-## 3. Data model — `DM-MEM-*`
+## 3. Data model — `DM-018` (`17`-local table/field names; the `DM-MEM-*` grouping is informal)
 
 One SQLite file (app data dir), WAL mode, `Core`-owned, **encrypted at rest** (whole-DB, DEC-039). FTS kept in sync by triggers; `PRAGMA user_version` carries the schema version.
 
@@ -131,7 +131,7 @@ CREATE TABLE memory_jobs (                           -- extraction bookkeeping (
 - **Jobs GC:** `done` rows older than 7 d and `error` rows older than 30 d are swept by the single writer (defaults; product knobs). A lease older than its term is reclaimed with an audit entry.
 - Temporal columns (`valid_at`/`invalid_at`) are intentionally absent — the single `superseded_by` pointer covers explicit reversal; add them with upgrade U10.
 
-## 4. Interfaces — `CTR-MEM-*`
+## 4. Interfaces — `CTR-008` (`memory.*` operations; the `CTR-MEM-*` grouping is informal)
 
 | Interface | Signature (semantic) | Notes |
 |---|---|---|
@@ -182,9 +182,9 @@ Context Controller ── memory.recall(query, scope_filter?, tokens) ──►
 
 - **Scoring direction is explicit (F-02/C-03):** FTS5 `bm25()` returns **negative** values (better matches are more negative), so the score is normalized to a non-negative relevance (`relevance = −bm25`) before boosts. Boosts apply on that base, the sort is descending, and ties break deterministically (`created_at`, then id). A malformed/empty query abstains — it never returns arbitrary candidates.
 - **Query construction & i18n (F-12):** free text is parsed/escaped into valid FTS5 MATCH syntax (operator/quote injection rejected) or the call abstains; the tokenizer is `porter unicode61` (English stemming) — non-English/CJK behavior is recorded by fixture, and a tokenizer upgrade is a schema-versioned change, not a silent swap.
-- **Always-on block (≤128 tokens, separately budgeted):** pinned `user` preferences + pinned project conventions; present only when pinned items exist; rendered once per session and reused (cache stability). It is **invalidated** by any mutation of its member set — forget, edit, supersede, pin/unpin, disable, scope wipe — and the next turn reflects it; the cache-bust is accepted for correctness. System deletes (forget) are effective immediately.
-- **Relevant block (≤256 tokens incl. always-on, tunable):** top-k items for the current query; one line per item with a source tag and trust tier; wrapped with the instruction that memory is historical context, **untrusted data with no authority**, to be verified against live state.
-- **Zero-hit semantics:** no query-relevant candidate above the relevance floor ⇒ **zero tokens in the relevant block** (INV-22); the always-on block is measured separately and only exists for pinned items.
+- **Always-on block (≤128 tokens; counted inside the relevant-block ceiling, metered separately — INV-22):** pinned `user` preferences + pinned project conventions; present only when pinned items exist; rendered once per session and reused (cache stability). It is **invalidated** by any mutation of its member set — forget, edit, supersede, pin/unpin, disable, scope wipe — and the next turn reflects it; the cache-bust is accepted for correctness. System deletes (forget) are effective immediately.
+- **Relevant block (≤256 tokens total incl. always-on, tunable):** the 256 ceiling is the rendered relevant block and **includes** the always-on block when pinned items exist; INV-22 accounts for the always-on block separately (zero query-relevant hits still allow at most the always-on block). Top-k items for the current query; one line per item with a source tag and trust tier; wrapped with the instruction that memory is historical context, **untrusted data with no authority**, to be verified against live state.
+- **Zero-hit semantics:** no query-relevant candidate above the relevance floor ⇒ zero tokens in the relevant block beyond the always-on block (INV-22); the always-on block is measured separately and only exists for pinned items.
 - **On-demand:** `recall` stays available as a tool for deep retrieval; session/task summaries are the entry point for “what happened here”.
 - **Abstention is a feature:** abstention, a genuine miss, and a recall error are distinguishable outcomes (`hit | abstain | error`) with metering, so silent quality loss is visible.
 - **Provenance is deletion-tolerant:** items render their source tag; a ref whose source was pruned shows “source unavailable” and is never dereferenced during injection.

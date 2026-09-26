@@ -108,6 +108,8 @@ Commit messages should describe the software change, not the tool, model, assist
 
 The same rule applies to future tools with the same role: keep the repository history about the code and engineering decision, not about which agent happened to perform the edit.
 
+**Scope of the rule:** it targets *authoring-tool attribution* — naming the tool, model or agent that produced an edit. It does not forbid citing named external systems as prior art or absorbed technology: architecture and evidence docs may name studied products (e.g. Codex, Grok Build, Cline, OpenCode) when the reference is about that software, never about who wrote the change.
+
 ## 8. Skill usage
 
 When a reusable workflow exists, prefer the corresponding skill instead of recreating the procedure from scratch.
@@ -151,7 +153,7 @@ L3  Tauri Shell        src-tauri/ — thin Rust shell, 42 *_cmds.rs modules
         ↓ direct Rust calls
 L2  Rust Kernel        crates/everyaios-* — guard/vault/audit/office/browser
         ↓ stdio JSON-RPC 2.0, [u32 LE len][JSON] framing
-L1  Bun Sidecar        packages/coordinator — turn coordination (not reasoning)
+L1  Bun Sidecar        packages/coordinator — shared-plane services a turn calls into (not reasoning)
         ↓ ACP/MCP/CDP
 L0  External Agents    peer agents (DEC-010), MCP servers, browsers
 ```

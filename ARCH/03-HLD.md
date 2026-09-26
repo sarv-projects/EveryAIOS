@@ -102,6 +102,7 @@ flowchart TB
 | 32 | Channels | Surfaces & protocols: desktop, CLI, ACP, A2A, API, mobile; agent gateway | everything above (thin) |
 | 34 | Effect Verification | Validate/render/verify/reconcile pipeline; receipt policy per risk | domains, artifacts, events |
 | 40–42 | Cross | Flows, edge cases, evidence map | all |
+| 43 | Glossary | Canonical terms — defined once, linked back (meta) | — |
 | 44 | Absorb Register | Competitor absorb matrix + licensing ledger | archive/REPO-COMPARE evidence |
 
 ### 3.1 Contract index (module → owned contracts)
@@ -206,6 +207,8 @@ Resources are installed/available at Global or Workspace and never duplicated pe
 | Domains | capability descriptors + execution | capability |
 | Artifacts | artifact/receipt service | agents, workflows, UI, library |
 | Events | store/bus/replay/subscriptions | everyone (read/subscribe) |
+| Skills & Plugins | skill resolver, plugin surfaces | capability, work, agents |
+| Channels | Agent Gateway, surface mappings | external agents, UI/CLI/IDE |
 | Verification | validated effects + render/verify results | capability (pre-receipt) |
 
 ## 9. Implementation order (after docs freeze; not current work)

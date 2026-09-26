@@ -41,7 +41,7 @@ IDs are stable once published; deprecated IDs are never reused.
 - **Acceptance:** `<how a test proves it, concretely>`
 - **Failure cases:** `<failure 1>`; `<failure 2>`
 - **Tests:** `TEST-<DOMAIN>-001` (or `pending`)
-- **Status:** proposed | accepted | implemented | verified | deprecated
+- **Status:** seeded | accepted | implemented | verified | deprecated
 
 ### REQ-<DOMAIN>-002 — <one-line title>
 
@@ -97,7 +97,7 @@ How this lands safely; compatibility; what must never be half-enabled.
 
 ## 15. Open questions
 
-- `OQ-<n>` — <question + who resolves it>
+- `OQ-<MNEMONIC>-<n>` — <question + who resolves it>. Cross-cutting questions use `OQ-###` in the project index; module-scoped ids are stable and never renumbered.
 
 ## 16. Related
 

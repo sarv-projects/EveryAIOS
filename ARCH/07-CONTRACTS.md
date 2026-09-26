@@ -8,7 +8,7 @@
 
 - **IDs:** `CTR-###`, stable.
 - **Async by default**; every long-running call accepts a cancellation handle and declares a default timeout + retryability.
-- **Typed errors** only: `AuthorizationDenied · NotFound · Conflict · Unavailable · Timeout · InvalidState · GuidanceRequired · RequiresUserAction`. `guidance`/`requires_user_action` are **results**, not errors (a capability may answer “connect Google Drive first”).
+- **Typed errors** only: `AuthorizationDenied · NotFound · Conflict · Unavailable · Timeout · InvalidState · GuidanceRequired · RequiresUserAction · Internal`. `guidance`/`requires_user_action` are **results**, not errors (a capability may answer “connect Google Drive first”).
 - **Effects:** any contract that can cause an externally visible effect MUST require a `Ticket` (INV-03) and SHOULD return/append a `Receipt` ref (INV-07).
 - **No store exposure:** contracts return projections, handles and refs — never internal stores, vault values, or other modules' mutable state (INV-11).
 - **Versioning:** breaking signature changes require a `DEC`; additive changes are minor.

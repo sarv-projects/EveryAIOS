@@ -33,7 +33,7 @@
 | DM-011 | `CapabilityDescriptor` | `13` | Semantic operation definition | versioned |
 | DM-012 | `CapabilityHandle` | `13` | Resolved provider binding (epoch-checked) | valid → stale (epoch bump) → expired |
 | DM-013 | `ProviderInfo` | `14` | Provider registration + health | registered → connected → degraded → down |
-| DM-014 | `AgentProfile` | `15` | Agent definition (native or external); incl. composer capabilities | installed / available / disabled |
+| DM-014 | `AgentProfile` | `15` | Agent definition (native or external); incl. composer capabilities; occupancy facts stay distinct (`installed` ≠ `discovered` ≠ `launchable` — REQ-UI-011) | installed / discovered / launchable / available / disabled |
 | DM-015 | `DelegationPolicyEntry` | `15` | Worker configuration for delegation | versioned |
 | DM-016 | `WorkerReceipt` | `15` | Result summary returned to the parent (never the transcript) | immutable |
 | DM-017 | `ContextItem` | `16` | Context fragment record (reference-first) | ephemeral |
@@ -80,7 +80,7 @@ erDiagram
 **DM-009 `Ticket`** — `id` · `capability_id` · `provider_id` · `environment_id` · `scope` (paths/targets/resource patterns) · `issued_at` · `expires_at` · `uses` · `approval_ref?`.
 **DM-011 `CapabilityDescriptor`** — `id` · `version` · `description` · `affordances[]` · `requirements[]` · `providers[]` · `loading_mode` (`eager|catalog|on-demand`) · `risk_class` (`safe|sensitive|dangerous`) · `auth_requirements?`.
 **DM-012 `CapabilityHandle`** — `capability_id` · `provider_id` · `provider_epoch` · `environment_id` · `permission_snapshot` · `runtime_handle_ref` · `expires_at`.
-**DM-014 `AgentProfile`** — `id` · `name` · `runtime` (`native|acp|mcp-agent|remote`) · `version` · `status` · `supported_models[]` · `capabilities[]` · `protocol` · `supports_subagents/background/steering` · `composer` capabilities.
+**DM-014 `AgentProfile`** — `id` · `name` · `runtime` (`native|acp|mcp-agent|remote`) · `version` · `status` (`installed` · `discovered` · `launchable` · `available` · `disabled`) · `supported_models[]` · `capabilities[]` · `protocol` · `supports_subagents/background/steering` · `composer` capabilities.
 **DM-015 `DelegationPolicyEntry`** — `worker_agent_id` · `role` · `model?` · `instructions_ref?` · `skills[]` · `mcp_scope[]` · `permissions` · `workspace_scope` (`shared|isolated-worktree|sandbox`) · `can_spawn_children` · `max_parallel` · `max_turns?` · `token_budget?` · `mode` (`automatic|preferred|manual|disabled`) · `routing_rules[]`.
 **DM-016 `WorkerReceipt`** — `agent_id` · `run_id` · `status` · `scope[]` · `summary` · `findings?[]` · `changed_files?[]` · `tests?[]` · `artifacts?[]` · `blockers?[]` · `confidence?` · `usage {in,out}` · `will_wake?` (advisory, from the `subagent.finished` event) · `partial?` (set when the child overran its step budget or was interrupted mid-task).
 **DM-017 `ContextItem`** — see `16` §2 (id · source · type · content_ref · token_cost · priority · relevance · freshness · scope · pinned · compressible · reconstructable · sensitivity).
