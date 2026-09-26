@@ -56,7 +56,7 @@
 
 ### FLOW-09 — Memory recall into context
 **Actors:** Context Controller (`15`/`16`) · `17`.
-**Steps:** recall(query, scopes, budget) → filter (current, unexpired, sensitivity) → BM25 candidates → score → budget-fit (whole-item drop) → candidates returned → Controller decides inclusion → injection (non-touching; staleness-annotated).
+**Steps:** recall(query, scopes, budget; caller scopes narrow the actor-derived ceiling) → filter (current, unexpired, sensitivity) → FTS5 BM25 candidates → relevance = −bm25 (higher = better; deterministic tie-break) → budget-fit (whole-item drop) → candidates returned → Controller decides inclusion → injection (non-touching; staleness-annotated).
 **Terminal:** items injected or **abstention** (zero hits ⇒ zero tokens).
 **Failure branches:** recall failure → proceed without memory; DB locked → memory disabled for session with warning.
 
