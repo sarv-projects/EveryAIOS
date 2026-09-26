@@ -74,6 +74,9 @@ pub fn storage_scan(
     let opts = scan_opts();
     let records = everyaios_storage::scan(&root, &opts).map_err(|e| e.to_string())?;
     let files = records.iter().filter(|r| !r.is_dir).count();
+    // FIX-10: count before the arena takes ownership of `records`; the response
+    // reports how many records the OS gave no identity for (never a zero-filled id).
+    let identity_unknown = records.iter().filter(|r| r.identity.is_unknown()).count();
     let arena = everyaios_storage::build_arena(records, &root);
     let root_id = arena.root().unwrap_or(0);
     let rects = everyaios_storage::treemap_for_dir(&arena, root_id);
@@ -102,7 +105,7 @@ pub fn storage_scan(
         // FIX-10: how many records the OS would not give an identity for.
         // Surfaced as a count (never a silent zero-filled id) so the UI can
         // stay honest about hardlink/reclaim numbers derived from it.
-        "identityUnknown": records.iter().filter(|r| r.identity.is_unknown()).count(),
+        "identityUnknown": identity_unknown,
         "identityPlatform": everyaios_storage::IdentityPlatform::current().as_str(),
     }))
 }
