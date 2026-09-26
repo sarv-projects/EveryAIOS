@@ -3877,6 +3877,107 @@ mod tests {
         assert_eq!(reply["result"]["outcome"]["optionId"], "reject-once");
     }
 
+    // ---- FIX-03: the permission bridge never invents an option ------------
+
+    /// The inbound frames for one driven turn whose permission request carries
+    /// `options` (the verbatim JSON array the agent offers).
+    fn permission_turn(options: &str) -> Vec<String> {
+        vec![
+            result_response(1, init_result()),
+            result_response(2, json!({ "sessionId": "s1" })),
+            json!({
+                "jsonrpc": "2.0", "id": 99, "method": "session/request_permission",
+                "params": {
+                    "sessionId": "s1",
+                    "toolCall": { "toolCallId": "tc1", "title": "Edit a.rs", "kind": "edit" },
+                    "options": serde_json::from_str::<Value>(options).expect("options json")
+                }
+            })
+            .to_string(),
+            result_response(3, json!({ "stopReason": "end_turn" })),
+        ]
+    }
+
+    /// A handshaken session over a scripted permission turn.
+    fn permission_session(options: &str) -> AcpSession<MockTransport> {
+        let frames = permission_turn(options);
+        let borrowed: Vec<&str> = frames.iter().map(String::as_str).collect();
+        let mut s = AcpSession::new(MockTransport::new(borrowed));
+        s.initialize(client_info()).unwrap();
+        s.session_new("/w", vec![]).unwrap();
+        s
+    }
+
+    /// The last frame the session sent — the permission reply.
+    fn last_reply(s: &AcpSession<MockTransport>) -> Value {
+        serde_json::from_str(s.transport.sent.last().expect("a reply")).unwrap()
+    }
+
+    #[test]
+    fn an_unanswerable_permission_is_refused_with_a_typed_error_not_a_synthesized_option() {
+        // The agent offers no reject option, so a denial cannot be expressed.
+        // The turn must fail closed: no `result` with an invented id, and the
+        // agent gets a typed JSON-RPC error instead of a silent allow.
+        let mut s = permission_session(
+            r#"[ { "optionId": "allow-once", "kind": "allow_once", "label": "Allow" } ]"#,
+        );
+        let error = s
+            .prompt("deny it", |_p| PermissionDecision::deny())
+            .expect_err("must fail closed");
+        assert!(
+            matches!(&error, AcpError::PermissionUnanswerable(message) if message.contains("reject")),
+            "unexpected error: {error}"
+        );
+        let reply = last_reply(&s);
+        assert_eq!(reply["id"], 99);
+        assert_eq!(reply["error"]["code"], ERROR_PERMISSION_UNANSWERABLE);
+        assert!(
+            reply.get("result").is_none(),
+            "a fail-closed refusal must not carry an outcome: {reply}"
+        );
+        // The transport is quarantined: the session cannot keep running after a
+        // protocol-level refusal.
+        assert!(s.is_quarantined());
+    }
+
+    #[test]
+    fn an_unpinned_allow_selects_allow_once_even_when_allow_always_is_listed_first() {
+        let mut s = permission_session(
+            r#"[
+                { "optionId": "allow-always", "kind": "allow_always", "label": "Always" },
+                { "optionId": "allow-once", "kind": "allow_once", "label": "Once" },
+                { "optionId": "reject-once", "kind": "reject_once", "label": "No" }
+            ]"#,
+        );
+        s.prompt("do it", |_p| PermissionDecision::allow())
+            .expect("answered");
+        assert_eq!(
+            last_reply(&s)["result"]["outcome"]["optionId"],
+            "allow-once"
+        );
+    }
+
+    #[test]
+    fn a_foreign_option_id_is_refused_rather_than_echoed() {
+        let mut s = permission_session(
+            r#"[ { "optionId": "allow-once", "kind": "allow_once", "label": "Allow" } ]"#,
+        );
+        let error = s
+            .prompt("sneak one in", |_p| PermissionDecision::Allow {
+                option_id: Some("approve-everything".into()),
+            })
+            .expect_err("must fail closed");
+        assert!(
+            matches!(&error, AcpError::PermissionUnanswerable(message) if message.contains("approve-everything")),
+            "unexpected error: {error}"
+        );
+        let reply = last_reply(&s);
+        assert!(
+            reply.get("result").is_none(),
+            "a foreign option id must never reach the agent: {reply}"
+        );
+    }
+
     #[test]
     fn authenticate_agent_method_succeeds() {
         let mut t = MockTransport::new(vec![

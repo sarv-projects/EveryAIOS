@@ -586,12 +586,14 @@ impl ChiefAdapter for AcpChief {
         // this layer. `DenyAllGate` (the default) denies, so there is no
         // unconditional allow on any path here.
         let approval = self.gate.decide(&req);
+        // FIX-03: an allow names **no** option id of its own. The wire reply
+        // must be an option the agent actually offered, so the strict resolver
+        // picks the offered `allow_once`; synthesizing an id here (this path
+        // used to fall back to the tool-call id) would put a value in the
+        // agent's hand that the agent never minted.
         let decision = if approval.approved {
             PermissionDecision::Allow {
-                option_id: approval
-                    .option_id
-                    .clone()
-                    .or_else(|| Some(req.tool_call_id.clone())),
+                option_id: approval.option_id.clone(),
             }
         } else {
             PermissionDecision::Deny {
@@ -1069,6 +1071,10 @@ mod tests {
                     saw_done = true;
                     break;
                 }
+                // A failed turn must end the drain: a driver that reported an
+                // error will send no further events, and waiting for one would
+                // hang the test instead of failing it.
+                ChiefEvent::Error(message) => panic!("chief turn failed: {message}"),
                 _ => {}
             }
         }

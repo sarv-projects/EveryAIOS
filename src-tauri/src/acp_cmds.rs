@@ -1672,8 +1672,13 @@ fn build_acp_prompt_with_passport(state: &State<'_, AppState>, text: &str) -> (S
     // requests are mediated by Guard-2 at the ACP boundary, but effects
     // performed inside the agent's own process are outside the EveryAIOS audit
     // trail. No id gets a fully-mediated session any more — that was the
-    // retired built-in engine's privilege (ADR-0005 §3).
-    let governance = everyaios_acp::GovernedSession::SelfContained { channel_b: true };
+    // retired built-in engine's privilege (ADR-0005 §3). The class is an
+    // architectural claim and is recorded as a decision; the Channel-B flag is
+    // **observed**, not assumed: a failed lease leaves no servers, and a badge
+    // that claims a mounted catalog when none is mounted is a lie the agent
+    // would read as permission to use it (FIX-07).
+    let channel_b = !channel_b_servers(state).is_empty();
+    let governance = everyaios_acp::GovernedSession::SelfContained { channel_b };
     let core_facts = {
         let relay = state.chat_relay.lock().ok();
         relay
@@ -3198,6 +3203,11 @@ pub fn acp_prompt(
 
     let guard = Arc::clone(&state.guard_service);
     let mut pending_tickets: Vec<String> = Vec::new();
+    // FIX-03 — the ACP permission bridge. Trust (GuardService) is the only
+    // decider; the bridge maps its verdict onto an option the agent actually
+    // offered, requires a live single-use bound ticket for any allow, and
+    // fails closed when it cannot answer (`ARCH/12-TRUST.md` §5, §11).
+    let bridge = everyaios_acp::PermissionBridge::new();
     let prompt_result = provider_session.prompt_with_content(content, |req| {
         if cancel.is_requested() {
             return PermissionDecision::deny();
@@ -3206,45 +3216,76 @@ pub fn acp_prompt(
             return PermissionDecision::deny();
         };
         let (op, risk) = map_tool_call(&req.tool_call);
-        let paths: Vec<String> = req
-            .tool_call
-            .locations
-            .iter()
-            .map(|l| l.uri.clone())
-            .collect();
-        let decision = DecisionPackage::new(req.tool_call.title.clone())
+        // The approval card must show *what* is being approved: the preview is
+        // the bounded, secret-redacted projection of the agent's own request
+        // (diff, script lines, destinations), so the human approves against the
+        // change rather than a title. The preview is the only source of that
+        // content — this call site just maps it onto the canonical Guard-2
+        // decision package.
+        let preview = everyaios_acp::PermissionPreview::build(req, op.name(), risk);
+        let decision = DecisionPackage::new(preview.title.clone())
+            .with_diff(preview.diff.clone())
             .with_risk(risk)
-            .with_paths(paths);
+            .with_paths(preview.paths.clone())
+            .with_script(
+                preview.script_lines.clone(),
+                preview.execution_target.clone(),
+            )
+            .with_network(preview.network_destinations.clone());
         let args_hash = hash_tool_args(&req.tool_call);
-        match g.evaluate(
+        let binding = everyaios_acp::TicketBinding {
+            agent_id: agent_id.clone(),
+            session_id: application_session_id.clone(),
+            args_hash: args_hash.clone(),
+        };
+        let tool_call_id = req.tool_call.tool_call_id.clone();
+        // The one decider runs first; only its own verdict decides anything.
+        let verdict = g.evaluate(
             &application_session_id,
             &agent_id,
-            &req.tool_call.tool_call_id,
+            &tool_call_id,
             op,
             decision,
             &args_hash,
             0,
-        ) {
-            GuardDecision::Allow { ticket_id } => {
-                if is_brokered_op(&op) {
-                    match g.use_ticket(&ticket_id, &args_hash) {
-                        Ok(()) if !cancel.is_requested() => PermissionDecision::allow(),
-                        _ => PermissionDecision::deny(),
-                    }
-                } else {
-                    let _ = g.use_ticket(&ticket_id, &args_hash);
-                    if cancel.is_requested() {
-                        PermissionDecision::deny()
-                    } else {
-                        PermissionDecision::allow()
-                    }
+        );
+        // Spend the ticket exactly as Trust issued it: `use_ticket` enforces
+        // approval → validity → args → single-use, and its result is never
+        // discarded (a stale, expired or already-used ticket is a denial, not
+        // an allow).
+        let spend = |g: &mut everyaios_core::GuardService, ticket_id: &str| -> bool {
+            match g.use_ticket(ticket_id, &args_hash) {
+                Ok(()) => !cancel.is_requested(),
+                Err(error) => {
+                    eprintln!(
+                        "everyaios: ACP permission `{tool_call_id}` refused — ticket {ticket_id} \
+                         could not be spent: {error}"
+                    );
+                    false
                 }
             }
-            GuardDecision::Block { .. } => PermissionDecision::deny(),
+        };
+        let trust = match verdict {
+            GuardDecision::Allow { ticket_id } => {
+                if spend(&mut g, &ticket_id) {
+                    everyaios_acp::TrustOutcome::once(
+                        acp_ticket_facts(&ticket_id, &binding),
+                        "guard allow (policy or standing rule)",
+                    )
+                } else {
+                    everyaios_acp::TrustOutcome::reject("ticket spend refused")
+                }
+            }
+            GuardDecision::Block { reason } => {
+                everyaios_acp::TrustOutcome::reject(format!("guard deny: {reason}"))
+            }
             GuardDecision::Ask { ticket_id } => {
                 pending_tickets.push(ticket_id.clone());
                 let rx = g.watch_ticket(&ticket_id);
                 drop(g);
+                // The approval waits on the channel that owns the binding
+                // (`ARCH/32-CHANNELS.md` §7): a disconnect, a cancel, or a
+                // lost channel all resolve to a denial, never an implicit allow.
                 let approved = loop {
                     if cancel.is_requested() {
                         break false;
@@ -3258,14 +3299,35 @@ pub fn acp_prompt(
                 let Ok(mut g) = guard.lock() else {
                     return PermissionDecision::deny();
                 };
-                if approved && !cancel.is_requested() {
-                    match g.use_ticket(&ticket_id, &args_hash) {
-                        Ok(()) => PermissionDecision::allow(),
-                        Err(_) => PermissionDecision::deny(),
-                    }
+                if approved && spend(&mut g, &ticket_id) {
+                    everyaios_acp::TrustOutcome::once(
+                        acp_ticket_facts(&ticket_id, &binding),
+                        "human approved on the owning channel",
+                    )
+                } else if approved {
+                    everyaios_acp::TrustOutcome::reject("ticket spend refused after approval")
                 } else {
-                    PermissionDecision::deny()
+                    everyaios_acp::TrustOutcome::reject("human rejected or wait ended")
                 }
+            }
+        };
+        match bridge.answer(req, &binding, &trust) {
+            Ok(answer) => {
+                if answer.narrowed {
+                    eprintln!(
+                        "everyaios: ACP permission `{tool_call_id}` answered as `{}` — no durable \
+                         policy change was recorded, so the standing grant was not created",
+                        answer.choice.card_vocabulary()
+                    );
+                }
+                answer.decision
+            }
+            Err(error) => {
+                // Fail closed: the bridge could not express the decision, so no
+                // option is granted. `resolve_option` will refuse to name an
+                // option the agent never offered and the turn ends.
+                eprintln!("everyaios: ACP permission `{tool_call_id}` failed closed: {error}");
+                PermissionDecision::deny()
             }
         }
     });
@@ -3665,19 +3727,13 @@ fn read_workspace_resource(cwd: &str, reference: &str) -> Option<(String, String
 
 /// Map an ACP tool call onto a Guard-2 operation + risk tier so it routes
 /// through the same policy engine as native tools (F9 shared taxonomy).
-/// S0.6 containment: EveryAIOS-implemented file/terminal ops are *brokered*
-/// (must consume a Rust ticket). Other kinds are still ticketed on Allow
-/// but labeled uncontrolled for ACP-native tools we do not execute.
-fn is_brokered_op(op: &Operation) -> bool {
-    matches!(
-        op,
-        Operation::DeleteFiles
-            | Operation::GenericWrite
-            | Operation::MultiFileEdit { .. }
-            | Operation::TerminalShell { .. }
-    )
-}
-
+///
+/// One mapping, and it is the only one: the ACP wire's tool kind is the
+/// translation boundary, and the operation + risk it yields are what Guard
+/// decides on. Note that a non-mutating kind still maps to a *write* operation
+/// at low risk — the classification is deliberately conservative, and Guard's
+/// own layers (human floor, protected paths, risk tier) decide what happens
+/// next.
 fn map_tool_call(tc: &ToolCall) -> (Operation, RiskLevel) {
     match tc.kind {
         Some(ToolKind::Delete) => (Operation::DeleteFiles, RiskLevel::High),
@@ -3688,6 +3744,33 @@ fn map_tool_call(tc: &ToolCall) -> (Operation, RiskLevel) {
         Some(ToolKind::Edit) | Some(ToolKind::Move) => (Operation::GenericWrite, RiskLevel::Medium),
         // read / search / think / fetch / unknown → non-mutating, auto-allow.
         _ => (Operation::GenericWrite, RiskLevel::Low),
+    }
+}
+
+/// The ticket facts the ACP permission bridge validates before it will express
+/// an allow (FIX-03 / `TASK-CHAN-001`).
+///
+/// `GuardService` deliberately exposes no ticket getter (a ticket is not a
+/// read API), so the facts are reconstructed from exactly what this call site
+/// asked Guard to mint plus the `use_ticket` result that already succeeded: the
+/// same `agent_id` / `session_id` / `args_hash` it passed to `evaluate`, and the
+/// single-use declaration `evaluate` always sets (pinned end-to-end by
+/// `an_acp_permission_ticket_is_spent_exactly_once` below). A mismatch in any
+/// of them — or a spend Guard refused — makes the bridge refuse the allow, so a
+/// fabricated or stale approval can never reach the agent.
+fn acp_ticket_facts(
+    ticket_id: &str,
+    binding: &everyaios_acp::TicketBinding,
+) -> everyaios_acp::TicketFacts {
+    everyaios_acp::TicketFacts {
+        ticket_id: ticket_id.to_string(),
+        agent_id: binding.agent_id.clone(),
+        session_id: binding.session_id.clone(),
+        args_hash: binding.args_hash.clone(),
+        single_use: true,
+        // True only because the caller reached here *after* `use_ticket`
+        // returned `Ok` for this exact ticket and args hash.
+        validated_by_guard: true,
     }
 }
 
@@ -4129,16 +4212,56 @@ mod tests {
         let (_, risk) = map_tool_call(&tc);
         assert_eq!(risk, RiskLevel::Low);
         let (op, _) = map_tool_call(&tc);
-        assert!(!is_brokered_op(&op) || matches!(op, Operation::GenericWrite));
+        assert!(matches!(op, Operation::GenericWrite));
     }
 
+    /// FIX-03: the ticket the ACP permission bridge relies on is genuinely
+    /// single-use, end to end through the real `GuardService` — the fact the
+    /// bridge asserts is not an assumption.
     #[test]
-    fn file_and_terminal_ops_are_brokered() {
-        assert!(is_brokered_op(&Operation::DeleteFiles));
-        assert!(is_brokered_op(&Operation::TerminalShell {
-            destructive: false
-        }));
-        assert!(is_brokered_op(&Operation::GenericWrite));
+    fn an_acp_permission_ticket_is_spent_exactly_once() {
+        let mut g = everyaios_core::GuardService::new();
+        let verdict = g.evaluate(
+            "session-1",
+            "claude-code",
+            "acp.tc-1",
+            Operation::GenericWrite,
+            DecisionPackage::new("edit a.rs"),
+            "args-1",
+            0,
+        );
+        let ticket_id = match verdict {
+            GuardDecision::Allow { ticket_id } => ticket_id,
+            GuardDecision::Ask { ticket_id } => {
+                assert!(g.approve(&ticket_id), "a pending ticket needs a decision");
+                ticket_id
+            }
+            GuardDecision::Block { reason } => panic!("unexpected block: {reason}"),
+        };
+        assert!(
+            g.use_ticket(&ticket_id, "args-1").is_ok(),
+            "the first spend consumes the ticket"
+        );
+        assert!(
+            g.use_ticket(&ticket_id, "args-1").is_err(),
+            "a second spend must be refused: an ACP allow is never replayable"
+        );
+        // A different argument set is refused too — the ticket is bound to the
+        // exact request (`DM-009`).
+        let mut other = everyaios_core::GuardService::new();
+        let verdict = other.evaluate(
+            "session-1",
+            "claude-code",
+            "acp.tc-2",
+            Operation::GenericWrite,
+            DecisionPackage::new("edit a.rs"),
+            "args-1",
+            0,
+        );
+        if let GuardDecision::Allow { ticket_id } | GuardDecision::Ask { ticket_id } = verdict {
+            other.approve(&ticket_id);
+            assert!(other.use_ticket(&ticket_id, "args-2").is_err());
+        }
     }
 
     #[test]

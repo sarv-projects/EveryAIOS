@@ -28,11 +28,10 @@
 //! re-homing the corpus is tracked with the owner of `everyaios-core`.
 
 use crate::messages::{
-    PermissionDecision, PermissionOption, PermissionOptionKind, PermissionRequestParams, ToolKind,
+    PermissionDecision, PermissionOptionKind, PermissionRequestParams, ToolKind,
 };
-use everyaios_guard::decision::DecisionPackage;
-use everyaios_guard::ticket::AuthorizationTicket;
 use everyaios_guard::RiskLevel;
+use everyaios_guard::ticket::AuthorizationTicket;
 use serde::{Deserialize, Serialize};
 
 /// The answer a human (or policy) reached on the owning channel, in the three
@@ -157,11 +156,7 @@ impl TrustOutcome {
 
     /// An `always` answer. `policy_recorded` is the host's assertion that the
     /// user's policy change was actually persisted by Trust.
-    pub fn always(
-        ticket: TicketFacts,
-        policy_recorded: bool,
-        reason: impl Into<String>,
-    ) -> Self {
+    pub fn always(ticket: TicketFacts, policy_recorded: bool, reason: impl Into<String>) -> Self {
         Self {
             choice: AcpApprovalChoice::Always,
             ticket: Some(ticket),
@@ -251,7 +246,9 @@ impl PermissionBridge {
         // Without one, the effect may still run — but only once, and the
         // narrowing is reported so the host can surface it.
         let (choice, narrowed) = match outcome.choice {
-            AcpApprovalChoice::Always if !outcome.policy_recorded => (AcpApprovalChoice::Once, true),
+            AcpApprovalChoice::Always if !outcome.policy_recorded => {
+                (AcpApprovalChoice::Once, true)
+            }
             other => (other, false),
         };
 
@@ -310,17 +307,19 @@ impl PermissionBridge {
         decision: &PermissionDecision,
     ) -> Result<String, BridgeError> {
         match decision {
-            PermissionDecision::Allow { option_id: Some(id) } => offered_id(request, id),
-            PermissionDecision::Deny { option_id: Some(id) } => offered_id(request, id),
+            PermissionDecision::Allow {
+                option_id: Some(id),
+            } => offered_id(request, id),
+            PermissionDecision::Deny {
+                option_id: Some(id),
+            } => offered_id(request, id),
             PermissionDecision::Allow { option_id: None } => {
-                select_option(request, AcpApprovalChoice::Once)?.ok_or(BridgeError::NoOfferedOption(
-                    "allow_once",
-                ))
+                select_option(request, AcpApprovalChoice::Once)?
+                    .ok_or(BridgeError::NoOfferedOption("allow_once"))
             }
             PermissionDecision::Deny { option_id: None } => {
-                select_option(request, AcpApprovalChoice::Reject)?.ok_or(BridgeError::NoOfferedOption(
-                    "reject",
-                ))
+                select_option(request, AcpApprovalChoice::Reject)?
+                    .ok_or(BridgeError::NoOfferedOption("reject"))
             }
         }
     }
@@ -362,7 +361,10 @@ fn select_option(
 /// second decider: approval, validity, argument match and the single-use spend
 /// are enforced by Trust (`GuardService::use_ticket`). The bridge only refuses
 /// to answer `allow` for facts that could not authorize an effect.
-pub fn require_once_ticket(ticket: &TicketFacts, binding: &TicketBinding) -> Result<(), BridgeError> {
+pub fn require_once_ticket(
+    ticket: &TicketFacts,
+    binding: &TicketBinding,
+) -> Result<(), BridgeError> {
     if ticket.ticket_id.trim().is_empty() {
         return Err(BridgeError::MissingTicket("<empty>".to_string()));
     }
@@ -407,10 +409,10 @@ pub const PREVIEW_MAX_DESTINATIONS: usize = 16;
 
 /// What the approver is being asked to allow, in bounded and redacted form.
 ///
-/// This is the ACP-side projection of [`DecisionPackage`] (the Guard-2 card
-/// payload). It is built from the agent's own request, so it can be rendered
-/// **before** the decision is made — an approval the human cannot inspect is
-/// not informed consent (`ARCH/12-TRUST.md` §2, `DEC-028`).
+/// This is the ACP-side projection of `everyaios_guard::decision::DecisionPackage`
+/// (the Guard-2 card payload). It is built from the agent's own request, so it
+/// can be rendered **before** the decision is made — an approval the human
+/// cannot inspect is not informed consent (`ARCH/12-TRUST.md` §2, `DEC-028`).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PermissionPreview {
@@ -444,11 +446,7 @@ impl PermissionPreview {
     /// `operation` and `risk` come from the host's ACP→Guard mapping (one
     /// mapping, `acp_cmds::map_tool_call`); everything else is derived from the
     /// request itself.
-    pub fn build(
-        request: &PermissionRequestParams,
-        operation: &str,
-        risk: RiskLevel,
-    ) -> Self {
+    pub fn build(request: &PermissionRequestParams, operation: &str, risk: RiskLevel) -> Self {
         let tool_call = &request.tool_call;
         let kind = tool_call
             .kind
@@ -458,7 +456,8 @@ impl PermissionPreview {
         let mut truncated = false;
         let mut redacted = false;
 
-        let (title, t_redacted) = cap_text(&tool_call.title, PREVIEW_MAX_TITLE_CHARS, &mut truncated);
+        let (title, t_redacted) =
+            cap_text(&tool_call.title, PREVIEW_MAX_TITLE_CHARS, &mut truncated);
         redacted |= t_redacted;
 
         let mut paths = Vec::new();
@@ -473,8 +472,12 @@ impl PermissionPreview {
             paths.push(uri);
         }
 
-        let (diff, script_lines, execution_target, d_redacted, s_redacted) =
-            render_arguments(&tool_call.raw_input, &tool_call.content, kind, &mut truncated);
+        let (diff, script_lines, execution_target, d_redacted, s_redacted) = render_arguments(
+            &tool_call.raw_input,
+            &tool_call.content,
+            kind,
+            &mut truncated,
+        );
         redacted |= d_redacted | s_redacted;
 
         let (network_destinations, n_redacted) = collect_destinations(&diff, &script_lines);
@@ -493,30 +496,6 @@ impl PermissionPreview {
             network_destinations,
             truncated,
             redacted,
-        }
-    }
-
-    /// The Guard-2 decision package for this request — the payload the
-    /// approval card renders, so the human approves against the diff and not a
-    /// bare title.
-    pub fn decision_package(&self) -> DecisionPackage {
-        DecisionPackage {
-            goal: if self.title.is_empty() {
-                format!("{} ({})", self.operation, self.kind)
-            } else {
-                self.title.clone()
-            },
-            proposed_diff: self.diff.clone(),
-            risk: self.risk,
-            affected_paths: self.paths.clone(),
-            script_lines: self.script_lines.clone(),
-            execution_target: self.execution_target.clone(),
-            env_vars: Vec::new(),
-            network_destinations: self.network_destinations.clone(),
-            // ACP carries no web-action class; guessing one would claim a
-            // sensitivity the wire never stated.
-            web_action: None,
-            confidence: None,
         }
     }
 }
@@ -589,7 +568,7 @@ fn render_arguments(
                 }
                 if execution_target.is_empty() {
                     execution_target = cap_line_tracked(
-                        &command.split_whitespace().next().unwrap_or_default().to_string(),
+                        command.split_whitespace().next().unwrap_or_default(),
                         truncated,
                     );
                 }
@@ -603,10 +582,7 @@ fn render_arguments(
                     if text.contains('\n') {
                         push_text_lines(&mut lines, text.clone(), "+", truncated);
                     } else {
-                        lines.push(format!(
-                            "{key} = {}",
-                            cap_line_tracked(text, truncated)
-                        ));
+                        lines.push(format!("{key} = {}", cap_line_tracked(text, truncated)));
                     }
                 }
                 other => {
@@ -638,11 +614,10 @@ fn render_arguments(
         }
         if execution_target.is_empty() {
             execution_target = cap_line(
-                &script_lines
+                script_lines
                     .first()
                     .and_then(|l| l.split_whitespace().next())
-                    .unwrap_or_default()
-                    .to_string(),
+                    .unwrap_or_default(),
             );
         }
     }
@@ -655,7 +630,13 @@ fn render_arguments(
         scripts_redacted |= was_redacted;
         *line = value;
     }
-    (diff, script_lines, execution_target, redacted, scripts_redacted)
+    (
+        diff,
+        script_lines,
+        execution_target,
+        redacted,
+        scripts_redacted,
+    )
 }
 
 /// A JSON value as text (scalars verbatim, structures compactly serialized).
@@ -666,12 +647,7 @@ fn as_text(value: &serde_json::Value) -> String {
     }
 }
 
-fn push_text_lines(
-    lines: &mut Vec<String>,
-    text: String,
-    marker: &str,
-    truncated: &mut bool,
-) {
+fn push_text_lines(lines: &mut Vec<String>, text: String, marker: &str, truncated: &mut bool) {
     let count = text.lines().count();
     for line in text.lines().take(PREVIEW_MAX_SCRIPT_LINES * 5) {
         lines.push(format!("{marker} {}", cap_line_tracked(line, truncated)));
@@ -681,11 +657,7 @@ fn push_text_lines(
     }
 }
 
-fn join_bounded(
-    lines: Vec<String>,
-    max_chars: usize,
-    truncated: &mut bool,
-) -> (String, bool) {
+fn join_bounded(lines: Vec<String>, max_chars: usize, truncated: &mut bool) -> (String, bool) {
     let mut out = String::new();
     let mut redacted = false;
     for (index, line) in lines.iter().enumerate() {
@@ -1024,7 +996,10 @@ mod tests {
         }
     }
 
-    fn request(options: Vec<PermissionOption>, raw_input: Option<serde_json::Value>) -> PermissionRequestParams {
+    fn request(
+        options: Vec<PermissionOption>,
+        raw_input: Option<serde_json::Value>,
+    ) -> PermissionRequestParams {
         PermissionRequestParams {
             session_id: "s1".into(),
             tool_call: ToolCall {
@@ -1093,7 +1068,11 @@ mod tests {
             None,
         );
         let answer = bridge
-            .answer(&req, &binding(), &TrustOutcome::once(facts(), "human approved"))
+            .answer(
+                &req,
+                &binding(),
+                &TrustOutcome::once(facts(), "human approved"),
+            )
             .expect("answered");
         assert_eq!(answer.option_id, "allow-once");
         assert_eq!(answer.choice, AcpApprovalChoice::Once);
@@ -1128,7 +1107,10 @@ mod tests {
         // runs exactly once.
         assert_eq!(answer.option_id, "allow-once");
         assert_eq!(answer.choice, AcpApprovalChoice::Once);
-        assert!(answer.narrowed, "the narrowing must be reported to the host");
+        assert!(
+            answer.narrowed,
+            "the narrowing must be reported to the host"
+        );
     }
 
     #[test]
@@ -1258,7 +1240,11 @@ mod tests {
         claimed.validated_by_guard = false;
         assert_eq!(
             bridge
-                .answer(&req, &binding(), &TrustOutcome::once(claimed, "unvalidated"))
+                .answer(
+                    &req,
+                    &binding(),
+                    &TrustOutcome::once(claimed, "unvalidated")
+                )
                 .expect_err("must fail closed"),
             BridgeError::TicketNotLive
         );
@@ -1289,7 +1275,11 @@ mod tests {
             },
         ] {
             let error = bridge
-                .answer(&req, &wrong, &TrustOutcome::once(facts(), "bound elsewhere"))
+                .answer(
+                    &req,
+                    &wrong,
+                    &TrustOutcome::once(facts(), "bound elsewhere"),
+                )
                 .expect_err("must fail closed");
             assert!(matches!(error, BridgeError::BindingMismatch(_)), "{error}");
         }
@@ -1333,14 +1323,14 @@ mod tests {
         let preview = PermissionPreview::build(&req, "write", RiskLevel::Medium);
         assert!(preview.diff.contains("- let x = 1;"));
         assert!(preview.diff.contains("+ let x = 2;"));
+        assert!(preview.diff.contains("path = /w/a.rs"));
         assert_eq!(preview.paths, vec!["file:///w/a.rs".to_string()]);
+        assert_eq!(preview.operation, "write");
+        assert_eq!(preview.risk, RiskLevel::Medium);
+        assert_eq!(preview.tool_call_id, "tc1");
+        assert_eq!(preview.kind, "edit");
         assert!(!preview.redacted);
         assert!(!preview.truncated);
-
-        let package = preview.decision_package();
-        assert_eq!(package.proposed_diff, preview.diff);
-        assert_eq!(package.affected_paths, preview.paths);
-        assert_eq!(package.risk, RiskLevel::Medium);
     }
 
     #[test]
@@ -1414,7 +1404,10 @@ mod tests {
         );
         assert!(preview.redacted);
         // The key name stays legible — the human still sees what was set.
-        assert!(rendered.to_lowercase().contains("authorization"), "{rendered}");
+        assert!(
+            rendered.to_lowercase().contains("authorization"),
+            "{rendered}"
+        );
         // The destination is still reported (egress is the point of the card).
         assert_eq!(
             preview.network_destinations,
@@ -1502,7 +1495,7 @@ mod tests {
             .resolve(
                 &req,
                 &PermissionDecision::Allow {
-                    option_id: Some("approve-everything".into())
+                    option_id: Some("approve-everything".into()),
                 },
             )
             .expect_err("must fail closed");
