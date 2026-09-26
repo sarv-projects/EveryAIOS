@@ -76,6 +76,16 @@ One row per `REQ-*`. Status only from evidence.
 | `REQ-PROV-008` | `14-PROVIDERS` | pending | `INV-02/05`, `CTR-013` | — | pending | pending | unplanned |
 | `REQ-PROV-009` | `14-PROVIDERS` | pending | `DEC-035` | — | pending | pending | unplanned |
 | `REQ-PROV-010` | `14-PROVIDERS` | pending | `—` | — | pending | pending | unplanned |
+| `REQ-CTX-001` | `16-CONTEXT` | pending | `INV-08` | — | pending | pending | unplanned |
+| `REQ-CTX-002` | `16-CONTEXT` | pending | `INV-22` | — | pending | pending | unplanned |
+| `REQ-CTX-003` | `16-CONTEXT` | pending | `DEC-007` | — | pending | pending | unplanned |
+| `REQ-CTX-004` | `16-CONTEXT` | pending | `INV-08` | — | pending | pending | unplanned |
+| `REQ-CTX-005` | `16-CONTEXT` | pending | `DEC-027` | — | pending | pending | unplanned |
+| `REQ-CTX-006` | `16-CONTEXT` | pending | `—` | — | pending | pending | unplanned |
+| `REQ-CTX-007` | `16-CONTEXT` | pending | `INV-23` | — | pending | pending | unplanned |
+| `REQ-CTX-008` | `16-CONTEXT` | pending | `—` | — | pending | pending | unplanned |
+| `REQ-CTX-009` | `16-CONTEXT` | pending | `—` | — | pending | pending | unplanned |
+| `REQ-CTX-010` | `16-CONTEXT` | pending | `DEC-009`, `INV-11` | — | pending | pending | unplanned |
 
 ## 4. Maintenance
 

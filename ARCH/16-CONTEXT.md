@@ -1,6 +1,7 @@
 # 16 — Context
 
 > **Status:** Draft P2 (early — evidence-integrated 2026-09-26). Must pass the `ARCH/00-INDEX.md` §5 checklist at freeze.
+> **P7 pass (2026-09-26):** line-checked; requirements seeded (`REQ-CTX-*`, Requirements section).
 > **Core idea (DEC-007):** *Context is a platform capability; context control is an agent capability.* Core answers **“what context exists?”**; Agent X answers **“what should the model see right now?”**
 > **Dependencies:** `10-KERNEL`, `17-MEMORY`, `25-FILES`, `26-CODE`, `21-WORLD-MODEL`, `29-ARTIFACTS`, `30-EVENTS`, `11-WORK` (sessions), `18-MODEL-ROUTING` (windows/tokenizers), `12-TRUST` (sensitivity/projections), `15-AGENT-X` (control side).
 > **Evidence:** `ARCHIVE/v1-research/agent-harness-verification.md` §A1/§A2/§C1/§C2/§E1/§E2 · `ARCHIVE/v1-research/memory.md` §4 · product-owner brief. Key decisions: DEC-007, DEC-015, DEC-019, DEC-027, INV-08, INV-22.
@@ -134,3 +135,20 @@ Retrieve (search/snapshot) → Select/Rank → Budget → Prune → Compact (if 
 ## 13. Evidence
 
 `ARCHIVE/v1-research/agent-harness-verification.md`: §A1 (resolved window + feasibility), §A2/§E1 (bounded fragments + baseline/deltas), §C1–C2 (budget vocabulary, overflow recovery, checkpoint projection, durable log, pruning V1-only), §E2 (named constants), §E3 (typed stream), §E4 (log + projections). `ARCHIVE/v1-research/memory.md`: §4 (non-touching recall, budget-as-maximum, whole-item degradation). Anchors: `clone2/codex/codex-rs/core/src/session/mod.rs:4560-4587` · `clone2/opencode/packages/core/src/session/compaction.ts:12-15, 178, 232-243` · `to-llm-message.ts:152-162` · `history.ts:13-80`.
+
+## 14. Requirements (`REQ-CTX-*`)
+
+Testable behaviors owned by this module live in `ARCH/08-REQUIREMENTS.md`; the traceability chain is in `ARCH/09-FEATURE-MATRIX.md`. This table is a pointer, not a second copy.
+
+| REQ | Behavior (one line) |
+|---|---|
+| `REQ-CTX-001` | Context assembly is a non-touching read of sources (INV-08) |
+| `REQ-CTX-002` | Budget honesty — zero relevant hits means zero injected tokens (INV-22) |
+| `REQ-CTX-003` | Two-layer split: Core context infrastructure vs agent context control (DEC-007) |
+| `REQ-CTX-004` | References over copies; sources stay read-only through the service (INV-08) |
+| `REQ-CTX-005` | Pre-turn feasibility with named budget terms; overflow never discovered at the provider (DEC-027) |
+| `REQ-CTX-006` | Prune before compact; full pruned output stays durable as artifact/event |
+| `REQ-CTX-007` | Compaction is a projection over the durable session log — the log is never rewritten |
+| `REQ-CTX-008` | Checkpoints are reconstructable; `rebuild` prefers live state over stale checkpoints |
+| `REQ-CTX-009` | Cache stability: stable prefix, dynamic suffix, frozen injection blocks, baseline+deltas |
+| `REQ-CTX-010` | Projections are scoped slices, deny-by-default for external agents (DEC-009, INV-11) |

@@ -562,6 +562,78 @@ This registry answers one question per entry: **what behavior must this system e
 - **Tests:** pending
 - **Status:** seeded
 
+#### REQ-CTX-003 — Two-layer split: infrastructure vs control
+- **Statement:** GIVEN context handling, WHEN responsibilities are assigned, THEN Core provides context infrastructure (search/snapshot/get/checkpoint/projection — “what context exists”) and the bound agent owns context control (assemble/select/prune/compact/pin/exclude — “what the model sees”), and neither layer does the other’s job.
+- **Priority:** must
+- **Source:** `ARCH/04-DECISIONS.md` DEC-007 · `ARCH/16-CONTEXT.md` §1
+- **Acceptance:** Core exposes no policy deciding what the model sees; agent control ops call Core services instead of reaching into sources; for external agents their native context control is preserved (INV-12) with only the projection seam of `12`/`32`.
+- **Failure cases:** Core silently selecting or truncating model context → architecture violation; an agent mutating source stores to build context → denied (read-only, INV-08).
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-CTX-004 — References over copies; read-only sources
+- **Statement:** GIVEN a context item, WHEN it is assembled or retrieved, THEN items reference their source (`content_ref` + metadata) rather than duplicating content, and every read passes the context service without mutating sources.
+- **Priority:** must
+- **Source:** `ARCH/16-CONTEXT.md` §1.1/§2 · `ARCH/05-INVARIANTS.md` INV-08
+- **Acceptance:** no source-store write path from context assembly; injected content byte-identical to the referenced artifact/record version; changed sources are re-read, never silently stale-copied.
+- **Failure cases:** copy divergence → defect (stale context); write through assembly → violation.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-CTX-005 — Pre-turn feasibility, named budget terms
+- **Statement:** GIVEN a model call, WHEN the turn is prepared, THEN the usable window is computed as model_window_resolved − output_reserve − reasoning_reserve − summary_output_reserve − tool_schema_reserve − system_reserve − safety_buffer and feasibility is checked BEFORE send — overflow is never discovered from the provider; values are product-visible knobs.
+- **Priority:** must
+- **Source:** `ARCH/16-CONTEXT.md` §3 · `ARCH/04-DECISIONS.md` DEC-027
+- **Acceptance:** budget math unit tests per model class; an oversized turn is caught pre-send and recovered (never surfaced as a provider error while recovery options remain); telemetry shows the named terms.
+- **Failure cases:** provider-side overflow after send → defect; missing reserve term → defect; silent rounding that overruns → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-CTX-006 — Prune before compact; durable full output
+- **Statement:** GIVEN pressure on the window, WHEN the pipeline reacts, THEN pruning runs before compaction, pruned-away full output stays durable (artifact/event) and is marked reconstructable, and pruning is opt-in per agent configuration — never applied to log truth.
+- **Priority:** must
+- **Source:** `ARCH/16-CONTEXT.md` §4
+- **Acceptance:** pruned output retrievable from durable storage; `reconstructable` flag honored (a needed pruned target is recovered, never lost); ordering test (prune strictly precedes compact).
+- **Failure cases:** pruned content unrecoverable → verification failure; compaction before pruning → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-CTX-007 — Compaction is a projection; log never rewritten
+- **Statement:** GIVEN a compaction trigger (auto threshold, manual “optimize now”, overflow recovery), WHEN it runs, THEN it produces a checkpoint projection over the durable session log without rewriting the log; the chain is deterministic pruning → structured checkpoint → model-written summary for non-reconstructable residue → optional provider-native path; hooks fire pre/post compaction.
+- **Priority:** must
+- **Source:** `ARCH/16-CONTEXT.md` §4 · `ARCH/11-WORK.md` §4
+- **Acceptance:** post-compaction log byte-identical except appended compaction events; resume after compaction uses log + checkpoint only; checkpoint fields follow the documented shape (objective/requirements/decisions/completed/active/files/tests/artifacts/workers/blockers/next_actions).
+- **Failure cases:** log rewritten in place → architecture violation; compaction losing durable entries → verification failure; unbounded recovery loop → bounded retries, harder compact, then surfaced.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-CTX-008 — Checkpoint reconstructability; rebuild prefers live state
+- **Statement:** GIVEN any checkpoint, WHEN it is used for resume or rebuild, THEN it is versioned and reconstructable from log + artifacts, and `rebuild` prefers live state over a stale checkpoint.
+- **Priority:** must
+- **Source:** `ARCH/16-CONTEXT.md` §4/§9
+- **Acceptance:** reconstruct test from log + artifacts alone; staleness test shows rebuild choosing live sources; version mismatch handled by an explicit migration/rebuild decision.
+- **Failure cases:** non-reconstructable checkpoint mislabeled → defect; stale checkpoint silently used → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-CTX-009 — Cache stability
+- **Statement:** GIVEN repeated model calls in a session, WHEN context is packed, THEN the stable prefix (system contract, agent identity, project rules, stable tool definitions) stays stable, dynamic content lands in a suffix, injection blocks are frozen once computed for the session (memory always-on block computed once), and turns ship baseline + deltas.
+- **Priority:** must
+- **Source:** `ARCH/16-CONTEXT.md` §5
+- **Acceptance:** prefix-stability test across turns (byte-stable until a real change); a frozen injection block is not recomputed mid-session; cache-hit telemetry.
+- **Failure cases:** recomputing the always-on block per turn → defect (cache churn); dynamic content placed in the prefix → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-CTX-010 — Projection scoping, deny-by-default
+- **Statement:** GIVEN an external agent or any projection consumer, WHEN a context projection is requested, THEN the slice is scoped (project/workspace/task/step/artifact/user), sensitivity-filtered at Core and re-enforced at Trust, and deny-by-default for anything not explicitly in scope.
+- **Priority:** must
+- **Source:** `ARCH/16-CONTEXT.md` §1.3 · `ARCH/04-DECISIONS.md` DEC-009 · `ARCH/05-INVARIANTS.md` INV-11
+- **Acceptance:** out-of-scope request denied with typed error; confidential items never enter a broader assembly; the `32` contract is enforced together with `12`.
+- **Failure cases:** unscoped projection leak → verification failure; sensitivity-filter bypass → violation.
+- **Tests:** pending
+- **Status:** seeded
+
 ### Memory (`MEM`)
 
 #### REQ-MEM-001 — Memory v1 algorithm set
@@ -619,7 +691,8 @@ This registry answers one question per entry: **what behavior must this system e
 
 | Domain | Seeds | Next pass |
 |---|---|---|
-| `PROD` (6), `CTX` (2), `MEM` (2) | drafted above | verify + split during the P7 module passes (`16`, `17`) |
+| `PROD` (6), `MEM` (2) | drafted above | verify + split during the P7 module passes (`17`) |
+| `CTX` (10) | drafted above + expanded in pass `16` | verified during pass `16` ✅ (2026-09-26) |
 | `TRUST` (10), `CAP` (10) | drafted above + expanded in passes `12`/`13` | verified during passes `12` ✅ / `13` ✅ (2026-09-26) |
 | `PROV` (10) | drafted above + expanded in pass `14` | verified during pass `14` ✅ (2026-09-26) |
 | `WF` (1), `AGX` (1), `UI` (1) | drafted above | `20`, Agent X finalisation lane, `AGENTCOWORK-UI.md` |
