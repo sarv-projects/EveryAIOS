@@ -87,7 +87,7 @@ v0 grew by accretion: 33 ARCH files, 55 research files, a 355 KB spec, a 606 KB 
 | 29 | `ARCH/29-ARTIFACTS.md` | Artifacts | Artifact + Receipt models · versions · provenance · library promotion | Frozen v1 |
 | 30 | `ARCH/30-EVENTS.md` | Events | Event store · bus · replay · subscriptions; usage & cost telemetry | Frozen v1 |
 | 31 | `ARCH/31-SKILLS-PLUGINS.md` | Extensibility | Skill registry/loader/resolver; plugin surfaces | Frozen v1 |
-| 32 | `ARCH/32-CHANNELS.md` | Surfaces | Desktop/CLI/ACP/A2A/API/mobile projections; agent gateway | Frozen v1 |
+| 32 | `ARCH/32-CHANNELS.md` | Surfaces | Desktop/CLI/ACP/A2A/API/mobile projections; agent gateway; owns the ACP crate (`everyaios-acp`) | Frozen v1 |
 | 34 | `ARCH/34-EFFECT-VERIFICATION.md` | Verification | Validate · render · verify · reconcile; receipt policy | Frozen v1 |
 | 40 | `ARCH/40-FLOWS.md` | Cross | End-to-end sequences (`FLOW-*`) | Frozen v1 |
 | 41 | `ARCH/41-EDGE-CASES.md` | Cross | Edge-case catalog (`EDGE-*`) + resolutions | Frozen v1 |

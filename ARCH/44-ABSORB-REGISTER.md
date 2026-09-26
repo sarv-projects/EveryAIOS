@@ -91,6 +91,13 @@ From `MASTER-COMPARISON §3`, each mapped to the v1 invariant that enforces it:
 
 `MASTER-COMPARISON §5` priority ordering (P0: SEC-1/2/3/21) remains the code-phase entry sequence.
 
+**Protocol-SDK dependencies (one decision, two answers).** The MCP protocol-SDK question is **decided, not open** (`ARCH/14-PROVIDERS.md` §4, DEC-048 decision 1, `OQ-PRV-1` closed), and it is decided on architecture rather than on licensing: the **Rust kernel adopts no external MCP protocol SDK** — its protocol core is hand-rolled, dual-era and **patch-owned in-tree**, because Guard egress (INV-05) requires a transport whose HTTP client can be routed through our policy, and a second protocol core beside the existing TypeScript one would be the "no second engine" rule (`DEC-006`) inverted. The ACP side is the same shape: the ACP client is our own implementation, owned by `ARCH/32-CHANNELS.md` §1, not a third-party crate. The sidecar's pre-existing SDK dependency is kept and version-pinned.
+
+| Dependency | Where it lives | Licence as recorded in the repo | Disposition |
+|---|---|---|---|
+| MCP protocol SDK in the Rust kernel (`rmcp` is the evaluated candidate) | crates — nothing linked | **not recorded in the licence ledger**, and deliberately so: nothing is vendored or linked, so there is nothing to clear | **not adopted**; the kernel keeps its own patch-owned client (`14` §4, DEC-048 decision 1) |
+| `@modelcontextprotocol/sdk` (TypeScript, v1 line) | sidecar (`packages/core-search`) | **MIT** — recorded in the repo's own notices file (`THIRD-PARTY-NOTICES.md`, MIT section). The `LICENSE-LEDGER.md` behind this § has **no row for this package** (its `modelcontextprotocol/registry` row is a different repository), so for any package this ledger does not record, **this entry defers to the licence ledger rather than guessing a licence** | in-dependency; the manifest range resolves to and the lockfile pins an **exact** version (`1.30.0`). It does not carry the modern `2026-07-28` revision, which is one reason it is not a candidate for the kernel's protocol core |
+
 ## 4. Verification corrections (do not carry forward)
 
 | Claim | Correction | Source |

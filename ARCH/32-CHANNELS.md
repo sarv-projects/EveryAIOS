@@ -3,13 +3,13 @@
 > **Status:** Frozen v1 (frozen 2026-09-26; drafted P3).
 > **P7 pass (2026-09-26):** line-checked; requirements seeded (`REQ-CHAN-*`, Requirements section).
 > **P9 verification pass (2026-09-26):** read line-by-line; fixes applied where needed (owner-directed; re-freeze follows).
-> **Role:** every surface is a **projection of Core**, and every external agent connects through the **Agent Gateway** and receives projections only (DEC-009). One internal contract; protocols are mappings.
+> **Role:** every surface is a **projection of Core**, and every external agent connects through the **Agent Gateway** and receives projections only (DEC-009). One internal contract; protocols are mappings. The ACP protocol implementation is **ours** and lives in the `everyaios-acp` crate (§1, §4).
 > **Dependencies:** `07-CONTRACTS` (CTRs) · `11-WORK` (sessions) · `12-TRUST` (projection enforcement) · `13`/`14` (capability/tool subsetting) · `16-CONTEXT` (context projection) · `29`/`30` (artifact gateway, event filter). **Consumers:** external agents, IDE/CLI users, remote surfaces.
 > **Evidence:** product-owner brief (protocol surfaces: ACP · A2A · API; the 7-item projection model; “surfaces are projections”) · `agent-harness-verification.md` §B1/§B2 (ACP server + session manager + tool registry + typed updates — verified), §C3 (ACP stdio ND-JSON), §D1 (scope-tagged registrations) · DEC-009 · `ARCH/12-TRUST.md` §8 · `ARCH/30-EVENTS.md` §6.
 
 ## 1. Purpose & rules
 
-**Owns:** the surface set (desktop · CLI · ACP · A2A · API · mobile-later) · the **Agent Gateway** (identity · sessions · projections · artifact gateway · event filter · approval routing) · protocol mappings onto the internal Agent Runtime Contract · per-surface capability declarations.
+**Owns:** the surface set (desktop · CLI · ACP · A2A · API · mobile-later) · the **Agent Gateway** (identity · sessions · projections · artifact gateway · event filter · approval routing) · protocol mappings onto the internal Agent Runtime Contract · per-surface capability declarations · **the ACP protocol implementation itself — the `everyaios-acp` crate in the Rust kernel** (wire codec · typed messages · client/session lifecycle · the `Chief` session manager that owns one connection per session and hosts the turn driver).
 **Never owns:** business logic · the contracts themselves (`07`) · policy (`12`).
 
 1. **No second brain** — surfaces render, request and subscribe; they never own state (P-01).
@@ -47,6 +47,12 @@
 - **As server:** Agent X exposes session management + tool registry + typed streaming updates (verified reference: Grok Build B1/B2). Message shapes map the internal typed stream (`30` §3) onto ACP update classes — plans, messages, tool calls, tool updates.
 - **As client:** external agents arrive either in-process (CLI adapters) or as ACP subprocesses over stdio ND-JSON (verified OpenCode pattern C3); the adapter registers a factory (`15` §2) and receives its projection.
 - **Auth:** local subprocess trust model for stdio; gateway-issued tokens for remote/API binds.
+
+**Which side we are.** On the live v1 path we are the ACP **client**: `everyaios-acp` spawns the external agent as a **child process we own** (hermetic environment, piped stdio) and speaks the protocol to it. The "as server" arm above is the *other* direction — an editor driving us — and is a different surface, not a second role in the same connection.
+
+**The wire (do not conflate with MCP).** The ACP transport is **JSON-RPC 2.0, newline-delimited, over the child's stdio** — one JSON object per line, `\n` terminating each message (not LSP's `Content-Length` framing). The protocol version is an **integer** (`PROTOCOL_VERSION = 1`, negotiated at `initialize`; bumped only on breaking changes, with non-breaking features riding the capability mechanism) — this is **not** MCP's dated-revision scheme (`2026-07-28` / `2025-11-25`, `14` §4, DEC-030/048). The two must not be conflated when reading a refusal, an era-cached record or a compatibility note: an ACP refusal is about an integer major, an MCP refusal is about a dated revision, and "protocol version mismatch" in a receipt means different things on each wire.
+
+**Method set on the wire.** `session/{new, load, prompt, cancel, set_config_option, update, request_permission}` plus `fs/{read_text_file, write_text_file}` and `terminal/{create, output, wait_for_exit, kill, release}`. The `fs/*` and `terminal/*` methods exist in the protocol but **we withhold those client capabilities at `initialize`** (DEC-049), so their presence in the method list is **not** a claim that we drive them: an agent that needs a file or a terminal satisfies it with its own tools, inside its own process, off our capability plane and off our audit trail. The governance class we claim for such a session is `SelfContained`, and the classification is fixed by the one decision that names it.
 
 ## 5. A2A & remote agents
 
@@ -88,6 +94,8 @@ Approvals (`DEC-021`) route to the channel bound to the session/work: desktop pr
 ## 11. Evidence
 
 Product-owner brief (three protocol surfaces; 7-item projection; “surfaces are projections”) · `agent-harness-verification.md` §B1/§B2 (ACP server + session manager + tool registry + typed updates; anchors `acp_conversion.rs:116,633`, `session/persistence.rs:1605-1606`), §C3 (opencode acp stdio ND-JSON), §D1 (factory/scope patterns) · DEC-009/021 · `ARCH/12-TRUST.md` §8 · `ARCH/30-EVENTS.md` §6 · `ARCH/16-CONTEXT.md` §1.3 · `ARCH/13-CAPABILITY.md` §6.
+
+**The owned crate, anchored.** `crates/everyaios-acp` (13,640 lines) — `src/frame.rs:1-5` (newline-delimited JSON-RPC 2.0 over the child's stdio) · `src/messages.rs:16` (`PROTOCOL_VERSION: u64 = 1`) and the 13 wire methods in §4 · `src/client.rs:855-868` (the child spawn) · `src/chief.rs` (one connection per session, the turn driver, `GovernedSession`) · `src/permission_bridge.rs` (the Trust-decider projection, DEC-049) · `src/registry.rs`, `src/registry_index.rs`, `src/registry_client.rs`, `src/installer.rs` (the launch registry and the official-registry fetch/cache/install) · `src/prefix_guard.rs` (the prefix-stability guard, `16` §4) · `src/a2a.rs`, `src/agent_backend.rs`, `src/harness_config.rs`.
 
 ## 12. Requirements (`REQ-CHAN-*`)
 
