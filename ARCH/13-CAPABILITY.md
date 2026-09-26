@@ -1,6 +1,6 @@
 # 13 — Capability Plane
 
-> **Status:** Draft P2 (early). Must pass the `ARCH/00-INDEX.md` §5 checklist at freeze.
+> **Status:** Frozen v1 (frozen 2026-09-26; drafted P2).
 > **P7 pass (2026-09-26):** line-checked; requirements seeded (`REQ-CAP-*`, Requirements section).
 > **Role:** semantic operations — **what** can be done — resolved to providers — **who** does it (DEC-004). The model sees *capabilities*, never raw tool catalogs (semantic compression; DEC-005).
 > **Dependencies:** `10-KERNEL` · `11-WORK` · `12-TRUST` (policy/tickets) · `14-PROVIDERS` (implementations) · `16-CONTEXT` (what enters prompts) · `31-SKILLS-PLUGINS` (skill→capability requirements).

@@ -1,6 +1,6 @@
 # 29 — Artifacts & Receipts
 
-> **Status:** Draft P2 (early). Must pass the `ARCH/00-INDEX.md` §5 checklist at freeze.
+> **Status:** Frozen v1 (frozen 2026-09-26; drafted P2).
 > **P7 pass (2026-09-26):** line-checked; requirements seeded (`REQ-ART-*`, Requirements section).
 > **Role:** **Artifacts** are work products — versioned, provenance-carrying, scoped to work. **Receipts** are durable evidence of effects. **Library** is the reusable inventory; promotion is explicit (DEC-014).
 > **Dependencies:** `10-KERNEL` · `25-FILES` (identity/locations) · `30-EVENTS` (stream, telemetry) · `34-EFFECT-VERIFICATION` (verification precedes receipts). **Consumers:** `15`, `20`, UI (`32`), external agents (artifact gateway).

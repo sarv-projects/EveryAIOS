@@ -1,6 +1,6 @@
 # 23 — Browser Runtime
 
-> **Status:** Draft P3 (early — browser-world evidence integrated 2026-09-26). Must pass the `ARCH/00-INDEX.md` §5 checklist at freeze.
+> **Status:** Frozen v1 (frozen 2026-09-26; drafted P3).
 > **P7 pass (2026-09-26):** line-checked; requirements seeded (`REQ-BROWSER-*`, Requirements section).
 > **Role:** the managed browser execution environment + **Browser World**. DEC-012: managed Chromium is the default; Chrome/Edge/Firefox/Opera are selectable **adapters**, not parallel embedded runtimes. The browser is an execution environment: research → browser → sources → evidence → artifact.
 > **Dependencies:** `19-RUNTIME-ENVIRONMENTS` (process/environment hosting) · `21-WORLD-MODEL` (W5 browser collector) · `12-TRUST` (per-origin policy, consent) · `29-ARTIFACTS` (downloads/captures) · `14-PROVIDERS` (browser capability descriptors). **Consumers:** `15` (agent browser ops), `28` (web connectors), `34` (verification).

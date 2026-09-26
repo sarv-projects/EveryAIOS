@@ -1,6 +1,6 @@
 # 31 — Skills & Plugins
 
-> **Status:** Draft P3 (early). Must pass the `ARCH/00-INDEX.md` §5 checklist at freeze.
+> **Status:** Frozen v1 (frozen 2026-09-26; drafted P3).
 > **P7 pass (2026-09-26):** line-checked; requirements seeded (`REQ-SKILL-*`, Requirements section).
 > **Role:** **skills** are reusable know-how (instructions + requirements); **plugins** are the declared extension surfaces. Skills teach; capabilities enable; workflows repeat; agents reason.
 > **Dependencies:** `13-CAPABILITY` (requirements resolution) · `11-WORK` (activation scope) · `12-TRUST` (permissions/review) · `19-RUNTIME-ENVIRONMENTS` (sandboxed plugin code) · `29-ARTIFACTS` (library promotion). **Consumers:** `15` (agent skill use), UI (skill/plugin management).

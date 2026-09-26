@@ -1,6 +1,6 @@
 # 06 — Data Model (canonical entity registry)
 
-> **Status:** Draft P1. This is the **entity registry**: one canonical identity per shared entity, with one owner doc each. Module docs carry detailed schemas; this doc owns identity strategy, shared field rules, state-machine naming, and cross-entity constraints. Where this doc and a module doc disagree on naming/identity, **this doc wins**; on field detail, the owner doc wins.
+> **Status:** Frozen v1 (frozen 2026-09-26; drafted P1). This is the **entity registry**: one canonical identity per shared entity, with one owner doc each. Module docs carry detailed schemas; this doc owns identity strategy, shared field rules, state-machine naming, and cross-entity constraints. Where this doc and a module doc disagree on naming/identity, **this doc wins**; on field detail, the owner doc wins.
 > **Evidence:** product-owner brief schemas · `ARCH/15-AGENT-X.md`, `ARCH/16-CONTEXT.md`, `ARCH/17-MEMORY.md` · `ARCHIVE/v1-research/agent-harness-verification.md` (receipt/limit shapes) · `ARCH/12-TRUST.md`/`13`/`14`/`20` pending (shapes marked *provisional*).
 
 ## 0. Conventions

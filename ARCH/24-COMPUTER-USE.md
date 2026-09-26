@@ -1,6 +1,6 @@
 # 24 — Computer Use
 
-> **Status:** Draft P3 (early — ladder/vision evidence integrated 2026-09-26). Must pass the `ARCH/00-INDEX.md` §5 checklist at freeze.
+> **Status:** Frozen v1 (frozen 2026-09-26; drafted P3).
 > **P7 pass (2026-09-26):** line-checked; requirements seeded (`REQ-CUA-*`, Requirements section).
 > **Role:** operate the desktop when no better rung exists. **The ladder:** native API → structured UI → browser DOM/AX → CLI/MCP → **vision fallback** → raw input.
 > **Honest framing (recorded):** screenshot-first is the industry default (OpenAI computer tool · Anthropic computer-use · UI-TARS “solely perceives the screenshots”). **AgentCowork chooses structured-first** — verified hybrids (Agent-S a11y+OCR, open-codex AX-first, arXiv 2511.19477) outperform where semantics exist; vision remains a first-class rung, not the default.

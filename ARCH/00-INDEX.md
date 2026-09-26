@@ -1,17 +1,17 @@
 # AgentCowork — Architecture v1 — Index & Blueprint
 
 > **Doc set:** AgentCowork architecture **v1** — rebuilt from scratch on the shoulders of v0.
-> **Status:** Pass **P7** (SDD layer, in progress). Docs 00–44 drafted; module passes + registry + matrix seeded; final review next.
+> **Status:** **v1 FROZEN (2026-09-26)** — docs 00–44 + `AGENTCOWORK-SPEC.md` + `AGENTCOWORK-UI.md` frozen after the P7 SDD wave (`DEC-038…045` promoted to `Locked`; independent review reconciled). Further changes require a superseding `DEC` (`ARCH/04-DECISIONS.md`).
 > **Date:** 2026-09-26 · **Repo:** `desktop_app` · **Branch:** `main`
-> **Code:** frozen. This set describes the target architecture; no code changes until v1 freezes.
+> **Code:** v1 docs are frozen (2026-09-26) — implementation now proceeds spec-driven, tracked in `TODO.md` (W0–W4) and accepted per `ARCH/42-EVIDENCE-MAP.md`.
 > **v0 archive:** `ARCHIVE/v0/` (local, git-ignored) — see `ARCHIVE/v0/MANIFEST.md`. Nothing in the archive is a contract.
 > **Exempt:** `TODO.md` stays the live delivery tracker and is not part of this rebuild.
 >
-> **v1 freeze for review (2026-09-26):** passes P0–P6 complete — 39 `ARCH/` docs + `AGENTCOWORK-SPEC.md` + `AGENTCOWORK-UI.md` + README/AGENTS syncs. Further changes go through `DEC` entries (`ARCH/04-DECISIONS.md`).
+> **v1 FROZEN (2026-09-26):** owner decision after the P7 SDD wave — spec layer (`ARCH/08-REQUIREMENTS.md`, 307 `REQ-*`), traceability (`ARCH/09-FEATURE-MATRIX.md`, 307 rows), `TODO.md` reworked into `TASK-*` units (W0–W4), independent review reconciled; `DEC-038…045` promoted to `Locked` (`DEC-020` stays `Provisional` — branding).
 >
-> **Owner reopening (2026-09-26):** absorption wave 2 ✅ complete — provider layer (`DEC-034/035`), async subagents (`DEC-036`), web search (`DEC-037`). Docs re-frozen for review.
+> **Absorption wave 2 (2026-09-26, before freeze):** provider layer (`DEC-034/035`), async subagents (`DEC-036`), web search (`DEC-037`) — absorbed and registered.
 >
-> **SDD pass P7 (in progress, 2026-09-26):** spec-driven layer — `ARCH/08-REQUIREMENTS.md` (REQ registry) + `ARCH/09-FEATURE-MATRIX.md` (traceability) + agent-kit protocol (`.agents/docs/spec-driven-development.md`) + `AGENTS.md` §16.
+> **P7 (SDD layer, 2026-09-26):** module passes `10`–`34` seeded; registry + matrix + agent-kit protocol (`.agents/docs/spec-driven-development.md`) + `AGENTS.md` §16.
 
 ---
 
@@ -53,48 +53,48 @@ v0 grew by accretion: 33 ARCH files, 55 research files, a 355 KB spec, a 606 KB 
 
 | ID | File | Scope | Purpose | Status |
 |---|---|---|---|---|
-| 00 | `ARCH/00-INDEX.md` | Meta | This file: authority, doc map, passes, conventions, evidence | Draft P0 |
-| 01 | `ARCH/01-NAMING.md` | Meta | Working names + v0→v1 rename map | Draft P0 |
-| 02 | `ARCH/02-THESIS.md` | Meta | Positioning, locked principles, non-goals, success statements | Draft P0 |
-| 03 | `ARCH/03-HLD.md` | Meta | Planes, module map, dependency rules, governed path, scoping model | Draft P0 |
-| 04 | `ARCH/04-DECISIONS.md` | Meta | Decision register (`DEC-*`) with evidence | Draft P1 |
-| 05 | `ARCH/05-INVARIANTS.md` | Meta | Invariants (`INV-*`) + enforcement points + verification | Draft P1 |
-| 06 | `ARCH/06-DATA-MODEL.md` | Shared | Canonical entities and schemas (`DM-*`) | Draft P1 |
-| 07 | `ARCH/07-CONTRACTS.md` | Shared | Canonical cross-module interfaces (`CTR-*`) | Draft P1 |
-| 08 | `ARCH/08-REQUIREMENTS.md` | Requirements | Behavioral registry (`REQ-*`): statements, acceptance, failure cases | Draft P7 (seeded; all domains module-verified) |
-| 09 | `ARCH/09-FEATURE-MATRIX.md` | Requirements | Traceability: `REQ` → `DEC/DM/CTR` → `TASK` → `TEST` | Draft P7 (rows seeded) |
-| 10 | `ARCH/10-KERNEL.md` | Core kernel | ids, errors, config, time, serialization; minimal-kernel rule | Draft P2 (early) |
-| 11 | `ARCH/11-WORK.md` | Work plane | Work · Step · Task · Session · Run · Checkpoint · Scheduler | Draft P2 (early) |
-| 12 | `ARCH/12-TRUST.md` | Trust/Control | Policy · Guard · approvals · tickets · vault · egress · audit · external-agent projections | Draft P2 (early) |
-| 13 | `ARCH/13-CAPABILITY.md` | Capability | Registry · catalog · resolver · handles · affordances · guidance · capability graph | Draft P2 (early) |
-| 14 | `ARCH/14-PROVIDERS.md` | Capability/Execution | Provider adapter contract + native/MCP/ACP/HTTP/CLI/plugin/remote + MCP era policy | Draft P2 (early) |
-| 15 | `ARCH/15-AGENT-X.md` | Agent runtime | Agent X LLD: loop, planner, delegation, recovery, completion contracts, CLI/ACP surfaces | Draft P2 (early) |
-| 16 | `ARCH/16-CONTEXT.md` | Context | Context infrastructure (Core) + context control (Agent X) + projections | Draft P2 (early) |
-| 17 | `ARCH/17-MEMORY.md` | Memory | Durable memory: layers, write/read paths, minimal algorithm set, upgrade path | Draft P2 (early) |
-| 18 | `ARCH/18-MODEL-ROUTING.md` | Model plane | Model registry · router · adapters; local discovery; reasoning-effort mapping | Draft P2 (early) |
-| 19 | `ARCH/19-RUNTIME-ENVIRONMENTS.md` | Execution | Process manager · environments · sandbox · lifecycle · health | Draft P2 (early) |
-| 20 | `ARCH/20-WORKFLOW.md` | Orchestration | Workflow IR · triggers · durability · versioning · approvals | Draft P2 (early) |
-| 21 | `ARCH/21-WORLD-MODEL.md` | World | Scanner · registries · world graph · event stream · incremental updates | Draft P2 (early) |
-| 22 | `ARCH/22-OFFICE.md` | Domain | Office runtime: L1/L2/L3 · resident contexts · render/validate · format providers | Draft P3 (early) |
-| 23 | `ARCH/23-BROWSER.md` | Domain | Browser runtime: managed Chromium + adapters · browser world · ladder | Draft P3 (early) |
-| 24 | `ARCH/24-COMPUTER-USE.md` | Domain | Computer-use ladder · UI automation · vision fallback · input safety | Draft P3 (early) |
-| 25 | `ARCH/25-FILES.md` | Domain | File identity · watchers · leases · indexing | Draft P3 (early) |
-| 26 | `ARCH/26-CODE.md` | Domain | RepoGraph/RepoMap · LSP · worktrees · code execution | Draft P3 (early) |
-| 27 | `ARCH/27-SEARCH.md` | Domain | Search plane | Draft P3 (early) |
-| 28 | `ARCH/28-COMMS.md` | Domain | Connectors; email/calendar/messaging as a capability layer | Draft P3 (early) |
-| 29 | `ARCH/29-ARTIFACTS.md` | Artifacts | Artifact + Receipt models · versions · provenance · library promotion | Draft P2 (early) |
-| 30 | `ARCH/30-EVENTS.md` | Events | Event store · bus · replay · subscriptions; usage & cost telemetry | Draft P3 (early) |
-| 31 | `ARCH/31-SKILLS-PLUGINS.md` | Extensibility | Skill registry/loader/resolver; plugin surfaces | Draft P3 (early) |
-| 32 | `ARCH/32-CHANNELS.md` | Surfaces | Desktop/CLI/ACP/A2A/API/mobile projections; agent gateway | Draft P3 (early) |
-| 34 | `ARCH/34-EFFECT-VERIFICATION.md` | Verification | Validate · render · verify · reconcile; receipt policy | Draft P3 (early) |
-| 40 | `ARCH/40-FLOWS.md` | Cross | End-to-end sequences (`FLOW-*`) | Draft P4 |
-| 41 | `ARCH/41-EDGE-CASES.md` | Cross | Edge-case catalog (`EDGE-*`) + resolutions | Draft P4 |
-| 42 | `ARCH/42-EVIDENCE-MAP.md` | Cross | Evidence map + acceptance mapping for implementation | Draft P4 |
-| 43 | `ARCH/43-GLOSSARY.md` | Meta | Terms | Draft P3 |
-| 44 | `ARCH/44-ABSORB-REGISTER.md` | Meta | Competitor absorb register + licensing ledger | Draft P3 |
-| — | `AGENTCOWORK-SPEC.md` | Product | Product contract (WHAT) — root authority | Draft P5 |
-| — | `AGENTCOWORK-UI.md` | UI | UI architecture + chat rendering spec | Draft P5 |
-| — | `README.md` (root) | Product | Repo landing page — v1 sync | Draft P6 |
+| 00 | `ARCH/00-INDEX.md` | Meta | This file: authority, doc map, passes, conventions, evidence | Frozen v1 |
+| 01 | `ARCH/01-NAMING.md` | Meta | Working names + v0→v1 rename map | Frozen v1 |
+| 02 | `ARCH/02-THESIS.md` | Meta | Positioning, locked principles, non-goals, success statements | Frozen v1 |
+| 03 | `ARCH/03-HLD.md` | Meta | Planes, module map, dependency rules, governed path, scoping model | Frozen v1 |
+| 04 | `ARCH/04-DECISIONS.md` | Meta | Decision register (`DEC-*`) with evidence | Frozen v1 |
+| 05 | `ARCH/05-INVARIANTS.md` | Meta | Invariants (`INV-*`) + enforcement points + verification | Frozen v1 |
+| 06 | `ARCH/06-DATA-MODEL.md` | Shared | Canonical entities and schemas (`DM-*`) | Frozen v1 |
+| 07 | `ARCH/07-CONTRACTS.md` | Shared | Canonical cross-module interfaces (`CTR-*`) | Frozen v1 |
+| 08 | `ARCH/08-REQUIREMENTS.md` | Requirements | Behavioral registry (`REQ-*`): statements, acceptance, failure cases | Frozen v1 |
+| 09 | `ARCH/09-FEATURE-MATRIX.md` | Requirements | Traceability: `REQ` → `DEC/DM/CTR` → `TASK` → `TEST` | Frozen v1 |
+| 10 | `ARCH/10-KERNEL.md` | Core kernel | ids, errors, config, time, serialization; minimal-kernel rule | Frozen v1 |
+| 11 | `ARCH/11-WORK.md` | Work plane | Work · Step · Task · Session · Run · Checkpoint · Scheduler | Frozen v1 |
+| 12 | `ARCH/12-TRUST.md` | Trust/Control | Policy · Guard · approvals · tickets · vault · egress · audit · external-agent projections | Frozen v1 |
+| 13 | `ARCH/13-CAPABILITY.md` | Capability | Registry · catalog · resolver · handles · affordances · guidance · capability graph | Frozen v1 |
+| 14 | `ARCH/14-PROVIDERS.md` | Capability/Execution | Provider adapter contract + native/MCP/ACP/HTTP/CLI/plugin/remote + MCP era policy | Frozen v1 |
+| 15 | `ARCH/15-AGENT-X.md` | Agent runtime | Agent X LLD: loop, planner, delegation, recovery, completion contracts, CLI/ACP surfaces | Frozen v1 |
+| 16 | `ARCH/16-CONTEXT.md` | Context | Context infrastructure (Core) + context control (Agent X) + projections | Frozen v1 |
+| 17 | `ARCH/17-MEMORY.md` | Memory | Durable memory: layers, write/read paths, minimal algorithm set, upgrade path | Frozen v1 |
+| 18 | `ARCH/18-MODEL-ROUTING.md` | Model plane | Model registry · router · adapters; local discovery; reasoning-effort mapping | Frozen v1 |
+| 19 | `ARCH/19-RUNTIME-ENVIRONMENTS.md` | Execution | Process manager · environments · sandbox · lifecycle · health | Frozen v1 |
+| 20 | `ARCH/20-WORKFLOW.md` | Orchestration | Workflow IR · triggers · durability · versioning · approvals | Frozen v1 |
+| 21 | `ARCH/21-WORLD-MODEL.md` | World | Scanner · registries · world graph · event stream · incremental updates | Frozen v1 |
+| 22 | `ARCH/22-OFFICE.md` | Domain | Office runtime: L1/L2/L3 · resident contexts · render/validate · format providers | Frozen v1 |
+| 23 | `ARCH/23-BROWSER.md` | Domain | Browser runtime: managed Chromium + adapters · browser world · ladder | Frozen v1 |
+| 24 | `ARCH/24-COMPUTER-USE.md` | Domain | Computer-use ladder · UI automation · vision fallback · input safety | Frozen v1 |
+| 25 | `ARCH/25-FILES.md` | Domain | File identity · watchers · leases · indexing | Frozen v1 |
+| 26 | `ARCH/26-CODE.md` | Domain | RepoGraph/RepoMap · LSP · worktrees · code execution | Frozen v1 |
+| 27 | `ARCH/27-SEARCH.md` | Domain | Search plane | Frozen v1 |
+| 28 | `ARCH/28-COMMS.md` | Domain | Connectors; email/calendar/messaging as a capability layer | Frozen v1 |
+| 29 | `ARCH/29-ARTIFACTS.md` | Artifacts | Artifact + Receipt models · versions · provenance · library promotion | Frozen v1 |
+| 30 | `ARCH/30-EVENTS.md` | Events | Event store · bus · replay · subscriptions; usage & cost telemetry | Frozen v1 |
+| 31 | `ARCH/31-SKILLS-PLUGINS.md` | Extensibility | Skill registry/loader/resolver; plugin surfaces | Frozen v1 |
+| 32 | `ARCH/32-CHANNELS.md` | Surfaces | Desktop/CLI/ACP/A2A/API/mobile projections; agent gateway | Frozen v1 |
+| 34 | `ARCH/34-EFFECT-VERIFICATION.md` | Verification | Validate · render · verify · reconcile; receipt policy | Frozen v1 |
+| 40 | `ARCH/40-FLOWS.md` | Cross | End-to-end sequences (`FLOW-*`) | Frozen v1 |
+| 41 | `ARCH/41-EDGE-CASES.md` | Cross | Edge-case catalog (`EDGE-*`) + resolutions | Frozen v1 |
+| 42 | `ARCH/42-EVIDENCE-MAP.md` | Cross | Evidence map + acceptance mapping for implementation | Frozen v1 |
+| 43 | `ARCH/43-GLOSSARY.md` | Meta | Terms | Frozen v1 |
+| 44 | `ARCH/44-ABSORB-REGISTER.md` | Meta | Competitor absorb register + licensing ledger | Frozen v1 |
+| — | `AGENTCOWORK-SPEC.md` | Product | Product contract (WHAT) — root authority | Frozen v1 |
+| — | `AGENTCOWORK-UI.md` | UI | UI architecture + chat rendering spec | Frozen v1 |
+| — | `README.md` (root) | Product | Repo landing page — v1 sync | Frozen v1 |
 | — | `AGENTS.md` (root) | Process | Agent operating instructions — v1 synced 2026-09-26 | Done |
 
 ---
@@ -110,23 +110,26 @@ v0 grew by accretion: 33 ARCH files, 55 research files, a 355 KB spec, a 606 KB 
 | **P4** ✅ | Cross-cutting: 40-FLOWS, 41-EDGE-CASES, 42-EVIDENCE-MAP | Drafted 2026-09-26 — 24 flows · ~50 edges · FIX register |
 | **P5** ✅ | `AGENTCOWORK-SPEC.md`, `AGENTCOWORK-UI.md` | SPEC ✅ + UI ✅ drafted 2026-09-26 (UI: 583 lines, 13 sections) |
 | **P6** ✅ | Viability + evidence sweep; consistency pass; freeze v1; README/AGENTS sync | Sweep run 2026-09-26 (cross-refs/sections/statuses/names clean; `20-WORKFLOW` interop gap fixed); freeze declared for review; README + AGENTS synced |
-| **P7** ⏳ | SDD layer: `08-REQUIREMENTS` + `09-FEATURE-MATRIX`; module Requirements/Acceptance sections; `AGENTS.md` §16 + kit protocol | `REQ-*` registry seeded per domain; matrix traceable; `TODO.md` tasks reference `REQ-*` |
+| **P7** ✅ | SDD layer: `08-REQUIREMENTS` + `09-FEATURE-MATRIX`; module Requirements/Acceptance sections; `AGENTS.md` §16 + kit protocol | `REQ-*` registry seeded per domain (307); matrix traceable (307 rows); `TODO.md` reworked into `TASK-*` units (W0–W4) |
+| **P8** ✅ | **v1 freeze** — owner decision (2026-09-26): `DEC-038…045` promoted to `Locked`; doc statuses flipped | **Frozen v1 (2026-09-26)** |
 
 ---
 
 ## 5. Viability checklist (per doc, and for the whole set at freeze)
 
-- [ ] **One governed path:** every externally visible effect flows `Work → Capability → Provider → Handle → Guard → Ticket → Execute → Effect → Verify → Receipt → Event`.
-- [ ] **One owner per responsibility:** no duplicated engines/registries/schedulers/provider systems.
-- [ ] **Acyclic dependencies:** every module edge has a named contract (`CTR-*`).
-- [ ] **Module interop:** doc states depends-on, exposes-to, and failure behavior.
-- [ ] **Flows complete:** start, success, failure, cancel, crash-recovery.
-- [ ] **Edge cases:** enumerated and resolved, or explicitly deferred with a DEC.
-- [ ] **Evidence:** external claims cited (`path:line` / URL); no silent UNVERIFIED claims.
-- [ ] **Traceability:** every `REQ-*` has acceptance + failure cases, an owning module, and a `TEST-*` (or an explicit deferral).
-- [ ] **Token discipline:** deterministic operations never require an LLM.
-- [ ] **Security:** enforcement in Core (Guard) not prompts; vault custody preserved; external agents get projections only.
-- [ ] **No stale v0 terms:** v1 names only (except `01-NAMING` map and history notes).
+- [x] **One governed path:** every externally visible effect flows `Work → Capability → Provider → Handle → Guard → Ticket → Execute → Effect → Verify → Receipt → Event`.
+- [x] **One owner per responsibility:** no duplicated engines/registries/schedulers/provider systems.
+- [x] **Acyclic dependencies:** every module edge has a named contract (`CTR-*`).
+- [x] **Module interop:** doc states depends-on, exposes-to, and failure behavior.
+- [x] **Flows complete:** start, success, failure, cancel, crash-recovery.
+- [x] **Edge cases:** enumerated and resolved, or explicitly deferred with a DEC.
+- [x] **Evidence:** external claims cited (`path:line` / URL); no silent UNVERIFIED claims.
+- [x] **Traceability:** every `REQ-*` has acceptance + failure cases, an owning module, and a `TEST-*` (or an explicit deferral).
+- [x] **Token discipline:** deterministic operations never require an LLM.
+- [x] **Security:** enforcement in Core (Guard) not prompts; vault custody preserved; external agents get projections only.
+- [x] **No stale v0 terms:** v1 names only (except `01-NAMING` map and history notes).
+
+> **Freeze record (2026-09-26):** checklist run across the set during P6 + P7 (module passes, line-checks, independent review; findings reconciled). `TEST-*` minting and Windows acceptance records are code-phase (`TODO.md` W0–W4, `ARCH/42-EVIDENCE-MAP.md`).
 
 ---
 

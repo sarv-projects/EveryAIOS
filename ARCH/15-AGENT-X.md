@@ -1,6 +1,6 @@
 # 15 — Agent X (native agent)
 
-> **Status:** Draft P2 (early — harness verification integrated 2026-09-26).
+> **Status:** Frozen v1 (frozen 2026-09-26; drafted P2).
 > **P7 pass (2026-09-26):** line-checked; requirements seeded (`REQ-AGX-*`, Requirements section).
 > **Role:** the native first-party agent of AgentCowork. Architecturally a **peer** of every external agent (DEC-010) — same `AgentEngine` contract, same Guard, no privileged path.
 > **Dependencies:** `11-WORK`, `16-CONTEXT`, `17-MEMORY`, `13-CAPABILITY`, `14-PROVIDERS`, `18-MODEL-ROUTING`, `19-RUNTIME-ENVIRONMENTS`, `12-TRUST`.

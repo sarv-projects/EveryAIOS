@@ -1,6 +1,6 @@
 # 16 — Context
 
-> **Status:** Draft P2 (early — evidence-integrated 2026-09-26). Must pass the `ARCH/00-INDEX.md` §5 checklist at freeze.
+> **Status:** Frozen v1 (frozen 2026-09-26; drafted P2).
 > **P7 pass (2026-09-26):** line-checked; requirements seeded (`REQ-CTX-*`, Requirements section).
 > **Core idea (DEC-007):** *Context is a platform capability; context control is an agent capability.* Core answers **“what context exists?”**; Agent X answers **“what should the model see right now?”**
 > **Dependencies:** `10-KERNEL`, `17-MEMORY`, `25-FILES`, `26-CODE`, `21-WORLD-MODEL`, `29-ARTIFACTS`, `30-EVENTS`, `11-WORK` (sessions), `18-MODEL-ROUTING` (windows/tokenizers), `12-TRUST` (sensitivity/projections), `15-AGENT-X` (control side).

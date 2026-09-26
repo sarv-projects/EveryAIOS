@@ -1,6 +1,6 @@
 # 27 — Search
 
-> **Status:** Draft P3 (early). Must pass the `ARCH/00-INDEX.md` §5 checklist at freeze.
+> **Status:** Frozen v1 (frozen 2026-09-26; drafted P3).
 > **P7 pass (2026-09-26):** line-checked; requirements seeded (`REQ-SEARCH-*`, Requirements section).
 > **Role:** **one** search service over all context sources. Deterministic retrieval — **never an LLM call** (DEC-015). `27` is the one Core-side search implementation and indexing surface (the baseline's "kernel search" names this service, not module `10`); other modules register index adapters, and `16`'s `context.search` (`CTR-006`) is the assembly-facing façade over it.
 > **Dependencies:** source owners (`17` memory · `21` world · `25` files · `26` repo · `29` artifacts · `30` events) · `12-TRUST` (scope/sensitivity). **Consumers:** `16` (retrieval), `15` (agent queries), UI (global search), `32` (external-agent projection).

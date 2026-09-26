@@ -1,6 +1,6 @@
 # 43 — Glossary
 
-> **Status:** Draft P3. Terms are defined **once here**; module docs may add domain-specific vocabulary but must link back. Where a term has a canonical schema, the entity id is given.
+> **Status:** Frozen v1 (frozen 2026-09-26; drafted P3). Terms are defined **once here**; module docs may add domain-specific vocabulary but must link back. Where a term has a canonical schema, the entity id is given.
 > **P7 pass (2026-09-26):** line-checked; cross-references verified.
 
 | Term | Definition |

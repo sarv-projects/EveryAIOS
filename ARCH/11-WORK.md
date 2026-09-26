@@ -1,6 +1,6 @@
 # 11 — Work
 
-> **Status:** Draft P2 (early — integrated from the foundations + verified harness evidence). Must pass the `ARCH/00-INDEX.md` §5 checklist at freeze.
+> **Status:** Frozen v1 (frozen 2026-09-26; drafted P2).
 > **P7 pass (2026-09-26):** line-checked; requirements seeded (`REQ-WORK-*`, Requirements section).
 > **Role:** the **universal execution abstraction** (DEC-003). Everything that runs — a chat turn, a workflow run, a background job, a subagent task, an automation — is a `Work` item with one lifecycle, one scheduler, one Runs surface.
 > **Dependencies:** `10-KERNEL` · `12-TRUST` (tickets for effects) · `16-CONTEXT` (checkpoints) · `30-EVENTS` (stream). **Consumers:** `15-AGENT-X` · `20-WORKFLOW` · `32-CHANNELS` · UI.

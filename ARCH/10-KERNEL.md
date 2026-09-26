@@ -1,6 +1,6 @@
 # 10 — Kernel
 
-> **Status:** Draft P2 (early). Must pass the `ARCH/00-INDEX.md` §5 checklist at freeze.
+> **Status:** Frozen v1 (frozen 2026-09-26; drafted P2).
 > **P7 pass (2026-09-26):** line-checked; requirements seeded (`REQ-KERNEL-*`, Requirements section).
 > **Role:** the smallest layer: identity, errors, configuration, time, serialization, and the base conventions every module depends on. **No domain logic** (INV-14).
 > **Evidence:** `ARCH/06-DATA-MODEL.md` (conventions), `ARCH/07-CONTRACTS.md` (contract rules), product-owner brief (“the kernel stays small”), INV-14.

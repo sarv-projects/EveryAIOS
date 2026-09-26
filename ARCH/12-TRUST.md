@@ -1,6 +1,6 @@
 # 12 — Trust & Control
 
-> **Status:** Draft P2 (early — DEC-028 and the verified Codex guard model integrated). Must pass the `ARCH/00-INDEX.md` §5 checklist at freeze.
+> **Status:** Frozen v1 (frozen 2026-09-26; drafted P2).
 > **P7 pass (2026-09-26):** line-checked; requirements seeded (`REQ-TRUST-*`, Requirements section).
 > **Role:** the one place where permission, authorization, custody and audit live. **Guard decides; agents request; prompts never enforce** (P-13, DEC-002).
 > **Dependencies:** `10-KERNEL` · `11-WORK` · `19-RUNTIME-ENVIRONMENTS` (sandbox hosts) · `30-EVENTS` (audit feed). **Consumers:** `13`/`14` (capability execution), `15`, `21` (consent), `22`–`28` (domains), `32` (projections).

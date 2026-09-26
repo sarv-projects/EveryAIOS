@@ -1,6 +1,6 @@
 # 34 — Effect Verification
 
-> **Status:** Draft P3 (early). Must pass the `ARCH/00-INDEX.md` §5 checklist at freeze.
+> **Status:** Frozen v1 (frozen 2026-09-26; drafted P3).
 > **P7 pass (2026-09-26):** line-checked; requirements seeded (`REQ-VERIFY-*`, Requirements section).
 > **Role:** the **verification plane** — `observe → validate → render → verify → reconcile` before any receipt. Verification depth scales with the capability’s risk class (INV-19; DEC-022/023). “Implemented but unverified” can never masquerade as complete.
 > **Dependencies:** `13-CAPABILITY` (hooks/risk classes) · domains (`22`–`28` provide validators/renderers) · `19-RUNTIME-ENVIRONMENTS` (execution of checks) · `29-ARTIFACTS` (receipts/records) · `30-EVENTS`. **Consumers:** the governed path itself.

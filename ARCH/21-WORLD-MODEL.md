@@ -1,6 +1,6 @@
 # 21 — World Model
 
-> **Status:** Draft P2 (early — verification integrated 2026-09-26). Must pass the `ARCH/00-INDEX.md` §5 checklist at freeze.
+> **Status:** Frozen v1 (frozen 2026-09-26; drafted P2).
 > **P7 pass (2026-09-26):** line-checked; requirements seeded (`REQ-WORLD-*`, Requirements section).
 > **Thesis:** *“Don't make the AI look at the computer. Make the computer explain itself to the AI.”* — structural state first; vision is a fallback rung (`24-COMPUTER-USE`).
 > **Dependencies:** `30-EVENTS` (stream), `25-FILES` (file identity), `23-BROWSER` (browser world), `12-TRUST` (consent/guard), `19-RUNTIME-ENVIRONMENTS` (collector hosts/helpers), `16-CONTEXT` (primary consumer).

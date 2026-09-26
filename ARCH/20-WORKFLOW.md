@@ -1,6 +1,6 @@
 # 20 — Workflow Engine
 
-> **Status:** Draft P2 (early — workflow verification integrated 2026-09-26). Must pass the `ARCH/00-INDEX.md` §5 checklist at freeze.
+> **Status:** Frozen v1 (frozen 2026-09-26; drafted P2).
 > **P7 pass (2026-09-26):** line-checked; requirements seeded (`REQ-WF-*`, Requirements section).
 > **Role:** Core infrastructure, a **peer of the agent runtime** (DEC-008). Deterministic processes that can include agent nodes; agents author workflows and invoke them as tools (P-11).
 > **Dependencies:** `11-WORK` (lifecycle/checkpoints/scheduler) · `13`/`14` (action nodes) · `15` (agent nodes) · `12` (approvals/tickets) · `30-EVENTS` · `21-WORLD-MODEL` (trigger sources).

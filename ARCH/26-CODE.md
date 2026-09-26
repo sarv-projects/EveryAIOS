@@ -1,6 +1,6 @@
 # 26 — Code (Repository Intelligence & Execution)
 
-> **Status:** Draft P3 (early). Must pass the `ARCH/00-INDEX.md` §5 checklist at freeze.
+> **Status:** Frozen v1 (frozen 2026-09-26; drafted P3).
 > **P7 pass (2026-09-26):** line-checked; requirements seeded (`REQ-CODE-*`, Requirements section).
 > **Role:** the coding domain runtime — **repo understanding** (RepoGraph → RepoMap) + **code execution** (shell/tests/worktrees). This module produces structure and executes; Agent X supplies the intelligence that uses it (`15`).
 > **Dependencies:** `25-FILES` (identity/watchers) · `16-CONTEXT` (budgets/levels) · `19-RUNTIME-ENVIRONMENTS` (processes/worktrees) · `12-TRUST` (exec policy) · `29-ARTIFACTS` (outputs). **Consumers:** `15` (coder profile), `34` (verification).

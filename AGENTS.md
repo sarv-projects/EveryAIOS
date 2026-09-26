@@ -139,7 +139,7 @@ Keep descriptions factual and tied to the repository. Do not add marketing langu
 
 ## 10. Architecture
 
-> **v1 docs (2026-09-26).** The architecture was rebuilt from scratch; the v0 corpus is archived locally at `ARCHIVE/v0/` (git-ignored). Authority: [`AGENTCOWORK-SPEC.md`](AGENTCOWORK-SPEC.md) (WHAT) → [`ARCH/08-REQUIREMENTS.md`](ARCH/08-REQUIREMENTS.md) (testable behaviors) → [`ARCH/03-HLD.md`](ARCH/03-HLD.md) (HOW) → module docs; the door is [`ARCH/00-INDEX.md`](ARCH/00-INDEX.md). Working names: product **AgentCowork**, runtime **Core**, native agent **Agent X** ([`ARCH/01-NAMING.md`](ARCH/01-NAMING.md)). Delivery status: [`TODO.md`](TODO.md). Code remains frozen until the v1 freeze lands.
+> **v1 docs (2026-09-26).** The architecture was rebuilt from scratch; the v0 corpus is archived locally at `ARCHIVE/v0/` (git-ignored). Authority: [`AGENTCOWORK-SPEC.md`](AGENTCOWORK-SPEC.md) (WHAT) → [`ARCH/08-REQUIREMENTS.md`](ARCH/08-REQUIREMENTS.md) (testable behaviors) → [`ARCH/03-HLD.md`](ARCH/03-HLD.md) (HOW) → module docs; the door is [`ARCH/00-INDEX.md`](ARCH/00-INDEX.md). Working names: product **AgentCowork**, runtime **Core**, native agent **Agent X** ([`ARCH/01-NAMING.md`](ARCH/01-NAMING.md)). Delivery status: [`TODO.md`](TODO.md) — the v1 docs are frozen (2026-09-26); implementation proceeds spec-driven (W0–W4).
 >
 > **This section is an orientation summary only** — where it disagrees with the v1 set, the v1 set wins. The invariant list lives in [`ARCH/05-INVARIANTS.md`](ARCH/05-INVARIANTS.md); do not fork it here.
 

@@ -1,6 +1,6 @@
 # 25 — Files
 
-> **Status:** Draft P3 (early — file-world evidence integrated 2026-09-26). Must pass the `ARCH/00-INDEX.md` §5 checklist at freeze.
+> **Status:** Frozen v1 (frozen 2026-09-26; drafted P3).
 > **P7 pass (2026-09-26):** line-checked; requirements seeded (`REQ-FILES-*`, Requirements section).
 > **Role:** the filesystem as structured state — **identity · watchers · deltas · write leases · metadata index**. Content indexing is deliberately deferred (metadata-first, `21` W7).
 > **Dependencies:** `10-KERNEL` · `12-TRUST` (path scopes) · `19-RUNTIME-ENVIRONMENTS` (helper/leases hosts) · `21-WORLD-MODEL` (W1 collector) · `30-EVENTS` (deltas). **Consumers:** `16`, `26-CODE` (worktrees), `29` (artifact locations), `15`.

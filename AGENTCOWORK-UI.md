@@ -1,6 +1,6 @@
 # AGENTCOWORK-UI — UI Architecture: shell · DocumentSurface · chat · composer
 
-> **Status:** Draft **P5**. Must pass the `ARCH/00-INDEX.md` §5 checklist at freeze.
+> **Status:** Frozen v1 (frozen 2026-09-26; drafted P5).
 > **P7 pass (2026-09-26):** line-checked; requirements proposed (`REQ-UI-*`, Requirements section).
 > **Authority:** root for the **UI** row of `ARCH/00-INDEX.md` §2 — "UI/UX architecture, chat rendering, interaction model. Derives from SPEC + Experience plane." Compliance order: `AGENTCOWORK-SPEC.md` §9 (Experience contract — WHAT) → `ARCH/03-HLD.md` §2/§5 (HOW) → this doc. A change that alters behaviour described here requires a `DEC-*`; this doc MUST NOT contradict a `DEC-*`, `INV-*`, `DM-*` or `CTR-*`.
 > **Derives from:** SPEC §3/§4/§6/§9/§11 · HLD §2 (Experience plane: *rendering, input, presentation, view state — never domain logic, execution, policy*), §5, §6, §7 · `ARCH/13-CAPABILITY.md` §6 (composer capability negotiation) · `ARCH/18-MODEL-ROUTING.md` §5 (normalized reasoning dial) · `ARCH/30-EVENTS.md` §3 (typed stream — *the UI's only progress channel*) · `ARCH/32-CHANNELS.md` §1/§3/§7 (surfaces are projections; approval routing) · `ARCH/29-ARTIFACTS.md` · `ARCH/22-OFFICE.md` · `ARCH/16-CONTEXT.md` §7 (Context Inspector) · `ARCH/11-WORK.md` §2/§3/§8.

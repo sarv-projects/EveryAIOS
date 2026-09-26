@@ -1,6 +1,6 @@
 # 41 — Edge Cases
 
-> **Status:** Draft P4. The consolidated edge-case catalog. Each row names the scenario and the **required behavior**; the owning module doc carries detail. New edge cases discovered during review get a row here + a reference in the owning doc — no silent fixes.
+> **Status:** Frozen v1 (frozen 2026-09-26; drafted P4). The consolidated edge-case catalog. Each row names the scenario and the **required behavior**; the owning module doc carries detail. New edge cases discovered during review get a row here + a reference in the owning doc — no silent fixes.
 > **P7 pass (2026-09-26):** coverage extended end-to-end — kernel (`10`), agent/model plane (`15`/`18`), runtime (`19`), code/search/comms (`26`–`28`), effect verification (`34`) and multi-agent coexistence get their own families; existing IDs and rows are unchanged.
 > **P7 memory merge (2026-09-26):** +12 entries — memory-grade store integrity, mutation-vs-injection semantics and multi-agent memory boundaries (EDGE-157/158, EDGE-170–179).
 > **Rule:** an edge case is resolved when the owning doc states the behavior; deferred cases carry an explicit trigger.

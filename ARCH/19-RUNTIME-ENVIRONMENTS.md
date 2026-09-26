@@ -1,6 +1,6 @@
 # 19 — Runtime & Environments
 
-> **Status:** Draft P2 (early). Must pass the `ARCH/00-INDEX.md` §5 checklist at freeze.
+> **Status:** Frozen v1 (frozen 2026-09-26; drafted P2).
 > **P7 pass (2026-09-26):** line-checked; requirements seeded (`REQ-RTENV-*`, Requirements section).
 > **Role:** where things actually run — processes, sandboxes, environments, lifecycle, health. This module **executes** the platform-confinement layer that `12-TRUST` decides (DEC-028), and hosts provider adapters (`14`) and domain runtimes (`22`–`28`).
 > **Dependencies:** `10-KERNEL` · `12-TRUST` (policy + tickets) · `11-WORK` (lifecycle/lanes) · `30-EVENTS` (health/streams). **Consumers:** `14` (adapters, MCP servers), `21` (collectors + helper), `22`–`28` (domains), `25`/`26` (worktrees/leases handoff).

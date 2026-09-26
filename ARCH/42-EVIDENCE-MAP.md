@@ -1,6 +1,6 @@
 # 42 — Evidence Map
 
-> **Status:** Draft P4. How claims get evidence, how the implementation will be accepted, and the consolidated **code-phase fix register**. This doc is the bridge between the frozen docs and the future code phase.
+> **Status:** Frozen v1 (frozen 2026-09-26; drafted P4). How claims get evidence, how the implementation will be accepted, and the consolidated **code-phase fix register**. This doc is the bridge between the frozen docs and the future code phase.
 > **P7 pass (2026-09-26):** line-checked; cross-references verified.
 > **Rule:** no claim ships without evidence; a passing unit test proves that behavior only (never “it works”); readiness claims require real platform acceptance records.
 

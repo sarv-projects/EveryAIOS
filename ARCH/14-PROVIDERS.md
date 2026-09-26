@@ -1,6 +1,6 @@
 # 14 — Providers
 
-> **Status:** Draft P2 (early — MCP policy verified 2026-09-26, `DEC-030`).
+> **Status:** Frozen v1 (frozen 2026-09-26; drafted P2).
 > **P7 pass (2026-09-26):** line-checked; requirements seeded (`REQ-PROV-*`, Requirements section).
 > **Role:** the only layer where protocols exist. Providers implement capabilities; nothing above the Capability Plane knows the transport (INV-15).
 > **Dependencies:** `13-CAPABILITY` (resolution) · `12-TRUST` (guard/egress/vault) · `19-RUNTIME-ENVIRONMENTS` (where adapters run) · `30-EVENTS` (health/events).

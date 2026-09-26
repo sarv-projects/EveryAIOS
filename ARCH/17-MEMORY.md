@@ -1,6 +1,6 @@
 # 17 — Memory
 
-> **Status:** Draft P2 (early — memory evidence lane integrated 2026-09-26). Must pass the `ARCH/00-INDEX.md` §5 checklist at freeze.
+> **Status:** Frozen v1 (frozen 2026-09-26; drafted P2).
 > **P7 pass (2026-09-26):** line-checked; requirements seeded (`REQ-MEM-*`, Requirements section).
 > **Consumers:** `ARCH/16-CONTEXT.md` (recall), UI (Memory screen), `ARCH/32-CHANNELS.md` (external-agent projection).
 > **Dependencies:** `ARCH/10-KERNEL.md`, `ARCH/30-EVENTS.md`, `ARCH/18-MODEL-ROUTING.md` (extractor call), `ARCH/12-TRUST.md` (authorization + audit).

@@ -1,6 +1,6 @@
 # 07 — Contracts (canonical cross-module interfaces)
 
-> **Status:** Draft P1 — the interface registry. Every named contract that crosses a module boundary lives here. **Owner** = the module that implements/stabilizes it; **consumers** = modules that call it. Module docs carry serialization/transport detail; this doc owns names, semantic signatures, and guarantees. Details marked *provisional* firm up as their owner doc lands.
+> **Status:** Frozen v1 (frozen 2026-09-26; drafted P1) — the interface registry. Every named contract that crosses a module boundary lives here. **Owner** = the module that implements/stabilizes it; **consumers** = modules that call it. Module docs carry serialization/transport detail; this doc owns names, semantic signatures, and guarantees. Details marked *provisional* firm up as their owner doc lands.
 > **Rules:** signatures are transport-free (adapters map transports); every contract takes an `actor` context (user / agent / workflow) and is subject to Trust.
 > **SDD:** this registry carries the L3 interface layer for behaviors in `ARCH/08-REQUIREMENTS.md`; REQ ↔ CTR links accrue in `ARCH/09-FEATURE-MATRIX.md`.
 

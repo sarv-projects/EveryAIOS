@@ -1,6 +1,6 @@
 # 05 — Invariants
 
-> **Status:** Draft P1. Invariants are rules the system must never violate. Each declares its enforcement point and how it is verified. Changing an invariant requires a `DEC` that supersedes it.
+> **Status:** Frozen v1 (frozen 2026-09-26; drafted P1). Invariants are rules the system must never violate. Each declares its enforcement point and how it is verified. Changing an invariant requires a `DEC` that supersedes it.
 > **Enforcement points** name the owning module; **verification** names the acceptance evidence path (detailed in `ARCH/42-EVIDENCE-MAP.md`).
 > **SDD:** requirements cite the invariants they enforce (`ARCH/08-REQUIREMENTS.md`); a violated invariant is a spec deviation under `.agents/docs/spec-driven-development.md`.
 

@@ -1,6 +1,6 @@
 # 01 — Naming & Brand Map (v1)
 
-> **Status:** Draft P0 — provisional **working names** per product-owner direction (2026-09-26). Nothing here is final branding; the layer is centralized so a rename is mechanical.
+> **Status:** Frozen v1 (frozen 2026-09-26; drafted P0) — provisional **working names** per product-owner direction (2026-09-26). Nothing here is final branding; the layer is centralized so a rename is mechanical.
 > **Rule of use:** all v1 docs use the **v1 names** only. v0 names appear only in the rename map below or in explicit historical notes.
 
 ## 1. Working names

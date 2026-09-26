@@ -1,6 +1,6 @@
 # AgentCowork — v1 implementation plan
 
-> **Status:** P7 rework (2026-09-26) — the implementation plan for the v1 document set. **Docs:** unfrozen (P7 in progress; `ARCH/00-INDEX.md` §4/§5). **Code:** frozen until the v1 freeze lands — nothing in this file authorizes touching `crates/`, `packages/`, `src-tauri/` or `ui/` before then (`AGENTS.md` §16).
+> **Status:** v1 implementation plan (P7 rework, 2026-09-26). **Docs:** frozen v1 (2026-09-26; `ARCH/00-INDEX.md` §4/§5). **Code:** the freeze has landed — the code phase starts at W0; work proceeds spec-driven per `AGENTS.md` §16.
 > **Authority / read order:** `AGENTCOWORK-SPEC.md` (WHAT) → `ARCH/08-REQUIREMENTS.md` (testable behaviors) → `ARCH/03-HLD.md` (HOW) → module docs (`ARCH/10…34`). **This file is the plan** — it owns `TASK-*` ids, status and sequencing, never design. Where it disagrees with an authority doc, the authority doc wins; a conflict becomes `BLOCKED` + a proposed `DEC`, never a silent plan edit.
 > **Revision:** reworked 2026-09-26 (P7) from the v0-era ledger. Still-true open rows are condensed into the waves; the full pre-v1 text (1,304 done / 375 open / 4 partial rows at commit `3eeb8f0`) is kept in the History section and preserved verbatim in git (`git show 3eeb8f0:TODO.md`).
 

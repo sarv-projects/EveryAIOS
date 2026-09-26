@@ -1,6 +1,6 @@
 # 28 — Communication (Connectors)
 
-> **Status:** Draft P3 (early). Must pass the `ARCH/00-INDEX.md` §5 checklist at freeze.
+> **Status:** Frozen v1 (frozen 2026-09-26; drafted P3).
 > **P7 pass (2026-09-26):** line-checked; requirements seeded (`REQ-COMMS-*`, Requirements section).
 > **Role:** an **agentic action layer** over communication systems — email, calendar, messaging — delivered as **capabilities over connectors**. Not another messaging client (owner brief).
 > **Dependencies:** `13-CAPABILITY` (descriptors) · `14-PROVIDERS` (transport/auth) · `12-TRUST` (permissions, vault, egress) · `30-EVENTS` (arrival events) · `29-ARTIFACTS` (attachments) · `20-WORKFLOW` (triggers). **Consumers:** `15` (agent), UI (`32`).
