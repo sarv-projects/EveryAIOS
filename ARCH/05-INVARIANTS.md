@@ -47,14 +47,14 @@
 **Verification:** mutation-free recall tests; counters bump only on explicit use.
 
 ### INV-09 — Memory write discipline
-**Invariant:** Memory writes derive from settled history, run off the hot path, and never fail a turn. Secrets are rejected at write. User forget is permanent (suppression blocks re-extraction).
+**Invariant:** Memory writes derive from settled history, run off the hot path, and never fail a turn. Secrets are rejected at write. User forget is permanent — suppression blocks re-extraction **and import**, and erasure follows the declared policy/threat model (DEC-039).
 **Enforcement:** `17-MEMORY` (pipeline), `12-TRUST` (authorization/audit).
-**Verification:** extractor-failure isolation test; secret corpus never persisted; forget→re-extract = 0.
+**Verification:** extractor-failure isolation test; secret corpus never persisted; forget→re-extract = 0; forget→import = 0.
 
 ### INV-10 — Sensitivity ceilings
-**Invariant:** Recall enforces sensitivity ≤ caller ceiling; `confidential` items never leave their owning project scope.
+**Invariant:** Sensitivity uses one canonical vocabulary (`public | personal | confidential`); every item's class is assigned at write (default `personal`; user actions may raise; monotone floor from source scope/surface — DEC-038). Recall enforces sensitivity ≤ the ceiling derived from the actor binding (never caller parameters); `confidential` items never leave their owning project scope.
 **Enforcement:** `17-MEMORY`, `12-TRUST` (projection), `32-CHANNELS`.
-**Verification:** cross-project leakage = 0; external-agent view tests.
+**Verification:** write-assignment and ceiling-matrix tests; cross-project leakage = 0; external-agent view tests.
 
 ### INV-11 — Projections only
 **Invariant:** External agents receive projected views only (capability/context/workspace/artifacts/events). Internal topology, stores, policy engines and other agents' state are never exposed. Workspace boundaries are enforced by interception, not by discovery.
@@ -112,9 +112,9 @@
 **Verification:** capability catalogue review; no dependency on evasion services.
 
 ### INV-22 — Budget honesty
-**Invariant:** Context and memory budgets are maxima: zero relevant hits ⇒ zero injected tokens. Injection is measured on rendered output and degraded by dropping whole items — never by truncating an item.
+**Invariant:** Context and memory budgets are maxima: zero **query-relevant** hits ⇒ zero tokens in the relevant injection block; the always-on block is separately budgeted and present only when pinned items exist. Injection is measured on rendered output and degraded by dropping whole items — never by truncating an item.
 **Enforcement:** `16-CONTEXT`, `17-MEMORY`.
-**Verification:** budget tests (p50/p95 injected tokens vs ceiling); zero-hit = zero tokens test.
+**Verification:** budget tests (p50/p95 injected tokens vs ceiling); zero-query-hit = zero relevant-block tokens test, with the always-on block measured separately.
 
 ### INV-23 — Single event log
 **Invariant:** UI projections, workflow triggers, world updates, telemetry and audit derive from one event store. No hidden side channels for state propagation.

@@ -33,7 +33,7 @@
 |---|---|---|
 | 1 | **Identity / agent contract** — agent id, workspace id, declared capabilities (Agent Card analogue) | Gateway-issued; audited |
 | 2 | **Capability projection** — Effective = Installed × Available × Allowed × Relevant | `13` §6 + `12` §8 |
-| 3 | **Context projection** — scoped slice (workspace root, rules, RepoMap, relevant files, git status, recent history) | `16` §1.3, sensitivity-filtered |
+| 3 | **Context projection** — scoped slice (workspace root, rules, RepoMap, relevant files, git status, recent history, **memory — filtered recall projection**) | `16` §1.3 + `17` §4, sensitivity-filtered |
 | 4 | **Workspace projection** — `allowed_paths` / `read_only_paths`; interception, not un-discovery | `12` §8, pathfloor |
 | 5 | **Tool/MCP subset** — only the granted subset is mounted | `13`/`14` |
 | 6 | **Artifacts** — via the artifact gateway (refs; permissions) | `29` §5 |
@@ -53,7 +53,7 @@ Remote agents remain **opaque**: exchange tasks/messages/artifacts; their intern
 
 ## 6. CLI surface
 
-`agentcowork` (placeholder name, OQ-005): run a prompt with a workspace, serve ACP for editors, inspect work/runs/approvals, trigger workflows. The CLI is a thin projection — no separate state, same gateway rules, and it must work when the desktop UI is closed (detached work continues, `11` §3/§7).
+`agentcowork` (placeholder name, OQ-005): run a prompt with a workspace, serve ACP for editors, inspect work/runs/approvals, trigger workflows. The CLI is a thin projection — no separate state, same gateway rules, and it must work when the desktop UI is closed (detached work continues, `11` §3/§7). Memory writes from CLI/detached runs route through the single-writer mechanism (`17` §8) — same store rules, never a second writer.
 
 ## 7. Approvals & interaction routing
 

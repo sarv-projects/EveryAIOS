@@ -46,6 +46,13 @@
 | DEC-035 | Provider client identity & session affinity (gateway class): own User-Agent (never impersonation) + stable per-conversation session header (e.g. `x-opencode-session`) mapped from the logical session id; stable across turns/compaction/restarts; provider traffic policies are conditions of enablement | Locked | 18, 14, 11 |
 | DEC-036 | Async subagent lifecycle (completes DEC-029): spawn-returns-immediately · two completion modes (bounded wait vs turn-boundary queue-only wake) · wake-suppression gate (cancelled never wakes) · typed child stream (`spawned/progress/finished` + `will_wake`) · bounded waits auto-background · held-until-closed slots · token-based cancellation (no completion rebuffer) · child reports untrusted + scanned | Locked | 15, 11, 12, 30 |
 | DEC-037 | Web search & fetch capabilities: `web.search`/`web.fetch` with provider variants (native · MCP · guarded fetch; browser fallback) · vault keys never in URLs · Guard egress with operator policy overriding model · caps + TTL cache with freshness · citations/provenance first-class · fetched content untrusted (no instruction authority) | Locked | 28, 27, 14, SPEC |
+| DEC-038 | Memory sensitivity: one vocabulary (`public`/`personal`/`confidential`), default `personal`; assignment by user action or deterministic monotone floor from source scope/surface; recall ceilings derived from the actor binding per surface, never caller-supplied | Provisional | 17, 16, 06, 12, 05 |
+| DEC-039 | Memory at-rest protection & erasure semantics (closes PEND-06): whole-DB SQLCipher (vault-held key; WAL/temp covered) · `secure_delete` + WAL checkpoint/TRUNCATE + FTS delete-trigger/rebuild after forget · keyed suppression digest · audit carries no item body · stated threat-model boundary | Provisional | 17, 12, 05 |
+| DEC-040 | Memory project identity: bind the `project` scope to `DM-024 project_identity`, not raw paths; canonicalization + re-key rules for move/clone/rename/worktree/path-reuse; Windows verification pending | Provisional | 17, 25, 21, 06 |
+| DEC-041 | Summary ownership: the checkpoint (`DM-006`) is authoritative for work state; memory `summary` items reference checkpoints/sessions via `source_ref` and are never served as work state; no second timeline | Provisional | 17, 16, 11 |
+| DEC-042 | Memory mutation classification: in-store writes are local persistent mutations (policy-gated + audited, no per-write tickets); export/import/sharing follow the guarded effect path; permitted scopes and ceilings are actor-derived, never caller-supplied | Provisional | 17, 07, 12, 05 |
+| DEC-043 | External-agent memory boundary: v1 recall-only projection (bound project + own session/task + user preferences); Core never writes native agent stores; provider-session transcripts not harvested; subagent child sessions harvested only when Core-owned with parent linkage; Agent X private notes are session-scope items + session log | Provisional | 17, 15, 32 |
+| DEC-044 | Extraction model & disclosure: session provider default; `confidential` scopes local-only or off until enabled; global extraction budget + global/per-scope kill switches + per-run metering; concurrent sessions bounded | Provisional | 17, 18, 11 |
 | DEC-045 | Provider-native compaction adoption policy: records the correction to DEC-027's evidence clause (a verified shipping reference exists — Codex remote compaction v2) and freezes the adoption rules (provider capability event · Guard egress + audit + per-provider off switch · usage via `18` · deterministic checkpoint stays primary); DEC-027's rules untouched | Provisional | 16, 18 |
 
 ## 2. Details
@@ -211,6 +218,48 @@ Completion delivery has exactly two modes: a **bounded foreground wait** (declar
 **Evidence:** `ARCHIVE/v1-research/async-subagents-websearch-absorption.md` §3–§4 — Claude Code WebSearch/WebFetch docs + Anthropic server-tool docs; OpenCode `mcp-websearch.ts`/`webfetch.ts`; Cline `web-fetch.ts`; Grok Build `resolve_filters`.
 **Affects:** `28-COMMS`, `27-SEARCH`, `14-PROVIDERS`, SPEC §8.
 
+### DEC-038 — Memory sensitivity assignment, vocabulary and ceilings
+One canonical vocabulary for memory and context — `public | personal | confidential`, default `personal` (`06` §0 wins on naming). Assignment is deterministic where it must be: user actions may raise a class; the extractor may propose one; an item is **never less sensitive than its source scope/surface** (monotone floor). Recall ceilings are derived from the actor binding per surface — desktop user (owner, all classes) · external-agent projection (`personal` and below; `confidential` only with a recorded loadout; v1 default none) · UI inspect (owner-visible) · exports (classes marked). Caller-supplied scope or ceiling widening is rejected by construction. This makes INV-10 testable and removes the second vocabulary (`normal | sensitive`) from memory/context paths.
+**Evidence:** `ARCHIVE/v1-research/v1-sdd/memory-agent-deep-dive.md` §1.4/§6.1 (finding F-01; contradiction C-01); `ARCH/17-MEMORY.md` §5.3/§7/§9.
+**Status note:** Provisional — vocabulary and rules fixed; per-surface ceiling defaults are product knobs.
+**Affects:** `17-MEMORY`, `16-CONTEXT`, `06-DATA-MODEL`, `12-TRUST`, `05-INVARIANTS` (INV-10).
+
+### DEC-039 — Memory at-rest protection & erasure semantics
+Closes PEND-06. The memory store is **whole-DB encrypted at rest** (SQLCipher via the same bundled stack as the vault; the key never rests outside the vault; WAL/journal/temp files inherit the encryption). Forget remains a hard delete, and the erasure claim carries an explicit policy and threat model: `secure_delete` on; WAL checkpoint/TRUNCATE after forget; FTS rows removed through the external-content delete trigger (rebuild for repair); **suppression digests are keyed** (store-local key), not plain content hashes, so low-entropy content is not dictionary-correlatable; audit records carry no item body. The claim explicitly does **not** cover OS caches, backups/snapshots, or flash wear-leveling — “permanent” means no path inside Core can resurrect the item, not physical media sanitization.
+**Evidence:** `ARCHIVE/v1-research/v1-sdd/memory-agent-deep-dive.md` §3.4/§6.1 (findings F-04/F-23; probes §7.1); `ARCH/04-DECISIONS.md` §3 PEND-06; `ARCH/17-MEMORY.md` §7/§9.
+**Status note:** Provisional — policy fixed; encryption and forensic verification are code-phase.
+**Affects:** `17-MEMORY`, `12-TRUST`, `05-INVARIANTS`.
+
+### DEC-040 — Memory project identity & re-keying
+The memory `project` scope is keyed by the stable project identity (`DM-024 project_identity`), never a raw path: canonical root + git remote as identity attributes; Windows canonicalization follows the file-identity model (`21` §3) — case-insensitive comparison, junction/short-name/long-path/UNC normalization; POSIX symlinks resolved once and recorded. Re-key rules: move/rename keeps identity when the identity attributes survive (remote match), otherwise the item set is surfaced with explicit re-point guidance; a clone gets a new identity unless the user explicitly adopts the source mapping (recorded); worktrees share the parent identity; a new project at a reused path never inherits memory automatically. Recall can only return identities in the actor's permitted set.
+**Evidence:** `ARCHIVE/v1-research/v1-sdd/memory-agent-deep-dive.md` §6.1 (findings F-09/E-06/E-12); `ARCH/25-FILES.md` §5 (shared with OQ-FILES-1); `ARCH/21-WORLD-MODEL.md` §3.
+**Status note:** Provisional — Windows canonicalization matrix pending a Windows acceptance record.
+**Affects:** `17-MEMORY`, `25-FILES`, `21-WORLD-MODEL`, `06-DATA-MODEL`.
+
+### DEC-041 — Summary ownership (checkpoint vs memory)
+The checkpoint (`DM-006`) is the authoritative work-state projection for long-horizon steering; memory `summary` items are durable *knowledge* roll-ups that reference their checkpoint/session through `source_ref` and are never served as work state. A live checkpoint supersedes a stale memory summary in assembly; deleting a checkpoint annotates its summaries, never promotes them. No second timeline exists (`16` §4, `11` §2).
+**Evidence:** `ARCHIVE/v1-research/v1-sdd/memory-agent-deep-dive.md` §2.3/§6.2 (finding F-10; contradiction C-05); `ARCH/17-MEMORY.md` §2.1/§2.3; `ARCH/16-CONTEXT.md` §4.
+**Status note:** Provisional.
+**Affects:** `17-MEMORY`, `16-CONTEXT`, `11-WORK`.
+
+### DEC-042 — Memory mutation classification & actor-derived scopes
+In-store memory writes (extraction, `remember`, forget/supersede/pin/edit, scope wipe) are **local persistent mutations**: policy-gated per scope and audited, with **no per-write ticket** — a background extractor must be able to run without holding effect tickets. Boundary-crossing operations (export/import to disk, sharing, anything leaving the machine) follow the guarded effect path (pathfloor/egress/tickets as applicable). The permitted scope set and sensitivity ceiling are derived by the service from the actor binding; caller parameters may only narrow — a caller cannot select another project's scope (confused-deputy prevention). Every mutation is audited with no item body in the record.
+**Evidence:** `ARCHIVE/v1-research/v1-sdd/memory-agent-deep-dive.md` §6.1 (finding F-27; contradictions C-04/E-18); `ARCH/07-CONTRACTS.md` §0/§5; `ARCH/12-TRUST.md` §8/§9; `ARCH/05-INVARIANTS.md` INV-01/04/24.
+**Status note:** Provisional.
+**Affects:** `17-MEMORY`, `07-CONTRACTS`, `12-TRUST`, `05-INVARIANTS`.
+
+### DEC-043 — External-agent memory boundary
+v1 memory exposure to external agents is **read-only filtered recall** — bound project + own session/task + user preferences; no org, no other projects, `confidential` only with a recorded loadout (v1 default: none). Core never writes or mutates an external agent's native memory/config/session stores, and provider-session transcripts we do not own are never harvested; imports from native stores stay deferred (U8), explicit, read-only to the source, and audited. Subagent child sessions are Core-owned: they may be harvested at their own settle boundaries with parent linkage (`source_ref`), never auto-promoted, and receipts enter extraction only as untrusted data. Agent X's “private working notes” are session-scope memory items + the session log — there is no second durable store.
+**Evidence:** `ARCHIVE/v1-research/v1-sdd/memory-agent-deep-dive.md` §4/§6.1 (findings F-13/F-14; contradiction C-08); `ARCH/15-AGENT-X.md` §5/§7; `ARCH/32-CHANNELS.md` §3; `ARCH/41-EDGE-CASES.md` EDGE-150/151.
+**Status note:** Provisional.
+**Affects:** `17-MEMORY`, `15-AGENT-X`, `32-CHANNELS`.
+
+### DEC-044 — Extraction model & disclosure policy
+Background extraction defaults to the session's active provider (no *new* disclosure). `confidential` scopes extract **local-only or not at all** until explicitly enabled by the user. Extraction runs against a declared **global budget** (calls/tokens per period) with global and per-scope **kill switches** and per-run metering (`memory.extraction.run`); concurrent sessions cannot exceed the budget. This closes the extraction-disclosure item (`OQ-MEM-03`) and bounds cost/DoS exposure.
+**Evidence:** `ARCHIVE/v1-research/v1-sdd/memory-agent-deep-dive.md` §6.1 (finding F-15); `ARCH/17-MEMORY.md` §5.1/§9; `ARCH/04-DECISIONS.md` DEC-031 (outer limits).
+**Status note:** Provisional — default model policy fixed; budget constants are product knobs.
+**Affects:** `17-MEMORY`, `18-MODEL-ROUTING`, `11-WORK`.
+
 ### DEC-045 — Provider-native compaction adoption policy
 **Correction on record:** DEC-027's evidence clause ("the verified shipping set has none") is factually stale. A verified shipping reference exists: Codex remote compaction v2 — `run_remote_compaction_request_v2` (`codex-rs/core/src/compact_remote_v2.rs:387-412`), a `ContextCompactionItem` protocol request item (`codex-rs/protocol/src/items.rs:509-517`), a `compaction_output` response (`codex-rs/core/src/compact_remote_v2_attempt.rs:23-24, 104-129`), with analytics distinguishing `CompactionImplementation::{Responses, ResponsesCompactionV2}` (`codex-rs/analytics/src/facts.rs:460-463`). **DEC-027's rules are untouched** — named terms, pre-turn feasibility, one overflow recovery, the projection boundary over a durable log, and pruning-as-a-separate-transform all stand; this decision corrects the evidence and freezes the policy if a provider-native path is adopted.
 **Adoption rules (frozen):** a provider-native compaction path is a **provider capability event**, never an implementation detail — conversation egress goes through Guard with provider allowlisting, audit and a per-provider off switch (INV-02/INV-05); its usage/cost rolls into `18` telemetry as a second inference call; the deterministic checkpoint remains the primary reconstructable state and provider output is never the sole checkpoint. Adoption is decided per provider behind capability detection (OQ-CTX-01).
@@ -227,5 +276,5 @@ Completion delivery has exactly two modes: a **bounded foreground wait** (declar
 | PEND-03 | ~~Scheduler lanes + global limits~~ → resolved as DEC-031 | ✅ `11-WORK` (2026-09-26) | 11, 15 |
 | PEND-04 | First-release surfaces (desktop + CLI minimum? ACP timing) | 32, SPEC | 32 |
 | PEND-05 | Agent profile / "assistant" composition model naming | 15, UI doc | 15 |
-| PEND-06 | Memory encryption at rest (SQLCipher vs plaintext; item-level for confidential) | OQ-MEM-04 → 17 | 17 |
+| PEND-06 | ~~Memory encryption at rest (SQLCipher vs plaintext; item-level for confidential)~~ → resolved as DEC-039 (Provisional) | ✅ `17-MEMORY` (2026-09-26) | 17 |
 | PEND-07 | ~~Artifact storage layout + retention policy~~ → resolved as DEC-032 | ✅ `29-ARTIFACTS` (2026-09-26) | 29 |

@@ -67,6 +67,7 @@ The Agent Gateway (`32`) *builds* projections; Trust *enforces* them:
 |---|---|
 | Capability set | Effective = Installed × Available × Allowed × Relevant; anything else resolves to `NotFound` for that agent. |
 | Context | Sensitivity-filtered slices (`16`); cross-project/confidential leakage = 0 (INV-10). |
+| Memory | Filtered **recall-only** projection (bound project + own session/task + user preferences; no org, no other projects, `confidential` only with a recorded loadout); scopes and ceilings are **actor-derived**, never caller-supplied; no write path is exposed (`17` §4/§9, DEC-042/043). |
 | Workspace | `allowed_paths` / `read_only_paths`; **interception, not un-discovery** — out-of-scope reads are denied and logged. |
 | Tools / MCP subset | Only the granted subset is mounted; the rest is invisible. |
 | Artifacts | Via the artifact gateway with permissions; never raw storage. |
@@ -78,6 +79,7 @@ Never exposed: service topology, stores/schema, queues, scheduler internals, vau
 
 - Append-only, tamper-evident chain; every mutating operation logged (INV-24): actor · action · target · decision · ticket · result · timestamps.
 - Denials and forget/delete/wipe are first-class audit entries.
+- Memory mutations are audited under the local-mutation class (DEC-042); the record carries **no item body**, and suppression digests are keyed (DEC-039).
 - Audit reads are themselves access-controlled; exports carry the chain proof.
 
 ## 10. Consent (collector-facing)

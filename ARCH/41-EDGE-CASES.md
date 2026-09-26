@@ -2,6 +2,7 @@
 
 > **Status:** Draft P4. The consolidated edge-case catalog. Each row names the scenario and the **required behavior**; the owning module doc carries detail. New edge cases discovered during review get a row here + a reference in the owning doc — no silent fixes.
 > **P7 pass (2026-09-26):** coverage extended end-to-end — kernel (`10`), agent/model plane (`15`/`18`), runtime (`19`), code/search/comms (`26`–`28`), effect verification (`34`) and multi-agent coexistence get their own families; existing IDs and rows are unchanged.
+> **P7 memory merge (2026-09-26):** +12 entries — memory-grade store integrity, mutation-vs-injection semantics and multi-agent memory boundaries (EDGE-157/158, EDGE-170–179).
 > **Rule:** an edge case is resolved when the owning doc states the behavior; deferred cases carry an explicit trigger.
 
 ## A. Work & scheduling (`11`)
@@ -41,12 +42,12 @@
 | EDGE-021 | Pruned item needed later | `reconstructable` flag prevents loss; non-reconstructable items are never pruned. |
 | EDGE-022 | Recall serves stale/conflicting memory | `superseded_by` filters superseded; staleness annotation + verify-against-live-state framing. |
 | EDGE-023 | Secret enters memory pipeline | Rejected at validate + logged; if slipped: forget + suppression + corpus test. |
-| EDGE-024 | Forgotten item re-extracted | Suppression hash blocks re-extraction (TEPA revocation). |
+| EDGE-024 | Forgotten item re-extracted | Suppression digest blocks re-extraction **and import** (TEPA revocation); the digest is keyed, and scope wipes retain suppressions (`17` §7, DEC-039). |
 | EDGE-025 | Pinned context exceeds ceiling | Ceiling enforced with warning; pins are bounded, not absolute. |
 | EDGE-026 | Model switch changes tokenizer | Conservative re-estimate + feasibility recheck; degrade gracefully. |
-| EDGE-027 | Zero relevant memory | Zero injected tokens (INV-22) — abstention is correct behavior. |
-| EDGE-028 | Memory import malformed, oversized or hostile | Bounded read; schema + hash + secret scan re-run before landing; all-or-nothing transaction as `source='import'`; rejected items surfaced — never partially merged (`17` §4, §5, §13). |
-| EDGE-029 | Concurrent extraction jobs contest one scope / store lock | Job lease + debounce serialize extractors per scope; a locked/corrupt store disables memory for the session with a warning; the turn is never blocked (`17` §3, §5, §8). |
+| EDGE-027 | Zero relevant memory | Zero tokens in the **relevant** block (INV-22) — abstention is correct behavior; the always-on block is separately budgeted and exists only for pinned items. |
+| EDGE-028 | Memory import malformed, oversized or hostile | Bounded read; schema + hash + secret + **suppression** scan re-run before landing; id/scope remapping follows the declared rules (project identity is not assumed portable); all-or-nothing transaction as `source='import'`; rejected items surfaced — never partially merged (`17` §4, §5, §13). |
+| EDGE-029 | Concurrent extraction jobs contest one scope / store access | Job lease + debounce serialize extractors per scope; a **locked** store backpressures per call (bounded busy timeout + backoff) without disabling memory or failing a turn; a **corrupt** store disables memory for the session with a warning and a surfaced repair path (`17` §3, §5, §8; EDGE-172/173). |
 
 ## D. Trust & security (`12`)
 
@@ -153,7 +154,7 @@
 |---|---|---|
 | EDGE-110 | Config layer malformed / carries unknown keys or secrets | Fail closed for that layer only; fall back to the previous valid layer with a surfaced warning + audit event; unknown keys yield migration notes; secrets in config are rejected (vault refs only) — never silently accepted (`10` §4, §9; INV-02). |
 | EDGE-111 | Store migration fails part-way at boot | The dependent feature is blocked cleanly; no read or write runs against a half-migrated store; the exact migration + error is reported (`10` §6, §9). |
-| EDGE-112 | Wall clock jumps backward/forward mid-run | Monotonic durations and timers are unaffected; schedules re-evaluate conservatively from persisted times; no wall-clock delta drives expiry or ordering (`10` §5, §9). |
+| EDGE-112 | Wall clock jumps backward/forward mid-run | Kernel **timers/schedules**: monotonic durations and timers are unaffected; schedules re-evaluate conservatively from persisted times; no wall-clock delta drives kernel expiry or ordering (`10` §5, §9). Memory recency/TTL/lease skew is governed separately by its clamp and anchor policy (`17` §7, EDGE-177). |
 | EDGE-113 | Boundary payload is invalid UTF-8 / non-canonical JSON / float-unsafe number | Typed boundary error; no lossy coercion; ids and sizes stay integer-safe; canonical JSON on every emit (`10` §3, §6). |
 | EDGE-114 | Duplicate uuidv7 id minted | Treated as `Internal` with the collision recorded — single-writer minting makes this a bug, never a silent merge or reuse (`10` §2, §9). |
 
@@ -200,6 +201,8 @@
 | EDGE-154 | Cancelled/closed child returns a late completion | Wake-suppression gate: a cancelled child never wakes the parent and never re-buffers after teardown; receipt delivery is at-most-once per parent incarnation; queued spawns are swept (`15` §7, DEC-036). |
 | EDGE-155 | External agent reaches outside its projection (path/tool/store) | Interception, not un-discovery: deny + audit at the Core boundary; the projection never widens implicitly; the session is flagged (`12` §8, INV-11). |
 | EDGE-156 | External agent process crashes/restarts mid-run | Work state stays durable (log + checkpoints); the binding re-establishes through the gateway; effects re-authorize through tickets/idempotency with no duplicate application (`11` §4, `32` §3, `12` §4). |
+| EDGE-157 | External agent attempts a memory write (or Core reaches a native memory/config dir) | v1 exposure is **recall-only**: no write path is projected, and Core never writes or mutates an external agent's native memory/config/session store — deny + audit (`17` §4–§5, DEC-025/043, EDGE-150/151). |
+| EDGE-158 | Subagent completes its work | The parent context receives a **receipt, not a transcript**; receipt content is untrusted data (scanned, no-authority header); child-session harvesting follows the declared policy — Core-owned only, keyed to the child session/task with parent linkage, never auto-promoted (`15` §7, `17` §5, DEC-029/036/043). |
 
 ## P. Effect verification (`34`)
 
@@ -209,6 +212,21 @@
 | EDGE-161 | A false pass is discovered after the fact | Sampled audits + drift metrics; the miss becomes a new check/regression; prior receipts are not retro-trusted (`34` §7). |
 | EDGE-162 | Reconciliation shows a mismatch needing repair | Repair is a new work item/operation with its own ticket and receipt; verification never mutates the effect in place (`34` §6, `29` §3). |
 | EDGE-163 | Verify–repair cycle makes no progress | Bounded attempts, then escalation / `needs_attention` with evidence — never an infinite loop (`34` §7). |
+
+## Q. Memory store integrity (`17`)
+
+| ID | Scenario | Required behavior |
+|---|---|---|
+| EDGE-170 | Forget meets supersede pointers and import | No dangling `superseded_by` and no resurrection: deleting a superseding item collapses its chain and never fails; import re-checks suppression and cannot resurrect a forgotten hash; scope-wipe suppression semantics are explicit (suppressions retained; content stays un-extractable) (`17` §3/§7, DEC-039). |
+| EDGE-171 | Mid-session forget/edit/pin/disable vs the frozen injection block | The next turn reflects it: forget/edit/supersede/pin/unpin/disable/wipe invalidate the always-on block, the cache-bust is accepted, and a deleted item is never injected again (`16` §5/§6, `17` §6). |
+| EDGE-172 | Memory DB corrupt (vs merely locked) | Corruption is not treated as a transient lock: memory disables for the session with a warning, the store is quarantined, and a repair path (export readable rows → recreate → re-import validated) is surfaced + audited; chat is unaffected (`17` §8). |
+| EDGE-173 | Two processes/surfaces write memory (desktop + CLI/detached) | Single-writer ownership (lease + heartbeat; stale-lease reclaim audited) or serialized WAL with bounded `busy_timeout`/backoff: no lost writes, no turn failure (`17` §3/§8, `11` §3, `32` §6). |
+| EDGE-174 | FTS desync detected | `integrity-check`/row-count parity detects; `rebuild` restores the external-content index; verification runs **after** rebuild; an unrestored index is surfaced (`17` §3/§8). |
+| EDGE-175 | Oversized extraction output or entry | The per-item cap is enforced at validate; oversize is rejected with no partial write; one giant item can never consume the injection budget (`17` §5/§6). |
+| EDGE-176 | Hostile content harvested into memory | The item records a provenance trust tier; instruction-shaped or scope-widening candidates are rejected or downgraded without authority; recall text is quoted data that grants no authority (`17` §5/§6, DEC-036/037). |
+| EDGE-177 | Clock jump vs memory recency/TTL/leases | Ordering and expiry never invert: recency deltas clamp against non-monotonic observations, TTL uses the persisted anchor, leases fail safe, and skew events are recorded — aligned with `EDGE-112` (`17` §3/§6/§7). |
+| EDGE-178 | Project re-key (move/clone/rename/worktree/path reuse) | Scope follows the stable project identity (`DM-024`), not the path: explicit re-key/mapping rules apply, worktrees share the parent identity, and no recall path returns an out-of-set identity (`17` §2.1, `25` §5, DEC-040). |
+| EDGE-179 | Source artifact deleted | Provenance renders “source unavailable”; injection never dereferences the ref; the item stays usable (`17` §3/§6, `29`, DEC-032). |
 
 ## Extension rule
 

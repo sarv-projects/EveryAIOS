@@ -81,7 +81,7 @@ Agent X owns context **control**; Core owns context **data** (DEC-007; `16-CONTE
 - Pipeline: retrieve → select/rank → budget → prune → compact-if-needed → checkpoint → pack.
 - Manual control: focus / pin / exclude / inspect (surfaced in UI; `AGENTCOWORK-UI.md`).
 - **Subagent context isolation:** each child assembles its own context; `fork_context` is an explicit per-spawn option (default: fresh + bounded inherited snapshot) — never the parent's full transcript (§B3).
-- **Memory boundary:** recall via `memory.recall()` from `17`; Agent X may keep private working notes, but there is **no second durable memory store** (OQ-MEM-01 recommendation; final call in P1/P2).
+- **Memory boundary:** recall via `memory.recall()` from `17` (scopes and ceilings actor-derived, never caller-supplied); Agent X's private working notes live as **session-scope memory items + the session log** — there is **no second durable memory store**, and Core never writes or mutates another agent's native memory/config/session files (DEC-043).
 
 ## 6. Planning
 

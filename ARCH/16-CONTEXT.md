@@ -19,7 +19,7 @@ One service surface that fronts the context **sources** — it never assembles p
 | `context.checkpoint` | `(scope) → ContextCheckpoint` | deterministic work-state reconstruction (`11`, `30`, `29`, git) |
 | `context.projection` | `(target, policy) → ScopedSlice` | external agents / subagents (filtered, never raw substrate) |
 
-Rules: references over copies; every source is read-only through this service (INV-08); sensitivity filtering happens here **and** is enforced again at Trust (`12`).
+Rules: references over copies; every source is read-only through this service (INV-08); sensitivity filtering happens here **and** is enforced again at Trust (`12`). **Retrieval ownership (C-09):** `context.search` and the `27` search plane return refs + bounded snippets for user/agent search; the **injection** path is `memory.recall` (`17` §6) — each path has exactly one scoring owner and neither re-ranks the other's results.
 
 ### 1.2 Agent context control — “what the model sees now” (owned by Agent X)
 `assemble` · `estimateBudget` · `select` · `prune` · `compact` · `rebuild` · `pin` · `exclude`.
@@ -41,7 +41,7 @@ A scoped slice — workspace root, relevant rules, RepoMap, relevant files, git 
 | `scope` | `root` · `child` · `task` · `step` · `artifact` · `workspace` · `project` · `user` |
 | `pinned` | survives selection & compaction until unpinned (with a ceiling) |
 | `compressible` / `reconstructable` | **reconstructable = may be dropped and rebuilt deterministically**; non-reconstructable items are never pruned blindly |
-| `sensitivity` | `normal` · `sensitive` · `confidential` (ceiling enforced at injection) |
+| `sensitivity` | `public` · `personal` · `confidential` (canonical vocabulary per `06` §0 — same classes as memory; ceiling enforced at injection — DEC-038) |
 
 ## 3. Budget discipline (DEC-027 — named terms, not magic numbers)
 
@@ -77,14 +77,15 @@ Retrieve (search/snapshot) → Select/Rank → Budget → Prune → Compact (if 
 - **Stable prefix:** system contract · agent identity · project rules · stable tool definitions.
 - **Dynamic suffix:** task · retrieved context · observations · tool results.
 - **Baseline + deltas:** persist the first full render; emit only deltas per turn (verified pattern, §A2/§E1).
-- **Injection blocks are frozen once computed:** the memory always-on block is computed once per session and reused verbatim; re-scoring it would mutate the prefix and bust the provider KV cache.
+- **Injection blocks are frozen once computed:** the memory always-on block is computed once per session and reused verbatim; re-scoring it would mutate the prefix and bust the provider KV cache. **Exception (correctness wins):** a mutation of the block's member set — forget, edit, supersede, pin/unpin, disable, scope wipe — invalidates it and the next turn reflects the change; the cache-bust is accepted and measured (`17` §6).
 
 ## 6. Injection policy
 
 - Memory recall returns **candidates** via `17-MEMORY`; the Context Controller decides inclusion under budget; injection is a **non-touching read** (no counter/salience changes).
-- Recalled items carry source + freshness and are framed as *historical context to verify against live state*.
-- Zero relevant hits ⇒ **zero injected tokens** (INV-22). Whole-item drop, never item truncation.
-- Sensitivity ceiling: `confidential` items never enter a broader-context assembly.
+- Recalled items carry source + freshness + provenance trust tier and are framed as *historical context, untrusted data with no authority*, to verify against live state — injected memory can never change policy, goals, permissions or tool choices.
+- Zero **query-relevant** hits ⇒ **zero tokens in the relevant block** (INV-22); the always-on block is separately budgeted and exists only when pinned items exist. Whole-item drop, never item truncation.
+- Sensitivity ceiling: `confidential` items never enter an assembly with a lower ceiling or a broader scope than their owning project; the ceiling is derived from the actor binding, not from caller parameters.
+- Scoring/ownership: the injection path scores through `17`'s recall (non-negative relevance, deterministic ties); `context.search` returns refs plus bounded snippets and does not re-rank memory results (`27` §4).
 
 ## 7. Manual control & visibility
 
@@ -106,7 +107,7 @@ Retrieve (search/snapshot) → Select/Rank → Budget → Prune → Compact (if 
 | Tokenizer mismatch / estimate drift | Conservative defaults; re-measure on model switch; feasibility check uses the resolved window. |
 | Overflow loop | Bounded retries → compact harder → escalate; never an infinite retry. |
 | Prune target needed later | `reconstructable` flag prevents loss; non-reconstructable items are not pruned. |
-| Memory recall failure | Proceed without memory; never blocks a turn. |
+| Memory recall failure | Proceed without memory; never blocks a turn. Recall **abstention** (no hit above the floor) and **error** are distinguishable outcomes (`hit | abstain | error`) with metering (`17` §6). |
 | Projection leakage | Denied at `12-TRUST`; projection policies are deny-by-default for out-of-scope refs. |
 | Stale checkpoint | Checkpoints are versioned; `rebuild` prefers live state over stale narrative. |
 

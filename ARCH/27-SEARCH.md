@@ -38,7 +38,7 @@ Adapters declare: supported query forms · freshness semantics · cost class. `2
 
 ## 4. Ranking & result shaping
 
-v1 ranking: source-native score (BM25 etc.) × recency × pin/priority boosts; deterministic tie-breaks. Every result carries: `ref` · `source` · `score` · `freshness` · `snippet` (bounded) · `sensitivity`. **Abstention is correct behavior** — “no relevant memory” must yield nothing (`17` §6).
+v1 ranking: a **non-negative relevance base** — for FTS5, `relevance = −bm25` because raw `bm25()` is negative (better matches are more negative) — then × recency × pin/priority boosts, sorted **descending** with deterministic tie-breaks; a boost never inverts relevance (`17` §6). Every result carries: `ref` · `source` · `score` · `freshness` · `snippet` (bounded) · `sensitivity`. **Abstention is correct behavior** — “no relevant memory” must yield nothing (`17` §6). **Path ownership (C-09):** memory's injection path is `memory.recall` (`17` §6) with exactly one scoring owner; `27` fronts memory as a **user/agent search source** returning refs + bounded snippets and never re-ranks the recall candidates.
 
 ## 5. Scoping & security
 
@@ -78,7 +78,7 @@ Semantic/vector search (trigger: recall misses) · cross-repository federation �
 
 ## 11. Evidence
 
-Repo principle: kernel search is the single implementation (`everyaios-search`; AGENTS.md) · product-owner brief (search/files-index rows explicitly zero-token) · `ARCH/16-CONTEXT.md` §1/§4 · `ARCH/17-MEMORY.md` §6 (BM25+boosts, abstention) · `ARCH/21-WORLD-MODEL.md` §4 (index-not-walk) · `ARCH/26-CODE.md` §5 (structural queries owned by `26`).
+Repo principle: kernel search is the single implementation (`everyaios-search`; AGENTS.md) · product-owner brief (search/files-index rows explicitly zero-token) · `ARCH/16-CONTEXT.md` §1/§4 · `ARCH/17-MEMORY.md` §6 (non-negative relevance, abstention) · `ARCH/21-WORLD-MODEL.md` §4 (index-not-walk) · `ARCH/26-CODE.md` §5 (structural queries owned by `26`).
 
 ## 12. Requirements (`REQ-SEARCH-*`)
 

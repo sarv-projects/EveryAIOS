@@ -13,7 +13,7 @@
   - *mutable-with-audit:* `Work`, `Run`, `Step`, `Session`, `WorkflowRun`, `Approval` state transitions.
   - *hard-delete allowed:* `MemoryItem` (explicit forget → suppression record, DEC-018); everything else tombstones + audit.
 - **Secrets:** no entity ever stores a credential value — vault references only (INV-02).
-- **Sensitivity:** entities that can carry user content have `sensitivity: public | personal | confidential` (default `personal`); memory carries its own class rules (`17`).
+- **Sensitivity:** entities that can carry user content have `sensitivity: public | personal | confidential` (default `personal`); this is the **only** sensitivity vocabulary (`normal`/`sensitive` are not sensitivity classes — risk classes are a separate scale); memory carries its own class rules and the assignment/floor rule (`17`, DEC-038).
 - **Versioning:** any entity that can be referenced by a running execution (workflow, capability, skill, agent) is content-versioned; runs record the version they started with (INV-16).
 
 ## 1. Registry
@@ -84,13 +84,13 @@ erDiagram
 **DM-015 `DelegationPolicyEntry`** — `worker_agent_id` · `role` · `model?` · `instructions_ref?` · `skills[]` · `mcp_scope[]` · `permissions` · `workspace_scope` (`shared|isolated-worktree|sandbox`) · `can_spawn_children` · `max_parallel` · `max_turns?` · `token_budget?` · `mode` (`automatic|preferred|manual|disabled`) · `routing_rules[]`.
 **DM-016 `WorkerReceipt`** — `agent_id` · `run_id` · `status` · `scope[]` · `summary` · `findings?[]` · `changed_files?[]` · `tests?[]` · `artifacts?[]` · `blockers?[]` · `confidence?` · `usage {in,out}` · `will_wake?` (advisory, from the `subagent.finished` event) · `partial?` (set when the child overran its step budget or was interrupted mid-task).
 **DM-017 `ContextItem`** — see `16` §2 (id · source · type · content_ref · token_cost · priority · relevance · freshness · scope · pinned · compressible · reconstructable · sensitivity).
-**DM-018 `MemoryItem`** — see `17` §3 (full SQL): scope/kind/content/hash/dedup_key/sensitivity/source/confidence/pinned/used/superseded_by/expiry.
+**DM-018 `MemoryItem`** — see `17` §3 (full SQL): scope/kind/content/hash/dedup_key/sensitivity/trust_tier/source/confidence/pinned/used/superseded_by/expiry.
 **DM-019 `Artifact`** — `id` · `name` · `type` · `mime_type` · `source` · owner refs (`session_id/run_id/workflow_id/agent_id/workspace_id`) · `version` · `location` · `provenance` (chain) · `parent_artifact?` · `permissions`.
 **DM-020 `Receipt`** — `id` · `effect_ref` · `ticket_ref` · `capability_id`/`provider_id` · `inputs_digest` · `outputs` · `verification` (what ran) · `status` · `work_id` · `timestamps`.
 **DM-021 `WorkflowDefinition`** — `id` · `version` · `trigger` · `inputs/outputs` · `nodes[]`/`edges[]` (typed) · `variables` · `secrets[]` (vault refs) · `retry/timeout/concurrency policies` · `compensation?`.
 **DM-022 `WorkflowRun`** — `run_id` · `workflow_id` + `workflow_version` · `status` (enum above) · `current_node` · `variables` · `completed_nodes[]`/`pending_nodes[]` · `waiting_until?` · `checkpoints[]` · `artifacts[]` · `approvals[]` · `errors[]` · `retry_state`.
 **DM-023 `LibraryItem`** — `id` · `kind` (`agent|skill|workflow|connector|plugin|template|prompt|saved_artifact`) · `name` · `description` · `saved_from_artifact_id?` · `version` · `usage_count`.
-**DM-024 `Workspace`** — `id` · `kind` (`folder|repo|multi-root`) · `roots[]` · `project_identity` (git remote/root; OQ-MEM-05) · `policy_refs[]` · `trust_level`.
+**DM-024 `Workspace`** — `id` · `kind` (`folder|repo|multi-root`) · `roots[]` · `project_identity` (stable repo identity; DEC-040, shared with OQ-FILES-1) · `policy_refs[]` · `trust_level`.
 **DM-025 `ModelDescriptor`** — `id` (`provider/model`) · `provider` · `context_window` · `max_output` · `tool_calling` · `reasoning_modes[]` · `vision` · `streaming` · `structured_output` · `cost {in,out}` · `latency_class` · `local|cloud`.
 **DM-026 `WorldObject` / `WorldEdge`** — `id` · `kind` (`app|window|file|process|device|browser_tab|…`) · `identity_key` (per-kind stable key) · `attributes` · `freshness` · `provenance`; edges: `kind` · `from` · `to` · `observed_at`.
 **DM-027 `Skill`** — `id` · `version` · `metadata` · `instructions_ref` · `capability_requirements[]` · `input/output contracts` · `examples_refs[]`.
@@ -105,8 +105,9 @@ erDiagram
 6. `WorkflowRun` executes against the `WorkflowDefinition` version it started with (INV-16).
 7. `Approval` decisions are recorded once and referenced by receipts/tickets; they are never inferred.
 8. No entity stores secrets; sensitivity filters apply before any cross-scope read (INV-10).
-9. `MemoryItem` is the only entity with hard-delete; deletion writes a suppression record (DEC-018).
+9. `MemoryItem` is the only entity with hard-delete; deletion writes a suppression record (DEC-018) whose digest is keyed and whose erasure policy is declared (DEC-039).
 10. Cross-store references are by id + ref only — never by embedding another entity's mutable state.
+11. Memory mutations split by class (DEC-042): **in-store writes** (extract · remember · forget/supersede/pin/edit · wipe) are local persistent mutations — policy-gated per scope + audited, no per-write ticket; **boundary-crossing operations** (export/import to disk, sharing) follow the governed effect path. Permitted scopes and sensitivity ceilings are actor-derived, never caller-supplied (`17` §4/§9).
 
 ## 4. Open questions (`OQ-DM-*`)
 
