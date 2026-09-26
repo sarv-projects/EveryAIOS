@@ -1,6 +1,7 @@
 # 40 — Flows
 
 > **Status:** Draft P4. The end-to-end sequence catalog. Every flow declares actors, steps, terminal states and failure branches; edge cases are detailed in `41-EDGE-CASES.md`.
+> **P7 pass (2026-09-26):** line-checked; cross-references verified.
 > **Rule:** a flow is authoritative only if it is consistent with the module docs it touches; conflicts escalate to a `DEC`.
 
 ---

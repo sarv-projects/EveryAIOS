@@ -1,6 +1,7 @@
 # 44 — Absorb Register
 
 > **Status:** Draft P3. Must pass the `ARCH/00-INDEX.md` §5 checklist at freeze.
+> **P7 pass (2026-09-26):** line-checked; cross-references verified.
 > **Purpose:** the standing record of **what v1 absorbed from external systems, how, under what licensing, and what was explicitly rejected** — the operational ledger behind DEC-017.
 > **Evidence base (surviving):** `~/business_Dev/REPO-COMPARE/` — `MASTER-COMPARISON.md` (329 lines; 186-item register measured against v0), `DISPOSITION.md` (347 lines; item-level dispositions), `LICENSE-LEDGER.md` (100 lines; fresh-`LICENSE` verified), `BRIEFS/` (20 files), `clone2/` (58 clones) · `ARCHIVE/v1-research/` verification lanes (claim corrections).
 
@@ -51,13 +52,13 @@ From `MASTER-COMPARISON §3`, each mapped to the v1 invariant that enforces it:
 | 4 | LLM reviewer or “server answers for the user” as authority | INV-04 (input at most; human-gesture human-only) |
 | 5 | Per-engine approval authority over shared-plane effects | INV-03 (one governed path) |
 | 6 | A second engine or giant model router as kernel | DEC-004/005, INV-06 |
-| 7 | Micro-compaction by default | `16` §11 (telemetry first) |
+| 7 | Micro-compaction by default | `16` §11 · `30` §5 (telemetry first) |
 | 8 | Config-file credentials / unsandboxed shell as perimeter posture | INV-04/05, `12` §2 |
 | 9 | Electron desktop patterns as architecture | (stack decision; Tauri stands) |
 | 10 | AGPL code linking/vendoring | §3 licensing rules |
 | 11 | Nango key-scope authz replacing tickets; KMS custody; hosted resale | INV-03 (tickets sole authority), INV-02 |
 | 12 | Session-per-run multi-run data model | DM-004 single-session rule |
-| 13 | Public naming of algorithm subsystems | `17` §4.1 (one API; algorithms behind it) |
+| 13 | Public naming of algorithm subsystems | `17` §4 (one API; algorithms behind it) |
 | 14 | Deprecated V1 patterns as surfaces | module doc currency rules |
 | 15 | Main-process data model as truth (no event log) | INV-23 (single log) |
 | 16 | Silent-degradation / “installation = works” claims | INV-19, `42` evidence rules |

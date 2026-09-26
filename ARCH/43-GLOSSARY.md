@@ -1,6 +1,7 @@
 # 43 — Glossary
 
 > **Status:** Draft P3. Terms are defined **once here**; module docs may add domain-specific vocabulary but must link back. Where a term has a canonical schema, the entity id is given.
+> **P7 pass (2026-09-26):** line-checked; cross-references verified.
 
 | Term | Definition |
 |---|---|
@@ -13,6 +14,7 @@
 | **Approval** | A recorded human decision (approve/reject/edit/provide-data) requested by an agent question or a workflow node (DM-010, DEC-021). |
 | **Artifact** | A versioned, provenance-carrying work product (document, spreadsheet, patch, dataset, capture…) (DM-019). |
 | **Artifact Gateway** | The ref-based exchange surface for artifacts with external agents (`artifact_id`, mime, uri) (`29` §5). |
+| **`BLOCKED`** | The spec-conflict stop: when code and spec disagree, the change stops and a `DEC` / spec change is proposed; implementation resumes only after resolution (`.agents/docs/spec-driven-development.md`). |
 | **Capability** | A semantic operation — *what* can be done (`office.spreadsheet.edit`) — independent of *who* implements it (DEC-004). |
 | **Capability Descriptor** | The capability’s declaration: id, version, affordances, requirements, providers, loading mode, risk class, auth, verification hook (DM-011). |
 | **Capability Handle** | A resolved, epoch-checked binding to a provider for a capability (DM-012). |
@@ -25,9 +27,11 @@
 | **Context (Control vs Infrastructure)** | Core owns context **infrastructure** (what exists); the agent owns context **control** (what the model sees now) (DEC-007). |
 | **Context Item** | One context fragment record: source, type, content ref, token cost, scope, pins, reconstructable flag, sensitivity (DM-017). |
 | **Context Projection** | The scoped slice given to subagents and external agents — never the substrate (`16` §1.3). |
+| **Decision (`DEC-*`)** | A recorded design choice with its evidence (`04-DECISIONS.md`); a `Locked` decision changes only through a new `DEC` that supersedes the old — its text is never silently edited. |
 | **Domain Runtime** | A specialized execution domain — Office, Browser, Computer, Files, Code, Search, Comms (`22`–`28`). |
 | **Effect** | The externally visible consequence of an executed capability — the thing verification and receipts attach to. |
 | **Event** | A published system fact (append-only) — the single stream every projection derives from (DM-008, `30`). |
+| **GIVEN/WHEN/THEN** | The statement form of a testable requirement — GIVEN the context · WHEN the trigger · THEN the observable outcome (`08-REQUIREMENTS.md`). |
 | **Guard** | The single policy decider (`ALLOW`/`ASK`/`DENY`) composed of three layers: platform confinement × approval policy × declarative exec rules (DEC-028). |
 | **Handles** | See Capability Handle. Handles are cached bindings; the hot path looks one up instead of re-negotiating. |
 | **Installed / Available / Activated / Executing** | The four-state scoping model for resources (MCP servers, skills, plugins, models) (DEC-024). |
@@ -45,13 +49,17 @@
 | **Receipt** | Durable evidence of an effect: ticket, capability/provider, inputs digest, outputs, verification performed (DM-020). |
 | **Reconciliation** | The verification step comparing intended vs actual effect outcomes (`34` §6). |
 | **RepoGraph / RepoMap** | The repository intelligence index and its ranked, token-budgeted projection (`26`). |
+| **Requirement (`REQ-<DOMAIN>-<NNN>`)** | One testable behavior with acceptance and failure cases, owned by a module and derived from the SPEC/invariants/decisions (`08-REQUIREMENTS.md`); IDs are stable — never renumbered or reused. |
 | **Run** | One concrete execution of an agent or workflow node (DM-005). |
 | **Scheduler** | The Core component admitting work into lanes under outer limits (DEC-031, CTR-026). |
 | **Session** | A durable conversation/agent-context container; its log is append-only and everything else is a projection (DM-004, DM-007). |
 | **Sensitivity** | Data classification (`public`/`personal`/`confidential`) enforced at recall/projection/injection (INV-10). |
 | **Skill** | Reusable know-how (instructions + capability requirements) — teaches; doesn’t execute (DM-027, `31`). |
+| **Spec gate** | The pre-implementation check: read the applicable specs → extract the `REQ-*` to satisfy → inspect the implementation → plan → obtain a decision for any architecture change → smallest change → test every failure case → verify acceptance (`.agents/docs/spec-driven-development.md`). |
 | **Step** | A unit of progress inside a run; checkpoint boundary (DM-002). |
 | **Subagent** | A child session spawned by an agent for delegated work; returns a receipt, never a transcript (DEC-029). |
+| **Task (`TASK-<DOMAIN>-<NNN>`)** | A plan unit in `TODO.md` that references the `REQ-*` it implements and its touched paths/tests; the matrix (`09`) carries the link. |
+| **Test (`TEST-<DOMAIN>-<NNN>`)** | The executable verification attached to a requirement; `verified` status requires an acceptance record (`42`) — for risky classes, never unit tests alone (`09`). |
 | **Ticket** | Scoped, time-boxed authorization for one effect — required before any execution (DM-009, INV-03). |
 | **Tool vs Capability** | “Tool” is provider-side vocabulary; AgentCowork exposes capabilities. Protocols/tool names stay below the Capability Plane (INV-15). |
 | **Vault** | The credential store; `use`-style API only — values never leave it (INV-02). |
