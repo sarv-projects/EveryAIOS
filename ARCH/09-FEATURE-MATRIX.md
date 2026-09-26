@@ -165,6 +165,18 @@ One row per `REQ-*`. Status only from evidence.
 | `REQ-BROWSER-010` | `23-BROWSER` | pending | `INV-05`, `INV-20` | — | pending | pending | unplanned |
 | `REQ-BROWSER-011` | `23-BROWSER` | pending | `CTR-018` | — | pending | pending | unplanned |
 | `REQ-BROWSER-012` | `23-BROWSER` | pending | `DEC-016`, `INV-21` | — | pending | pending | unplanned |
+| `REQ-CUA-001` | `24-COMPUTER-USE` | pending | `DEC-011` | — | pending | pending | unplanned |
+| `REQ-CUA-002` | `24-COMPUTER-USE` | pending | `—` | — | pending | pending | unplanned |
+| `REQ-CUA-003` | `24-COMPUTER-USE` | pending | `DM-026` | — | pending | pending | unplanned |
+| `REQ-CUA-004` | `24-COMPUTER-USE` | pending | `—` | — | pending | pending | unplanned |
+| `REQ-CUA-005` | `24-COMPUTER-USE` | pending | `—` | — | pending | pending | unplanned |
+| `REQ-CUA-006` | `24-COMPUTER-USE` | pending | `—` | — | pending | pending | unplanned |
+| `REQ-CUA-007` | `24-COMPUTER-USE` | pending | `DEC-011` | — | pending | pending | unplanned |
+| `REQ-CUA-008` | `24-COMPUTER-USE` | pending | `DEC-015`, `INV-22` | — | pending | pending | unplanned |
+| `REQ-CUA-009` | `24-COMPUTER-USE` | pending | `DEC-021` | — | pending | pending | unplanned |
+| `REQ-CUA-010` | `24-COMPUTER-USE` | pending | `DEC-016`, `INV-21` | — | pending | pending | unplanned |
+| `REQ-CUA-011` | `24-COMPUTER-USE` | pending | `DEC-021`, `INV-04` | — | pending | pending | unplanned |
+| `REQ-CUA-012` | `24-COMPUTER-USE` | pending | `DEC-022` | — | pending | pending | unplanned |
 
 ## 4. Maintenance
 

@@ -1368,6 +1368,116 @@ This registry answers one question per entry: **what behavior must this system e
 - **Tests:** pending
 - **Status:** seeded
 
+### Computer use (`CUA`)
+
+#### REQ-CUA-001 — Highest deterministic rung first
+- **Statement:** GIVEN a desktop interaction need, WHEN a rung is chosen, THEN the highest deterministic rung runs first — native API → structured UI (UIA/AX/AT-SPI) → browser DOM/AX → CLI/app API/MCP → vision → raw input — and a screenshot is never taken for something an API or a tree can answer.
+- **Priority:** must
+- **Source:** `ARCH/24-COMPUTER-USE.md` §1/§2 · `ARCH/04-DECISIONS.md` DEC-011
+- **Acceptance:** rung-selection tests per scenario; vision/raw paths are reached only after higher rungs fail or are unavailable.
+- **Failure cases:** screenshot used where structure answers → design violation; raw input chosen first → violation.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-CUA-002 — Per-platform capability matrix is declared and honest
+- **Statement:** GIVEN a platform, WHEN computer use is offered, THEN the actually available rungs are declared in a per-platform matrix (e.g. no by-point AX on macOS in the current build; no AT-SPI client on bare X11), the matrix is tested and surfaced, and unimplemented rungs are absent rather than abstractly promised.
+- **Priority:** must
+- **Source:** `ARCH/24-COMPUTER-USE.md` §1/§2
+- **Acceptance:** matrix-conformance tests per platform; a missing rung produces guidance, never a silent failure.
+- **Failure cases:** promising a rung the platform lacks → defect; unavailable rung reported as success → violation.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-CUA-003 — Epoch-scoped observations; ambiguity is rejected
+- **Statement:** GIVEN an element resolution, WHEN a handle is produced, THEN it is `(runtime_id | role+name+automationId+bounds)` valid for one observation/action, re-read per step and never persisted as identity; ambiguous matches are rejected and re-read or escalated rather than guessed.
+- **Priority:** must
+- **Source:** `ARCH/24-COMPUTER-USE.md` §1/§3/§8 · `ARCH/06-DATA-MODEL.md` DM-026 · `ARCH/21-WORLD-MODEL.md` §3
+- **Acceptance:** handle-lifetime test; ambiguous-match test rejects; a stale observation is re-validated before acting.
+- **Failure cases:** cached structure used as identity → defect; a guessed element selected → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-CUA-004 — Bounded structured reads with timeout isolation
+- **Statement:** GIVEN a structured UI read, WHEN it runs, THEN it is bounded (nodes · depth · text limits), the tree is treated as lazy and changing (re-read per action, never cached as identity), and a per-call budget plus worker isolation prevent a hung provider from stalling the agent.
+- **Priority:** must
+- **Source:** `ARCH/24-COMPUTER-USE.md` §3 · `ARCH/21-WORLD-MODEL.md` §7
+- **Acceptance:** bounds test; hung-provider test times out to a partial tree and the ladder falls through.
+- **Failure cases:** hung provider stalling the agent → defect; unbounded tree read → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-CUA-005 — Pattern-first actuation
+- **Statement:** GIVEN a target element, WHEN it is actuated, THEN supported patterns are re-queried and invoked first (`Invoke` · `Value` · `Toggle` · `Scroll` · `Selection` · `Text` · `Window`), then synthetic events, and raw input only as the last, gated rung.
+- **Priority:** must
+- **Source:** `ARCH/24-COMPUTER-USE.md` §3/§5
+- **Acceptance:** pattern-preference tests per control type; patterns are re-queried per action; raw input is never chosen while a supported pattern works.
+- **Failure cases:** synthetic or raw input where a pattern applies → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-CUA-006 — Elevation limits degrade to guidance
+- **Statement:** GIVEN an elevated region unreachable without UIAccess/consent, WHEN the agent acts, THEN the region is marked unknown, no partial-input attempt is made, and the run surfaces typed guidance instead.
+- **Priority:** must
+- **Source:** `ARCH/24-COMPUTER-USE.md` §3/§8
+- **Acceptance:** elevated-region test yields unknown + guidance; no input synthesis into the unreachable region.
+- **Failure cases:** blind input at an elevated region → violation; unreachable region silently reported empty → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-CUA-007 — Vision rung discipline
+- **Statement:** GIVEN the vision rung, WHEN it runs, THEN it executes only for canvas/WebGL/custom render, poor semantics, verification, or a structured miss; captures are size-capped before send (model limits honored; no reliance on provider downscaling); the loop is screenshot → model → action → observe, with a zoom-class action available for legibility.
+- **Priority:** must
+- **Source:** `ARCH/24-COMPUTER-USE.md` §4 · `ARCH/04-DECISIONS.md` DEC-011
+- **Acceptance:** capture-size test; vision-trigger tests per allowed class; zoom path test.
+- **Failure cases:** vision used as the default → design violation; oversized capture sent → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-CUA-008 — Capture preference and context discipline
+- **Statement:** GIVEN a capture, WHEN vision is needed, THEN DOM/AX-informed capture with highlights is preferred over a plain screenshot, local OCR word-boxes are preferred when the tree is empty and text suffices (zero model cost), snapshots entering context are bounded, and screenshots enter context only when the vision rung ran.
+- **Priority:** must
+- **Source:** `ARCH/24-COMPUTER-USE.md` §4/§7 · `ARCH/16-CONTEXT.md` §3 · `ARCH/04-DECISIONS.md` DEC-015 · `ARCH/05-INVARIANTS.md` INV-22
+- **Acceptance:** preference-order tests; the OCR path runs without model calls; snapshot-bound test; a context scan shows no screenshots outside the vision rung.
+- **Failure cases:** a plain screenshot preferred over highlight capture → defect; screenshot in context without the vision rung → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-CUA-009 — On-screen content is untrusted input
+- **Statement:** GIVEN on-screen content, WHEN the agent processes it, THEN the content is untrusted input (a prompt-injection surface), consequential actions it proposes require the approval primitive, and capture is consent-gated with protected fields masked.
+- **Priority:** must
+- **Source:** `ARCH/24-COMPUTER-USE.md` §4/§6 · `ARCH/04-DECISIONS.md` DEC-021 · `ARCH/12-TRUST.md` §5
+- **Acceptance:** injection-corpus test (screen instructions never auto-execute); consequential-action approval test; masked-field test.
+- **Failure cases:** screen text treated as instructions → catastrophic violation; unapproved consequential action → violation.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-CUA-010 — Raw input is gated, indicated and rate-limited
+- **Statement:** GIVEN the raw-input rung, WHEN it is used, THEN it requires a `HumanAuthorization`-class gate, shows a visible indicator, is rate-limited, is never the first choice, and is never used for evasion.
+- **Priority:** must
+- **Source:** `ARCH/24-COMPUTER-USE.md` §5 · `ARCH/04-DECISIONS.md` DEC-016 · `ARCH/05-INVARIANTS.md` INV-20/INV-21
+- **Acceptance:** gate test (raw input without authorization is denied); indicator test; rate-limit test.
+- **Failure cases:** ungated synthetic input → violation; raw input used for evasion → catastrophic violation.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-CUA-011 — Confirmation thresholds and no bulk storms
+- **Statement:** GIVEN a consequential action class (sends · purchases · deletes · permission changes), WHEN it is about to execute, THEN the approval primitive is required; destructive/persistent patterns are denied by policy defaults and the ladder never overrides policy; bulk-input storms are prevented by a bounded action rate per target.
+- **Priority:** must
+- **Source:** `ARCH/24-COMPUTER-USE.md` §6 · `ARCH/04-DECISIONS.md` DEC-021 · `ARCH/12-TRUST.md` §3
+- **Acceptance:** consequential-class tests require approval; policy-default denial test; rate-bound test.
+- **Failure cases:** consequential action without approval → violation; ladder bypassing a policy denial → violation; bulk storm → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-CUA-012 — Post-action verification with bounded recovery
+- **Statement:** GIVEN an action whose outcome is uncertain (vision-based location, a pattern call that may not have applied), WHEN it completes, THEN the outcome is verified (structured re-read or a second observation), retries are bounded, and repeated failure lands in `needs_attention` — never an unbounded retry loop.
+- **Priority:** must
+- **Source:** `ARCH/24-COMPUTER-USE.md` §4/§8 · `ARCH/04-DECISIONS.md` DEC-022
+- **Acceptance:** post-action verification tests; bounded-retry test; repeated failure yields `needs_attention`.
+- **Failure cases:** unbounded retry loop → defect; unverified success claimed → violation.
+- **Tests:** pending
+- **Status:** seeded
+
 ### Agent X (`AGX`)
 
 #### REQ-AGX-001 — Delegation contract
@@ -1407,7 +1517,8 @@ This registry answers one question per entry: **what behavior must this system e
 | `WORLD` (11) | drafted above + expanded in pass `21` | verified during pass `21` ✅ (2026-09-26) |
 | `OFFICE` (11) | drafted above + expanded in pass `22` | verified during pass `22` ✅ (2026-09-26) |
 | `BROWSER` (12) | drafted above + expanded in pass `23` | verified during pass `23` ✅ (2026-09-26) |
-| `CUA`, `FILES`, `CODE`, `SEARCH`, `COMMS`, `ART`, `EVENTS`, `SKILL`, `CHAN`, `VERIFY` | pending | seeded during each module's P7 pass |
+| `CUA` (12) | drafted above + expanded in pass `24` | verified during pass `24` ✅ (2026-09-26) |
+| `FILES`, `CODE`, `SEARCH`, `COMMS`, `ART`, `EVENTS`, `SKILL`, `CHAN`, `VERIFY` | pending | seeded during each module's P7 pass |
 
 ## 6. Related
 
