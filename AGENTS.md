@@ -181,7 +181,7 @@ pnpm --filter @everyaios/coordinator build  # Sidecar
 # Test
 (cd crates && cargo test)                    # All Rust tests
 (cd crates && cargo test -p everyaios-core)  # Single crate
-pnpm test                         # All JS tests
+pnpm -r test                      # All JS/TS tests (recursive; skips packages without a test script)
 
 # Typecheck
 (cd crates && cargo clippy)       # Rust lint

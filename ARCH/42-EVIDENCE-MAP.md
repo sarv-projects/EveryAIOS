@@ -2,6 +2,7 @@
 
 > **Status:** Frozen v1 (frozen 2026-09-26; drafted P4). How claims get evidence, how the implementation will be accepted, and the consolidated **code-phase fix register**. This doc is the bridge between the frozen docs and the future code phase.
 > **P7 pass (2026-09-26):** line-checked; cross-references verified.
+> **P9 verification pass (2026-09-26):** read line-by-line; fixes applied where needed (owner-directed; re-freeze follows).
 > **Rule:** no claim ships without evidence; a passing unit test proves that behavior only (never “it works”); readiness claims require real platform acceptance records.
 
 ## 1. Evidence rules (recap)
@@ -55,11 +56,11 @@ Each doc’s claims map to a verification class; tests are sized to the claim. (
 | `32` Channels | Gateway 7-item projection tests; ACP mapping; approval routing. |
 | `34` Verification | Risk→depth matrix tests; unverified-state surfacing; repair paths. |
 | `40`/`41` | Flow e2e scripts + edge-case regression tests. |
-| `AGENTCOWORK-SPEC` / `AGENTCOWORK-UI` | Product acceptance criteria + UI checks (P5 defines). |
+| `AGENTCOWORK-SPEC` / `AGENTCOWORK-UI` | Product acceptance criteria + UI checks (defined by the product + UI docs). |
 
 ## 4. Code-phase fix register (re-verify each before fixing)
 
-**Standing rule:** code is frozen until v1 freezes; each item is re-verified against the current tree before implementation (some v0 findings predate the freeze).
+**Standing rule:** v1 is frozen; each item is re-verified against the current tree before its fix lands (some v0 findings predate the freeze).
 
 | FIX | Item | Source / evidence |
 |---|---|---|
@@ -69,23 +70,23 @@ Each doc’s claims map to a verification class; tests are sized to the claim. (
 | FIX-04 | UI-blob secret scan | SEC-21 |
 | FIX-05 | `skills_uninstall` arbitrary recursive deletion (`skill_store.rs:442`) | v0 audit (re-verify path) |
 | FIX-06 | Unticketed `fs_*`/`terminal_run` with false `AgentTicket` provenance | v0 audit (re-verify) |
-| FIX-07 | Hardcoded governance badge `SelfContained { channel_b: true }` (`acp_cmds.rs:1676`) — the code comment argues it is correct post-ADR-0005; **annotated close pending a `DEC`/evidence note, not a code patch** | v0 audit + `code-state-inventory` §7.5/§8.6 |
+| FIX-07 | Hardcoded governance badge `SelfContained { channel_b: true }` (`acp_cmds.rs:1676`) — the code comment argues it is correct post-ADR-0005; **annotated close pending a `DEC`/evidence note, not a code patch** | v0 audit + `code-state-inventory` §7 item 5 / §8 item 6 |
 | FIX-08 | `tool/commit` has no live driver | v0 audit (re-verify) |
-| FIX-09 | netfloor bypasses: direct `ureq` calls in `core/src/tools.rs:2414`, `core/src/messaging.rs:35`, `core/src/models/*`, `vault/src/oauth.rs:1022-1048` — whether each site is pre-flighted by `netfloor` is unclear from a static read (trust wave) | v0 audit + `code-state-inventory` §7.4 |
+| FIX-09 | netfloor bypasses: direct `ureq` calls in `core/src/tools.rs:2414`, `core/src/messaging.rs:35`, `core/src/search_config.rs:98`, `core/src/challenge.rs:177`, `core/src/models/*`, `vault/src/oauth.rs:1022-1067` — whether each site is pre-flighted by `netfloor` is unclear from a static read (trust wave) | v0 audit + `code-state-inventory` §7 item 4 |
 | FIX-10 | Windows file identity: `walk.rs:131-157` zeroes dev/ino → corrupts dedup (`dedup.rs:106-118`) | `world-model-verification.md` §3 |
 | FIX-11 | `usn_winapi.rs` unwired — wire as W1 delta source | same |
 | FIX-12 | MCP remote client sends no `_meta`/modern headers (`remote.rs`) | `mcp-provider-verification.md` |
 | FIX-13 | MCP façade missing `server/discover` + `Mcp-Method`/`Mcp-Name` validation | same |
 | FIX-14 | Office resident/lease missing (commit/snapshot primitives exist) | `office-runtime-verification.md` §4 |
 | FIX-15 | PDF “redact” annotates instead of removing content (P0) | v0 audit + `office-runtime-verification.md` |
-| FIX-16 | fsync before atomic swap in Office commit path | `office-runtime-verification.md` §1.A |
+| FIX-16 | fsync before atomic swap in the Office commit path — the XLSX save path is the gap (`src-tauri/src/xlsx_cmds.rs:301-312` `atomic_write` = write + rename, no fsync); the docx/PDF paths already use `everyaios_office::write_atomic` (fsync) | `office-runtime-verification.md` §1.A |
 | FIX-17 | UIA collector hardening (AutomationId-as-hint, UIAccess limits, CDP for browser) | `world-model-verification.md` §2 |
 | FIX-18 | WGC readiness verification for window capture | same §6 |
 
 ## 5. Pass gates
 
 - **P6 freeze conditions:** every doc passes `00-INDEX` §5; the interop matrix is updated; the fix register is owned by the code phase; no `UNVERIFIED` claim remains silent.
-- **Post-freeze:** code phase re-verifies FIX-01…18, then implements in the `MASTER-COMPARISON §5` order (P0 wave → context machinery → lifecycle discipline → honesty surfaces → polish).
+- **Post-freeze:** the code phase re-verifies FIX-01…18, then implements per `TODO.md` (W0–W4); the register's historical sequencing sketch is `MASTER-COMPARISON §5` (Wave 0 P0 → Wave 1 floors → Wave 2 context/token → Wave 3 engine hosting → Wave 4 work/scheduler → Wave 5 polish).
 
 ## 6. Open questions (`OQ-EVID-*`)
 

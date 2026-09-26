@@ -2,6 +2,7 @@
 
 > **Status:** Frozen v1 (frozen 2026-09-26; drafted P3).
 > **P7 pass (2026-09-26):** line-checked; cross-references verified.
+> **P9 verification pass (2026-09-26):** read line-by-line; fixes applied where needed (owner-directed; re-freeze follows).
 > **Purpose:** the standing record of **what v1 absorbed from external systems, how, under what licensing, and what was explicitly rejected** — the operational ledger behind DEC-017.
 > **Evidence base (surviving):** `~/business_Dev/REPO-COMPARE/` — `MASTER-COMPARISON.md` (329 lines; 190-item register measured against v0 — its §1 “186” line is stale per `DISPOSITION.md` §a), `DISPOSITION.md` (347 lines; item-level dispositions), `LICENSE-LEDGER.md` (100 lines; fresh-`LICENSE` verified), `BRIEFS/` (20 files), `clone2/` (55 clones) · `ARCHIVE/v1-research/` verification lanes (claim corrections).
 

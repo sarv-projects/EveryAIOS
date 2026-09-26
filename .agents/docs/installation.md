@@ -14,7 +14,9 @@ The kit is installed under `.agents/`, so paths below are relative to the reposi
 .agents/
 ├── README.md
 ├── docs/
-├── templates/AGENTS.template.md
+├── templates/
+│   ├── AGENTS.template.md
+│   └── SPEC.template.md
 └── skills/
     ├── codebase-intelligence/
     │   ├── SKILL.md

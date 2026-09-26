@@ -1,6 +1,7 @@
 # AgentCowork (working name)
 
 > **Status: architecture docs v1 — FROZEN (2026-09-26)** — the documentation set was rebuilt from scratch in September 2026 on the shoulders of the v0 corpus (archived locally at `ARCHIVE/v0/`) and finalised with the P7 spec-driven pass; changes now require a superseding `DEC`. Delivery status lives in [`TODO.md`](TODO.md) (the v1 implementation plan); nothing here is released.
+> **P9 verification pass (2026-09-26):** read line-by-line; fixes applied where needed (owner-directed; re-freeze follows).
 
 AgentCowork is a **local-first AI work environment** that composes interchangeable agents, models, capabilities and execution environments behind one governed execution model, on top of a continuously updated model of the user's digital world. It is an AI-native execution layer on your existing computer — not an operating-system replacement.
 
@@ -59,7 +60,7 @@ scripts/       CI gates, codegen, verification tools
 # JavaScript/TypeScript workspace
 pnpm install
 pnpm --filter @everyaios/coordinator build
-pnpm test
+pnpm -r test                        # JS/TS tests across workspace packages
 pnpm --filter ui tsc --noEmit      # UI typecheck
 
 # Repository gates

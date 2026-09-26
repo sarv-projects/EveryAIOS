@@ -3,6 +3,7 @@
 > **Status:** Frozen v1 (frozen 2026-09-26; drafted P4). The consolidated edge-case catalog. Each row names the scenario and the **required behavior**; the owning module doc carries detail. New edge cases discovered during review get a row here + a reference in the owning doc — no silent fixes.
 > **P7 pass (2026-09-26):** coverage extended end-to-end — kernel (`10`), agent/model plane (`15`/`18`), runtime (`19`), code/search/comms (`26`–`28`), effect verification (`34`) and multi-agent coexistence get their own families; existing IDs and rows are unchanged.
 > **P7 memory merge (2026-09-26):** +12 entries — memory-grade store integrity, mutation-vs-injection semantics and multi-agent memory boundaries (EDGE-157/158, EDGE-170–179).
+> **P9 verification pass (2026-09-26):** read line-by-line; fixes applied where needed (owner-directed; re-freeze follows).
 > **Rule:** an edge case is resolved when the owning doc states the behavior; deferred cases carry an explicit trigger.
 
 ## A. Work & scheduling (`11`)
@@ -88,7 +89,7 @@
 | EDGE-052 | Attach to user browser fails | Fall back to managed Chromium with a surfaced note. |
 | EDGE-053 | PDF redact “completes” but text remains | Required: post-op extraction check proving removal; current code annotates (code-phase P0 fix). |
 | EDGE-054 | Vision mislocates an element | Verify after action; bounded retries; `needs_attention` on repeat failure. |
-| EDGE-055 | Studio model unavailable when vision scheduled | Degrade with recorded gap; dangerous classes require human confirmation instead. |
+| EDGE-055 | Vision model unavailable when vision scheduled | Degrade with recorded gap; dangerous classes require human confirmation instead. |
 | EDGE-056 | Capture/UI read meets protected fields (passwords) | `IsPassword`/protected fields are excluded or masked before any output; screenshots remain capture-consent-gated; protected values never enter context (`21` §5, `24` §4, §7). |
 | EDGE-057 | User cancels mid-domain operation (Office batch / browser action) | Cooperative stop at the next boundary; Office batches stay all-or-nothing; browser actions settle or abort without interleaved input; partial effects are receipted/verified, never hidden (`11` §6, `22` §4, `23` §4). |
 | EDGE-058 | User and agent drive the same browser tab (takeover) | User takeover suspends agent input and the agent yields; actions serialize on the shared surface — no interleaved typing/clicking; resume is explicit (`23` §2). |

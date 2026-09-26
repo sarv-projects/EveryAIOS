@@ -4,7 +4,7 @@ specs/<area>.md, or a requirements registry) and fill it in.
 
 Rules: stable IDs; one behavior per requirement; acceptance and failure cases
 before implementation; never silently change an accepted requirement.
-Full protocol: docs/spec-driven-development.md (in this kit).
+Full protocol: `.agents/docs/spec-driven-development.md` (in this kit).
 -->
 
 # <Spec / area title>

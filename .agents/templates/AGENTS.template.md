@@ -2,7 +2,7 @@
 Blank template. Copy this file to the root of a new repository as `AGENTS.md`.
 It is deliberately named `AGENTS.template.md` here so that it is not loaded as an
 active instruction file for this directory. Project-specific sections should be
-appended below section 12, rather than mixed into the universal ones.
+appended after the universal sections, rather than mixed into them.
 -->
 
 # Repository Agent Instructions
@@ -149,7 +149,7 @@ Commit messages should describe the software change, not the tool, model, assist
 
 Do not mention those tool/agent names in commit messages, code comments, implementation notes, generated files, or documentation merely because they were used during the work. Examples include CodeBuff, FreeBuff, Claude Code, Cursor, Vibe, Codex, and Grok.
 
-The same rule applies to future tools with the same role.
+The same rule applies to future tools with the same role. The rule targets **authoring-tool attribution**; citing named external systems as prior art or absorbed technology is fine when the reference is about that software, never about who wrote the change.
 
 ## 11. Skills
 

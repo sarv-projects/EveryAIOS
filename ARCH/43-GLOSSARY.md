@@ -2,6 +2,7 @@
 
 > **Status:** Frozen v1 (frozen 2026-09-26; drafted P3). Terms are defined **once here**; module docs may add domain-specific vocabulary but must link back. Where a term has a canonical schema, the entity id is given.
 > **P7 pass (2026-09-26):** line-checked; cross-references verified.
+> **P9 verification pass (2026-09-26):** read line-by-line; fixes applied where needed (owner-directed; re-freeze follows).
 
 | Term | Definition |
 |---|---|
@@ -9,7 +10,7 @@
 | **Agent** | A reasoning runtime that plans and acts. Agent X (native) or any external peer (ACP/A2A/CLI/remote). |
 | **Agent X** | The native first-party agent; architecturally a peer of external agents — same `AgentEngine` contract, no privileged path (DEC-010). |
 | **`AgentEngine`** | The peer contract every agent implements: create/resume sessions, run, steer, interrupt, spawn subagent, dispose (CTR-001). |
-| **Agent Gateway** | The brokered entry point external agents use; produces the 7-item projection and enforces it (CTR-022, DEC-009). |
+| **Agent Gateway** | The brokered entry point external agents use; produces the 7-item projection (enforcement lives in Trust — `12` §8, `32` §3) (CTR-022, DEC-009). |
 | **Agent Profile** | An agent’s declarative configuration: runtime, version, supported models, capabilities, composer abilities (DM-014). |
 | **Approval** | A recorded human decision (approve/reject/edit/provide-data) requested by an agent question or a workflow node (DM-010, DEC-021). |
 | **Artifact** | A versioned, provenance-carrying work product (document, spreadsheet, patch, dataset, capture…) (DM-019). |
@@ -71,4 +72,4 @@
 | **World Model** | The continuously updated structural map of the machine + change stream; consumers query it instead of screenshotting (`21`). |
 | **W1…W7** | World Model collector set — W1 file inventory + deltas · W2 process/window registry · W3 UI tree on demand · W4 window capture on demand · W5 browser world · W6 devices/registry/shares (deferred) · W7 content index/OCR (deferred); defined in `ARCH/21-WORLD-MODEL.md` §2. |
 
-**Naming note:** v0 names (EveryAIOS-era) appear only in `ARCH/01-NAMING.md` and archive references.
+**Naming note:** v0 product names (EveryAIOS-era) appear only in `ARCH/01-NAMING.md` and archive references; frozen code identifiers (`everyaios-*`) keep their historical prefix until the post-freeze code-phase rename (OQ-003).

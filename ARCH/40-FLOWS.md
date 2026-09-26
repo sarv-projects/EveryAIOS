@@ -2,6 +2,7 @@
 
 > **Status:** Frozen v1 (frozen 2026-09-26; drafted P4). The end-to-end sequence catalog. Every flow declares actors, steps, terminal states and failure branches; edge cases are detailed in `41-EDGE-CASES.md`.
 > **P7 pass (2026-09-26):** line-checked; cross-references verified.
+> **P9 verification pass (2026-09-26):** read line-by-line; fixes applied where needed (owner-directed; re-freeze follows).
 > **Rule:** a flow is authoritative only if it is consistent with the module docs it touches; conflicts escalate to a `DEC`.
 
 ---
@@ -34,7 +35,7 @@
 **Actors:** scheduler loop (`20` §4) · journal · trigger row.
 **Steps:** `next_due_at` stored → wake loop materializes occurrence (idempotency key) → claim exactly-once → run pinned → execute → compute next wake.
 **Terminal:** run terminal state; trigger continues.
-**Failure branches:** app closed at due time → misfire policy (skip+record default; latest-missed optional); lease expiry → reaper requeues; journal reset → cursor discard + rescan (`25`).
+**Failure branches:** app closed at due time → misfire policy (skip+record default; latest-missed optional); lease expiry → reaper requeues; occurrence journal reset → re-materialize from the persisted trigger rows (unique idempotency keys make the replay exactly-once) (`20` §4).
 
 ### FLOW-06 — Background/detached work across app lifecycle
 **Actors:** `11` lanes · `19` runtime · user.
@@ -58,7 +59,7 @@
 **Actors:** Context Controller (`15`/`16`) · `17`.
 **Steps:** recall(query, scopes, budget; caller scopes narrow the actor-derived ceiling) → filter (current, unexpired, sensitivity) → FTS5 BM25 candidates → relevance = −bm25 (higher = better; deterministic tie-break) → budget-fit (whole-item drop) → candidates returned → Controller decides inclusion → injection (non-touching; staleness-annotated).
 **Terminal:** items injected or **abstention** (zero hits ⇒ zero tokens).
-**Failure branches:** recall failure → proceed without memory; DB locked → memory disabled for session with warning.
+**Failure branches:** recall failure → proceed without memory; DB locked → bounded backoff, memory degrades or defers without disabling memory or failing the turn; corrupt store → memory disabled for the session with a surfaced warning (`17` §8, EDGE-172/173).
 
 ### FLOW-10 — External agent onboarding
 **Actors:** external agent · Agent Gateway (`32`) · `12`/`13`/`16`/`29`/`30`.
@@ -140,7 +141,7 @@
 
 ### FLOW-23 — Multi-surface handoff
 **Actors:** surfaces (`32`) · `11` sessions · `12` approvals.
-**Steps:** session lives in Core → another surface attaches → projections render → approvals/notifications route to the active surface → work continues regardless of surface.
+**Steps:** session lives in Core → another surface attaches → projections render → approvals/notifications route to the bound channel (the active surface); a missing channel waits durably → work continues regardless of surface.
 **Terminal:** N surfaces, one session; no second brain.
 **Failure branches:** surface crash → isolated; offline surface → approvals wait durably and re-surface.
 
