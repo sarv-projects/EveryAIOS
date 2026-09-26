@@ -2,6 +2,7 @@
 
 > **Status:** Frozen v1 (frozen 2026-09-26; drafted P2).
 > **P7 pass (2026-09-26):** line-checked; requirements seeded (`REQ-MODEL-*`, Requirements section).
+> **P9 verification pass (2026-09-26):** read line-by-line; fixes applied where needed (owner-directed; re-freeze follows).
 > **Role:** every model — cloud or local — behind **one registry and one router**. No module hard-codes a vendor (P-03, DEC-004).
 > **Dependencies:** `10-KERNEL` · `12-TRUST` (vault) · `16-CONTEXT` (window/tokenization feeds budgets) · `30-EVENTS` (usage). **Consumers:** `15-AGENT-X` · `20-WORKFLOW` (agent nodes) · `17-MEMORY` (extractor) · `24-COMPUTER-USE` (vision).
 > **Evidence:** product-owner brief (ModelAdapter surface, local discovery UX, “never hard-code Claude”) · `ARCHIVE/v1-research/agent-harness-verification.md` §A1 (resolved window + feasibility check, `codex-rs/core/src/session/mod.rs:4560-4587`), §C1 (budget vocabulary) · `ARCH/06-DATA-MODEL.md` DM-025 · `ARCH/07-CONTRACTS.md` CTR-014 · `ARCHIVE/v1-research/memory.md` §7 (extraction disclosure boundary).
@@ -27,7 +28,7 @@
 | `locality` | `local` · `cloud` (privacy-relevant flag) |
 | `tokenizer` | tokenizer ref used for budget estimation |
 
-**Catalog sources:** cloud catalog data (models.dev-class; *data, not runtime*) + local discovery + manual entries. Offline behavior: vendored snapshot + local scan; no model available ⇒ typed `Unavailable` with guidance.
+**Catalog sources:** cloud catalog data (models.dev-class; *data, not runtime* — provider SDKs are never installed at runtime, DEC-034) + local discovery + manual entries. Offline behavior: vendored snapshot + local scan; no model available ⇒ typed `Unavailable` with guidance.
 
 **Descriptor additions (absorbed, A2/A3/A5/A6/A9/A10):** `status` (lifecycle `alpha|beta|deprecated|active` + visibility: whitelist/blacklist, experimental flag) · `family` + `release_date` · `variants` (named per-model option maps; config-mergeable; `disabled` removals) · per-model `options`/`headers` · `transport_ref` + `catalog_ref` (catalog key ≠ generated id ≠ runtime transport id) · `prompt_cache` (inferred from cache-cost fields) · `cost` extended to `{ in, out, cache_read, cache_write, tiers[]?, over_200k?, reported_actual? }` — cache-class-aware; provider-reported actual overrides catalog estimates; included plans are exactly 0 · `privacy` (training-use + retention class from the provider's disclosure — `confidential` scopes must not route to training-enabled models; e.g. the OpenCode Go privacy table).
 
@@ -53,6 +54,7 @@ The resolved window feeds the `16` pre-turn feasibility check (`window − reser
 - **Retries (A7 — single-owner rule):** request-start transport retries (exponential + jitter; honors `retry-after` in seconds/ms/HTTP-date) · **pre-content** stream interruptions via buffer-until-proven (discarded-attempt usage is summed, never lost; a user abort anywhere vetoes retry) · **post-content** failures handled at the turn level. Exactly one layer retries per failure class; context overflow is terminal **at this layer** — the adapter surfaces the typed `ContextOverflow` and never re-requests; the agent's turn-level recovery owns the single compact-and-retry of the same step (`16` §4) and never becomes a second transport retry. Provider-native compaction, when a provider exposes it, is adopted per DEC-045 — a capability event with Guard egress/audit and a per-provider off switch; its usage/cost counts in §7 as a second inference call.
 - **Typed provider errors (A8):** `InvalidRequest · Authentication · RateLimit{retryAfterMs} · QuotaExceeded · ContentPolicy · ProviderInternal · Transport · ContextOverflow`; `retryable` derived from the type (typed-first, structural-walk-second classification).
 - **Schema lowering (A12):** tool JSON schemas are lowered per wire protocol inside the adapter — callers keep one schema shape.
+- **Prompt cache (A9/G5):** cache hints are protocol-scoped — automatic breakpoints (last tool · last system part · latest user message) only for protocols with inline cache markers, TTL hints where supported; cache reads/writes are accounted per §7. Policy defaults remain open (OQ-MODEL-01, joint with `16`).
 - **Idempotency:** non-stream requests carry idempotency keys.
 - **Provider client identity & session affinity (gateway class):** providers may require an identifying User-Agent (**ours** — never impersonation or a generic SDK name) and a stable per-conversation session header (`x-opencode-session` class) mapped from the logical session id (`DM-004`, `11` §2). Stability: one value per conversation — unchanged across turns, compaction and restarts; a new conversation ⇒ a new value; each subagent session is its own conversation. Provider traffic policies (typical coding-agent traffic; monitored for abuse) are conditions of enabling the provider (`12`/`44`) — no evasion. Worked example: **OpenCode Go** — one gateway, three wire protocols per model (`/v1/responses` · `/v1/chat/completions` · `/v1/messages`), ids `opencode-go/<model-id>` (`DEC-035`).
 
@@ -64,6 +66,7 @@ Normalized dial: `auto · minimal · low · medium · high · extra_high` → pr
 
 - Probe common local endpoints (Ollama, LM Studio, vLLM, llama.cpp, generic OpenAI-compatible), list models, health-check, and register them like any other provider.
 - The common path requires no manual configuration (“pick a model and run”); manual entry exists as a fallback.
+- Discovery results persist in the provider registry across restarts (no cold re-discovery on every start); reachability is reported as health (`registered → connected → degraded → down`, DM-013) — a registry row is never treated as reachable (A11).
 - `locality: local` models carry a privacy guarantee: no egress leaves the machine (enforced by `12`).
 
 ## 7. Accounting
@@ -99,6 +102,7 @@ Usage events → `30` with the **usage contract (A2):** inclusive totals **plus*
 4. Which local models qualify for the vision rung (`24` decision).
 5. Embedding-model support: register now for future memory retrieval (U1) or later?
 6. Multi-modal input scope for v1 (images for vision; audio/video later).
+7. Default-model and recent-use policy, and the small utility model used for extraction, summaries and titles (selection policy; the extractor's disclosure default is fixed by DEC-044).
 
 ## 11. Evidence
 

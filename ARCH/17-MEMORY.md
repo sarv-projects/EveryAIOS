@@ -2,9 +2,10 @@
 
 > **Status:** Frozen v1 (frozen 2026-09-26; drafted P2).
 > **P7 pass (2026-09-26):** line-checked; requirements seeded (`REQ-MEM-*`, Requirements section).
+> **P9 verification pass (2026-09-26):** read line-by-line; fixes applied where needed (owner-directed; re-freeze follows).
 > **Consumers:** `ARCH/16-CONTEXT.md` (recall), UI (Memory screen), `ARCH/32-CHANNELS.md` (external-agent projection).
 > **Dependencies:** `ARCH/10-KERNEL.md`, `ARCH/30-EVENTS.md`, `ARCH/18-MODEL-ROUTING.md` (extractor call), `ARCH/12-TRUST.md` (authorization + audit).
-> **Evidence:** `ARCHIVE/v1-research/memory.md` — a source-read survey (Claude Code, Codex, OpenCode, Grok Build, Hermes, mem0, Graphiti, Letta, NOOA, claude-mem, anything-llm) with `path:line`/URL citations. Decisions here become `DEC-*` entries in P1; unresolved items are `OQ-MEM-*` until then.
+> **Evidence:** `ARCHIVE/v1-research/memory.md` — a source-read survey (Claude Code, Codex, OpenCode, Grok Build, Hermes, mem0, Graphiti, Letta, NOOA, claude-mem, anything-llm) with `path:line`/URL citations. Decisions from this module are registered as `DEC-*` in `ARCH/04-DECISIONS.md`; unresolved items remain `OQ-MEM-*` (§14).
 
 ## 1. Purpose & responsibilities
 
@@ -143,7 +144,7 @@ CREATE TABLE memory_jobs (                           -- extraction bookkeeping (
 
 **Mutation classification (DEC-042).** Memories are **local persistent mutations**: policy-gated per scope, audited, and **not** per-write tickets. Boundary-crossing operations — export/import file IO, sharing, anything leaving the machine — follow the guarded path (pathfloor / egress / tickets as applicable). Every mutation (including forget/wipe/import and policy-driven deletes) is audited, and the audit record carries **no item body**.
 
-**Events emitted** (registered in `30-EVENTS`): `memory.item.added` · `memory.item.superseded` · `memory.item.forgotten` · `memory.extraction.run` (counts, model, token cost, failures) · `memory.recall.outcome` (hit / abstain / error, metered; registration owed to `30-EVENTS`).
+**Events emitted:** `memory.item.added` · `memory.item.superseded` · `memory.item.forgotten` · `memory.extraction.run` (counts, model, token cost, failures) — registered in `30-EVENTS` — plus `memory.recall.outcome` (hit / abstain / error, metered; **registration owed to `30-EVENTS`**).
 
 **External-agent projection** (enforced by `12-TRUST`, surfaced by `32-CHANNELS`): filtered **recall-only** — owning project scope + the agent's own session/task + user preferences; **no** org, no other projects, no `confidential` unless a loadout grants it (v1 default: project + user only). v1 exposes **no write path** to external agents, and Core never writes or mutates an external agent's native memory/config/session stores (DEC-043).
 
@@ -210,6 +211,7 @@ Context Controller ── memory.recall(query, scope_filter?, tokens) ──►
 | DB **locked** (transient) | Bounded `busy_timeout` + backoff at the call site; the call degrades or defers — memory is **not** disabled for the session and the turn is never blocked. |
 | DB **corrupt** (persistent) | Memory disabled for the session with a surfaced warning and an audit entry; the store is quarantined; a **repair path** (export readable rows → recreate/rebuild → re-import validated) is offered to the user; chat is never blocked. |
 | Two writers contend (desktop + CLI/detached across processes) | Single-writer ownership: one writer host holds the store under a lease (owner + heartbeat); other processes route through it when present and otherwise reclaim a stale lease with an audit entry; WAL + bounded busy handling serialize the rest — no lost writes, no turn failure. |
+| Clock jump / non-monotonic observations | Recency deltas clamp (a backwards clock never promotes an older item); TTL evaluates against the persisted anchor; job leases fail safe; skew events are recorded (REQ-MEM-025, EDGE-177). |
 | FTS desync | Detection by FTS5 `integrity-check` / row-count parity; repair by `rebuild`; verification runs **after** rebuild; a failure to restore is surfaced, never silently ignored. |
 | Secret detected post-hoc | `forget` + suppression + audit; scan corpus added to tests. |
 | Stale recall served | Staleness annotation on every injected item + “prefer live state” instruction + abstention. |
@@ -271,7 +273,7 @@ Sequencing if metrics force upgrades: U1, U2 → U5, U4 → U0. Nothing is built
 8. **Drift simulation** (upgrade trigger for U4/U5): replay 30 simulated days; measure stale ratio, duplicates, injected-token waste, store growth vs the declared bounds.
 9. **Time correctness:** simulated backwards clock never inverts recency ordering or TTL outcomes; lease expiry fails safe (REQ-MEM-025).
 
-## 14. Open questions (`OQ-MEM-*` → DEC in P1)
+## 14. Open questions (`OQ-MEM-*`)
 
 1. **Agent X native memory vs Core shared memory** — **resolved (DEC-043):** the Core store is the only durable memory; Agent X's private notes are session-scope memory items + the session log, not a second store.
 2. **Rules write authority** — extractor never writes project rules; may propose a diff via approval. *(still open as UX detail)*

@@ -2,6 +2,7 @@
 
 > **Status:** Frozen v1 (frozen 2026-09-26; drafted P2).
 > **P7 pass (2026-09-26):** line-checked; requirements seeded (`REQ-CTX-*`, Requirements section).
+> **P9 verification pass (2026-09-26):** read line-by-line; fixes applied where needed (owner-directed; re-freeze follows).
 > **Core idea (DEC-007):** *Context is a platform capability; context control is an agent capability.* Core answers **“what context exists?”**; Agent X answers **“what should the model see right now?”**
 > **Dependencies:** `10-KERNEL`, `17-MEMORY`, `25-FILES`, `26-CODE`, `21-WORLD-MODEL`, `29-ARTIFACTS`, `30-EVENTS`, `11-WORK` (sessions), `18-MODEL-ROUTING` (windows/tokenizers), `12-TRUST` (sensitivity/projections), `15-AGENT-X` (control side).
 > **Evidence:** `ARCHIVE/v1-research/agent-harness-verification.md` §A1/§A2/§C1/§C2/§E1/§E2 · `ARCHIVE/v1-research/memory.md` §4 · product-owner brief. Key decisions: DEC-007, DEC-015, DEC-019, DEC-027, DEC-045, INV-08, INV-22.
@@ -53,18 +54,18 @@ retained_recent = keep                                                (≈ 8k de
 ```
 
 - **Pre-turn feasibility check:** estimate(system + messages + tools) ≤ window − buffer, else enter the compaction path **before** sending — never discover overflow from the provider.
-- **Window resolution** comes from `18-MODEL-ROUTING` (per model/provider); constants are product-visible knobs (`buffer`, `keep`, `reserve`), defaulted per model class.
+- **Window resolution** comes from `18-MODEL-ROUTING` (per model/provider); constants are product-visible knobs (`buffer`, `keep`, `reserve`), defaulted per model class — absolute floors for small local models, optionally percent-of-window for large cloud models (OQ-CTX-02). A request that cannot fit even after maximal compaction is refused before send with guidance — never sent to fail at the provider (DEC-027).
 - Overflow is never surfaced as an error to the user while recovery options remain (INV: recovery-first).
 
 ## 4. Pipeline
 
 ```
-Retrieve (search/snapshot) → Select/Rank → Budget → Prune → Compact (if needed) → Checkpoint → Pack → MODEL
+Retrieve (search/snapshot) → Select/Rank → Budget → Prune → Checkpoint → Compact (if needed) → Pack → MODEL
 ```
 
 1. **Select/Rank (v1):** relevance · scope match · pins · recency. Interfaces are MMR-ready; MMR/rerankers are deferred (parallel to memory U6) until a measured need.
 2. **Prune before compaction (cheapest first).** Old tool output is replaced by a compact representation + artifact reference; **full output stays durable** (artifact/event). Pruning is an opt-in transform that never touches log truth.
-3. **Compaction is a projection boundary over a durable log** (DEC-027): the session event log is never rewritten; a checkpoint segment is rendered as historical context (`<conversation-checkpoint>` framing). Strategy chain:
+3. **Compaction is a projection boundary over a durable log** (DEC-027): the session event log is never rewritten; a checkpoint is written before compaction (`11` §4) and its segment is rendered as historical context (`<conversation-checkpoint>` framing). Strategy chain:
    1. deterministic pruning (no LLM);
    2. **structured checkpoint** — deterministic reconstruction from Work/Events/Artifacts/Git (objective/requirements/decisions/completed/active/files/tests/artifacts/workers/blockers/next_actions);
    3. model-written summary for the **non-reconstructable residue** (why-decisions, preferences) — stored as checkpoint narrative, never as the sole state;
@@ -83,7 +84,7 @@ Retrieve (search/snapshot) → Select/Rank → Budget → Prune → Compact (if 
 
 - Memory recall returns **candidates** via `17-MEMORY`; the Context Controller decides inclusion under budget; injection is a **non-touching read** (no counter/salience changes).
 - Recalled items carry source + freshness + provenance trust tier and are framed as *historical context, untrusted data with no authority*, to verify against live state — injected memory can never change policy, goals, permissions or tool choices.
-- Zero **query-relevant** hits ⇒ **zero tokens in the relevant block** (INV-22); the always-on block is separately budgeted and exists only when pinned items exist. Whole-item drop, never item truncation.
+- Zero **query-relevant** hits ⇒ **zero tokens in the relevant block** (INV-22); the always-on block is separately budgeted and exists only when pinned items exist. Whole-item drop, never item truncation — this governs memory/context items; tool output uses the bounded-preview + artifact-ref rule (§4 item 2, DEC-032).
 - Sensitivity ceiling: `confidential` items never enter an assembly with a lower ceiling or a broader scope than their owning project; the ceiling is derived from the actor binding, not from caller parameters.
 - Scoring/ownership: the injection path scores through `17`'s recall (non-negative relevance, deterministic ties); `context.search` returns refs plus bounded snippets and does not re-rank memory results (`27` §4).
 
@@ -110,6 +111,7 @@ Retrieve (search/snapshot) → Select/Rank → Budget → Prune → Compact (if 
 | Memory recall failure | Proceed without memory; never blocks a turn. Recall **abstention** (no hit above the floor) and **error** are distinguishable outcomes (`hit | abstain | error`) with metering (`17` §6). |
 | Projection leakage | Denied at `12-TRUST`; projection policies are deny-by-default for out-of-scope refs. |
 | Stale checkpoint | Checkpoints are versioned; `rebuild` prefers live state over stale narrative. |
+| Provider signature / encrypted-reasoning invalidation | Pre-checkpoint provider-native blocks are not replayed across a compaction boundary — the checkpoint + recent tail replace them (log truth is untouched). |
 
 ## 10. Interop
 
@@ -128,7 +130,7 @@ Retrieve (search/snapshot) → Select/Rank → Budget → Prune → Compact (if 
 ## 12. Open questions (`OQ-CTX-*`)
 
 1. Provider-native compaction: which providers adopt it, behind capability detection and the DEC-045 rules (a verified shipping reference exists — Codex remote compaction v2); ties OQ-AX-06.
-2. Default `buffer`/`keep`/`reserve` per model class (small local models need different constants).
+2. Default `buffer`/`keep`/`reserve` per model class — absolute floors vs percent-of-window resolution (small local models need different constants).
 3. Tokenizer strategy: per-provider tokenizers vs conservative estimation (ties `18`).
 4. `fork_context` default policy per worker role (ties OQ-AX-02).
 5. Context Inspector scope for v1 vs v1.5 (UI tie).
