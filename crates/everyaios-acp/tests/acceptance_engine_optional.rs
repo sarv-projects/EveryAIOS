@@ -186,24 +186,45 @@ fn no_built_in_protocol_variant_exists() {
     assert!(serde_json::from_str::<HarnessProtocol>("\"model_backend\"").is_err());
 }
 
-/// (3 cont.) — the deletion is on disk, not just in the type system: the
-/// native loop is archived (outside every crate tree, so it cannot compile)
-/// and the sidecar reasoning package is gone.
+/// (3 cont.) — the deletion is on disk, not just in the type system: no
+/// compilable copy of the native loop survives anywhere in the live tree, and
+/// the sidecar reasoning package is gone. The archived copy itself lives under
+/// the git-ignored `ARCHIVE/v0/` tree, so its presence is a local fact rather
+/// than a CI-verifiable one; what must hold everywhere is that no copy remains
+/// where a compiler could pick it up.
 #[test]
 fn the_built_in_engine_is_archived_or_deleted() {
+    fn find_named(dir: &std::path::Path, name: &str, depth: usize) -> bool {
+        if depth == 0 {
+            return false;
+        }
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            return false;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                if matches!(
+                    path.file_name().and_then(|n| n.to_str()),
+                    Some("target") | Some("node_modules") | Some("ARCHIVE") | Some(".git")
+                ) {
+                    continue;
+                }
+                if find_named(&path, name, depth - 1) {
+                    return true;
+                }
+            } else if path.file_name().and_then(|n| n.to_str()) == Some(name) {
+                return true;
+            }
+        }
+        false
+    }
+
     let root = repo_root();
 
-    let archived_loop = root.join("ARCH/archive/native_loop.rs");
     assert!(
-        archived_loop.exists(),
-        "the native loop must be archived, not compiled: {}",
-        archived_loop.display()
-    );
-    assert!(
-        !root
-            .join("crates/everyaios-core/src/native_loop.rs")
-            .exists(),
-        "native_loop.rs must not be back in the crate tree"
+        !find_named(&root, "native_loop.rs", 8),
+        "native_loop.rs must not exist anywhere in the live tree (crates/, packages/, src-tauri/)"
     );
 
     assert!(
@@ -214,9 +235,13 @@ fn the_built_in_engine_is_archived_or_deleted() {
         !root.join("packages/coordinator/src/chat.ts").exists(),
         "the sidecar turn loop must be gone (P71.2c)"
     );
-    // The archive keeps them recoverable and self-documenting.
+    // The retired coordinator loop stays recoverable only from the local,
+    // git-ignored archive, so the live tree must not carry it in any form.
     assert!(
-        root.join("ARCH/archive/coordinator-loop/README.md")
-            .exists()
+        !root.join("ARCH/archive/coordinator-loop").exists()
+            && !root
+                .join("packages/coordinator/src/coordinator-loop")
+                .exists(),
+        "the retired coordinator loop must not exist in the live tree"
     );
 }
