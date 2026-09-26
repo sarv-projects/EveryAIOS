@@ -37,7 +37,7 @@
 | Run/step | `run.started` · `plan.created` · `step.started` · `step.completed` · `run.completed` · `run.failed` |
 | Model | `model.started` · `model.delta` · `usage.recorded` |
 | Tools | `tool.proposed` · `tool.started` · `tool.progress` · `tool.completed` |
-| Subagents | `subagent.started` · `subagent.progress` · `subagent.completed` |
+| Subagents | `subagent.spawned` · `subagent.progress` · `subagent.finished` |
 | Approvals | `approval.requested` · `approval.granted` · `approval.expired` |
 | Context | `context.compacting` · `context.compacted` |
 | Verification | `verification.started` · `verification.completed` |
@@ -47,7 +47,7 @@
 | World | `world.file.changed` · `world.tab.navigated` · `world.window.focused` · `world.rescan` |
 | Provider | `provider.health.changed` · `provider.epoch.bumped` |
 
-Namespacing rules: `<domain>.<noun>.<verb>`; additive evolution preferred; deprecations are declared with a window. `model.delta` (streaming tokens) is **ephemeral delivery only** — deltas are not persisted as individual events (the settled message is).
+Namespacing rules: `<domain>.<noun>.<verb>`; additive evolution preferred; deprecations are declared with a window. `model.delta` (streaming tokens) is **ephemeral delivery only** — deltas are not persisted as individual events (the settled message is). Subagent events follow DEC-036: `subagent.spawned` is emitted before the first prompt dispatch, and `subagent.finished` carries status · error · tool calls · turns · duration · tokens · output · `will_wake`.
 
 ## 4. Bus, subscriptions, replay
 

@@ -294,6 +294,18 @@ One row per `REQ-*`. Status only from evidence.
 | `REQ-PROD-005` | `AGENTCOWORK-UI`, `22-OFFICE` | pending | `INV-13`, `DEC-015` | — | pending | pending | unplanned |
 | `REQ-PROD-006` | `42-EVIDENCE-MAP` | pending | `—` | — | pending | pending | unplanned |
 | `REQ-AGX-001` | `15-AGENT-X` | pending | `DEC-029`, `DEC-031` | — | pending | pending | unplanned |
+| `REQ-AGX-002` | `15-AGENT-X` | pending | `DEC-022/027`, `CTR-001/002` | — | pending | pending | unplanned |
+| `REQ-AGX-003` | `15-AGENT-X` | pending | `DEC-021`, `INV-17` | — | pending | pending | unplanned |
+| `REQ-AGX-004` | `15-AGENT-X` | pending | `DEC-028`, `INV-01/03`, `CTR-009` | `EDGE-153` | pending | pending | unplanned |
+| `REQ-AGX-005` | `15-AGENT-X` | pending | `DEC-032`, `INV-07/22` | — | pending | pending | unplanned |
+| `REQ-AGX-006` | `15-AGENT-X` | pending | `DEC-029/031/036`, `CTR-021` | `EDGE-153/154` | pending | pending | unplanned |
+| `REQ-AGX-007` | `15-AGENT-X` | pending | `DEC-025/029`, `CTR-010/022` | `EDGE-153` | pending | pending | unplanned |
+| `REQ-AGX-008` | `15-AGENT-X` | pending | `DEC-029/036`, `DM-016` | — | pending | pending | unplanned |
+| `REQ-AGX-009` | `15-AGENT-X` | pending | `DEC-007/027`, `INV-08/22`, `CTR-007` | — | pending | pending | unplanned |
+| `REQ-AGX-010` | `15-AGENT-X` | pending | `DEC-004/034`, `CTR-014` | — | pending | pending | unplanned |
+| `REQ-AGX-011` | `15-AGENT-X` | pending | `REQ-CAP-001`, `DEC-030`, `INV-15` | — | pending | pending | unplanned |
+| `REQ-AGX-012` | `15-AGENT-X` | pending | `DEC-009/010`, `CTR-022` | `EDGE-155` | pending | pending | unplanned |
+| `REQ-AGX-013` | `15-AGENT-X` | pending | `DEC-022`, `INV-16/19`, `CTR-003/004` | — | pending | pending | unplanned |
 | `REQ-UI-001` | `AGENTCOWORK-UI` | pending | `—` | — | pending | pending | unplanned |
 
 ## 4. Maintenance

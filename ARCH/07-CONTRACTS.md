@@ -55,10 +55,11 @@ resumeSession(id) → AgentSession
 run(session, input: RunInput) → RunHandle
 steer(session, input: SteerInput) → void
 interrupt(session) → void
+cancel(run) → void                  // terminate the work; children cascade
 spawnSubagent(options: SubagentOptions) → AgentHandle
 dispose(session) → void
 ```
-**Guarantees:** input is admitted only at turn/step boundaries (inbox); `steer` never lands mid-tool; `interrupt` is cooperative and bounded; `dispose` releases environment resources; Agent X and every external adapter are interchangeable behind this contract (DEC-010).
+**Guarantees:** input is admitted only at turn/step boundaries (inbox); `steer` never lands mid-tool; `interrupt` is cooperative and bounded; `cancel` is terminal for the work, cascades parent→child, and never rebuffers a completion (DEC-036); `dispose` releases environment resources; Agent X and every external adapter are interchangeable behind this contract (DEC-010).
 
 ### CTR-002 `AgentSession` + `AgentHandle` + `Inbox` (15)
 - `AgentHandle` is a **capability** (`dispose()` only) returned to the owner; the registry keeps factories, not live internals.

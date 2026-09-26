@@ -69,7 +69,7 @@ Retrieve (search/snapshot) → Select/Rank → Budget → Prune → Compact (if 
    2. **structured checkpoint** — deterministic reconstruction from Work/Events/Artifacts/Git (objective/requirements/decisions/completed/active/files/tests/artifacts/workers/blockers/next_actions);
    3. model-written summary for the **non-reconstructable residue** (why-decisions, preferences) — stored as checkpoint narrative, never as the sole state;
    4. provider-native compaction — **a path we design ourselves** when a provider actually exposes one (open item OQ-CTX-01; no verified shipping reference implements it — OpenCode summarizes with the model in both generations).
-4. **Overflow recovery:** `compact-after-overflow → retry the same step`; bounded retries, then surface.
+4. **Overflow recovery:** `compact-after-overflow → retry the same step`; bounded retries, then surface. Transport retries belong to `18` (single owner, DEC-034) — this is the agent's turn-level recovery, not a second retry layer.
 5. **Hooks:** pre-compact / post-compact extension points (plugin surface, `31`).
 
 ## 5. Cache stability (first-class)

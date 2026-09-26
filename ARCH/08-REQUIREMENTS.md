@@ -1489,6 +1489,114 @@ This registry answers one question per entry: **what behavior must this system e
 - **Tests:** pending
 - **Status:** seeded
 
+#### REQ-AGX-002 — Native harness loop contract
+- **Statement:** GIVEN a bound Agent X session, WHEN a turn runs, THEN the loop is a step loop with admission boundaries (`next-turn`/`next-step`), per-agent step budget with a hard text-only wrap-up, tool materialization per step, and an explicit continuation decision (continue | compact | finish); the loop finishes only when the completion contract is satisfied or the run is genuinely blocked — never because it read a file, made an edit, ran a command, or completed one subtask.
+- **Priority:** must
+- **Source:** `ARCH/15` §4 · `DEC-022` · `DEC-027` · harness notes §1
+- **Acceptance:** no-early-finish test (tool result alone cannot end a turn); last-step test shows tools not materialized + wrap-up prompt; steer lands only at a boundary; completion requires `goal + success_conditions[] + verification[]`.
+- **Failure cases:** finish on first tool result → defect; tool call attempted on last step → refused by materialization; mid-step steer → rejected and deferred.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-AGX-003 — Deterministic loop guards
+- **Statement:** GIVEN repeated identical tool calls or N steps without progress, WHEN the detector threshold trips, THEN Agent X escalates through the approval primitive with full context (or a typed failure with a user-visible retry path) — deterministically, independent of model behavior, and never as a silent abort.
+- **Priority:** must
+- **Source:** `ARCH/15` §8 · `DEC-021` · harness notes §10.6 (OpenCode `doom_loop` is an advisory ask — counter-example)
+- **Acceptance:** N identical calls produce one escalation; no-progress detector test; thresholds configurable and audited.
+- **Failure cases:** silent abort → defect; infinite retry → defect; advisory-only guard → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-AGX-004 — Tool plane: bounded, mapped, no flat dump
+- **Statement:** GIVEN an Agent X turn, WHEN tools are materialized, THEN exactly the agent's declared loadout is exposed (bounded eager hot set + meta-tool for the long tail), every effect-bearing tool resolves through the capability/Guard/ticket path, every read-only tool is path-scope-checked, independent reads may run in parallel while mutating calls serialize per workspace lease, and no raw tool catalog is ever injected into the request.
+- **Priority:** must
+- **Source:** `ARCH/13` §6 · REQ-CAP-001 · `DEC-028` · `ARCH/25` §6 · harness notes §3/§7 (R-01/R-10/R-12)
+- **Acceptance:** materialized-tool-count cap test; permission-key mapping test per tool; parallel-read + serialized-mutation test with an explicit lease-conflict result; every effect call carries a ticket.
+- **Failure cases:** flat MCP injection → rejected; effect without ticket → denied + audited; overlapping concurrent writes → blocked by lease; unbounded output entering context → truncated-to-artifact.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-AGX-005 — Tool output bounding with artifact retention
+- **Statement:** GIVEN any tool result exceeding the declared bounds, WHEN the result is returned, THEN the model sees a bounded preview explicitly marked truncated, the full output persists as an artifact/event reference, retention failure is a typed operational failure, and lossy success is forbidden.
+- **Priority:** must
+- **Source:** harness notes §3/R-12 · `DEC-032` · `ARCH/16` §4.2 · REQ-CTX-006
+- **Acceptance:** >2,000 lines/50 KiB yields preview + artifact ref; receipt-pinned artifact is not GC'd; forced retention failure surfaces as a typed failure.
+- **Failure cases:** silent truncation → defect; preview presented as complete → defect; receipt-pinned artifact pruned → violation.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-AGX-006 — Subagent spawn and completion contract
+- **Statement:** GIVEN a delegation, WHEN spawn executes, THEN it returns `{agent_id, nickname?, session_ref, work_id, status, parent_turn_id}` immediately (or after a bounded await), the child is a fresh session with full escaped project rules and an explicit fork option, completion is delivered only at a turn boundary through the wake-suppression gate, cancelled children never wake, and slots are held until closed with queue-on-limit default (fail opt-in).
+- **Priority:** must
+- **Source:** `DEC-029` · `DEC-036` · `DEC-031` · `ARCH/15` §7 · ASW §0/§1.7
+- **Acceptance:** spawn returns before child completion; wake-gate truth table; cancelled-never-wakes test; held-slot test; queue/fail behavior test.
+- **Failure cases:** blocking spawn by default → defect; wake from a cancelled child → violation; slot leak after completion → defect; completion delivered mid-step → rejected.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-AGX-007 — Subagent isolation modes: worktree and ACP
+- **Statement:** GIVEN a spawn requesting `isolation: worktree | acp`, WHEN the child runs, THEN worktree children hold write leases on their checkout and merge explicitly, and ACP children run as external provider-executed agents through the `14` acp adapter with a scoped capability projection (Core tickets never cross the boundary), permission prompts routed through the parent session's approval channel, and receipts schema-validated with at most one bounded correction retry; the default isolation is in-process.
+- **Priority:** must
+- **Source:** `DEC-029` · `ARCH/14` §3 · `ARCH/32` §4 · harness notes §4.3 (R-02/R-04) · ASW §1.5/§1.7
+- **Acceptance:** default is in-process; ACP child cannot mint or consume Core tickets; prompts route through the gateway; malformed receipt → one correction retry then raw-text fallback with a typed note; ACP children occupy the same concurrency bound.
+- **Failure cases:** ACP child granted a Core ticket → violation; direct-to-user permission prompt → violation; unbounded correction loop → defect; ACP child escaping the concurrency bound → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-AGX-008 — Receipts, not transcripts; untrusted reports
+- **Statement:** GIVEN a child completes, WHEN the parent receives the result, THEN it is a `WorkerReceipt` (status · scope · summary · findings · changed files · tests · artifacts · blockers · confidence · usage · will_wake · partial) — never a transcript — scanned for instruction-shaped patterns, delivered under a no-authority header as an automated event, size-capped with a full-log artifact reference, at-most-once per parent incarnation, with usage rolled up to the parent.
+- **Priority:** must
+- **Source:** `DEC-029` · `DEC-036` · `ARCH/06` DM-016 · ASW §1.1/Q-A1.8 · harness notes R-04
+- **Acceptance:** parent context contains no child transcript; instruction-shaped payload is neutralized/marked; duplicate delivery deduped; oversize receipt becomes an artifact ref; usage attributable to the parent.
+- **Failure cases:** transcript handoff → violation; unscanned report consumed as instructions → defect; duplicate wake → defect; silent receipt loss → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-AGX-009 — Context-control integration: no silent overflow
+- **Statement:** GIVEN a model call is about to run, WHEN the assembled request approaches the resolved window, THEN Agent X runs the pre-turn feasibility check with named budget terms, prunes before compacting, writes a checkpoint before compaction, compacts as a projection over a log it never rewrites, and retries the same step exactly once after overflow; memory enters only as recall candidates under budget.
+- **Priority:** must
+- **Source:** `DEC-027` · `ARCH/16` §3/§4/§6 · `ARCH/17` §1 · ASW §2.2
+- **Acceptance:** overflow never reaches the provider in the normal path; a checkpoint exists before each compaction; a second overflow surfaces; zero-hit memory measured as zero injected tokens; no compaction loop.
+- **Failure cases:** silent overflow → defect; log rewrite → violation; compaction loop → defect; memory injected outside recall → violation.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-AGX-010 — Model-plane handoff, no duplicated routing or retry
+- **Statement:** GIVEN Agent X needs a model, WHEN it selects, streams, retries or accounts, THEN it calls `18` (`CTR-014`) only — never a vendor SDK, never its own registry; reasoning levels map through `18`; exactly one layer retries per failure class (transport retries belong to `18`, turn-level recovery to Agent X); usage/cost events follow the DEC-034 invariant.
+- **Priority:** must
+- **Source:** `ARCH/15` §9 · `ARCH/18` §3/§4/§7 · `DEC-034` · AHV §D1
+- **Acceptance:** no provider-id branch in Agent X; retry-ownership test per failure class; usage totals equal breakdown sums (never subtract); provider switch mid-session does not change agent state.
+- **Failure cases:** direct vendor SDK call → violation; double retry → defect; subtract-based accounting → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-AGX-011 — Meta-tool long-tail loading (cache-stable)
+- **Statement:** GIVEN a capability outside the eager tool set, WHEN the model needs it, THEN it discovers it through a static-description `capability.search` (deterministic BM25 over descriptors, typed results carrying the full schema, stable fingerprint) and invokes it through `capability.invoke`, which resolves through `13`/Guard and mints its ticket at invoke time — the eager set stays bounded and meta-tool descriptions never change per turn.
+- **Priority:** must
+- **Source:** REQ-CAP-001 · `ARCH/13` §6 · harness notes §7 (R-01/R-08)
+- **Acceptance:** tool-schema token count bounded independent of connected MCP servers; search-descriptor hash stable across a session; invoke without a ticket denied; unknown capability returns a typed corrective error naming candidates and schema.
+- **Failure cases:** flat injection → violation; per-turn descriptor churn → cache-bust defect; invoke bypassing Guard → violation; mis-guessed args without corrective output → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-AGX-012 — ACP/CLI surface parity
+- **Statement:** GIVEN an ACP or CLI client attaches, WHEN it drives Agent X, THEN it receives the same session lifecycle (initialize/new/list/resume/close/fork), typed updates mapped from the internal stream, cooperative `cancel`, and the 7-item projection through the gateway — no internal stores exposed and no protocol vocabulary leaking above the gateway; session state is durable across detach.
+- **Priority:** must
+- **Source:** `ARCH/15` §11 · `ARCH/32` §2/§4 · AHV §B1/§B2/§C3
+- **Acceptance:** ACP handshake acceptance test; cancel produces a terminal reason; detached session resumes; projection excludes internals; protocol mapping is the only protocol-aware layer.
+- **Failure cases:** protocol semantics leaking inward → violation; cancel not honored → defect; session state lost on detach → defect; internal store exposed → violation.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-AGX-013 — Recovery and no-fabrication
+- **Statement:** GIVEN a failure (model, tool, context, child, crash), WHEN Agent X recovers, THEN retries are bounded and typed, replan is recorded, crash recovery reconstructs from the session log + inbox projection, and no terminal state claims success without the completion contract and verification; partial completions are marked `partial` and resumable.
+- **Priority:** must
+- **Source:** `ARCH/15` §12 · `ARCH/11` §4/§9 · `INV-16`/`INV-19` · `DEC-022` · ASW A2-8
+- **Acceptance:** kill/restart resume test restores pending input; stuck-loop escalation; step-cap overrun yields a `partial` marker + resume; receipt only after verification.
+- **Failure cases:** fabricated completion → violation; unbounded retry loop → defect; accepted input lost after crash → violation; partial output shown as complete → defect.
+- **Tests:** pending
+- **Status:** seeded
+
 ### UI (`UI`)
 
 #### REQ-UI-001 — Reasoning is summarized, never raw chain-of-thought
@@ -2534,7 +2642,8 @@ This registry answers one question per entry: **what behavior must this system e
 | `CTX` (10) | drafted above + expanded in pass `16` | verified during pass `16` ✅ (2026-09-26) |
 | `TRUST` (10), `CAP` (10) | drafted above + expanded in passes `12`/`13` | verified during passes `12` ✅ / `13` ✅ (2026-09-26) |
 | `PROV` (10) | drafted above + expanded in pass `14` | verified during pass `14` ✅ (2026-09-26) |
-| `AGX` (1), `UI` (1) | drafted above | Agent X finalisation lane, `AGENTCOWORK-UI.md` |
+| `AGX` (13) | drafted above + expanded in the Agent X finalisation | verified during the Agent X finalisation (2026-09-26) |
+| `UI` (1) | drafted above | `AGENTCOWORK-UI.md` |
 | `KERNEL` (7), `WORK` (8) | drafted above | verified during passes `10` ✅ / `11` ✅ (2026-09-26) |
 | `MEM` (12) | drafted above + expanded in pass `17` | verified during pass `17` ✅ (2026-09-26) |
 | `MODEL` (12) | drafted above + expanded in pass `18` | verified during pass `18` ✅ (2026-09-26) |
