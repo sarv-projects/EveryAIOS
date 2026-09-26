@@ -97,6 +97,18 @@ One row per `REQ-*`. Status only from evidence.
 | `REQ-MEM-010` | `17-MEMORY` | pending | `INV-09`, `INV-24` | — | pending | pending | unplanned |
 | `REQ-MEM-011` | `17-MEMORY` | pending | `—` | — | pending | pending | unplanned |
 | `REQ-MEM-012` | `17-MEMORY` | pending | `INV-22` | — | pending | pending | unplanned |
+| `REQ-MODEL-001` | `18-MODEL-ROUTING` | pending | `DEC-004`, `DM-025` | — | pending | pending | unplanned |
+| `REQ-MODEL-002` | `18-MODEL-ROUTING` | pending | `DM-025` | — | pending | pending | unplanned |
+| `REQ-MODEL-003` | `18-MODEL-ROUTING` | pending | `DEC-034` | — | pending | pending | unplanned |
+| `REQ-MODEL-004` | `18-MODEL-ROUTING` | pending | `CTR-014` | — | pending | pending | unplanned |
+| `REQ-MODEL-005` | `18-MODEL-ROUTING` | pending | `INV-02`, `CTR-013` | — | pending | pending | unplanned |
+| `REQ-MODEL-006` | `18-MODEL-ROUTING` | pending | `DEC-034` | — | pending | pending | unplanned |
+| `REQ-MODEL-007` | `18-MODEL-ROUTING` | pending | `DEC-034` | — | pending | pending | unplanned |
+| `REQ-MODEL-008` | `18-MODEL-ROUTING` | pending | `DEC-034` | — | pending | pending | unplanned |
+| `REQ-MODEL-009` | `18-MODEL-ROUTING` | pending | `DEC-034` | — | pending | pending | unplanned |
+| `REQ-MODEL-010` | `18-MODEL-ROUTING` | pending | `INV-05` | — | pending | pending | unplanned |
+| `REQ-MODEL-011` | `18-MODEL-ROUTING` | pending | `DEC-034` | — | pending | pending | unplanned |
+| `REQ-MODEL-012` | `18-MODEL-ROUTING` | pending | `DEC-027` | — | pending | pending | unplanned |
 
 ## 4. Maintenance
 

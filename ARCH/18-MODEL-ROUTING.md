@@ -1,6 +1,7 @@
 # 18 — Model Plane (registry · routing · adapters)
 
 > **Status:** Draft P2 (early — harness evidence integrated). Must pass the `ARCH/00-INDEX.md` §5 checklist at freeze.
+> **P7 pass (2026-09-26):** line-checked; requirements seeded (`REQ-MODEL-*`, Requirements section).
 > **Role:** every model — cloud or local — behind **one registry and one router**. No module hard-codes a vendor (P-03, DEC-004).
 > **Dependencies:** `10-KERNEL` · `12-TRUST` (vault) · `16-CONTEXT` (window/tokenization feeds budgets) · `30-EVENTS` (usage). **Consumers:** `15-AGENT-X` · `20-WORKFLOW` (agent nodes) · `17-MEMORY` (extractor) · `24-COMPUTER-USE` (vision).
 > **Evidence:** product-owner brief (ModelAdapter surface, local discovery UX, “never hard-code Claude”) · `ARCHIVE/v1-research/agent-harness-verification.md` §A1 (resolved window + feasibility check, `codex-rs/core/src/session/mod.rs:4560-4587`), §C1 (budget vocabulary) · `ARCH/06-DATA-MODEL.md` DM-025 · `ARCH/07-CONTRACTS.md` CTR-014 · `ARCHIVE/v1-research/memory.md` §7 (extraction disclosure boundary).
@@ -104,3 +105,22 @@ Usage events → `30` with the **usage contract (A2):** inclusive totals **plus*
 **Wave-2 addition:** `ARCHIVE/v1-research/provider-layer-absorption.md` (OpenCode `fe3f3a4` · Cline `254f40c` · pinned) — absorb list A1–A14, gaps G1–G16, rejects R1–R5; behavior changes locked as `DEC-034`.
 
 Product-owner brief (ModelAdapter surface, local model UX, model independence) · `agent-harness-verification.md` §A1 (resolved window; pre-turn feasibility; anchors `codex-rs/core/src/session/mod.rs:4560-4587`), §C1 (keep/buffer/reserve vocabulary) · `ARCH/06-DATA-MODEL.md` DM-025 · `ARCH/07-CONTRACTS.md` CTR-014 · `ARCH/16-CONTEXT.md` §3 · `ARCHIVE/v1-research/memory.md` §7 (extraction model = disclosure boundary).
+
+## 12. Requirements (`REQ-MODEL-*`)
+
+Testable behaviors owned by this module live in `ARCH/08-REQUIREMENTS.md`; the traceability chain is in `ARCH/09-FEATURE-MATRIX.md`. This table is a pointer, not a second copy.
+
+| REQ | Behavior (one line) |
+|---|---|
+| `REQ-MODEL-001` | One registry, one router; no module hard-codes a vendor (P-03, DEC-004) |
+| `REQ-MODEL-002` | ModelDescriptor contract (`DM-025`) — declared capabilities only, never offered beyond them |
+| `REQ-MODEL-003` | Catalog is data: TTL + atomic write + lock + vendored snapshot + scheduled refresh; no runtime SDK installs (DEC-034) |
+| `REQ-MODEL-004` | Deterministic, audited routing with declared fallback chains; unmet requirements yield guidance, never a silent downgrade (CTR-014) |
+| `REQ-MODEL-005` | Vault-only credentials in adapters; keys never in logs, prompts or telemetry (INV-02) |
+| `REQ-MODEL-006` | One typed stream union above adapters; consumers never branch on provider id (DEC-034) |
+| `REQ-MODEL-007` | Usage/cost invariant: inclusive totals + non-overlapping breakdown, never subtract; actual overrides estimate; no content telemetry |
+| `REQ-MODEL-008` | Single-owner retry discipline; user abort vetoes retry; context overflow is terminal (DEC-034) |
+| `REQ-MODEL-009` | Watchdogs abort with explicit reasons; typed provider-error taxonomy with derived retryability |
+| `REQ-MODEL-010` | Local discovery first-class; `locality: local` means zero egress (INV-05) |
+| `REQ-MODEL-011` | Reasoning-effort dial maps normalized levels to provider parameters; unsupported levels are never offered |
+| `REQ-MODEL-012` | Resolved window + reserves feed the context pre-turn feasibility check from shared constants (DEC-027) |

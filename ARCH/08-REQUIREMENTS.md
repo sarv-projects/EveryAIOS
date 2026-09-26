@@ -744,6 +744,116 @@ This registry answers one question per entry: **what behavior must this system e
 - **Tests:** pending
 - **Status:** seeded
 
+### Models (`MODEL`)
+
+#### REQ-MODEL-001 — One registry, one router, no hard-coded vendor
+- **Statement:** GIVEN any model — cloud or local — WHEN it is registered or selected, THEN it lives behind exactly one model registry and one router, no module hard-codes a vendor, and callers never address a provider endpoint directly.
+- **Priority:** must
+- **Source:** `AGENTCOWORK-SPEC.md` §2 (P-03) · `ARCH/04-DECISIONS.md` DEC-004 · `ARCH/18-MODEL-ROUTING.md` §1
+- **Acceptance:** registry census shows every selectable model has one entry; static check finds no vendor-specific selection logic outside the router; swapping a provider changes no caller.
+- **Failure cases:** a module calling a vendor endpoint outside the router → architecture violation; a second registry or router → review failure.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-MODEL-002 — ModelDescriptor contract
+- **Statement:** GIVEN a registered model, WHEN its descriptor is stored, THEN it follows `DM-025` — id, provider, resolved context window and max output, tool-calling support, reasoning modes, vision, streaming, structured output, cost, latency class, locality and tokenizer ref, plus the declared lifecycle/visibility, family/release, variants/options, transport and catalog refs, prompt-cache and privacy additions — and no capability beyond the declared set is offered.
+- **Priority:** must
+- **Source:** `ARCH/18-MODEL-ROUTING.md` §2 · `ARCH/06-DATA-MODEL.md` DM-025
+- **Acceptance:** schema validation rejects incomplete descriptors; router and UI read declared capabilities only (composer negotiation shows supported options); a privacy-flagged model is excluded from disallowed scopes.
+- **Failure cases:** missing required field → registration rejected; undeclared capability offered to a caller → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-MODEL-003 — Catalog is data, never code
+- **Statement:** GIVEN catalog data and local discovery, WHEN the catalog refreshes, THEN it is vendored/compiled as data with a short TTL (≈5 min), atomic tmp+rename writes, a cross-process lock and an offline vendored snapshot, a scheduled refresh (≈60 min) emits a refresh event, refresh failures are logged and never block the UI, and provider SDKs are never installed at runtime.
+- **Priority:** must
+- **Source:** `ARCH/18-MODEL-ROUTING.md` §2 · `ARCH/04-DECISIONS.md` DEC-034
+- **Acceptance:** refresh tests (TTL honored, atomicity under simulated crash, lock contention); offline start works from the snapshot; a failed refresh does not block the UI; no runtime package-install path exists.
+- **Failure cases:** torn catalog write → defect; refresh failure blocking the UI → defect; runtime SDK installation → rejected (DEC-034).
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-MODEL-004 — Deterministic routing and no silent downgrade
+- **Statement:** GIVEN a selection request with preferences and constraints, WHEN the router resolves, THEN ranking is deterministic and audited from agent-profile default, session override, task requirements, policy, availability and preference weights, the selection carries its declared fallback chain, and an unmet requirement (vision · tools · reasoning · context size) yields `GuidanceRequired`/`RequiresUserAction` — never a silent capability downgrade or emulated tool.
+- **Priority:** must
+- **Source:** `ARCH/18-MODEL-ROUTING.md` §3 · `ARCH/07-CONTRACTS.md` CTR-014
+- **Acceptance:** determinism test on identical inputs (stable order, audited tie-break); unmet-requirement test returns guidance; failover test with an unavailable provider; a policy-denied model is never selected.
+- **Failure cases:** nondeterministic selection → defect; silent downgrade or tool emulation → defect; provider down without failover or typed `Unavailable` → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-MODEL-005 — Vault-only credentials in the model plane
+- **Statement:** GIVEN adapter auth and endpoint configuration, WHEN a model call is made, THEN credentials are vault `use`-style references only — never values — and keys never appear in logs, prompts, telemetry or stored config.
+- **Priority:** must
+- **Source:** `ARCH/05-INVARIANTS.md` INV-02 · `ARCH/07-CONTRACTS.md` CTR-013 · `ARCH/18-MODEL-ROUTING.md` §4
+- **Acceptance:** secret-corpus scan over logs/prompts/telemetry is clean; endpoint config carries references only; the model plane exposes no read-value API.
+- **Failure cases:** key in a log or prompt → verification failure; plaintext fallback when the vault is unavailable → typed `Unavailable`, never a stored copy.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-MODEL-006 — One typed stream union above adapters
+- **Statement:** GIVEN any streaming completion, WHEN events reach callers, THEN they use one typed stream-event union (step-start · text/reasoning/tool-input deltas · tool-call/result/error · step-finish · finish · provider-error) with explicit block ids synthesized when absent, step-finish and turn-finish distinct, and cancellation and backpressure mandatory — no consumer branches on provider id.
+- **Priority:** must
+- **Source:** `ARCH/18-MODEL-ROUTING.md` §4 · `ARCH/04-DECISIONS.md` DEC-034 · `ARCH/15-AGENT-X.md` §4
+- **Acceptance:** union-conformance tests per adapter; block-id synthesis test; provider-id branching absent above the adapter; cancellation and backpressure tests.
+- **Failure cases:** provider-specific event shape leaking upward → defect; missing step/turn distinction → defect; silent stream end treated as success → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-MODEL-007 — Usage and cost accounting invariant
+- **Statement:** GIVEN a completed model call, WHEN usage and cost are reported, THEN totals are inclusive with a non-overlapping breakdown (`non_cached_input` · `cache_read` · `cache_write` · `reasoning`), values are clamped and consumers never subtract; cost is cache-class-aware (read/write pricing · size tiers · >200k class), provider-reported actuals override catalog estimates, included/free plans are exactly 0, a mismatch is logged as an event, and telemetry carries no prompt or completion content.
+- **Priority:** must
+- **Source:** `ARCH/18-MODEL-ROUTING.md` §7 · `ARCH/04-DECISIONS.md` DEC-034 · `ARCH/30-EVENTS.md` §5
+- **Acceptance:** usage-invariant tests (breakdown stays within the inclusive total; clamping test); actual-overrides-estimate test; mismatch event test; telemetry content scan clean.
+- **Failure cases:** consumer subtracting fields → forbidden by the written invariant; negative/underflow value → clamped; prompt/completion content in telemetry → verification failure.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-MODEL-008 — Single-owner retry discipline
+- **Statement:** GIVEN a failed model request, WHEN retries are considered, THEN exactly one layer owns each failure class — request-start transport retries (exponential + jitter, honoring `retry-after`) · pre-content stream interruptions via buffer-until-proven with discarded-attempt usage summed · post-content failures handled at the turn level; a user abort anywhere vetoes retry, and context overflow is terminal.
+- **Priority:** must
+- **Source:** `ARCH/18-MODEL-ROUTING.md` §4 · `ARCH/04-DECISIONS.md` DEC-034
+- **Acceptance:** retry-ownership matrix test (one owner per class); user-abort veto test; usage aggregation across discarded attempts; overflow ends without retry.
+- **Failure cases:** two layers retrying one failure → defect; adapter retrying a post-content failure → defect; discarded-attempt usage lost → accounting defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-MODEL-009 — Watchdogs and typed provider errors
+- **Statement:** GIVEN a stalled or failing provider stream, WHEN a watchdog fires or the provider errors, THEN header/chunk-idle/read timeouts abort with an explicit reason, a network-error finish fails the step rather than silently ending it, and every failure maps to the typed taxonomy (`InvalidRequest` · `Authentication` · `RateLimit{retryAfterMs}` · `QuotaExceeded` · `ContentPolicy` · `ProviderInternal` · `Transport` · `ContextOverflow`) with `retryable` derived from the type — rate limits back off and surface, and auth expiry gets one refresh attempt where supported, else re-auth guidance.
+- **Priority:** must
+- **Source:** `ARCH/18-MODEL-ROUTING.md` §4/§8 · `ARCH/04-DECISIONS.md` DEC-034
+- **Acceptance:** watchdog matrix tests (each timeout → typed abort reason); taxonomy mapping test; retryability-derivation test; rate-limit backoff/queue surfaced; auth-expiry path test.
+- **Failure cases:** silent hang → defect; silent stream end on network error → defect; untyped error crossing a boundary → defect; unbounded retry on auth failure → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-MODEL-010 — Local discovery and locality guarantee
+- **Statement:** GIVEN local model servers (Ollama · LM Studio · vLLM · llama.cpp · any OpenAI-compatible endpoint), WHEN discovery runs, THEN the runtime probes endpoints, lists and health-checks models and registers them like any other provider with no manual configuration on the common path (manual entry stays as fallback), and a model declared `locality: local` produces no egress from the machine.
+- **Priority:** must
+- **Source:** `ARCH/18-MODEL-ROUTING.md` §6 · `ARCH/05-INVARIANTS.md` INV-05
+- **Acceptance:** discovery test against a local server; unconfigured common-path test; egress-observation test shows zero external traffic for local models; manual entry works.
+- **Failure cases:** a local model routed through cloud egress → violation; local server version drift → health re-probe + descriptor refresh + degraded marking; discovery failure → typed `Unavailable` with guidance.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-MODEL-011 — Reasoning-effort mapping
+- **Statement:** GIVEN a reasoning-capable model, WHEN reasoning effort is chosen, THEN one normalized dial (`auto · minimal · low · medium · high · extra_high`) maps to the provider's parameter, the descriptor declares which levels exist, only supported levels are offered, an unsupported choice is never silently downgraded, and raw chain-of-thought never enters the transcript.
+- **Priority:** must
+- **Source:** `ARCH/18-MODEL-ROUTING.md` §5 · `ARCH/04-DECISIONS.md` DEC-034
+- **Acceptance:** mapping tests per declared level; unsupported level not offered (composer negotiation); transcript scan finds no raw chain-of-thought.
+- **Failure cases:** unsupported level silently ignored → defect; raw chain-of-thought rendered → UI defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-MODEL-012 — Resolved window feeds context feasibility
+- **Statement:** GIVEN a resolved model selection, WHEN a turn is prepared, THEN the model's resolved window and the router's reserves feed the context pre-turn feasibility check (`window − reserves`) from shared constants, and a window/estimate mismatch is resolved before send through the context recovery path — never discovered as a provider error mid-stream.
+- **Priority:** must
+- **Source:** `ARCH/18-MODEL-ROUTING.md` §3 · `ARCH/04-DECISIONS.md` DEC-027 · `ARCH/16-CONTEXT.md` §3
+- **Acceptance:** shared-constant test (router and context compute identical numbers); mismatch test triggers pre-send recovery; no provider-side overflow while recovery options remain.
+- **Failure cases:** router and context diverging on window arithmetic → defect; overflow surfaced by the provider after send → defect.
+- **Tests:** pending
+- **Status:** seeded
+
 ### Workflow (`WF`)
 
 #### REQ-WF-001 — Runs pinned to their version
@@ -788,7 +898,8 @@ This registry answers one question per entry: **what behavior must this system e
 | `WF` (1), `AGX` (1), `UI` (1) | drafted above | `20`, Agent X finalisation lane, `AGENTCOWORK-UI.md` |
 | `KERNEL` (7), `WORK` (8) | drafted above | verified during passes `10` ✅ / `11` ✅ (2026-09-26) |
 | `MEM` (12) | drafted above + expanded in pass `17` | verified during pass `17` ✅ (2026-09-26) |
-| `MODEL`, `RTENV`, `WORLD`, `OFFICE`, `BROWSER`, `CUA`, `FILES`, `CODE`, `SEARCH`, `COMMS`, `ART`, `EVENTS`, `SKILL`, `CHAN`, `VERIFY` | pending | seeded during each module's P7 pass |
+| `MODEL` (12) | drafted above + expanded in pass `18` | verified during pass `18` ✅ (2026-09-26) |
+| `RTENV`, `WORLD`, `OFFICE`, `BROWSER`, `CUA`, `FILES`, `CODE`, `SEARCH`, `COMMS`, `ART`, `EVENTS`, `SKILL`, `CHAN`, `VERIFY` | pending | seeded during each module's P7 pass |
 
 ## 6. Related
 
