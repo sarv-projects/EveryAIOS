@@ -1,6 +1,7 @@
 # 25 — Files
 
 > **Status:** Draft P3 (early — file-world evidence integrated 2026-09-26). Must pass the `ARCH/00-INDEX.md` §5 checklist at freeze.
+> **P7 pass (2026-09-26):** line-checked; requirements seeded (`REQ-FILES-*`, Requirements section).
 > **Role:** the filesystem as structured state — **identity · watchers · deltas · write leases · metadata index**. Content indexing is deliberately deferred (metadata-first, `21` W7).
 > **Dependencies:** `10-KERNEL` · `12-TRUST` (path scopes) · `19-RUNTIME-ENVIRONMENTS` (helper/leases hosts) · `21-WORLD-MODEL` (W1 collector) · `30-EVENTS` (deltas). **Consumers:** `16`, `26-CODE` (worktrees), `29` (artifact locations), `15`.
 > **Evidence:** `ARCHIVE/v1-research/world-model-verification.md` §3 (identity, cursors, freshness; MS `FILE_ID_INFO` / MFT / USN docs) · local `crates/everyaios-storage` (`walk.rs:131-157`, `dedup.rs:106-118`, `usn.rs:77-90`, `usn_winapi.rs`) · DEC-029 · INV-20.
@@ -91,3 +92,22 @@ Content index/OCR · thumbnails · SMB/network shares · ReFS 128-bit edge cases
 ## 12. Evidence
 
 `ARCHIVE/v1-research/world-model-verification.md` §3 (identity table, collector mechanics, cursor/freshness) with MS docs (`FILE_ID_INFO`, MFT, USN change-journal identifiers) · local `walk.rs:131-157`, `dedup.rs:106-118`, `usn.rs:77-90`, `usn_winapi.rs` (unwired) · DEC-029 · INV-20 · `ARCH/21-WORLD-MODEL.md` §3–§5.
+
+## 13. Requirements (`REQ-FILES-*`)
+
+Testable behaviors owned by this module live in `ARCH/08-REQUIREMENTS.md`; the traceability chain is in `ARCH/09-FEATURE-MATRIX.md`. This table is a pointer, not a second copy.
+
+| REQ | Behavior (one line) |
+|---|---|
+| `REQ-FILES-001` | Platform file identity is incarnation-aware — `(volume, fileId, incarnation)` / `(dev, ino, nlink)`; reused ids never resume old identity; no zeroed Windows `dev`/`ino` (DM-026, INV-20) |
+| `REQ-FILES-002` | Rename/move preserves identity; replacement re-keys dedup/lease/index dependents explicitly, never silently |
+| `REQ-FILES-003` | The metadata index is the query surface — queries never walk the filesystem; deltas (and bounded rescans) keep it fresh (INV-20) |
+| `REQ-FILES-004` | Every watcher is lossy on overflow — gaps abort to the smallest-scope rescan + freshness anomaly, never a silent gap (INV-20) |
+| `REQ-FILES-005` | Cursor/epoch row `(source, scope, epoch, cursor, observed_at)`; journal reset discards + rescans; replayed records rejected |
+| `REQ-FILES-006` | Writes re-validate identity/size/mtime before mutating; staleness TTL marks objects `unknown` — no blind writes |
+| `REQ-FILES-007` | Overlapping writes are serialized by path-scoped leases with explicit conflict results — never a silent overwrite (DEC-029) |
+| `REQ-FILES-008` | Leases expire crash-safe, are audited and work-bound; worktree checkouts are leased; merges are explicit (DEC-029, INV-24) |
+| `REQ-FILES-009` | Canonicalization (symlinks/junctions, case, long paths) precedes policy checks and is re-checked at use — TOCTOU-safe |
+| `REQ-FILES-010` | Path scopes intercept (`allowed_paths`/`read_only_paths`); protected subpaths stay read-only inside writable roots — no un-discovery |
+| `REQ-FILES-011` | Workspace/project identity (`DM-024`) anchors memory/policy scopes; re-key on move/clone is explicit; worktrees share the parent identity |
+| `REQ-FILES-012` | Unreadable scopes are skipped without aborting, surfaced with counts; consent/elevation mode is recorded per collector instance (INV-20, INV-24) |

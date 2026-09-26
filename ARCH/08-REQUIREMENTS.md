@@ -1500,6 +1500,116 @@ This registry answers one question per entry: **what behavior must this system e
 - **Tests:** pending
 - **Status:** seeded
 
+### Files (`FILES`)
+
+#### REQ-FILES-001 — Platform file identity is incarnation-aware
+- **Statement:** GIVEN a file on a supported platform, WHEN its identity is recorded, THEN it is `(volume, fileId)` on Windows or `(st_dev, st_ino)` on POSIX extended with incarnation evidence — `(volume, fileId, incarnation)` / `(dev, ino, nlink)` — so a reused id after delete never resumes the old identity, and Windows records never carry zeroed `dev`/`ino`.
+- **Priority:** must
+- **Source:** `ARCH/25-FILES.md` §1/§2 · `ARCH/21-WORLD-MODEL.md` §3 · `ARCH/06-DATA-MODEL.md` DM-026 · `ARCH/05-INVARIANTS.md` INV-20
+- **Acceptance:** rename/move within a volume preserves identity; delete + recreate with a reused id yields a new identity; hardlink sets are distinguished by link count; a Windows scan record contains a real file id (no zeros).
+- **Failure cases:** path used as identity → defect; reused id accepted as the same file → defect; zeroed Windows `dev`/`ino` reaching dedup/lease keys → defect (recorded code-phase fix `walk.rs:131-157`).
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-FILES-002 — File replacement re-keys dependents explicitly
+- **Statement:** GIVEN a file whose incarnation changes (replace/restore/move across volumes), WHEN dedup, leases or index entries still refer to the old identity, THEN they are re-keyed or invalidated explicitly — stale identity is never carried forward.
+- **Priority:** must
+- **Source:** `ARCH/25-FILES.md` §2/§8 · `ARCH/21-WORLD-MODEL.md` §3
+- **Acceptance:** replacement test shows a new identity with old lease/dedup entries re-keyed or dropped; the index row for the old incarnation is marked stale; dependent capabilities see the new identity.
+- **Failure cases:** stale identity silently reused after replacement → defect; dedup grouping across two incarnations → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-FILES-003 — The metadata index is the query surface
+- **Statement:** GIVEN file queries (names/paths/ids/size/times/attrs/links), WHEN they run, THEN they read the metadata index instead of walking the filesystem, and the index is updated from watcher deltas (bounded rescans on gaps) with per-row freshness.
+- **Priority:** must
+- **Source:** `ARCH/25-FILES.md` §1/§3/§4 · `ARCH/05-INVARIANTS.md` INV-20
+- **Acceptance:** query-time I/O trace shows no directory walk; a delta-updated file appears in results without a full rescan; index rows expose `observed_at` freshness.
+- **Failure cases:** query walking the filesystem → architecture violation; stale index row served without a freshness flag → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-FILES-004 — Watcher gaps abort to a bounded rescan, never a silent gap
+- **Statement:** GIVEN a native watcher gap (dead/truncated USN journal, `IN_Q_OVERFLOW`, `FAN_Q_OVERFLOW`, FSEvents `MustScanSubDirs`, RDCW zero-length buffer), WHEN it is detected, THEN the cursor is discarded, the smallest known scope is rescanned, and a freshness anomaly is recorded — completeness is never claimed while a gap is open.
+- **Priority:** must
+- **Source:** `ARCH/25-FILES.md` §1/§3/§8 · `ARCH/21-WORLD-MODEL.md` §4 · `ARCH/05-INVARIANTS.md` INV-20
+- **Acceptance:** overflow-injection test produces a scoped rescan plus anomaly event; no result set is served as complete while the gap is unresolved.
+- **Failure cases:** silent gap → defect; full-volume rescan when a smaller known scope was available → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-FILES-005 — Cursor and epoch discipline survives restart and journal reset
+- **Statement:** GIVEN a collector instance, WHEN deltas are consumed, THEN its cursor row is `(source, scope, epoch, cursor, observed_at)`; a journal-id/epoch change or a deleted/truncated journal discards the cursor and requests a rescan; records at or below the cursor are rejected, never silently applied.
+- **Priority:** must
+- **Source:** `ARCH/25-FILES.md` §3/§4 · `ARCH/21-WORLD-MODEL.md` §4
+- **Acceptance:** restart resumes from the stored cursor; epoch-change test discards and rescans with the reset recorded; a duplicate/replayed batch is refused.
+- **Failure cases:** stale cursor applied after journal reset → defect; replayed records silently applied → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-FILES-006 — Writes re-validate freshness before mutating
+- **Statement:** GIVEN a write targeting a known file, WHEN the index entry is stale (TTL passed, identity/size/mtime guard mismatch), THEN the object is re-validated against live state and marked `unknown` on failure before any mutation — never a blind write against a stale snapshot.
+- **Priority:** must
+- **Source:** `ARCH/25-FILES.md` §4 · `ARCH/21-WORLD-MODEL.md` §4
+- **Acceptance:** stale-entry write test triggers re-validation; an identity/size/mtime mismatch blocks or re-keys the write and surfaces; an `unknown` object is not mutated without re-validation.
+- **Failure cases:** blind write on a stale/unknown object → defect; silent overwrite of a newer version → violation.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-FILES-007 — Overlapping writes are serialized by leases
+- **Statement:** GIVEN two writers whose path scopes overlap, WHEN a write lease is requested, THEN exactly one is granted and the other receives a conflict result offering queue · rebase (VCS-aware) · ask — never a silent overwrite.
+- **Priority:** must
+- **Source:** `ARCH/25-FILES.md` §1/§6 · `ARCH/04-DECISIONS.md` DEC-029
+- **Acceptance:** concurrent-writer test yields grant + conflict; the conflict resolves through the declared policy; no interleaved write reaches disk.
+- **Failure cases:** silent overwrite → violation; both writers granted the same scope → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-FILES-008 — Leases expire crash-safe, are audited and bound to work
+- **Statement:** GIVEN a granted lease, WHEN the holder crashes or the work ends, THEN the lease expires without manual cleanup, ownership is tied to `work_id`/worker, grant/conflict/expiry are audited, and worktree-isolated writers hold leases on their checkout with merges as explicit steps.
+- **Priority:** must
+- **Source:** `ARCH/25-FILES.md` §6 · `ARCH/04-DECISIONS.md` DEC-029 · `ARCH/05-INVARIANTS.md` INV-24
+- **Acceptance:** crash-expiry test releases the lease; audit entries exist for grant and expiry; a merge into the parent without its lease is rejected.
+- **Failure cases:** permanent lease after crash → defect; unaudited grant/expiry → violation.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-FILES-009 — Canonicalization precedes policy checks and is re-checked at use
+- **Statement:** GIVEN a path used in an operation, WHEN policy resolves it, THEN symlinks/junctions are canonicalized first, platform case-sensitivity and Windows long-path rules are declared, and a canonical mismatch between check and use denies the operation (TOCTOU-aware).
+- **Priority:** must
+- **Source:** `ARCH/25-FILES.md` §7 · `ARCH/12-TRUST.md` §2/§8
+- **Acceptance:** symlink-swap test denies at use time; case/long-path declaration tests per platform; no policy decision is made on a non-canonical path.
+- **Failure cases:** policy decision on a non-canonical path → security failure; check/use race exploited → TOCTOU violation.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-FILES-010 — Path scopes intercept; protected subpaths stay read-only
+- **Statement:** GIVEN workspace path scopes (`allowed_paths` / `read_only_paths`), WHEN out-of-scope access occurs, THEN it is denied and logged (interception, not un-discovery), and protected subpaths (VCS hooks, system dirs) remain read-only inside writable roots.
+- **Priority:** must
+- **Source:** `ARCH/25-FILES.md` §7 · `ARCH/12-TRUST.md` §2/§8 · `ARCH/05-INVARIANTS.md` INV-10
+- **Acceptance:** out-of-scope access denied and logged; protected subpath write denied inside an otherwise writable root; listing suppression is not used as a security mechanism.
+- **Failure cases:** out-of-scope write allowed → security failure; protected subpath mutated → violation.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-FILES-011 — Workspace/project identity anchors scopes and survives worktrees
+- **Statement:** GIVEN a workspace (`DM-024`: folder · repo · multi-root with roots/trust/policy refs), WHEN project identity is assigned, THEN it is keyed by canonical repo root with git remote as an attribute, re-keying on move/clone is explicit, and worktrees share the parent project identity.
+- **Priority:** must
+- **Source:** `ARCH/25-FILES.md` §5 · `ARCH/06-DATA-MODEL.md` DM-024 · `ARCH/17-MEMORY.md` §2.1
+- **Acceptance:** worktree membership maps to the parent identity; move/clone without an explicit re-key keeps the old key; memory and policy scopes resolve through the same key.
+- **Failure cases:** implicit re-key → defect; worktree treated as a new project → memory fragmentation or cross-scope leakage → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-FILES-012 — Unreadable scopes are skipped honestly and surfaced
+- **Statement:** GIVEN a permission-denied or unreadable path during collection, WHEN the scan proceeds, THEN the path is skipped without aborting the scan, the skip is surfaced with a count (metadata-mode honesty), and the instance's consent/elevation mode (helper/per-scan/non-admin) is recorded.
+- **Priority:** should
+- **Source:** `ARCH/25-FILES.md` §3/§8 · `ARCH/21-WORLD-MODEL.md` §5 · `ARCH/05-INVARIANTS.md` INV-20
+- **Acceptance:** a permission-denied fixture yields a partial result plus a surfaced skipped count; the collector mode is recorded on the instance; elevated modes remain consent-gated.
+- **Failure cases:** one denied path aborting the whole scan → defect; skipped paths hidden → defect; silent elevation → violation.
+- **Tests:** pending
+- **Status:** seeded
+
 ## 5. Seeding status
 
 | Domain | Seeds | Next pass |
@@ -1518,7 +1628,8 @@ This registry answers one question per entry: **what behavior must this system e
 | `OFFICE` (11) | drafted above + expanded in pass `22` | verified during pass `22` ✅ (2026-09-26) |
 | `BROWSER` (12) | drafted above + expanded in pass `23` | verified during pass `23` ✅ (2026-09-26) |
 | `CUA` (12) | drafted above + expanded in pass `24` | verified during pass `24` ✅ (2026-09-26) |
-| `FILES`, `CODE`, `SEARCH`, `COMMS`, `ART`, `EVENTS`, `SKILL`, `CHAN`, `VERIFY` | pending | seeded during each module's P7 pass |
+| `FILES` (12) | drafted above + expanded in pass `25` | verified during pass `25` ✅ (2026-09-26) |
+| `CODE`, `SEARCH`, `COMMS`, `ART`, `EVENTS`, `SKILL`, `CHAN`, `VERIFY` | pending | seeded during each module's P7 pass |
 
 ## 6. Related
 

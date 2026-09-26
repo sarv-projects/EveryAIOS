@@ -177,6 +177,18 @@ One row per `REQ-*`. Status only from evidence.
 | `REQ-CUA-010` | `24-COMPUTER-USE` | pending | `DEC-016`, `INV-21` | — | pending | pending | unplanned |
 | `REQ-CUA-011` | `24-COMPUTER-USE` | pending | `DEC-021`, `INV-04` | — | pending | pending | unplanned |
 | `REQ-CUA-012` | `24-COMPUTER-USE` | pending | `DEC-022` | — | pending | pending | unplanned |
+| `REQ-FILES-001` | `25-FILES` | pending | `DM-026`, `CTR-024`, `INV-20` | — | pending | pending | unplanned |
+| `REQ-FILES-002` | `25-FILES` | pending | `DM-026` | — | pending | pending | unplanned |
+| `REQ-FILES-003` | `25-FILES` | pending | `CTR-024`, `INV-20` | — | pending | pending | unplanned |
+| `REQ-FILES-004` | `25-FILES` | pending | `CTR-024`, `INV-20` | — | pending | pending | unplanned |
+| `REQ-FILES-005` | `25-FILES` | pending | `INV-20` | — | pending | pending | unplanned |
+| `REQ-FILES-006` | `25-FILES` | pending | `CTR-024` | — | pending | pending | unplanned |
+| `REQ-FILES-007` | `25-FILES` | pending | `DEC-029`, `CTR-024` | — | pending | pending | unplanned |
+| `REQ-FILES-008` | `25-FILES` | pending | `DEC-029`, `INV-24` | — | pending | pending | unplanned |
+| `REQ-FILES-009` | `25-FILES` | pending | `—` | — | pending | pending | unplanned |
+| `REQ-FILES-010` | `25-FILES` | pending | `INV-10` | — | pending | pending | unplanned |
+| `REQ-FILES-011` | `25-FILES` | pending | `DM-024`, `DEC-029` | — | pending | pending | unplanned |
+| `REQ-FILES-012` | `25-FILES` | pending | `INV-20`, `INV-24` | — | pending | pending | unplanned |
 
 ## 4. Maintenance
 
