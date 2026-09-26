@@ -500,34 +500,34 @@ function allowlistKey(path, fp) {
 const frag = (...parts) => parts.join('');
 
 const KNOWN_BAD = [
-  { id: 'openai', expect: 'prefix:sk-', secret: 'sk-proj-9T4mQ2vB8xL7nR3wZ6yH1jK5pC0dF4gA', in: `const k = "sk-proj-9T4mQ2vB8xL7nR3wZ6yH1jK5pC0dF4gA";` },
-  { id: 'anthropic', expect: 'prefix:sk-', secret: 'sk-ant-api03-7Yq2Lx9RtVb4NmZ6KdWp3HcJf8SgE1Au5Oi0', in: `provider_key: "sk-ant-api03-7Yq2Lx9RtVb4NmZ6KdWp3HcJf8SgE1Au5Oi0"` },
-  { id: 'openrouter', expect: 'prefix:sk-', secret: 'sk-or-v1-4d9c2a7b1e8f3c6a5b4d2e1f9c8b7a6d5e4f3c2b1a0d9e8f', in: `{"apiKey":"sk-or-v1-4d9c2a7b1e8f3c6a5b4d2e1f9c8b7a6d5e4f3c2b1a0d9e8f"}` },
-  { id: 'aws-access-key-id', expect: 'prefix:AKIA', secret: 'AKIAIOSFODNN7EXAMPLE', in: `let id = "AKIAIOSFODNN7EXAMPLE";` },
-  { id: 'github-classic', expect: 'prefix:ghp_', secret: 'ghp_16C7e42F292c6912E7710c838347Ae178B4a', in: `token: ghp_16C7e42F292c6912E7710c838347Ae178B4a` },
-  { id: 'github-fine-grained', expect: 'prefix:github_pat_', secret: 'github_pat_11ABCDEFG0aBcDeFgHiJkL_MnOpQrStUvWxYz0123456789AbCdEfGhIjKlMnOpQrSt', in: `"github_pat_11ABCDEFG0aBcDeFgHiJkL_MnOpQrStUvWxYz0123456789AbCdEfGhIjKlMnOpQrSt"` },
+  { id: 'openai', expect: 'prefix:sk-', secret: frag('sk-proj-', '9T4mQ2vB8xL7nR3wZ6yH1jK5pC0dF4gA'), in: `const k = "${frag('sk-proj-', '9T4mQ2vB8xL7nR3wZ6yH1jK5pC0dF4gA')}";` },
+  { id: 'anthropic', expect: 'prefix:sk-', secret: frag('sk-ant-api03-', '7Yq2Lx9RtVb4NmZ6KdWp3HcJf8SgE1Au5Oi0'), in: `provider_key: "${frag('sk-ant-api03-', '7Yq2Lx9RtVb4NmZ6KdWp3HcJf8SgE1Au5Oi0')}"` },
+  { id: 'openrouter', expect: 'prefix:sk-', secret: frag('sk-or-v1-', '4d9c2a7b1e8f3c6a5b4d2e1f9c8b7a6d5e4f3c2b1a0d9e8f'), in: `{"apiKey":"${frag('sk-or-v1-', '4d9c2a7b1e8f3c6a5b4d2e1f9c8b7a6d5e4f3c2b1a0d9e8f')}"}` },
+  { id: 'aws-access-key-id', expect: 'prefix:AKIA', secret: frag('AKIA', 'IOSFODNN7EXAMPLE'), in: `let id = "${frag('AKIA', 'IOSFODNN7EXAMPLE')}";` },
+  { id: 'github-classic', expect: 'prefix:ghp_', secret: frag('ghp_', '16C7e42F292c6912E7710c838347Ae178B4a'), in: `token: ${frag('ghp_', '16C7e42F292c6912E7710c838347Ae178B4a')}` },
+  { id: 'github-fine-grained', expect: 'prefix:github_pat_', secret: frag('github_pat_', '11ABCDEFG0aBcDeFgHiJkL_MnOpQrStUvWxYz0123456789AbCdEfGhIjKlMnOpQrSt'), in: `"${frag('github_pat_', '11ABCDEFG0aBcDeFgHiJkL_MnOpQrStUvWxYz0123456789AbCdEfGhIjKlMnOpQrSt')}"` },
   { id: 'slack', expect: 'prefix:xoxb-', secret: frag('xoxb-', '2385917462-', '2837483920-', 'Kq8vBn3mXpL5ZtR7wYc1'), in: `slackToken = "${frag('xoxb-', '2385917462-', '2837483920-', 'Kq8vBn3mXpL5ZtR7wYc1')}";` },
-  { id: 'google-api-key', expect: 'prefix:AIza', secret: 'AIzaSyD-9tSrke72PouQMnMX-a7eZSW0jkFMBWY', in: `const GOOGLE_KEY = "AIzaSyD-9tSrke72PouQMnMX-a7eZSW0jkFMBWY";` },
-  { id: 'google-oauth', expect: 'prefix:ya29.', secret: 'ya29.A0ARrdaM9tK4mB7yQ1cX8nP2sV6uZ3wL5hJ0eF8gK2nD7xQ', in: `refresh: "ya29.A0ARrdaM9tK4mB7yQ1cX8nP2sV6uZ3wL5hJ0eF8gK2nD7xQ"` },
-  { id: 'jwt', expect: 'jwt', secret: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIn0.dBjftJeZ4CVPmB92K27uhbUJU1p1r_wW1gFWFOEjXk', in: `"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIn0.dBjftJeZ4CVPmB92K27uhbUJU1p1r_wW1gFWFOEjXk"` },
-  { id: 'pem-private-key', expect: 'pem-private-key', secret: '-----BEGIN RSA PRIVATE KEY-----', in: `-----BEGIN RSA PRIVATE KEY-----\nMIIEow==\n-----END RSA PRIVATE KEY-----` },
-  { id: 'bearer-header', expect: 'bearer-token', secret: '4Zt9xQw2Lm7Nv1Kp8Rd3Sf6Hg0Jc5Yb1Ua2Xe4Ni', in: `Authorization: 'Bearer 4Zt9xQw2Lm7Nv1Kp8Rd3Sf6Hg0Jc5Yb1Ua2Xe4Ni'` },
-  { id: 'assigned-secret', expect: 'assigned-secret', secret: 'Tr0ub4dor&3xKcd!mn9Qv2wLpZ', in: `const vaultPassword = "Tr0ub4dor&3xKcd!mn9Qv2wLpZ";` },
-  { id: 'env-secret', expect: 'env-secret', secret: '9fKq2LmZ7xRw4Tb1Vc6Yn0Ps3Dg8Hj5Kl2Fq7Bx1', in: `EVERYAIOS_VAULT_KEY=9fKq2LmZ7xRw4Tb1Vc6Yn0Ps3Dg8Hj5Kl2Fq7Bx1` },
-  { id: 'high-entropy-blob', expect: 'high-entropy-blob', secret: 'Zm9vYmFyMTIzNDU2Nzg5MEFCQ0RlRmdISUpLTE1OT1BRUlNUVVZXWFla', in: `"Zm9vYmFyMTIzNDU2Nzg5MEFCQ0RlRmdISUpLTE1OT1BRUlNUVVZXWFla"` },
-  { id: 'hex-blob', expect: 'hex-digest-blob', secret: 'a3f1c95e7b2d4806af13ce95b7d2048ea16fb3c97d5e0a4b83c1f6927de5b0a48', in: `digest = "a3f1c95e7b2d4806af13ce95b7d2048ea16fb3c97d5e0a4b83c1f6927de5b0a48"` },
-  { id: 'credentialed-url', expect: 'url-userinfo', secret: 'Zt7Qw2Lm9Xk4Rb1Vc6Yn0Ps3Dg8Hj5Kl', in: `await fetch("https://svc:hZt7Qw2Lm9Xk4Rb1Vc6Yn0Ps3Dg8Hj5Kl@internal.example/api")` },
+  { id: 'google-api-key', expect: 'prefix:AIza', secret: frag('AIza', 'SyD-9tSrke72PouQMnMX-a7eZSW0jkFMBWY'), in: `const GOOGLE_KEY = "${frag('AIza', 'SyD-9tSrke72PouQMnMX-a7eZSW0jkFMBWY')}";` },
+  { id: 'google-oauth', expect: 'prefix:ya29.', secret: frag('ya29.', 'A0ARrdaM9tK4mB7yQ1cX8nP2sV6uZ3wL5hJ0eF8gK2nD7xQ'), in: `refresh: "${frag('ya29.', 'A0ARrdaM9tK4mB7yQ1cX8nP2sV6uZ3wL5hJ0eF8gK2nD7xQ')}"` },
+  { id: 'jwt', expect: 'jwt', secret: frag('eyJhbGciOiJIUzI1', 'NiIsInR5cCI6IkpXVCJ9', '.', 'eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIn0', '.', 'dBjftJeZ4CVPmB92K27uhbUJU1p1r', '_wW1gFWFOEjXk'), in: `"${frag('eyJhbGciOiJIUzI1', 'NiIsInR5cCI6IkpXVCJ9', '.', 'eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIn0', '.', 'dBjftJeZ4CVPmB92K27uhbUJU1p1r', '_wW1gFWFOEjXk')}"` },
+  { id: 'pem-private-key', expect: 'pem-private-key', secret: frag('-----BEGIN RSA', ' PRIVATE KEY-----'), in: `${frag('-----BEGIN RSA', ' PRIVATE KEY-----')}\nMIIEow==\n${frag('-----END RSA', ' PRIVATE KEY-----')}` },
+  { id: 'bearer-header', expect: 'bearer-token', secret: frag('4Zt9xQw2', 'Lm7Nv1Kp8Rd3Sf6Hg0Jc5Yb1Ua2Xe4Ni'), in: `Authorization: 'Bearer ${frag('4Zt9xQw2', 'Lm7Nv1Kp8Rd3Sf6Hg0Jc5Yb1Ua2Xe4Ni')}'` },
+  { id: 'assigned-secret', expect: 'assigned-secret', secret: frag('Tr0ub4dor', '&3xKcd!mn9Qv2wLpZ'), in: `const vaultPassword = "${frag('Tr0ub4dor', '&3xKcd!mn9Qv2wLpZ')}";` },
+  { id: 'env-secret', expect: 'env-secret', secret: frag('9fKq2LmZ', '7xRw4Tb1Vc6Yn0Ps3Dg8Hj5Kl2Fq7Bx1'), in: `EVERYAIOS_VAULT_KEY=${frag('9fKq2LmZ', '7xRw4Tb1Vc6Yn0Ps3Dg8Hj5Kl2Fq7Bx1')}` },
+  { id: 'high-entropy-blob', expect: 'high-entropy-blob', secret: frag('Zm9vYmFy', 'MTIzNDU2Nzg5MEFCQ0RlRmdISUpLTE1OT1BRUlNUVVZXWFla'), in: `"${frag('Zm9vYmFy', 'MTIzNDU2Nzg5MEFCQ0RlRmdISUpLTE1OT1BRUlNUVVZXWFla')}"` },
+  { id: 'hex-blob', expect: 'hex-digest-blob', secret: frag('a3f1c95e', '7b2d4806af13ce95b7d2048ea16fb3c97d5e0a4b83c1f6927de5b0a48'), in: `digest = "${frag('a3f1c95e', '7b2d4806af13ce95b7d2048ea16fb3c97d5e0a4b83c1f6927de5b0a48')}"` },
+  { id: 'credentialed-url', expect: 'url-userinfo', secret: frag('Zt7Qw2Lm', '9Xk4Rb1Vc6Yn0Ps3Dg8Hj5Kl'), in: `await fetch("https://svc:${frag('hZt7Qw2', 'Lm9Xk4Rb1Vc6Yn0Ps3Dg8Hj5Kl')}@internal.example/api")` },
   // A *public* key half is not a secret, and no entropy floor can tell it from
   // a private one. The gate reports the shape; the allowlist carries the review.
-  { id: 'public-key-blob', expect: 'high-entropy-blob', secret: 'lvI3luTatntgPJAIeBRIFHJsYv3CQRUCMZg97OYZrT0=', in: `STORE_PUBLIC_KEY_B64 = "lvI3luTatntgPJAIeBRIFHJsYv3CQRUCMZg97OYZrT0="` },
+  { id: 'public-key-blob', expect: 'high-entropy-blob', secret: frag('lvI3luTa', 'tntgPJAIeBRIFHJsYv3CQRUCMZg97OYZrT0='), in: `STORE_PUBLIC_KEY_B64 = "${frag('lvI3luTa', 'tntgPJAIeBRIFHJsYv3CQRUCMZg97OYZrT0=')}"` },
   // A `sk-`-prefixed literal is a structural finding even when its body is a
   // placeholder: the redactor must still see it, so the gate reports it and the
   // review (allowlist) decides. The placeholder screen is a *heuristic* gate.
-  { id: 'structural-beats-placeholder', expect: 'prefix:sk-', secret: 'sk-portable-000000000000', in: `secret: "sk-portable-000000000000"` },
+  { id: 'structural-beats-placeholder', expect: 'prefix:sk-', secret: frag('sk-', 'portable-000000000000'), in: `secret: "${frag('sk-', 'portable-000000000000')}"` },
   // The value whose fingerprint the allowlist carries for the vault at-rest
   // fixture (`crates/everyaios-vault/src/lib.rs`). Pinned below so the two
   // cannot drift apart silently.
-  { id: 'allowlist-key-pin', expect: 'prefix:sk-', secret: 'sk-portable-secret-42', in: `let secret = "sk-portable-secret-42";` },
+  { id: 'allowlist-key-pin', expect: 'prefix:sk-', secret: frag('sk-', 'portable-secret-42'), in: `let secret = "${frag('sk-', 'portable-secret-42')}";` },
 ];
 // secret-corpus:end-known-bad-corpus
 
