@@ -40,8 +40,8 @@ One row per `REQ-*`. Status only from evidence.
 | `REQ-WORK-001` | `11-WORK` | pending | `DEC-003`, `INV-06`, `CTR-003/026` | — | pending | pending | unplanned |
 | `REQ-WORK-002` | `11-WORK` | pending | `DEC-027`, `INV-23`, `CTR-004`, `DM-007` | — | pending | pending | unplanned |
 | `REQ-WORK-003` | `11-WORK` | pending | `INV-16`, `DM-006` | — | pending | pending | unplanned |
-| `REQ-WORK-004` | `11-WORK` | pending | `DEC-029`, `CTR-026` | — | pending | pending | unplanned |
-| `REQ-WORK-005` | `11-WORK` | pending | `INV-22`, `DEC-029`, `DM-001` | — | pending | pending | unplanned |
+| `REQ-WORK-004` | `11-WORK` | pending | `DEC-031`, `CTR-026` | — | pending | pending | unplanned |
+| `REQ-WORK-005` | `11-WORK` | pending | `INV-22`, `DEC-031`, `DM-001` | — | pending | pending | unplanned |
 | `REQ-WORK-006` | `11-WORK` | pending | `DM-001/002` | — | pending | pending | unplanned |
 | `REQ-WORK-007` | `11-WORK` | pending | `INV-16`, `DM-006` | — | pending | pending | unplanned |
 | `REQ-WORK-008` | `11-WORK` | pending | `DM-005/007` | — | pending | pending | unplanned |
@@ -54,7 +54,7 @@ One row per `REQ-*`. Status only from evidence.
 | `REQ-TRUST-007` | `12-TRUST` | pending | `INV-24` | — | pending | pending | unplanned |
 | `REQ-TRUST-008` | `12-TRUST` | pending | `DEC-009`, `INV-10/11` | — | pending | pending | unplanned |
 | `REQ-TRUST-009` | `12-TRUST` | pending | `INV-05` | — | pending | pending | unplanned |
-| `REQ-TRUST-010` | `12-TRUST` | pending | `DM-010` | — | pending | pending | unplanned |
+| `REQ-TRUST-010` | `12-TRUST` | pending | `—` | — | pending | pending | unplanned |
 | `REQ-CAP-001` | `13-CAPABILITY` | pending | `INV-13`, `DEC-005`, `DM-011` | — | pending | pending | unplanned |
 | `REQ-CAP-002` | `13-CAPABILITY` | pending | `DEC-002`, `DM-012` | — | pending | pending | unplanned |
 | `REQ-CAP-003` | `13-CAPABILITY` | pending | `DEC-004` | — | pending | pending | unplanned |
@@ -229,7 +229,7 @@ One row per `REQ-*`. Status only from evidence.
 | `REQ-SEARCH-011` | `27-SEARCH` | pending | `—` | — | pending | pending | unplanned |
 | `REQ-SEARCH-012` | `27-SEARCH` | pending | `—` | — | pending | pending | unplanned |
 | `REQ-COMMS-001` | `28-COMMS` | pending | `CTR-009` | — | pending | pending | unplanned |
-| `REQ-COMMS-002` | `28-COMMS` | pending | `DEC-025`, `CTR-010` | — | pending | pending | unplanned |
+| `REQ-COMMS-002` | `28-COMMS` | pending | `DEC-005`, `CTR-010` | — | pending | pending | unplanned |
 | `REQ-COMMS-003` | `28-COMMS` | pending | `INV-02`, `CTR-013` | — | pending | pending | unplanned |
 | `REQ-COMMS-004` | `28-COMMS` | pending | `—` | — | pending | pending | unplanned |
 | `REQ-COMMS-005` | `28-COMMS` | pending | `DEC-021`, `INV-07` | — | pending | pending | unplanned |

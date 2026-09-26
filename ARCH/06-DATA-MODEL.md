@@ -74,12 +74,12 @@ erDiagram
 
 > Detailed SQL/TS lives in owner docs; these are the load-bearing shared fields.
 
-**DM-001 `Work`** — `id` · `kind` (`session_turn` | `job` | `workflow_run` | `subagent_task` | `automation`) · `status` · `parent_work_id?` · `session_id?` · `agent_id?` · `workspace_id` · `objective` · `completion_contract_ref?` · `budget {tokens, cost, time}` · `checkpoint_ref?` · `created/started/finished`.
+**DM-001 `Work`** — `id` · `kind` (`session_turn` | `job` | `workflow_run` | `subagent_task` | `automation`) · `status` · `parent_work_id?` · `session_id?` · `agent_id?` · `workspace_id` · `objective` · `priority` · `completion_contract_ref?` · `budget {tokens, cost, time}` · `checkpoint_ref?` · `created/started/finished`.
 **DM-004 `Session`** — `id` · `workspace_id` · `agent_binding` (Agent X or external) · `status` · `title` · `log_range` (SessionEvent span) · `retention_class` · `last_active`.
 **DM-005 `Run`** — `id` · `session_id` · `work_id` · `agent_id` · `model` · `reasoning_level` · `status` · `usage {in,out,cost}` · `receipt_refs[]`.
 **DM-006 `Checkpoint`** — `id` · `scope` · `kind` (`work` | `context` | `workflow` | `session`) · `content_ref` · `reconstructable` (produced deterministically vs model-written) · `version`.
 **DM-009 `Ticket`** — `id` · `capability_id` · `provider_id` · `environment_id` · `provider_epoch` · `scope` (paths/targets/resource patterns) · `issued_at` · `expires_at` · `uses` · `approval_ref?`.
-**DM-011 `CapabilityDescriptor`** — `id` · `version` · `description` · `affordances[]` · `requirements[]` · `providers[]` · `loading_mode` (`eager|catalog|on-demand`) · `risk_class` (`safe|sensitive|dangerous`) · `auth_requirements?`.
+**DM-011 `CapabilityDescriptor`** — `id` · `version` · `description` · `affordances[]` · `requirements[]` · `providers[]` · `loading_mode` (`eager|catalog|on-demand`) · `risk_class` (`safe|sensitive|dangerous`) · `auth_requirements?` · `verification`.
 **DM-012 `CapabilityHandle`** — `capability_id` · `provider_id` · `provider_epoch` · `environment_id` · `permission_snapshot` · `runtime_handle_ref` · `expires_at`.
 **DM-014 `AgentProfile`** — `id` · `name` · `runtime` (`native|acp|mcp-agent|remote`) · `version` · `status` (`installed` · `discovered` · `launchable` · `available` · `disabled`) · `supported_models[]` · `capabilities[]` · `protocol` · `supports_subagents/background/steering` · `composer` capabilities.
 **DM-015 `DelegationPolicyEntry`** — `worker_agent_id` · `role` · `model?` · `instructions_ref?` · `skills[]` · `mcp_scope[]` · `permissions` · `workspace_scope` (`shared|isolated-worktree|sandbox`) · `can_spawn_children` · `max_parallel` · `max_turns?` · `token_budget?` · `mode` (`automatic|preferred|manual|disabled`) · `routing_rules[]`.

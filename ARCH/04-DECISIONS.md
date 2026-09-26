@@ -55,6 +55,8 @@
 | DEC-043 | External-agent memory boundary: v1 recall-only projection (bound project + own session/task + user preferences); Core never writes native agent stores; provider-session transcripts not harvested; subagent child sessions harvested only when Core-owned with parent linkage; Agent X private notes are session-scope items + session log | Locked | 17, 15, 32 |
 | DEC-044 | Extraction model & disclosure: session provider default; `confidential` scopes local-only or off until enabled; global extraction budget + global/per-scope kill switches + per-run metering; concurrent sessions bounded | Locked | 17, 18, 11 |
 | DEC-045 | Provider-native compaction adoption policy: amends DEC-027's evidence clause only (a verified shipping reference exists — Codex remote compaction v2) and freezes the adoption rules (provider capability event · Guard egress + audit + per-provider off switch · usage via `18` · deterministic checkpoint stays primary); DEC-027 stays Locked with its rules untouched | Locked | 16, 18 |
+| DEC-046 | Verification plane stage completion: completes DEC-023's stage list to five — observe → validate → render → verify → reconcile (DEC-023's rules otherwise unchanged) | Provisional | 34, 12 |
+| DEC-047 | Capability id mapping for adapter-native tools: capability ids stay protocol-neutral; provider adapters own the mapping table (`transport_ref` + native tool name ↔ capability id) at discovery; unmapped native tools are not invocable (guidance, never silent exposure); mapping changes are registry data (epoch-checked), never contract changes | Provisional | 13, 14 |
 
 ## 2. Details
 
@@ -269,6 +271,22 @@ Background extraction defaults to the session's active provider (no *new* disclo
 **Status note:** Locked — the correction and the adoption rules are fixed; which providers ship the path remains open (`OQ-CTX-01`). Proposed 2026-09-26 (Agent X finalisation, P7 pass 15); DEC-027's text is not amended.
 **Evidence:** `ARCHIVE/v1-research/v1-sdd/agentx-opencode-harness-notes.md` §5 (correction 1 — re-verified at the pinned Codex HEAD) · `ARCHIVE/v1-research/v1-sdd/agentx-finalization-draft.md` §4.2.
 **Affects:** `16-CONTEXT`, `18-MODEL-ROUTING`.
+
+### DEC-046 — Verification plane stage completion
+**Completion on record:** DEC-023 summarizes the verification plane as "validate → render → verify → reconcile"; `ARCH/34-EFFECT-VERIFICATION.md` §2 and `REQ-VERIFY-003` define the pipeline as five stages — **observe → validate → render → verify → reconcile** — where observation (capturing the actual effect: render, screenshot, state read) precedes validation. This decision completes the stage list; DEC-023's rules are otherwise unchanged and remain Locked.
+**Status note:** Provisional — completion of DEC-023's stage list; promote at the re-freeze.
+**Evidence:** `ARCH/34-EFFECT-VERIFICATION.md` §2/§7 · `ARCH/08-REQUIREMENTS.md` REQ-VERIFY-003 · P9 verification pass (2026-09-26).
+**Affects:** `34-EFFECT-VERIFICATION`, `12-TRUST`.
+
+### DEC-047 — Capability id mapping for adapter-native tools
+
+**Completion on record (P9, 2026-09-26):** MCP and adapter tool names are protocol-shaped while capability ids must stay protocol-neutral (`ARCH/13-CAPABILITY.md` §1 rule 1; `ARCH/14-PROVIDERS.md` §2 rule 2). `13` §8 and `14` §5 left the mapping owner unstated; this names it: the provider adapter owns the mapping table (`transport_ref` + native tool name ↔ capability id) built at discovery. Unmapped native tools are not invocable — they surface as guidance, never silent exposure. Mapping changes are registry data (epoch-checked, DEC-002), never contract changes.
+
+**Status note:** Provisional — promote at the re-freeze.
+
+**Evidence:** `ARCH/13-CAPABILITY.md` §1/§8 · `ARCH/14-PROVIDERS.md` §2/§5/§7 · `ARCH/08-REQUIREMENTS.md` REQ-PROV-007 · P9 verification pass (2026-09-26).
+
+**Affects:** `13-CAPABILITY`, `14-PROVIDERS`.
 
 ## 3. Pending decisions
 

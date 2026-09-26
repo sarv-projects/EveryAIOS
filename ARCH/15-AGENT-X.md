@@ -26,7 +26,7 @@ resumeSession(id) → AgentSession
 run(session, input) → RunHandle
 steer(session, input) → void        interrupt(session) → void
 cancel(run) → void
-spawnSubagent(options) → AgentHandle
+spawnSubagent(options) → SubagentRef   // immediate spawn (DEC-036); full contract: CTR-021 (§7)
 dispose(session) → void
 ```
 

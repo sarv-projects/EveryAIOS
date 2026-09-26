@@ -77,7 +77,7 @@ Each doc’s claims map to a verification class; tests are sized to the claim. (
 | FIX-11 | `usn_winapi.rs` unwired — wire as W1 delta source | same |
 | FIX-12 | MCP remote client sends no `_meta`/modern headers (`remote.rs`) | `mcp-provider-verification.md` |
 | FIX-13 | MCP façade missing `server/discover` + `Mcp-Method`/`Mcp-Name` validation | same |
-| FIX-14 | Office resident/lease missing (commit/snapshot primitives exist) | `office-runtime-verification.md` §4 |
+| FIX-14 | Office resident/lease missing (commit/snapshot primitives exist); op-log replay not yet implemented (`22` §4 designs it; EDGE-050) | `office-runtime-verification.md` §4 |
 | FIX-15 | PDF “redact” annotates instead of removing content (P0) | v0 audit + `office-runtime-verification.md` |
 | FIX-16 | fsync before atomic swap in the Office commit path — the XLSX save path is the gap (`src-tauri/src/xlsx_cmds.rs:301-312` `atomic_write` = write + rename, no fsync); the docx/PDF paths already use `everyaios_office::write_atomic` (fsync) | `office-runtime-verification.md` §1.A |
 | FIX-17 | UIA collector hardening (AutomationId-as-hint, UIAccess limits, CDP for browser) | `world-model-verification.md` §2 |

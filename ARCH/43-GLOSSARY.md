@@ -47,7 +47,7 @@
 | **Occurrence** | A materialized upcoming workflow trigger firing with an idempotency key — claimed exactly once (`20` §4). |
 | **Open question (`OQ-*`)** | An unresolved design point. Cross-cutting questions are `OQ-###` in `ARCH/00-INDEX.md` §9; module-scoped questions are `OQ-<MNEMONIC>-<n>` in the owning module doc's Open questions section (e.g. `OQ-CTX-01`). Ids are stable — never renumbered or reused. |
 | **Provider** | An implementation of capabilities (native runtime, MCP server, ACP agent, HTTP/CLI/plugin/remote) (DM-013). |
-| **Provider Epoch** | A counter bumped on provider restart; stale handles/tickets bound to old epochs are invalid (DEC-002). |
+| **Provider Epoch** | A counter bumped on provider restart; stale handles/tickets bound to old epochs are invalid (DM-012, `13` §4). |
 | **Receipt** | Durable evidence of an effect: ticket, capability/provider, inputs digest, outputs, verification performed (DM-020). |
 | **Reconciliation** | The verification step comparing intended vs actual effect outcomes (`34` §6). |
 | **RepoGraph / RepoMap** | The repository intelligence index and its ranked, token-budgeted projection (`26`). |

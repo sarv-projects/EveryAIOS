@@ -182,6 +182,6 @@ Testable behaviors owned by this module live in `ARCH/08-REQUIREMENTS.md`; the t
 | `REQ-WF-006` | `wake_at` is "not before" and re-checked at boot/wake; calendar schedules resolve in stored IANA zones (DST-safe) |
 | `REQ-WF-007` | Missed occurrences: default Skip + record, optional "latest missed" only, grace ≤ 24 h |
 | `REQ-WF-008` | Approval nodes use the one approval primitive (`approve`/`reject`/`edit`/`provide-data`), timeout per class (DEC-021, INV-17) |
-| `REQ-WF-009` | Node retry 2 · step timeout 5 min · lease 60 s/reaper 30 s · overlap Skip default · storm backpressure (DEC-031) |
+| `REQ-WF-009` | Node retry 2 · step timeout 5 min · lease 60 s/reaper 30 s · overlap Skip default · storm backpressure (DEC-031, DEC-033) |
 | `REQ-WF-010` | Agent nodes return receipts (never transcripts); workflows-as-tools resolve via the catalog; authored definitions pass validation + publish gate |
 | `REQ-WF-011` | Run/node receipts + typed events in the one event store; terminal reasons recorded; evidence replayable (INV-07/23) |

@@ -22,7 +22,7 @@ contract; [`TODO.md`](TODO.md) is delivery status, not a wish list.
 ```bash
 (cd crates && cargo test)                    # Rust workspace
 (cd crates && cargo clippy --all-targets --all-features -- -D warnings)
-pnpm test                                    # JS/TS suites
+pnpm -r test                                    # JS/TS suites
 pnpm --filter ui tsc --noEmit                # UI typecheck
 node scripts/check-doc-sync.mjs              # docs ↔ capability census
 node scripts/check-doc-refs.mjs               # cross-document references resolve

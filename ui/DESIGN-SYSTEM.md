@@ -31,7 +31,7 @@ table. Light-mode status hues were darkened and dark-mode ones brightened
 > wants a *darker* hue, on a dark card a *brighter* one. That is also why the
 > label on a dark accent is the dark ink rather than white.
 
-> **Landed (P66.5):** brand is a *semantic* token — `--brand` (cool-blue `221 83% 53%` light / `217 91% 67%` dark) with `[data-accent]` overrides for sky / emerald / violet / amber, so Settings can offer selectable accent themes and every viewport inherits the active choice. The retired orange `#F54E00` is no longer reachable: the whole legacy `orange-*` utility family is aliased to `--brand`, and `amber-*` / `yellow-*` to `--warning`, in the `@theme inline` map in `globals.css`. Status meanings (success/live/warning/error) keep their own semantic colors; orange is neither the brand nor a selection state. The semantic status tokens also carry dark-canvas values, which they previously did not.
+> **Landed (P66.5):** brand is a *semantic* token — `--brand` (cool-blue `221 83% 53%` light / `217 91% 67%` dark) with `[data-accent]` overrides for sky / emerald / violet / amber, so Settings can offer selectable accent themes and every viewport inherits the active choice. The retired orange `#F54E00` is no longer reachable through the theme: the whole legacy `orange-*` utility family is aliased to `--brand`, and `amber-*` / `yellow-*` to `--warning`, in the `@theme inline` map in `globals.css`. (Ten literal `hsl(19 100% 48% …)` values remain in individual components — tracked in `AGENTCOWORK-UI.md` G36 and cleaned up in the code phase.) Status meanings (success/live/warning/error) keep their own semantic colors; orange is neither the brand nor a selection state. The semantic status tokens also carry dark-canvas values, which they previously did not.
 
 **Radius** `--radius: 0.5rem` (sm/md/lg/xl derived). **Fonts** Inter (sans) +
 JetBrains Mono (mono). **Spacing** 4px grid. **Motion** 150–300ms
@@ -54,7 +54,7 @@ JetBrains Mono (mono). **Spacing** 4px grid. **Motion** 150–300ms
 | EmptyState | `ui/empty-state.tsx` | icon + title + desc + action (P11.2) |
 | ErrorState (5 kinds) | `ui/error-state.tsx` | network / keyRevoked / provider5xx / budget / unknown |
 | LoadingState (5 kinds) | `ui/loading-state.tsx` | ttft / compaction / tool / agent / generic |
-| MessageBubble, ChatComposer, MCQ card | `chat/*` | Composer: Work Mode ▾ · Agent ▾ (installed agents) · Autonomy ▾. Slash/`@` follow the pinned agent (H32: built-in catalog vs live ACP `available_commands`). Casual chips `[🤖 Auto] [🛡 Ask]`. |
+| MessageBubble, ChatComposer, MCQ card | `chat/*` | Composer: Work Mode ▾ · Agent ▾ (installed agents) · Autonomy ▾. Slash/`@` follow the pinned agent (v1: the agent's live ACP `available_commands`; a built-in catalog is post-v1 — ADR-0005). Casual chips `[🤖 Auto] [🛡 Ask]`. |
 | Agent-picker governance badge | `chat/agent-model-picker.tsx` | P50.3.9: Governed-Mediated (green, "every effect ticketed + audited") · Self-contained (amber, "approvals mediated; agent's own effects unaudited") · NotGoverned (red) — honest note on hover; data from `acp_agents` `governance` |
 | OnboardingModal | `onboarding-modal.tsx` | 4 steps, non-dismissible, skip allowed |
 | Folder/Shell/Browse/Code/Diff views | `views/*` | real backends (fs / H36 profile-backed PTY / CDP / undo-list) |
@@ -70,9 +70,10 @@ Radix focus traps.
 
 ## 5. Performance UX (P11.4)
 
-Skeletons on async views; debounced search (`useDebouncedValue`); virtual
-scrolling (`useVirtualList` in chat timeline); lazy chunks (pdf/charts/
-markdown); LCP/TTI measured in `lib/perf.ts` and surfaced in the status bar.
+Skeletons on async views; debounced search (`useDebouncedValue`); the chat
+timeline uses `[content-visibility:auto]` for long logs, and `useVirtualList`
+drives the `timeline` viewport; lazy chunks (pdf/charts/markdown); LCP/TTI
+measured in `lib/perf.ts` and surfaced in the status bar.
 
 ## 6. Layouts index (all screens)
 

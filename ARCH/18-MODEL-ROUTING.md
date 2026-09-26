@@ -32,7 +32,7 @@
 
 **Descriptor additions (absorbed, A2/A3/A5/A6/A9/A10):** `status` (lifecycle `alpha|beta|deprecated|active` + visibility: whitelist/blacklist, experimental flag) · `family` + `release_date` · `variants` (named per-model option maps; config-mergeable; `disabled` removals) · per-model `options`/`headers` · `transport_ref` + `catalog_ref` (catalog key ≠ generated id ≠ runtime transport id) · `prompt_cache` (inferred from cache-cost fields) · `cost` extended to `{ in, out, cache_read, cache_write, tiers[]?, over_200k?, reported_actual? }` — cache-class-aware; provider-reported actual overrides catalog estimates; included plans are exactly 0 · `privacy` (training-use + retention class from the provider's disclosure — `confidential` scopes must not route to training-enabled models; e.g. the OpenCode Go privacy table).
 
-**Catalog refresh discipline (absorbed, A4):** short TTL (≈5 min) · atomic `tmp`+rename writes · cross-process lock · compiled/vendored snapshot fallback (offline) · scheduled refresh (≈60 min) emitting a refresh event · refresh failures logged and swallowed (never block the UI). Resolves the cadence half of OQ-1; the **data license** of the catalog source remains open (`44` §5).
+**Catalog refresh discipline (absorbed, A4):** short TTL (≈5 min) · atomic `tmp`+rename writes · cross-process lock · compiled/vendored snapshot fallback (offline) · scheduled refresh (≈60 min) emitting a refresh event · refresh failures logged and swallowed (never block the UI). Resolves the cadence half of `OQ-MODEL-01`; the **data license** of the catalog source remains open (`44` §5).
 
 ## 3. Router (CTR-014)
 

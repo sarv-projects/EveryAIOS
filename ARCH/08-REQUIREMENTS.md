@@ -224,7 +224,7 @@ This registry answers one question per entry: **what behavior must this system e
 #### REQ-WORK-004 — Scheduler lanes and enforced outer bounds
 - **Statement:** GIVEN concurrent demand, WHEN work is admitted, THEN lanes (foreground 1/session · background bounded globally and per tree · detached rehydrated and bounded) and outer limits (max agents, workers/tree, depth, worker tokens, session spend, per-lane concurrency) are enforced at admission, with the decision recorded.
 - **Priority:** must
-- **Source:** `ARCH/04-DECISIONS.md` DEC-029 · `ARCH/11-WORK.md` §3
+- **Source:** `ARCH/04-DECISIONS.md` DEC-031 · `ARCH/11-WORK.md` §3
 - **Acceptance:** admission tests reject over-limit work (rejected, never trimmed silently); interactive work preempts background; a paused tree releases slots.
 - **Failure cases:** worker-tree explosion → rejected at admission; starvation → starvation guard engages.
 - **Tests:** pending
@@ -233,7 +233,7 @@ This registry answers one question per entry: **what behavior must this system e
 #### REQ-WORK-005 — Budgets are maxima; overrun pauses and surfaces
 - **Statement:** GIVEN per-work budgets (tokens/cost/wall-time) aggregated per tree, WHEN a soft threshold is crossed, THEN a warning event is emitted; WHEN a hard ceiling is reached, THEN work pauses and surfaces — never silently overruns; kill only by explicit policy.
 - **Priority:** must
-- **Source:** `ARCH/11-WORK.md` §5 · `ARCH/05-INVARIANTS.md` INV-22
+- **Source:** `ARCH/11-WORK.md` §5 · `ARCH/05-INVARIANTS.md` INV-22 · `ARCH/04-DECISIONS.md` DEC-031
 - **Acceptance:** budget tests show pause-at-ceiling; usage attributed into runs/receipts/telemetry.
 - **Failure cases:** silent overrun → defect; background work silently exceeding session budget → paused + surfaced.
 - **Tests:** pending
@@ -781,7 +781,7 @@ This registry answers one question per entry: **what behavior must this system e
 - **Status:** seeded
 
 #### REQ-MEM-017 — Growth bounds, item caps, retention and expiry
-- **Statement:** GIVEN long-running use, WHEN memory grows, THEN every writable scope has a declared bound (max items and/or bytes), a single item is capped at the declared byte size with oversize rejected at validate, session/task TTLs have a defined anchor plus a sweeper that deletes, syncs FTS and audits per policy, `memory_jobs` is garbage-collected, and the durable scopes' bound (or declared intentional unboundedness) is a named product knob measured by the drift simulation.
+- **Statement:** GIVEN long-running use, WHEN memory grows, THEN every writable scope has a declared bound (max items and/or bytes), a single item is capped at the declared byte size with oversize rejected at validate, session TTLs have a defined anchor (task-scoped items live only as long as the task) plus a sweeper that deletes, syncs FTS and audits per policy, `memory_jobs` is garbage-collected, and the durable scopes' bound (or declared intentional unboundedness) is a named product knob measured by the drift simulation.
 - **Priority:** must
 - **Source:** `ARCH/17-MEMORY.md` §7/§10/§13 · `ARCH/11-WORK.md` §7
 - **Acceptance:** oversize item rejected with no partial write; per-scope cap test; TTL-anchor test; sweeper leaves no FTS orphans; jobs-GC test; 1k/10k/50k-item recall benchmarks; drift simulation reports store size and top-k waste.
@@ -1654,7 +1654,7 @@ This registry answers one question per entry: **what behavior must this system e
 #### REQ-AGX-005 — Tool output bounding with artifact retention
 - **Statement:** GIVEN any tool result exceeding the declared bounds, WHEN the result is returned, THEN the model sees a bounded preview explicitly marked truncated, the full output persists as an artifact/event reference, retention failure is a typed operational failure, and lossy success is forbidden.
 - **Priority:** must
-- **Source:** harness notes §3/R-12 · `DEC-032` · `ARCH/16` §4.2 · REQ-CTX-006
+- **Source:** harness notes §3/R-12 · `DEC-032` · `ARCH/16` §4 item 2 · REQ-CTX-006
 - **Acceptance:** >2,000 lines/50 KiB yields preview + artifact ref; receipt-pinned artifact is not GC'd; forced retention failure surfaces as a typed failure.
 - **Failure cases:** silent truncation → defect; preview presented as complete → defect; receipt-pinned artifact pruned → violation.
 - **Tests:** pending
@@ -2018,7 +2018,7 @@ This registry answers one question per entry: **what behavior must this system e
 - **Status:** seeded
 
 #### REQ-CODE-006 — Worktrees are per-spawn options with explicit merge and cleanup
-- **Statement:** GIVEN isolated coding work, WHEN a worktree is provisioned, THEN isolation is requested per spawn (cheap read-only work does not pay it), the branch strategy is declared per task, the parent holds write leases, merging is an explicit reviewed step with receipts, and abandoned worktrees are cleaned with a receipt.
+- **Statement:** GIVEN isolated coding work, WHEN a worktree is provisioned, THEN isolation is requested per spawn (cheap read-only work does not pay it), the branch strategy is declared per task, worktree-isolated writers hold write leases on their checkout, merging is an explicit reviewed step with receipts, and abandoned worktrees are cleaned with a receipt.
 - **Priority:** must
 - **Source:** `ARCH/26-CODE.md` §1/§6 · `ARCH/04-DECISIONS.md` DEC-029 · `ARCH/25-FILES.md` §6
 - **Acceptance:** isolation-request test creates a worktree; merge requires diff review + tests and emits a receipt; abandoned-worktree cleanup is receipted.
@@ -2204,7 +2204,7 @@ This registry answers one question per entry: **what behavior must this system e
 #### REQ-COMMS-002 — Connectors are providers behind the adapter contract
 - **Statement:** GIVEN a connector (native HTTP · MCP server · plugin), WHEN it registers, THEN it implements the `14` provider adapter contract and nothing above Capability knows the transport; a transport swap preserves capability contracts.
 - **Priority:** must
-- **Source:** `ARCH/28-COMMS.md` §1/§2 · `ARCH/14-PROVIDERS.md` §2/§3 · `ARCH/04-DECISIONS.md` DEC-025
+- **Source:** `ARCH/28-COMMS.md` §1/§2 · `ARCH/14-PROVIDERS.md` §2/§3 · `ARCH/04-DECISIONS.md` DEC-005
 - **Acceptance:** connector-swap test with no capability change; descriptors carry no transport vocabulary; `14` conformance per connector.
 - **Failure cases:** transport details leaking into capability contracts → defect; a connector outside the adapter contract → review failure.
 - **Tests:** pending
