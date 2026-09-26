@@ -1,6 +1,7 @@
 # 27 — Search
 
 > **Status:** Draft P3 (early). Must pass the `ARCH/00-INDEX.md` §5 checklist at freeze.
+> **P7 pass (2026-09-26):** line-checked; requirements seeded (`REQ-SEARCH-*`, Requirements section).
 > **Role:** **one** search service over all context sources. Deterministic retrieval — **never an LLM call** (DEC-015). The kernel owns search; other modules register index adapters.
 > **Dependencies:** source owners (`17` memory · `21` world · `25` files · `26` repo · `29` artifacts · `30` events) · `12-TRUST` (scope/sensitivity). **Consumers:** `16` (retrieval), `15` (agent queries), UI (global search), `32` (external-agent projection).
 > **Evidence:** repo principle (kernel search = the one implementation; `everyaios-search`) · product-owner brief (search/file-index rows are explicitly token-free) · `ARCH/16-CONTEXT.md` §1, `ARCH/17-MEMORY.md` §6, `ARCH/21-WORLD-MODEL.md` §4.
@@ -66,7 +67,7 @@ Local indexes only; no network in the search path; no model calls. Targets (decl
 
 ## 9. Not in v1
 
-Semantic/vector search (trigger: recall misses) · cross-repository federation · personalized ranking · content indexing (deferred W7) · web search (that is a capability, `28`/`14`, not the local search plane — now specified in `28` §Web as `web.search`/`web.fetch`, `DEC-037`).
+Semantic/vector search (trigger: recall misses) · cross-repository federation · personalized ranking · content indexing (deferred W7) · web search (that is a capability, `28`/`14`, not the local search plane — now specified in `28` §3 (Web search & fetch) as `web.search`/`web.fetch`, `DEC-037`).
 
 ## 10. Open questions (`OQ-SRCH-*`)
 
@@ -78,3 +79,22 @@ Semantic/vector search (trigger: recall misses) · cross-repository federation �
 ## 11. Evidence
 
 Repo principle: kernel search is the single implementation (`everyaios-search`; AGENTS.md) · product-owner brief (search/files-index rows explicitly zero-token) · `ARCH/16-CONTEXT.md` §1/§4 · `ARCH/17-MEMORY.md` §6 (BM25+boosts, abstention) · `ARCH/21-WORLD-MODEL.md` §4 (index-not-walk) · `ARCH/26-CODE.md` §5 (structural queries owned by `26`).
+
+## 12. Requirements (`REQ-SEARCH-*`)
+
+Testable behaviors owned by this module live in `ARCH/08-REQUIREMENTS.md`; the traceability chain is in `ARCH/09-FEATURE-MATRIX.md`. This table is a pointer, not a second copy.
+
+| REQ | Behavior (one line) |
+|---|---|
+| `REQ-SEARCH-001` | One kernel search implementation, consumed through contracts — no second path, index or module-local search |
+| `REQ-SEARCH-002` | Deterministic, model-free, network-free queries (DEC-015, INV-13) |
+| `REQ-SEARCH-003` | Scopes + sensitivity ceiling applied before querying; out-of-scope sources are never touched (INV-10) |
+| `REQ-SEARCH-004` | External agents get a filtered projection — own project + granted scopes, deny-by-default (DEC-009, INV-11) |
+| `REQ-SEARCH-005` | Source adapters declare query forms/freshness/cost; search composes them, never bypasses an owner's store; code queries delegate to `26` |
+| `REQ-SEARCH-006` | Lexical · structured · exact forms compose; v1 merges by source priority + recency with deterministic ties (fusion deferred) |
+| `REQ-SEARCH-007` | Canonical result shape (`ref`/`source`/`score`/`freshness`/`snippet`/`sensitivity`); abstention returns nothing, never padding |
+| `REQ-SEARCH-008` | Ranking = source score × recency × pin boosts, deterministic tie-breaks; no hidden personalization in v1 |
+| `REQ-SEARCH-009` | Result count and snippets are capped; over-broad queries receive narrowing guidance |
+| `REQ-SEARCH-010` | NFR: metadata search p95 ≤ 50 ms at 100k files, local indexes only |
+| `REQ-SEARCH-011` | Stale indexes and adapter failures are surfaced (freshness flag + partial results + typed error), never silent |
+| `REQ-SEARCH-012` | Responses carry refs + bounded snippets only — search never synthesizes answers or resolves content without a permission check |

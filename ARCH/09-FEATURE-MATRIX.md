@@ -201,6 +201,18 @@ One row per `REQ-*`. Status only from evidence.
 | `REQ-CODE-010` | `26-CODE` | pending | `CTR-025` | — | pending | pending | unplanned |
 | `REQ-CODE-011` | `26-CODE` | pending | `—` | — | pending | pending | unplanned |
 | `REQ-CODE-012` | `26-CODE` | pending | `CTR-025` | — | pending | pending | unplanned |
+| `REQ-SEARCH-001` | `27-SEARCH` | pending | `CTR-009` | — | pending | pending | unplanned |
+| `REQ-SEARCH-002` | `27-SEARCH` | pending | `DEC-015`, `INV-13` | — | pending | pending | unplanned |
+| `REQ-SEARCH-003` | `27-SEARCH` | pending | `INV-10` | — | pending | pending | unplanned |
+| `REQ-SEARCH-004` | `27-SEARCH` | pending | `DEC-009`, `INV-11` | — | pending | pending | unplanned |
+| `REQ-SEARCH-005` | `27-SEARCH` | pending | `—` | — | pending | pending | unplanned |
+| `REQ-SEARCH-006` | `27-SEARCH` | pending | `—` | — | pending | pending | unplanned |
+| `REQ-SEARCH-007` | `27-SEARCH` | pending | `—` | — | pending | pending | unplanned |
+| `REQ-SEARCH-008` | `27-SEARCH` | pending | `—` | — | pending | pending | unplanned |
+| `REQ-SEARCH-009` | `27-SEARCH` | pending | `—` | — | pending | pending | unplanned |
+| `REQ-SEARCH-010` | `27-SEARCH` | pending | `—` | — | pending | pending | unplanned |
+| `REQ-SEARCH-011` | `27-SEARCH` | pending | `—` | — | pending | pending | unplanned |
+| `REQ-SEARCH-012` | `27-SEARCH` | pending | `—` | — | pending | pending | unplanned |
 
 ## 4. Maintenance
 

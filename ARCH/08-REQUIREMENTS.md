@@ -1720,6 +1720,116 @@ This registry answers one question per entry: **what behavior must this system e
 - **Tests:** pending
 - **Status:** seeded
 
+### Search (`SEARCH`)
+
+#### REQ-SEARCH-001 — One search implementation
+- **Statement:** GIVEN any search need (UI, agent, service, workflow), WHEN it is served, THEN it resolves through the single kernel search service via contracts — no second search path, index or parallel implementation exists.
+- **Priority:** must
+- **Source:** `ARCH/27-SEARCH.md` §1 · `ARCH/03-HLD.md` §4 · `AGENTCOWORK-SPEC.md` §8
+- **Acceptance:** static check finds one search implementation; every consumer calls through the service; no module-local ad-hoc search over another owner's store.
+- **Failure cases:** a second search path → architecture violation; a consumer querying a source store directly → review failure.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-SEARCH-002 — Deterministic, model-free queries
+- **Statement:** GIVEN any search query, WHEN it executes, THEN it performs zero model calls and no network activity — lexical and structured retrieval only.
+- **Priority:** must
+- **Source:** `ARCH/27-SEARCH.md` §1/§6 · `AGENTCOWORK-SPEC.md` §9 · `ARCH/05-INVARIANTS.md` INV-13 · `ARCH/04-DECISIONS.md` DEC-015
+- **Acceptance:** traces show zero model calls and zero network I/O for search; token accounting attributes no spend; results are reproducible for identical inputs.
+- **Failure cases:** a model call on a search path → INV-13 violation; network fetch inside local search → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-SEARCH-003 — Scope and sensitivity are enforced before querying
+- **Statement:** GIVEN a query, WHEN it runs, THEN it carries scopes and a sensitivity ceiling from the caller's policy snapshot, and out-of-scope sources are never queried for that caller — filtering is not an after-the-fact step.
+- **Priority:** must
+- **Source:** `ARCH/27-SEARCH.md` §1/§5 · `ARCH/05-INVARIANTS.md` INV-10 · `ARCH/12-TRUST.md` §8
+- **Acceptance:** an out-of-scope source is untouched in query traces; a sensitive hit for lower clearance is filtered before scoring; cross-project leakage is zero.
+- **Failure cases:** post-hoc filtering after a source was read → violation; unscoped query → security failure.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-SEARCH-004 — External agents receive a filtered search projection
+- **Statement:** GIVEN an external agent, WHEN it queries search, THEN it sees only its own project plus granted scopes, and out-of-scope refs resolve to `NotFound` — deny-by-default.
+- **Priority:** must
+- **Source:** `ARCH/27-SEARCH.md` §5/§8 · `ARCH/04-DECISIONS.md` DEC-009 · `ARCH/05-INVARIANTS.md` INV-11
+- **Acceptance:** external-agent query test returns only granted scope; an out-of-scope id is not found; no internal index handles leak.
+- **Failure cases:** a cross-project result → security violation; an internal handle exposed → violation.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-SEARCH-005 — Source adapters declare powers and never bypass owners
+- **Statement:** GIVEN a source (files metadata, memory, artifacts, world objects, repo symbols, events), WHEN its adapter is registered, THEN it declares supported query forms, freshness semantics and cost class; search composes adapters and never writes or bypasses the owner's store, and structural code queries delegate to `26`.
+- **Priority:** must
+- **Source:** `ARCH/27-SEARCH.md` §2 · `ARCH/07-CONTRACTS.md` §1
+- **Acceptance:** adapter registry shows declared powers; search performs no source-store writes; a code-symbol query routes to RepoGraph.
+- **Failure cases:** an adapter accessing a store it does not own → architecture violation; search re-indexing code → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-SEARCH-006 — Query forms compose with a deterministic v1 merge
+- **Statement:** GIVEN a query mixing lexical (BM25), structured filters, exact lookups and delegated structural forms, WHEN results are merged, THEN v1 merges by source priority + recency with deterministic tie-breaks (fusion/RRF deferred until a measured trigger), and zero results is a valid outcome.
+- **Priority:** must
+- **Source:** `ARCH/27-SEARCH.md` §3 · `ARCH/17-MEMORY.md` §12 · `ARCH/16-CONTEXT.md` §11
+- **Acceptance:** mixed-form query test; identical inputs produce identical order; empty result sets are returned without padding.
+- **Failure cases:** nondeterministic merge order → defect; a fusion layer shipping without the measured trigger → review failure.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-SEARCH-007 — Canonical result shape; abstention is correct
+- **Statement:** GIVEN any result, WHEN it is returned, THEN it carries `ref` · `source` · `score` · `freshness` · bounded `snippet` · `sensitivity`; resolving content is a separate permission-checked read; when nothing matches, nothing is returned.
+- **Priority:** must
+- **Source:** `ARCH/27-SEARCH.md` §1/§3/§4 · `ARCH/17-MEMORY.md` §6
+- **Acceptance:** schema test on every result; a zero-hit query returns an empty set (no placeholder); content resolution performs its own permission check.
+- **Failure cases:** missing result fields → defect; padding or guessed results → defect; content embedded without a permission check → security failure.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-SEARCH-008 — Ranking is deterministic and explained by declared factors
+- **Statement:** GIVEN two comparable results, WHEN they are ranked, THEN order derives from source-native score × recency × pin/priority boosts with deterministic tie-breaks, and no personalization beyond the declared factors exists in v1.
+- **Priority:** must
+- **Source:** `ARCH/27-SEARCH.md` §4/§9
+- **Acceptance:** tie-break determinism test; ranking factors observable per result; no personalized-ranking code path.
+- **Failure cases:** nondeterministic ranking → defect; hidden personalization → review failure.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-SEARCH-009 — Result sets are bounded; over-broad queries get guidance
+- **Statement:** GIVEN an over-broad query, WHEN it executes, THEN result count and snippet size are capped end-to-end and the caller receives narrowing guidance instead of an unbounded result set.
+- **Priority:** must
+- **Source:** `ARCH/27-SEARCH.md` §3/§7
+- **Acceptance:** caps test enforced at the service (not only in UI); over-broad fixture returns guidance; downstream consumers cannot lift caps.
+- **Failure cases:** unbounded result set → defect; caps enforced only in the UI → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-SEARCH-010 — Local metadata search meets the declared latency target
+- **Statement:** GIVEN 100k indexed files on the reference profile, WHEN metadata search runs, THEN p95 ≤ 50 ms with local indexes only (no network in the search path).
+- **Priority:** should
+- **Source:** `ARCH/27-SEARCH.md` §6 · `ARCH/42-EVIDENCE-MAP.md`
+- **Acceptance:** the 100k-file benchmark records p95 ≤ 50 ms; the evidence record is attached to the requirement.
+- **Failure cases:** target missed without a recorded deviation → defect; a network dependency in the path → violation.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-SEARCH-011 — Staleness and partial failure are surfaced, never silent
+- **Statement:** GIVEN a missing or stale source index, or a failing adapter, WHEN results return, THEN freshness is flagged, partial results come with a typed error path, and other sources remain unaffected.
+- **Priority:** must
+- **Source:** `ARCH/27-SEARCH.md` §7 · `ARCH/21-WORLD-MODEL.md` §4
+- **Acceptance:** stale-index fixture flags freshness; adapter-error test returns partial results plus a typed error; healthy sources are unaffected.
+- **Failure cases:** stale results presented as fresh → defect; one adapter failure failing the whole query → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-SEARCH-012 — Search returns references, not answers
+- **Statement:** GIVEN a search response, WHEN the caller needs content, THEN the response contains refs and bounded snippets only, and answer synthesis happens outside the search service (agent/consumer) — search never synthesizes prose or bypasses a permission check.
+- **Priority:** must
+- **Source:** `ARCH/27-SEARCH.md` §1/§4
+- **Acceptance:** response shapes contain no synthesized answer text; every content read triggered from a result passes a permission check.
+- **Failure cases:** search emitting synthesized answers → design violation; result content embedded while bypassing permission → security failure.
+- **Tests:** pending
+- **Status:** seeded
+
 ## 5. Seeding status
 
 | Domain | Seeds | Next pass |
@@ -1740,7 +1850,8 @@ This registry answers one question per entry: **what behavior must this system e
 | `CUA` (12) | drafted above + expanded in pass `24` | verified during pass `24` ✅ (2026-09-26) |
 | `FILES` (12) | drafted above + expanded in pass `25` | verified during pass `25` ✅ (2026-09-26) |
 | `CODE` (12) | drafted above + expanded in pass `26` | verified during pass `26` ✅ (2026-09-26) |
-| `SEARCH`, `COMMS`, `ART`, `EVENTS`, `SKILL`, `CHAN`, `VERIFY` | pending | seeded during each module's P7 pass |
+| `SEARCH` (12) | drafted above + expanded in pass `27` | verified during pass `27` ✅ (2026-09-26) |
+| `COMMS`, `ART`, `EVENTS`, `SKILL`, `CHAN`, `VERIFY` | pending | seeded during each module's P7 pass |
 
 ## 6. Related
 
