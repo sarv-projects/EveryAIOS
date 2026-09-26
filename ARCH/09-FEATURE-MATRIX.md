@@ -289,6 +289,12 @@ One row per `REQ-*`. Status only from evidence.
 | `REQ-VERIFY-011` | `34-EFFECT-VERIFICATION` | pending | `—` | — | pending | pending | unplanned |
 | `REQ-VERIFY-012` | `34-EFFECT-VERIFICATION` | pending | `INV-23` | — | pending | pending | unplanned |
 | `REQ-VERIFY-013` | `34-EFFECT-VERIFICATION` | pending | `INV-19` | `EDGE-160` | pending | pending | unplanned |
+| `REQ-PROD-003` | `12-TRUST` | pending | `INV-04`, `DEC-028` | — | pending | pending | unplanned |
+| `REQ-PROD-004` | `15-AGENT-X`, `12-TRUST` | pending | `INV-12`, `DEC-010` | — | pending | pending | unplanned |
+| `REQ-PROD-005` | `AGENTCOWORK-UI`, `22-OFFICE` | pending | `INV-13`, `DEC-015` | — | pending | pending | unplanned |
+| `REQ-PROD-006` | `42-EVIDENCE-MAP` | pending | `—` | — | pending | pending | unplanned |
+| `REQ-AGX-001` | `15-AGENT-X` | pending | `DEC-029`, `DEC-031` | — | pending | pending | unplanned |
+| `REQ-UI-001` | `AGENTCOWORK-UI` | pending | `—` | — | pending | pending | unplanned |
 
 ## 4. Maintenance
 
