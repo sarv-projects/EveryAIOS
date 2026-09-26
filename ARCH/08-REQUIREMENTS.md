@@ -2059,6 +2059,116 @@ This registry answers one question per entry: **what behavior must this system e
 - **Tests:** pending
 - **Status:** seeded
 
+### Events (`EVENTS`)
+
+#### REQ-EVENTS-001 — One event store and one bus; projections are derived
+- **Statement:** GIVEN any UI projection, workflow trigger, world update, telemetry or audit feed, WHEN it needs system state, THEN it derives from the single event store + bus — no second source of truth and no hidden side channels.
+- **Priority:** must
+- **Source:** `ARCH/30-EVENTS.md` §1/§4 · `ARCH/05-INVARIANTS.md` INV-23 · `ARCH/04-DECISIONS.md` DEC-027
+- **Acceptance:** projections rebuild from the store alone; no parallel state store exists for runs/pending work/world.
+- **Failure cases:** a second source of truth → violation; a projection that cannot be rebuilt → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-EVENTS-002 — The stream vocabulary is typed and declared
+- **Statement:** GIVEN an event, WHEN it is published, THEN its type is a namespaced dotted name with a declared payload schema; opaque "output chunk" events do not exist; deprecations are declared with a window.
+- **Priority:** must
+- **Source:** `ARCH/30-EVENTS.md` §2/§3 · `ARCH/06-DATA-MODEL.md` DM-008
+- **Acceptance:** schema-validation test per type; an unregistered type is rejected; no opaque chunk event classes exist.
+- **Failure cases:** payload without a schema → defect; silent type rename/removal → violation.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-EVENTS-003 — Events carry refs, never payload data or secrets
+- **Statement:** GIVEN a material event, WHEN it is published, THEN its payload is bounded metadata/refs — large data lives in artifacts/stores, and credentials/PII never appear.
+- **Priority:** must
+- **Source:** `ARCH/30-EVENTS.md` §1/§2 · `ARCH/05-INVARIANTS.md` INV-02 · `ARCH/06-DATA-MODEL.md` DM-008
+- **Acceptance:** payload-shape test; secret scan over emitted events is clean; large blobs are referenced, not embedded.
+- **Failure cases:** secret/PII in a payload → custody violation; unbounded payload → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-EVENTS-004 — At-least-once delivery with idempotent consumers
+- **Statement:** GIVEN event delivery, WHEN an event is delivered (possibly more than once), THEN consumers dedupe by event id and ordering is guaranteed per work/session — never globally.
+- **Priority:** must
+- **Source:** `ARCH/30-EVENTS.md` §1/§4 · `ARCH/06-DATA-MODEL.md` DM-008
+- **Acceptance:** duplicate-delivery test produces one side effect; per-work ordering test passes.
+- **Failure cases:** duplicate side effect → defect; a consumer relying on global ordering → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-EVENTS-005 — Publish applies backpressure; slow consumers get lag markers
+- **Statement:** GIVEN a slow consumer or an event storm, WHEN queues fill, THEN bounded queues apply producer backpressure and emit lag markers with pull-based catch-up — memory never grows unbounded.
+- **Priority:** must
+- **Source:** `ARCH/30-EVENTS.md` §4/§7 · `ARCH/41-EDGE-CASES.md` EDGE-076
+- **Acceptance:** storm test shows bounded memory plus lag markers; catch-up reads from the store; no silent event loss.
+- **Failure cases:** unbounded queue growth → defect; event loss without a marker → violation.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-EVENTS-006 — Subscriptions are filtered and authorized
+- **Statement:** GIVEN a subscriber, WHEN it subscribes, THEN delivery is filtered by type/refs/scope and authorized; a subscriber never receives out-of-scope events.
+- **Priority:** must
+- **Source:** `ARCH/30-EVENTS.md` §4 · `ARCH/05-INVARIANTS.md` INV-11 · `ARCH/04-DECISIONS.md` DEC-009
+- **Acceptance:** an out-of-scope subscription is denied; filter tests pass; authorization decisions are auditable.
+- **Failure cases:** unauthorized subscription → violation; scope leakage → security failure.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-EVENTS-007 — Replay rebuilds projections after restart
+- **Statement:** GIVEN a restart or detected drift, WHEN `read(range)` replays the store, THEN projections (Runs, pending work, world state) are reconstructable from the store + checkpoints.
+- **Priority:** must
+- **Source:** `ARCH/30-EVENTS.md` §4 · `ARCH/04-DECISIONS.md` DEC-027/DEC-033
+- **Acceptance:** kill/restart test rebuilds projections consistently; drift triggers a rebuild; replay never calls producers.
+- **Failure cases:** projection not rebuildable → violation; replay invoking producers → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-EVENTS-008 — Retention prunes events, never receipts/audit; gaps are reported
+- **Statement:** GIVEN retention policy, WHEN durable events are pruned by age per family, THEN receipts/audit are separate stores and are not pruned with events; a pruned range a projection genuinely still needs is reported, never silently answered.
+- **Priority:** must
+- **Source:** `ARCH/30-EVENTS.md` §4/§7 · `ARCH/41-EDGE-CASES.md` EDGE-106 · `ARCH/29-ARTIFACTS.md` §6 · `ARCH/12-TRUST.md` §9
+- **Acceptance:** retention test (events pruned, receipts/audit intact); a gap produces a surfaced report; projections rebuild from checkpoints.
+- **Failure cases:** receipts/audit pruned with events → violation; silent gap → violation.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-EVENTS-009 — Poison events quarantine without stalling the stream
+- **Statement:** GIVEN an unprocessable event, WHEN it is encountered, THEN it is quarantined with a reconciliation entry and the stream continues.
+- **Priority:** must
+- **Source:** `ARCH/30-EVENTS.md` §4/§7
+- **Acceptance:** poison-injection test shows quarantine + continued delivery; a reconciliation entry exists.
+- **Failure cases:** one event blocks the stream → defect; a dropped event without quarantine → violation.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-EVENTS-010 — Usage/cost telemetry is counts and refs only
+- **Statement:** GIVEN a model call, WHEN `usage.recorded` is published, THEN it carries model tokens in/out, estimated cost, latency, provider/model id and work/session refs — no prompt or completion content — and powers per-work budget checks.
+- **Priority:** must
+- **Source:** `ARCH/30-EVENTS.md` §5 · `ARCH/11-WORK.md` §5
+- **Acceptance:** telemetry-shape test (no content fields); budget checks and analytics derive from the same aggregations.
+- **Failure cases:** prompt/completion content in telemetry → privacy violation; budget bypass via telemetry → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-EVENTS-011 — External agents receive a filtered, stable projection
+- **Statement:** GIVEN an external agent, WHEN it consumes events, THEN it receives a filtered stream for its own work only (session/run/tool/artifact/approval/context events), sensitivity-filtered, as a declared stable subset with deprecation windows — never the internal bus and never other agents' events.
+- **Priority:** must
+- **Source:** `ARCH/30-EVENTS.md` §6 · `ARCH/04-DECISIONS.md` DEC-009 · `ARCH/05-INVARIANTS.md` INV-11
+- **Acceptance:** cross-agent isolation test; delivered vocabulary matches the declared subset; a version change returns a typed error naming the supported window.
+- **Failure cases:** internal bus exposure → violation; another agent's events delivered → security failure.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-EVENTS-012 — `model.delta` is ephemeral delivery only
+- **Statement:** GIVEN streaming tokens, WHEN `model.delta` events are emitted, THEN they are ephemeral delivery only — individual deltas are not persisted; the settled message is.
+- **Priority:** must
+- **Source:** `ARCH/30-EVENTS.md` §3
+- **Acceptance:** persistence test shows no per-delta rows; replay shows settled messages; losing ephemeral deltas loses nothing.
+- **Failure cases:** per-delta persistence → defect; settled message missing → defect.
+- **Tests:** pending
+- **Status:** seeded
+
 ## 5. Seeding status
 
 | Domain | Seeds | Next pass |
@@ -2082,7 +2192,8 @@ This registry answers one question per entry: **what behavior must this system e
 | `SEARCH` (12) | drafted above + expanded in pass `27` | verified during pass `27` ✅ (2026-09-26) |
 | `COMMS` (13) | drafted above + expanded in pass `28` | verified during pass `28` ✅ (2026-09-26) |
 | `ART` (12) | drafted above + expanded in pass `29` | verified during pass `29` ✅ (2026-09-26) |
-| `EVENTS`, `SKILL`, `CHAN`, `VERIFY` | pending | seeded during each module's P7 pass |
+| `EVENTS` (12) | drafted above + expanded in pass `30` | verified during pass `30` ✅ (2026-09-26) |
+| `SKILL`, `CHAN`, `VERIFY` | pending | seeded during each module's P7 pass |
 
 ## 6. Related
 

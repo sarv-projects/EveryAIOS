@@ -238,6 +238,18 @@ One row per `REQ-*`. Status only from evidence.
 | `REQ-ART-010` | `29-ARTIFACTS` | pending | `DEC-015` | — | pending | pending | unplanned |
 | `REQ-ART-011` | `29-ARTIFACTS` | pending | `INV-18` | `EDGE-101` | pending | pending | unplanned |
 | `REQ-ART-012` | `29-ARTIFACTS` | pending | `INV-07` | `EDGE-104` | pending | pending | unplanned |
+| `REQ-EVENTS-001` | `30-EVENTS` | pending | `INV-23`, `DEC-027` | — | pending | pending | unplanned |
+| `REQ-EVENTS-002` | `30-EVENTS` | pending | `DM-008` | — | pending | pending | unplanned |
+| `REQ-EVENTS-003` | `30-EVENTS` | pending | `INV-02`, `DM-008` | — | pending | pending | unplanned |
+| `REQ-EVENTS-004` | `30-EVENTS` | pending | `DM-008` | — | pending | pending | unplanned |
+| `REQ-EVENTS-005` | `30-EVENTS` | pending | `—` | `EDGE-076` | pending | pending | unplanned |
+| `REQ-EVENTS-006` | `30-EVENTS` | pending | `INV-11`, `DEC-009` | — | pending | pending | unplanned |
+| `REQ-EVENTS-007` | `30-EVENTS` | pending | `DEC-027/033` | — | pending | pending | unplanned |
+| `REQ-EVENTS-008` | `30-EVENTS` | pending | `INV-23` | `EDGE-106` | pending | pending | unplanned |
+| `REQ-EVENTS-009` | `30-EVENTS` | pending | `—` | — | pending | pending | unplanned |
+| `REQ-EVENTS-010` | `30-EVENTS` | pending | `DEC-027` | — | pending | pending | unplanned |
+| `REQ-EVENTS-011` | `30-EVENTS` | pending | `DEC-009`, `INV-11` | `EDGE-079` | pending | pending | unplanned |
+| `REQ-EVENTS-012` | `30-EVENTS` | pending | `—` | — | pending | pending | unplanned |
 
 ## 4. Maintenance
 

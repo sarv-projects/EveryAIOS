@@ -1,6 +1,7 @@
 # 30 — Events
 
 > **Status:** Draft P3 (early). Must pass the `ARCH/00-INDEX.md` §5 checklist at freeze.
+> **P7 pass (2026-09-26):** line-checked; requirements seeded (`REQ-EVENTS-*`, Requirements section).
 > **Role:** **one event store + one bus**. UI projections, workflow triggers, world updates, telemetry and audit feeds all derive from it — no hidden side channels (INV-23).
 > **Boundary:** `SessionEvent` (DM-007, owned by `11`) is the session-local append-only log; `Event` (DM-008, owned here) is the **published system stream**. Everything material emits ≥1 published event; session logs remain the session’s truth.
 > **Dependencies:** `10-KERNEL` · `11-WORK` (producers) · all modules (producers/consumers). **Consumers:** UI (`32`), `20` (triggers), `21` (world updates), `12` (audit feed), telemetry.
@@ -69,10 +70,12 @@ External agents receive a **filtered stream** for their own work only: session/r
 | Failure | Behavior |
 |---|---|
 | Store growth | Retention prunes by age policy; projections/critical evidence live elsewhere (receipts/audit). |
+| Event storm | Bounded subscriber queues + lag markers; producers backpressure; memory never grows unbounded (EDGE-076). |
 | Consumer lag | Lag marker event; pull-based catch-up from the store. |
 | Duplicate delivery | Consumers dedupe by event id (idempotent by contract). |
 | Bus restart | Subscribers re-attach + replay from last ack. |
 | Poison event | Quarantine + reconciliation; stream continues. |
+| Retention gap | Critical evidence lives in receipts/audit (not pruned with events); projections rebuild from store + checkpoints; a real gap is reported, never silently answered (EDGE-106). |
 | Projection drift | Rebuild projections from store (they are derivable — INV-23). |
 
 ## 8. Interop
@@ -96,3 +99,22 @@ Distributed log/federation · cross-device streaming · external schema registry
 ## 11. Evidence
 
 INV-23 (one log) · DEC-027 (log + projections) · DEC-033 (workflow event set) · `agent-harness-verification.md` §E3 (typed stream union as wire vocabulary), §E4 (log + projections pattern) · `ARCH/15-AGENT-X.md` §4 · `ARCH/20-WORKFLOW.md` §4 · `ARCH/21-WORLD-MODEL.md` §4 · `ARCH/17-MEMORY.md` §4 (memory events) · `ARCH/29-ARTIFACTS.md` §3 (receipt emission).
+
+## 12. Requirements (`REQ-EVENTS-*`)
+
+Testable behaviors owned by this module live in `ARCH/08-REQUIREMENTS.md`; the traceability chain is in `ARCH/09-FEATURE-MATRIX.md`. This table is a pointer, not a second copy.
+
+| REQ | Behavior (one line) |
+|---|---|
+| `REQ-EVENTS-001` | One event store + one bus; every projection derived — no hidden side channels (INV-23, DEC-027) |
+| `REQ-EVENTS-002` | Namespaced typed vocabulary with declared payload schemas; no opaque output-chunk events |
+| `REQ-EVENTS-003` | Refs over payloads: bounded metadata, no credentials/PII (INV-02) |
+| `REQ-EVENTS-004` | At-least-once delivery; consumers dedupe by event id; per-work/session ordering only |
+| `REQ-EVENTS-005` | Publish backpressure; bounded queues + lag markers under storm — memory never unbounded (EDGE-076) |
+| `REQ-EVENTS-006` | Subscriptions are filtered by type/refs/scope and authorized; no out-of-scope delivery |
+| `REQ-EVENTS-007` | Replay (`read(range)`) rebuilds projections after restart from store + checkpoints |
+| `REQ-EVENTS-008` | Retention prunes events per family; receipts/audit are separate stores; a real gap is reported (EDGE-106) |
+| `REQ-EVENTS-009` | Poison events quarantine + reconcile; the stream continues |
+| `REQ-EVENTS-010` | Usage/cost telemetry is counts + refs only — no prompt/completion content; powers budget checks (`11` §5) |
+| `REQ-EVENTS-011` | External agents get a filtered, own-work-only stable subset projection (DEC-009, INV-11) |
+| `REQ-EVENTS-012` | `model.delta` is ephemeral delivery only; settled messages are what persist |
