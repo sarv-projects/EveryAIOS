@@ -119,7 +119,7 @@ where
         // per-caller tier degrades to the per-command tier instead of
         // inventing a bucket per spoofed name.
         let caller = caller
-            .and_then(|v| v.to_str())
+            .and_then(|v| v.to_str().ok())
             .map(|s| s.trim())
             .filter(|s| !s.is_empty() && s.len() <= 64)
             .unwrap_or("renderer");

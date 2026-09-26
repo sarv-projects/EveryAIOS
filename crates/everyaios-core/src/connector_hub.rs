@@ -327,4 +327,37 @@ mod tests {
         let mut hub = ConnectorHub::new();
         assert_eq!(hub.meter("nope"), Err(HubError::NotFound("nope".into())));
     }
+
+    /// FIX-01 / INV-02 — the hub is routing metadata, not custody. A
+    /// `Connection` names the engine and the account; it holds no credential,
+    /// and the whole registry serializes without one. This test pins that so a
+    /// future field cannot quietly become a token holder.
+    #[test]
+    fn a_connection_record_carries_no_credential() {
+        let mut hub = ConnectorHub::new();
+        let id = hub
+            .connect("gmail", "me@example.com", Engine::AuthBridge)
+            .unwrap();
+        hub.set_state(&id, ConnectionState::Connected).unwrap();
+        let json = serde_json::to_string(&hub.list()).unwrap();
+        for forbidden in [
+            "access_token",
+            "accessToken",
+            "refresh_token",
+            "refreshToken",
+            "token",
+            "secret",
+            "password",
+        ] {
+            assert!(
+                !json.to_lowercase().contains(&forbidden.to_lowercase()),
+                "the hub record leaked a credential-shaped field: {json}"
+            );
+        }
+        // What it *does* carry is the engine reference the executor resolves
+        // through the vault — a reference, not bytes.
+        let conn = hub.get(&id).unwrap();
+        assert_eq!(conn.engine_ref, "gmail:me@example.com");
+        assert_eq!(conn.engine, Engine::AuthBridge);
+    }
 }

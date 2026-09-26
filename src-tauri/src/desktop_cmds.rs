@@ -274,6 +274,13 @@ fn windows_json(windows: &[everyaios_computeruse::WindowInfo]) -> serde_json::Va
 
 /// Serialize an a11y read into the `DesktopBackend` snapshot shape
 /// (`{windowId, tree:[{role, name, indexPath}], hasTree}`).
+///
+/// `FIX-17`: the snapshot now carries the read's **status**, epoch, guidance and
+/// freshness anomalies. The agent-facing point: a window this process is not
+/// allowed to read used to reach the model as `hasTree: false`, which reads as
+/// "the app has no controls" — and the model's next move is a blind click. An
+/// `unknown` status with its guidance is the difference between "nothing there"
+/// and "I could not look" (`REQ-CUA-006`).
 fn snapshot_json(window_id: u64, read: &everyaios_computeruse::ReadResult) -> serde_json::Value {
     let tree = read
         .tree
@@ -296,6 +303,19 @@ fn snapshot_json(window_id: u64, read: &everyaios_computeruse::ReadResult) -> se
         "tree": tree,
         "hasTree": read.tree.is_some(),
         "dpiScale": read.dpi_scale,
+        "status": read.status.as_str(),
+        "detail": read.status_detail(),
+        // `false` means "this read may not conclude anything is absent" — the
+        // agent must not treat a missing control as a fact on such a read.
+        "mayInferAbsence": read.may_infer_absence(),
+        "epoch": read.epoch.0,
+        "observedAtMs": read.observed_at_ms,
+        "guidance": read.guidance,
+        "anomalies": read
+            .anomalies
+            .iter()
+            .map(|a| serde_json::json!({ "kind": a.kind, "scope": a.scope, "detail": a.detail }))
+            .collect::<Vec<_>>(),
     })
 }
 
@@ -345,6 +365,14 @@ pub fn desktop_status(state: State<'_, AppState>) -> Result<serde_json::Value, S
                     "ocr": c.ocr,
                     "window_list": c.window_list,
                     "launch_app": c.launch_app,
+                    // `FIX-18` — the capture chip is a real readiness probe, so
+                    // the surface can say "graphics capture unavailable —
+                    // PrintWindow fallback" before anyone attempts a capture.
+                    "capture_readiness": {
+                        "state": c.capture_readiness.state,
+                        "pipeline": c.capture_readiness.pipeline,
+                        "detail": c.capture_readiness.detail,
+                    },
                 },
             }))
         }
@@ -409,6 +437,12 @@ pub fn desktop_windows(
 
 /// Text read of a window via the a11y tree. Read-only (estop-guarded, not a
 /// mutation; no Merkle row is expected for a read).
+///
+/// `FIX-17`: the response now says **how** the read went, not just whether a tree
+/// came back. `has_tree: false` used to be ambiguous between "this app exposes no
+/// accessibility tree" (the vision rung) and "this process is not allowed to look"
+/// (elevation), and the second is the one a caller must not treat as empty
+/// (`REQ-CUA-006`).
 #[tauri::command]
 pub fn desktop_read(
     state: State<'_, AppState>,
@@ -416,19 +450,35 @@ pub fn desktop_read(
     window_id: u64,
 ) -> Result<serde_json::Value, String> {
     let engine = get_or_attach(&state, &app)?;
-    let read = engine
-        .read(&resolve_window(&engine, window_id))
-        .map_err(|e| e.to_string())?;
+    let window = resolve_window(&engine, window_id);
+    let read = engine.read(&window).map_err(|e| e.to_string())?;
     let text = read.tree.as_ref().map(render_tree).unwrap_or_default();
     Ok(serde_json::json!({
         "tree": text,
         "has_tree": read.tree.is_some(),
         "dpi_scale": read.dpi_scale,
+        "status": read.status.as_str(),
+        "detail": read.status_detail(),
+        "may_infer_absence": read.may_infer_absence(),
+        "epoch": read.epoch.0,
+        "observed_at_ms": read.observed_at_ms,
+        "guidance": read.guidance,
+        "anomalies": read
+            .anomalies
+            .iter()
+            .map(|a| serde_json::json!({ "kind": a.kind, "scope": a.scope, "detail": a.detail }))
+            .collect::<Vec<_>>(),
     }))
 }
 
 /// Capture a window (`see`), returning PNG bytes as base64 for the UI.
 /// Read-only (estop-guarded, not a mutation).
+///
+/// `FIX-18`: the capture path is verified **before** it runs, and the response
+/// carries the verdict. The v0 shape (png + dimensions) could not distinguish
+/// "captured with graphics capture" from "graphics capture was unavailable, so
+/// PrintWindow was used, and here is why" — which is the whole of the readiness
+/// requirement (`REQ-CUA-008`, `ARCH/24` §7).
 #[tauri::command]
 pub fn desktop_see(
     state: State<'_, AppState>,
@@ -441,7 +491,21 @@ pub fn desktop_see(
         .map_err(|e| e.to_string())?;
     use base64::Engine;
     let b64 = base64::engine::general_purpose::STANDARD.encode(&result.png);
-    Ok(serde_json::json!({ "png": b64, "width": result.width, "height": result.height }))
+    Ok(serde_json::json!({
+        "png": b64,
+        "width": result.width,
+        "height": result.height,
+        "method": format!("{:?}", result.method),
+        // `FIX-18` — the readiness verdict the capture was made under, including
+        // the pipeline that was skipped and the fault that skipped it.
+        "readiness": result.readiness.to_json(),
+        "degraded": result.readiness.is_degraded(),
+        "budget": result
+            .budget
+            .as_ref()
+            .map(|b| serde_json::json!({ "describe": b.describe() })),
+        "describe": result.describe(),
+    }))
 }
 
 /// Parse the wire act-kind vocabulary into an [`everyaios_computeruse::ActKind`].
@@ -520,6 +584,10 @@ pub fn desktop_act(
             "act": act.describe(),
             "window_id": window_id,
             "executed": outcome.ok && outcome.error.is_none(),
+            // `FIX-17` — the ladder verdict carries *why* an act did not land,
+            // including the `unknown_region` stop: an elevated target is refused
+            // there rather than acted on blind.
+            "ladder": outcome.click.as_ref().map(|v| v.to_json()),
             "error": outcome.error,
         }),
     );
@@ -527,7 +595,11 @@ pub fn desktop_act(
     if let Some(err) = outcome.error {
         return Err(format!("desktop.act declined: {err}"));
     }
-    Ok(serde_json::json!({ "ok": true, "act": act.describe() }))
+    Ok(serde_json::json!({
+        "ok": true,
+        "act": act.describe(),
+        "ladder": outcome.click.as_ref().map(|v| v.to_json()),
+    }))
 }
 
 /// P57.4 — does this act need a foreground escalation under the current
@@ -855,12 +927,16 @@ impl everyaios_core::tools::DesktopBackend for DesktopEngineBackend {
         if !outcome.ok {
             return Err(format!("desktop.act did not complete: {}", act.describe()));
         }
+        // `FIX-17` — the verdict travels to the model too: an `unknown_region`
+        // stop and an ambiguity are both answers the agent must see, and both
+        // name the remedy in the same sentence the UI card shows.
         Ok(serde_json::json!({
             "kind": kind,
             "windowId": id,
             "target": target,
             "text": text,
             "ok": true,
+            "ladder": outcome.click.as_ref().map(|v| v.to_json()),
         }))
     }
 }
@@ -1035,6 +1111,44 @@ mod policy_tests {
         assert_eq!(w.id, 42);
         assert!(w.app.is_empty());
         assert!(!w.has_a11y_tree);
+    }
+
+    /// `FIX-17` — the agent-facing snapshot must distinguish "this app exposes no
+    /// accessibility tree" from "this process could not look". A field rename or a
+    /// dropped status would turn an elevation block back into "no controls", and
+    /// the model's next move would be a blind click.
+    #[test]
+    fn the_agent_snapshot_carries_the_read_status_epoch_and_guidance() {
+        let base = everyaios_computeruse::ReadResult::absent(7, 1.0, vec![]);
+        let json = snapshot_json(7, &base);
+        assert_eq!(json["windowId"], 7);
+        assert_eq!(json["hasTree"], false);
+        // An `absent` read is a positive fact: the vision rung may follow.
+        assert_eq!(json["status"], "absent");
+        assert_eq!(json["mayInferAbsence"], true);
+        assert!(json["guidance"].as_str().unwrap().contains("vision rung"));
+
+        // A read that could not look must not report absence as inferable.
+        let blocked = everyaios_computeruse::ReadResult {
+            status: everyaios_computeruse::UiaReadStatus::Unknown {
+                detail: "this window runs elevated and this process is not UIAccess-enabled"
+                    .into(),
+            },
+            guidance: Some(
+                "this window runs elevated — no input is synthesized into it".into(),
+            ),
+            epoch: everyaios_computeruse::SnapshotEpoch(3),
+            ..base
+        };
+        let json = snapshot_json(7, &blocked);
+        assert_eq!(json["status"], "unknown");
+        assert_eq!(json["mayInferAbsence"], false);
+        assert_eq!(json["epoch"], 3);
+        assert!(json["detail"]
+            .as_str()
+            .unwrap()
+            .contains("UIAccess"));
+        assert!(json["guidance"].as_str().unwrap().contains("no input"));
     }
 
     #[test]

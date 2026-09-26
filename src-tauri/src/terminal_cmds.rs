@@ -286,27 +286,35 @@ fn stream_frames(
         .map_err(|e| format!("start pty reader: {e}"))
 }
 
-/// Shared spawn tail: record authority, start the reader, and return the id.
+/// The provenance one spawn records: who acted, under which label, authorized
+/// by which ticket, plus the subject payload.
 ///
-/// `ticket_id` is the Guard-2 ticket that authorized this spawn, when the
-/// caller holds one. FIX-06: the row must name the ticket that actually
+/// FIX-06: grouping these keeps the spawn tail's signature honest and forces
+/// every spawn path to state its authority explicitly — `ticket_id` is part of
+/// the record, so a path that has no ticket has to say so instead of defaulting
+/// to an implied one. The audit row must name the ticket that actually
 /// authorized the effect, so the provenance is checkable rather than asserted
 /// (`ARCH/10-KERNEL.md` §7 — the envelope's idempotency key is
 /// `<work_id>:<ticket>`; the audit row carries the same link).
+struct SpawnProvenance<'a> {
+    origin: TerminalOrigin,
+    label: Option<&'a str>,
+    ticket_id: Option<&'a str>,
+    subject: serde_json::Value,
+}
+
+/// Shared spawn tail: record authority, start the reader, and return the id.
 fn finish_spawn(
     app: &AppHandle,
     state: &State<'_, AppState>,
     pty_id: String,
     output: everyaios_core::terminal::PtyOutput,
-    origin: TerminalOrigin,
-    label: Option<&str>,
-    audit_subject: serde_json::Value,
-    ticket_id: Option<&str>,
+    prov: SpawnProvenance<'_>,
 ) -> Result<String, String> {
     stream_frames(app.clone(), pty_id.clone(), output)?;
     // v3.59 governance decision — the audit kind tracks who acted: a user
     // gesture for a human tab, an agent authorization for `script.run`.
-    let (kind, subject) = match origin {
+    let (kind, subject) = match prov.origin {
         TerminalOrigin::Human => (crate::control::AuthKind::HumanGesture, "terminal.spawn"),
         TerminalOrigin::Agent => (crate::control::AuthKind::AgentTicket, "terminal.agent_run"),
         TerminalOrigin::Task => (
@@ -314,12 +322,12 @@ fn finish_spawn(
             "terminal.task_run",
         ),
     };
-    let mut payload = audit_subject;
-    if let Some(l) = label {
+    let mut payload = prov.subject;
+    if let Some(l) = prov.label {
         payload["label"] = serde_json::json!(l);
     }
-    payload["origin"] = serde_json::json!(origin_label(origin));
-    if let Some(tid) = ticket_id {
+    payload["origin"] = serde_json::json!(origin_label(prov.origin));
+    if let Some(tid) = prov.ticket_id {
         payload["ticketId"] = serde_json::json!(tid);
     }
     crate::control::record_mutation(state, kind, subject, payload);
@@ -373,16 +381,18 @@ pub fn terminal_spawn(
         &state,
         pty_id,
         output,
-        TerminalOrigin::Human,
-        None,
-        serde_json::json!({
-            "profileId": resolved.profile_name,
-            "backend": backend_label(resolved.backend),
-            "rows": rows,
-            "cols": cols,
-        }),
-        // A human tab is authorized by the user's own gesture, not a ticket.
-        None,
+        SpawnProvenance {
+            origin: TerminalOrigin::Human,
+            label: None,
+            // A human tab is authorized by the user's own gesture, not a ticket.
+            ticket_id: None,
+            subject: serde_json::json!({
+                "profileId": resolved.profile_name,
+                "backend": backend_label(resolved.backend),
+                "rows": rows,
+                "cols": cols,
+            }),
+        },
     )
 }
 
@@ -419,11 +429,9 @@ fn spawn_agent_command(
     app: &AppHandle,
     state: &State<'_, AppState>,
     command: &str,
-    label: Option<&str>,
-    origin: TerminalOrigin,
     rows: Option<u16>,
     cols: Option<u16>,
-    ticket_id: Option<&str>,
+    prov: SpawnProvenance<'_>,
 ) -> Result<(String, Arc<Mutex<CommandTracker>>), String> {
     let cfg = Config::load().map_err(|e| e.to_string())?;
     // Prefer the automation profile; fall back to the interactive default so a
@@ -441,7 +449,7 @@ fn spawn_agent_command(
             rows,
             cols,
             SpawnOpts {
-                origin,
+                origin: prov.origin,
                 integration: cfg.terminal.shell_integration,
             },
         )
@@ -473,15 +481,15 @@ fn spawn_agent_command(
         state,
         pty_id.clone(),
         output,
-        origin,
-        label,
-        serde_json::json!({
-            "profileId": resolved.profile_name,
-            "command": command.trim(),
-            "rows": rows,
-            "cols": cols,
-        }),
-        ticket_id,
+        SpawnProvenance {
+            subject: serde_json::json!({
+                "profileId": resolved.profile_name,
+                "command": command.trim(),
+                "rows": rows,
+                "cols": cols,
+            }),
+            ..prov
+        },
     )?;
     Ok((pty_id, tracker))
 }
@@ -517,11 +525,13 @@ fn ticket_for_agent_command(
     use std::hash::{Hash, Hasher};
 
     // 1) Guard-1: the deterministic blocklist, on the exact command line.
+    //    `scan_shell` returns the blocklist indices that matched; non-empty
+    //    means a known-destructive pattern, which is refused outright (the
+    //    same corpus the tool executor's `tool/exec` prescan refuses on).
     let hits = prescan::scan_shell(command);
     if !hits.is_empty() {
         return Err(format!(
-            "terminal_run refused: Guard-1 blocked: {}",
-            hits.join("; ")
+            "terminal_run refused: Guard-1 blocked this command (blocklist patterns {hits:?})"
         ));
     }
 
@@ -610,11 +620,14 @@ pub fn terminal_run(
         &app,
         &state,
         trimmed,
-        label.as_deref(),
-        origin,
         rows,
         cols,
-        Some(&ticket_id),
+        SpawnProvenance {
+            origin,
+            label: label.as_deref(),
+            ticket_id: Some(&ticket_id),
+            subject: serde_json::Value::Null,
+        },
     )?;
     Ok(pty_id)
 }
@@ -756,16 +769,18 @@ impl everyaios_core::tools::TerminalExecutor for TerminalPlaneExecutor {
             &state,
             pty_id.clone(),
             output,
-            origin,
-            Some(label),
-            serde_json::json!({ "profileId": profile_id, "command": trimmed }),
-            // The `script.run` ticket was already minted, consumed and audited
-            // by the tool executor (`tool/exec` → `tool/commit` → the
-            // `tool.exec` Merkle row, which names it). The trait hands the
-            // executor no ticket id, so this PTY-lifecycle row does not repeat
-            // it — the link lives on the effect row, which is the row that
-            // records the effect.
-            None,
+            SpawnProvenance {
+                origin,
+                label: Some(label),
+                // The `script.run` ticket was already minted, consumed and
+                // audited by the tool executor (`tool/exec` → `tool/commit` →
+                // the `tool.exec` Merkle row, which names it). The trait hands
+                // the executor no ticket id, so this PTY-lifecycle row does not
+                // repeat it — the link lives on the effect row, which is the row
+                // that records the effect.
+                ticket_id: None,
+                subject: serde_json::json!({ "profileId": profile_id, "command": trimmed }),
+            },
         )?;
 
         // Without shell integration no completion record will ever arrive, so

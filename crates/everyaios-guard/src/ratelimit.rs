@@ -135,13 +135,22 @@ pub struct RateLimitConfig {
 }
 
 impl Default for RateLimitConfig {
-    /// The desktop default: generous enough that a normal turn (tens of
-    /// commands, a few per second) is never throttled, tight enough that a
-    /// runaway loop is refused in well under a second.
+    /// The desktop default: generous enough that a normal turn is never
+    /// throttled, tight enough that a runaway loop is refused in seconds.
+    ///
+    /// **Why these numbers.** A busy turn on this surface is *bursty by
+    /// nature*: a chat turn streams chunks, a tool loop calls the executor many
+    /// times in a row, and the UI polls status. A per-key burst in the tens
+    /// would throttle legitimate work, so the burst is sized in the hundreds and
+    /// the *steady rate* is the real control: 20/s per `(caller, command)` and
+    /// 100/s process-wide means a runaway loop is refused after roughly a
+    /// second of hammering, while no human interaction pattern reaches it. The
+    /// bound that actually protects the process is the map cap
+    /// ([`RateLimitConfig::max_entries`]) plus the TTL, not the token count.
     fn default() -> Self {
         Self {
-            global: Limit::new(240, 40.0),
-            per_caller_command: Limit::new(30, 5.0),
+            global: Limit::new(600, 100.0),
+            per_caller_command: Limit::new(120, 20.0),
             ttl_ms: 60_000,
             max_entries: 4096,
         }
@@ -585,5 +594,25 @@ mod tests {
                 "refilled call {i} must pass"
             );
         }
+    }
+
+    /// The real control is the steady rate: a runaway loop hammering one
+    /// command is refused once the burst is spent, and the refusal reports a
+    /// concrete backoff rather than a vague limit.
+    #[test]
+    fn the_default_config_stops_a_runaway_loop() {
+        let cfg = RateLimitConfig::default();
+        let rl = RateLimiter::with_defaults();
+        let burst = cfg.per_caller_command.burst as u64;
+        for _ in 0..burst {
+            assert!(rl.check_at("ui", "fs_read_file", 1_000).is_ok());
+        }
+        // Immediately after the burst is spent, the call is refused.
+        let err = rl
+            .check_at("ui", "fs_read_file", 1_000)
+            .expect_err("a runaway loop must be stopped");
+        assert_eq!(err.code(), "Unavailable");
+        // …and the backoff is a real, positive number of milliseconds.
+        assert!(err.retry_after_ms > 0 && err.retry_after_ms < 60_000, "{err}");
     }
 }

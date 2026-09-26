@@ -3917,6 +3917,26 @@ mod tests {
         ToolService::new(Arc::new(Mutex::new(GuardService::new())), dir.to_path_buf())
     }
 
+    /// A `ToolService` for the **adversarial corpus** loops.
+    ///
+    /// Those loops drive the executor hundreds of times inside a single
+    /// millisecond — deliberately a far larger burst than any human or agent
+    /// turn — so admission control would refuse them for the right reason and
+    /// hide the floor verdict the test is actually asserting. Rate limiting has
+    /// its own test (`the_tool_path_rate_limits_and_fails_closed`).
+    fn svc_for_corpus(dir: &Path) -> ToolService {
+        let mut s = svc(dir);
+        s.rate_limiter = Arc::new(everyaios_guard::RateLimiter::new(
+            everyaios_guard::RateLimitConfig {
+                global: everyaios_guard::Limit::new(1_000_000, 0.0),
+                per_caller_command: everyaios_guard::Limit::new(1_000_000, 0.0),
+                ttl_ms: 60_000,
+                max_entries: 64,
+            },
+        ));
+        s
+    }
+
     #[derive(Default)]
     struct CountingTerminal {
         calls: std::sync::atomic::AtomicUsize,
@@ -4072,16 +4092,20 @@ mod tests {
         let receipt_id = out["receiptId"]
             .as_str()
             .expect("REQ-ART-003: a mutating effect must carry a receipt");
+        // The nested receipt body is `everyaios_audit::EffectReceipt`'s own
+        // serde shape (snake_case, the same one `worktrees::append_receipt`
+        // persists); `receiptId` above is the camelCase handle the boundary
+        // uses for the same record.
         let receipt = &out["receipt"];
-        assert_eq!(receipt["effectId"], receipt_id);
-        assert_eq!(receipt["ticketId"], ticket_id);
-        assert_eq!(receipt["toolId"], "file_ops.write");
-        assert_eq!(receipt["hasGap"], false);
+        assert_eq!(receipt["effect_id"], receipt_id);
+        assert_eq!(receipt["ticket_id"], ticket_id);
+        assert_eq!(receipt["tool_id"], "file_ops.write");
+        assert_eq!(receipt["has_gap"], false);
         // The receipt is addressable afterwards and reports the same fact.
         let replay = s
             .handle("tool/receipt", &json!({"receiptId": receipt_id}))
             .expect("receipt must be replayable");
-        assert_eq!(replay["receipt"]["ticketId"], ticket_id);
+        assert_eq!(replay["receipt"]["ticket_id"], ticket_id);
         // An unknown id is an honest error, never an invented receipt.
         assert!(s.handle("tool/receipt", &json!({"receiptId": "rcpt:nope"})).is_err());
     }
@@ -4093,11 +4117,12 @@ mod tests {
         let dir = tempfile();
         let guard = Arc::new(Mutex::new(GuardService::new()));
         let mut s = ToolService::new(Arc::clone(&guard), dir);
-        // A write to a path whose parent does not exist fails in the dispatch.
-        let args = json!({"path": "no-such-dir/a.txt", "content": "x"});
-        let pre = approved_preflight(&mut s, &guard, "file_ops.write", args.clone());
+        // A delete of a file that is not there: the dispatch fails, the ticket
+        // was already spent, and the effect's state is genuinely uncertain.
+        let args = json!({"path": "missing.txt"});
+        let pre = approved_preflight(&mut s, &guard, "file_ops.delete", args.clone());
         let body = json!({
-            "toolId": "file_ops.write",
+            "toolId": "file_ops.delete",
             "ticketId": pre["ticketId"],
             "argsHash": pre["argsHash"],
             "args": args
@@ -4108,7 +4133,7 @@ mod tests {
         // The receipt is still emitted (an effect cannot complete without one)
         // and it is honest about the gap.
         let receipt = &out["receipt"];
-        assert_eq!(receipt["hasGap"], true);
+        assert_eq!(receipt["has_gap"], true);
         assert!(
             receipt["uncertainty"].as_str().unwrap().contains("uncertain"),
             "{receipt}"
@@ -4894,7 +4919,7 @@ mod tests {
     #[test]
     fn redteam_corpus_blocked_through_executor() {
         let dir = tempfile();
-        let mut s = svc(&dir);
+        let mut s = svc_for_corpus(&dir);
         for probe in everyaios_guard::redteam::RED_TEAM_CORPUS {
             let pre = s
                 .handle(
@@ -4918,7 +4943,7 @@ mod tests {
     #[test]
     fn pathfloor_fuzz_through_executor() {
         let dir = tempfile();
-        let mut s = svc(&dir);
+        let mut s = svc_for_corpus(&dir);
         let root = dir.to_string_lossy().to_string();
         for p in everyaios_guard::pathfloor::adversarial_paths() {
             let pre = s
@@ -4959,7 +4984,7 @@ mod tests {
     #[test]
     fn urlfloor_fuzz_through_executor() {
         let dir = tempfile();
-        let mut s = svc(&dir);
+        let mut s = svc_for_corpus(&dir);
         for u in everyaios_guard::urlfloor::adversarial_urls() {
             let pre = s
                 .handle(
