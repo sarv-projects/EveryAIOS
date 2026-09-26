@@ -1157,6 +1157,107 @@ This registry answers one question per entry: **what behavior must this system e
 - **Tests:** pending
 - **Status:** seeded
 
+### Office (`OFFICE`)
+
+#### REQ-OFFICE-001 — One registry per format, shared by every surface
+- **Statement:** GIVEN a document operation, WHEN any surface (CLI/MCP/GUI/agent/API) invokes it, THEN it resolves through the single per-format operation registry where each op is `{id · input/output schema · risk · executor · verification hook}`, exposed as typed capability descriptors (never a command-string tool), and a docs-sync test gates registry↔docs parity with no divergent implementations.
+- **Priority:** must
+- **Source:** `ARCH/22-OFFICE.md` §1/§3 · `ARCH/04-DECISIONS.md` DEC-013 · `ARCH/07-CONTRACTS.md` CTR-009
+- **Acceptance:** all surfaces resolve the same op ids; the docs-sync test is present and enforced; no per-surface op implementation; the model receives semantic ops, not a shell.
+- **Failure cases:** divergent op implementations → rejection; command-string tool surface → design violation.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-OFFICE-002 — Progressive L1 → L2 → L3 access
+- **Statement:** GIVEN a document operation, WHEN it runs, THEN it is classified L1 (semantic read) · L2 (structured mutation) · or L3 (raw part-level escape hatch, gated), ordinary agent work uses L1/L2, and L3 requires explicit policy gating — it is never the default path.
+- **Priority:** must
+- **Source:** `ARCH/22-OFFICE.md` §1/§3 · `ARCH/04-DECISIONS.md` DEC-013
+- **Acceptance:** the op set is classified per format; L3 ops require explicit gating (policy/approval); default flows emit no raw part edits.
+- **Failure cases:** ungated raw part write → violation; L3 used to bypass registry ops → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-OFFICE-003 — Resident document contexts with exclusive writer leases
+- **Statement:** GIVEN an open document, WHEN it is edited, THEN exactly one resident context per document holds an exclusive writer lease; a second writer receives an explicit "in use" result with options (read-only render vs wait); flush is interval + dirty-marker driven with explicit flush on session end and idle eviction under memory bounds; no merge exists in v1.
+- **Priority:** must
+- **Source:** `ARCH/22-OFFICE.md` §1/§4 · `ARCH/04-DECISIONS.md` DEC-013
+- **Acceptance:** concurrent-open test yields the lease message and no silent overwrite; flush-policy tests; session-end flush; idle eviction respects the memory bound.
+- **Failure cases:** two writers mutating one document → violation; edits lost without an explicit "in use" result → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-OFFICE-004 — Crash-safe commit: staging, fsync, atomic swap, op log
+- **Statement:** GIVEN a commit of document mutations, WHEN it persists, THEN it writes a staging package, `fsync`s it, atomically swaps it into place, and supports op-log replay on recovery; a crash mid-write never leaves a torn file, and scratch/work areas stay confined to declared roots (pathfloor).
+- **Priority:** must
+- **Source:** `ARCH/22-OFFICE.md` §4 · `ARCH/12-TRUST.md` §2 · `ARCH/04-DECISIONS.md` DEC-013
+- **Acceptance:** kill-during-commit test recovers via op-log replay with no torn file; scratch-write test denies paths outside declared roots.
+- **Failure cases:** torn file after crash → violation; scratch escaping declared roots → security failure.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-OFFICE-005 — Batch atomicity with replayable op log
+- **Statement:** GIVEN a batch of document operations, WHEN it is applied, THEN it is all-or-nothing with an op log for replay and audit; a pre-commit validation failure aborts the whole batch and the receipt records the failed check.
+- **Priority:** must
+- **Source:** `ARCH/22-OFFICE.md` §4/§5/§7 · `ARCH/04-DECISIONS.md` DEC-023
+- **Acceptance:** a failing batch leaves the document unchanged; op-log replay reproduces the batch; the receipt names the failing check.
+- **Failure cases:** partially applied batch → violation; failed check unrecorded → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-OFFICE-006 — No silent lossy path; engine limits are declared
+- **Statement:** GIVEN a format engine and its fidelity limits, WHEN an operation exceeds them (charts/pivots/SmartArt/OLE or unavoidable re-serialization), THEN the limitation is declared per engine, the operation returns typed `guidance` naming the limitation, and re-serialization is disclosed whenever it is unavoidable — never a silent lossy transformation.
+- **Priority:** must
+- **Source:** `ARCH/22-OFFICE.md` §1/§2/§7 · `ARCH/07-CONTRACTS.md` CTR-009
+- **Acceptance:** an engine-limit registry exists; an unsupported-op test yields typed guidance naming the limitation; no lossy path executes undeclared.
+- **Failure cases:** silent shape/chart loss → defect; undeclared re-serialization → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-OFFICE-007 — Deterministic render and validation before commit
+- **Statement:** GIVEN a preview or a pending commit, WHEN it runs, THEN previews are projections produced without model tokens (browser shell-out or native renderer), and per-format structural validation (DOCX structure/text round-trip · XLSX recalc + formula presence · PPTX slide/shape audit · PDF page/object counts, plus render-diff where useful) runs before commit.
+- **Priority:** must
+- **Source:** `ARCH/22-OFFICE.md` §5 · `ARCH/04-DECISIONS.md` DEC-015 · `ARCH/05-INVARIANTS.md` INV-13
+- **Acceptance:** the preview flow shows zero model calls; validation hooks run per format pre-commit; a failing structural check blocks the commit.
+- **Failure cases:** preview consuming model tokens → INV-13 violation; commit without required validation → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-OFFICE-008 — Risk-scaled verification hooks
+- **Statement:** GIVEN a committed office effect, WHEN verification runs, THEN its depth scales with the capability's risk class; PDF redact requires a post-op text-extraction check proving removal, and externally visible sends carry a receipt recording the validation result.
+- **Priority:** must
+- **Source:** `ARCH/22-OFFICE.md` §5 · `ARCH/05-INVARIANTS.md` INV-19 · `ARCH/04-DECISIONS.md` DEC-022 · `ARCH/34-EFFECT-VERIFICATION.md` §3
+- **Acceptance:** the redact post-op extraction test proves removal; the receipt carries the validation result; verification depth matches the risk class.
+- **Failure cases:** redact leaving extractable content → security failure; externally visible send without a receipt → violation.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-OFFICE-009 — XLSX formula integrity: recalculate before commit
+- **Statement:** GIVEN an XLSX mutation, WHEN the workbook is committed, THEN formulas are recalculated through the declared engine (IronCalc-class) before commit so stored cached values match the formulas — a workbook never commits stale computed values.
+- **Priority:** must
+- **Source:** `ARCH/22-OFFICE.md` §2/§3 · `ARCH/04-DECISIONS.md` DEC-023
+- **Acceptance:** recalc-before-commit test; an edited formula yields the updated cached value; recalc failure blocks the commit with a typed error.
+- **Failure cases:** commit without recalc → defect; stale cached value after a formula edit → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-OFFICE-010 — Templates and staged construction validate at each stage
+- **Statement:** GIVEN a template merge or a staged deck build (`deck_start → deck_page → deck_build → deck_replace`), WHEN stages execute, THEN each stage is validated check-before-write and the merged/built artifact is validated after merge — a failed stage stops the build without leaving a partial artifact.
+- **Priority:** should
+- **Source:** `ARCH/22-OFFICE.md` §6 · `ARCH/04-DECISIONS.md` DEC-023
+- **Acceptance:** stage-validation tests; a failed stage leaves no partial artifact; the merged result is validated.
+- **Failure cases:** partial artifact after a failed stage → defect; unvalidated merge → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-OFFICE-011 — Corrupt inputs quarantine; large inputs stay bounded
+- **Statement:** GIVEN a corrupt/unreadable document or a huge workbook/document, WHEN it is opened, THEN the corrupt document is quarantined with a typed error and its original left untouched, and huge inputs use bounded loads/streaming reads under declared limits.
+- **Priority:** must
+- **Source:** `ARCH/22-OFFICE.md` §7
+- **Acceptance:** corrupt-input test; quarantine keeps the original byte-identical; huge-file test respects the declared memory/load limits.
+- **Failure cases:** original modified on failed open → violation; unbounded load → defect.
+- **Tests:** pending
+- **Status:** seeded
+
 ### Agent X (`AGX`)
 
 #### REQ-AGX-001 — Delegation contract
@@ -1194,7 +1295,8 @@ This registry answers one question per entry: **what behavior must this system e
 | `RTENV` (11) | drafted above + expanded in pass `19` | verified during pass `19` ✅ (2026-09-26) |
 | `WF` (11) | drafted above + expanded in pass `20` | verified during pass `20` ✅ (2026-09-26) |
 | `WORLD` (11) | drafted above + expanded in pass `21` | verified during pass `21` ✅ (2026-09-26) |
-| `OFFICE`, `BROWSER`, `CUA`, `FILES`, `CODE`, `SEARCH`, `COMMS`, `ART`, `EVENTS`, `SKILL`, `CHAN`, `VERIFY` | pending | seeded during each module's P7 pass |
+| `OFFICE` (11) | drafted above + expanded in pass `22` | verified during pass `22` ✅ (2026-09-26) |
+| `BROWSER`, `CUA`, `FILES`, `CODE`, `SEARCH`, `COMMS`, `ART`, `EVENTS`, `SKILL`, `CHAN`, `VERIFY` | pending | seeded during each module's P7 pass |
 
 ## 6. Related
 

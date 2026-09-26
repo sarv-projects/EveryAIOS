@@ -142,6 +142,17 @@ One row per `REQ-*`. Status only from evidence.
 | `REQ-WORLD-009` | `21-WORLD-MODEL` | pending | `INV-20`, `DEC-011` | — | pending | pending | unplanned |
 | `REQ-WORLD-010` | `21-WORLD-MODEL` | pending | `INV-24` | — | pending | pending | unplanned |
 | `REQ-WORLD-011` | `21-WORLD-MODEL` | pending | `CTR-017`, `INV-11` | — | pending | pending | unplanned |
+| `REQ-OFFICE-001` | `22-OFFICE` | pending | `CTR-009`, `DEC-013` | — | pending | pending | unplanned |
+| `REQ-OFFICE-002` | `22-OFFICE` | pending | `DEC-013` | — | pending | pending | unplanned |
+| `REQ-OFFICE-003` | `22-OFFICE` | pending | `DEC-013` | — | pending | pending | unplanned |
+| `REQ-OFFICE-004` | `22-OFFICE` | pending | `DEC-013` | — | pending | pending | unplanned |
+| `REQ-OFFICE-005` | `22-OFFICE` | pending | `DEC-023` | — | pending | pending | unplanned |
+| `REQ-OFFICE-006` | `22-OFFICE` | pending | `CTR-009` | — | pending | pending | unplanned |
+| `REQ-OFFICE-007` | `22-OFFICE` | pending | `DEC-015`, `INV-13` | — | pending | pending | unplanned |
+| `REQ-OFFICE-008` | `22-OFFICE` | pending | `INV-19`, `DEC-022` | — | pending | pending | unplanned |
+| `REQ-OFFICE-009` | `22-OFFICE` | pending | `DEC-023` | — | pending | pending | unplanned |
+| `REQ-OFFICE-010` | `22-OFFICE` | pending | `DEC-023` | — | pending | pending | unplanned |
+| `REQ-OFFICE-011` | `22-OFFICE` | pending | `—` | — | pending | pending | unplanned |
 
 ## 4. Maintenance
 

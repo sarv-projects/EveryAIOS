@@ -1,6 +1,7 @@
 # 22 — Office
 
 > **Status:** Draft P3 (early — office verification integrated 2026-09-26). Must pass the `ARCH/00-INDEX.md` §5 checklist at freeze.
+> **P7 pass (2026-09-26):** line-checked; requirements seeded (`REQ-OFFICE-*`, Requirements section).
 > **Role:** the office domain runtime **under the universal document surface** (DEC-013) — not a sidebar mode. Progressive **L1 semantic → L2 structured mutation → L3 raw escape hatch**; documents stay **resident** for active sessions; render/validate before receipts.
 > **Dependencies:** `13`/`14` (capabilities/providers) · `19-RUNTIME-ENVIRONMENTS` · `12-TRUST` (paths/exec) · `29-ARTIFACTS` (previews/versions) · `34` (verification depth). **Consumers:** `15` (agent office work), UI (document surface).
 > **Evidence:** `ARCHIVE/v1-research/office-runtime-verification.md` (448 lines; OfficeCLI verified in source, GenOffice per-domain registries verified) · v0 corpus `ARCHIVE/v0/RESEARCH/desktop_app/28,29` · local `crates/everyaios-office` (frozen reference) · DEC-013.
@@ -99,3 +100,21 @@ Pivot authoring · reflow · SmartArt/OLE editing · multi-writer merge · real-
 ## 12. Evidence
 
 `ARCHIVE/v1-research/office-runtime-verification.md` — §1.A OfficeCLI (`IDocumentHandler.cs:58-104` L1/L2/L3; `ResidentFlushPolicy.cs:5-15`; `CommandBuilder.Batch.cs:187-193,473-490`; `AtomicPackageWriter.cs:45-52`; `McpServer.cs:562-600` single-tool; `HtmlScreenshot.cs:10-12` shell-out) · §1.B GenOffice (`pptx-ops/src/ops/registry.ts:1-21` + `tests/op-docs-sync.test.ts:43-60`; `cli/src/mcp/deck.ts:58-253,260-276`; `GENOFFICE_ALLOWED_ROOTS`) · §2 fidelity (openpyxl shapes/pivot docs; LibreOffice `start_parameters` + MPL-2.0) · §3 op set · §4 resident design · §6 hooks/non-goals · v0 corpus 28/29 · DEC-013.
+
+## 13. Requirements (`REQ-OFFICE-*`)
+
+Testable behaviors owned by this module live in `ARCH/08-REQUIREMENTS.md`; the traceability chain is in `ARCH/09-FEATURE-MATRIX.md`. This table is a pointer, not a second copy.
+
+| REQ | Behavior (one line) |
+|---|---|
+| `REQ-OFFICE-001` | One per-format operation registry shared by every surface; typed descriptors via `13`; docs-sync gate — no command-string tool (DEC-013) |
+| `REQ-OFFICE-002` | Progressive L1 semantic read → L2 structured mutation → L3 gated raw escape hatch; L3 never the default |
+| `REQ-OFFICE-003` | One resident context per document + exclusive writer lease; second writer gets "in use" (read-only/wait); no merge in v1 |
+| `REQ-OFFICE-004` | Crash-safe commit: staging package → fsync → atomic swap → op-log replay; scratch under declared roots (pathfloor) |
+| `REQ-OFFICE-005` | Batch all-or-nothing with op log; pre-commit validation failure aborts and records the failed check |
+| `REQ-OFFICE-006` | Declared engine limits; unsupported fidelity returns typed `guidance` naming the limitation — no silent lossy path |
+| `REQ-OFFICE-007` | Previews are token-free projections (DEC-015); per-format structural validation runs before commit |
+| `REQ-OFFICE-008` | Risk-scaled verification hooks (INV-19): redact proves removal; externally visible sends receipt the validation result |
+| `REQ-OFFICE-009` | XLSX always recalculates (IronCalc-class engine) before commit — never stale cached formula values |
+| `REQ-OFFICE-010` | Templates and staged deck builds validate check-before-write at each stage; a failed stage leaves no partial artifact |
+| `REQ-OFFICE-011` | Corrupt inputs quarantine with a typed error and untouched original; huge documents use bounded/streaming loads |
