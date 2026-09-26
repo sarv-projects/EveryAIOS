@@ -798,7 +798,7 @@ fn acceptance_commit_path_is_fsynced_before_the_swap() {
 
     let before = fsync_calls();
     let trace = commit_bytes(&doc, b"v2-committed").expect("the commit lands");
-    assert!(fsync_calls() >= before + 1, "the staging file was fsynced");
+    assert!(fsync_calls() > before, "the staging file was fsynced");
     assert_eq!(
         trace.stages,
         vec![

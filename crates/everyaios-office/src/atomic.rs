@@ -271,10 +271,10 @@ pub fn commit_bytes(target: &Path, bytes: &[u8]) -> Result<CommitTrace, CommitEr
     //    design: platforms without directory fsync still have an atomic swap.
     #[cfg(unix)]
     {
-        if let Ok(d) = File::open(&dir) {
-            if d.sync_all().is_ok() {
-                stages.push(CommitStage::DurablyRenamed);
-            }
+        if let Ok(d) = File::open(&dir)
+            && d.sync_all().is_ok()
+        {
+            stages.push(CommitStage::DurablyRenamed);
         }
     }
     #[cfg(not(unix))]
@@ -440,7 +440,7 @@ mod tests {
         let before = fsync_calls();
         let trace = commit_bytes(&path, b"durable").unwrap();
         assert!(
-            fsync_calls() >= before + 1,
+            fsync_calls() > before,
             "commit did not reach the staging-file fsync call site"
         );
         assert!(trace.stages.contains(&CommitStage::Fsynced));

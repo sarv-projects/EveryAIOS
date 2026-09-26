@@ -210,28 +210,50 @@ pub fn pdf_page_op(
     let path = crate::control::floor_user_file(&path)?;
     let bytes = std::fs::read(&path).map_err(|e| e.to_string())?;
     let pages = pages.unwrap_or_default();
-    let result = match op.as_str() {
-        "split" if pages.len() >= 2 => {
-            everyaios_office::split_pdf(&bytes, pages[0]..=pages[1]).map_err(|e| e.to_string())
-        }
-        "extract" => everyaios_office::extract_pages(&bytes, &pages).map_err(|e| e.to_string()),
-        "reorder" => everyaios_office::reorder_pages(&bytes, &pages).map_err(|e| e.to_string()),
-        "delete" => everyaios_office::delete_pages(&bytes, &pages).map_err(|e| e.to_string()),
-        "rotate" => everyaios_office::rotate_pages(
-            &bytes,
-            delta.unwrap_or(90),
-            if pages.is_empty() {
-                None
-            } else {
-                Some(pages.as_slice())
-            },
-        )
-        .map_err(|e| e.to_string()),
+    let dest = match out {
+        Some(p) => crate::control::floor_user_file(&p)?,
+        None => path.clone(),
+    };
+    // Each arm produces the new bytes plus whatever evidence the receipt needs.
+    let (result, evidence) = match op.as_str() {
+        "split" if pages.len() >= 2 => (
+            everyaios_office::split_pdf(&bytes, pages[0]..=pages[1])
+                .map_err(|e| e.to_string())?,
+            None,
+        ),
+        "extract" => (
+            everyaios_office::extract_pages(&bytes, &pages).map_err(|e| e.to_string())?,
+            None,
+        ),
+        "reorder" => (
+            everyaios_office::reorder_pages(&bytes, &pages).map_err(|e| e.to_string())?,
+            None,
+        ),
+        "delete" => (
+            everyaios_office::delete_pages(&bytes, &pages).map_err(|e| e.to_string())?,
+            None,
+        ),
+        "rotate" => (
+            everyaios_office::rotate_pages(
+                &bytes,
+                delta.unwrap_or(90),
+                if pages.is_empty() {
+                    None
+                } else {
+                    Some(pages.as_slice())
+                },
+            )
+            .map_err(|e| e.to_string())?,
+            None,
+        ),
         "merge" => {
             let other = other.ok_or("merge requires other")?;
             let other = crate::control::floor_user_file(&other)?;
             let b2 = std::fs::read(&other).map_err(|e| e.to_string())?;
-            everyaios_office::merge_pdfs(&[bytes.clone(), b2]).map_err(|e| e.to_string())
+            (
+                everyaios_office::merge_pdfs(&[bytes.clone(), b2]).map_err(|e| e.to_string())?,
+                None,
+            )
         }
         // P2.12 — surgical content ops wired to the same engine the agent
         // tools use: `other` carries a JSON payload.
@@ -257,13 +279,19 @@ pub fn pdf_page_op(
             if fields.is_empty() {
                 return Err("form_fill requires at least one {field, value}".into());
             }
-            everyaios_office::pdf::form::form_fill(&bytes, &fields).map_err(|e| e.to_string())
+            (
+                everyaios_office::pdf::form::form_fill(&bytes, &fields)
+                    .map_err(|e| e.to_string())?,
+                None,
+            )
         }
         "redact" => {
             let raw = other.ok_or("redact requires a JSON rects payload")?;
-            let rects: Vec<(u32, [f32; 4])> = serde_json::from_str::<Vec<serde_json::Value>>(&raw)
-                .map_err(|e| format!("redact payload: {e}"))?
-                .into_iter()
+            let items: Vec<serde_json::Value> =
+                serde_json::from_str(&raw).map_err(|e| format!("redact payload: {e}"))?;
+            let rects: Vec<(u32, [f32; 4])> = items
+                .iter()
+                .cloned()
                 .map(|v| {
                     let page = v
                         .get("page")
@@ -288,7 +316,57 @@ pub fn pdf_page_op(
             if rects.is_empty() {
                 return Err("redact requires at least one {page, rect}".into());
             }
-            everyaios_office::pdf::redact::redact(&bytes, &rects).map_err(|e| e.to_string())
+            // Optional post-op proof (REQ-OFFICE-008): a payload may name the
+            // strings whose absence must be proven by text extraction *and* by
+            // a raw scan of the saved bytes. A target that survives refuses the
+            // whole operation — there is no partial "redaction".
+            // Each item may carry `"verifyAbsent": "text"` or an array of
+            // them; the post-op proof runs for every string found.
+            let verify_absent: Vec<String> = items
+                .iter()
+                .filter_map(|v| v.get("verifyAbsent"))
+                .flat_map(|v| match v {
+                    serde_json::Value::String(s) => vec![s.clone()],
+                    serde_json::Value::Array(a) => a
+                        .iter()
+                        .filter_map(|x| x.as_str().map(|s| s.to_string()))
+                        .collect(),
+                    _ => Vec::new(),
+                })
+                .filter(|s| !s.is_empty())
+                .collect();
+
+            // A payload may opt into the non-default policy; the default
+            // refuses anything this engine cannot remove.
+            let allow_unremovable = items
+                .iter()
+                .any(|v| v.get("allowUnremovable").and_then(|x| x.as_bool()) == Some(true));
+            let opts = everyaios_office::pdf::redact::RedactOptions {
+                unremovable: if allow_unremovable {
+                    everyaios_office::pdf::redact::UnremovablePolicy::Report
+                } else {
+                    everyaios_office::pdf::redact::UnremovablePolicy::Refuse
+                },
+                ..everyaios_office::pdf::redact::RedactOptions::default()
+            };
+            let request =
+                everyaios_office::pdf::redact::RedactRequest::new(rects.clone())
+                    .with_verify_absent(verify_absent);
+            let report =
+                everyaios_office::pdf::redact::redact_checked(&bytes, &request, &opts)
+                    .map_err(redact_error)?;
+            // The evidence a receipt needs: what was removed, what the page
+            // still says, and the engine's declared reach.
+            let removed_chars = report.removed_chars();
+            let evidence = serde_json::json!({
+                "removals": report.removals,
+                "removedChars": removed_chars,
+                "survivingText": report.surviving_text,
+                "unremovable": report.unremovable,
+                "residuals": report.residuals,
+                "noIntersection": report.no_intersection,
+            });
+            (report.bytes, Some(evidence))
         }
         "annotate" => {
             let raw = other.ok_or("annotate requires a JSON {page, rect, text?} payload")?;
@@ -312,23 +390,34 @@ pub fn pdf_page_op(
                 return Err(format!("annotate rect must be [x1,y1,x2,y2], got {rect:?}"));
             }
             let rect = [rect[0], rect[1], rect[2], rect[3]];
-            match v.get("text").and_then(serde_json::Value::as_str) {
+            let out = match v.get("text").and_then(serde_json::Value::as_str) {
                 Some(text) if !text.is_empty() => {
                     everyaios_office::pdf::annot::add_text_annotation(&bytes, page, rect, text)
-                        .map_err(|e| e.to_string())
+                        .map_err(|e| e.to_string())?
                 }
                 _ => everyaios_office::pdf::annot::add_highlight_annotation(&bytes, page, rect)
-                    .map_err(|e| e.to_string()),
-            }
+                    .map_err(|e| e.to_string())?,
+            };
+            (out, None)
         }
         other_op => return Err(format!("unknown pdf page op: {other_op}")),
-    }
-    .map_err(|e| e.to_string())?;
-    let dest = match out {
-        Some(p) => crate::control::floor_user_file(&p)?,
-        None => path.clone(),
     };
-    everyaios_office::write_atomic(&dest, &result).map_err(|e| e.to_string())?;
+
+    // The commit path (FIX-16): staging package → fsync → atomic swap, under a
+    // short-lived exclusive writer lease (REQ-OFFICE-003/004). A second writer
+    // is refused with the "in use" result instead of overwriting.
+    let receipt = everyaios_office::commit_under_lease(
+        dest.as_path(),
+        &result,
+        &format!("office.pdf_op:{op}"),
+        "tauri:office_cmds",
+        everyaios_office::now_ms(),
+    )
+    .map_err(|e| match e {
+        everyaios_office::ResidentError::InUse(c) => c.message(),
+        other => other.to_string(),
+    })?;
+
     // v3.59 — human-UI path audit (spec §4.3 / P47.1).
     crate::control::record_mutation(
         &state,
@@ -338,9 +427,39 @@ pub fn pdf_page_op(
             "path": dest.display().to_string(),
             "op": op,
             "pages": pages,
+            "commitStages": receipt.verification.stages,
+            "commitDurable": receipt.verification.durable,
+            "evidence": evidence,
         }),
     );
-    Ok(serde_json::json!({ "ok": true, "path": dest.display().to_string() }))
+    Ok(serde_json::json!({
+        "ok": true,
+        "path": dest.display().to_string(),
+        "commitStages": receipt.verification.stages,
+        "evidence": evidence,
+    }))
+}
+
+/// Render a redaction failure for the surface. The typed variants name what
+/// happened, so the UI can offer a real action (shrink the rectangle, accept
+/// the residual) instead of a generic error.
+fn redact_error(e: everyaios_office::PdfError) -> String {
+    match e {
+        everyaios_office::PdfError::Unremovable(findings) => format!(
+            "redaction refused — {} item(s) intersect the area but cannot be removed: {}",
+            findings.len(),
+            findings
+                .iter()
+                .map(|f| f.describe())
+                .collect::<Vec<_>>()
+                .join("; ")
+        ),
+        everyaios_office::PdfError::RemovalUnproven(hits) => format!(
+            "redaction refused — the target text is still present after the pass: {:?}",
+            hits
+        ),
+        other => other.to_string(),
+    }
 }
 
 /// Optional human-fidelity tier: open the file in the system LibreOffice.

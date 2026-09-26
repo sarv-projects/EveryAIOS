@@ -678,13 +678,14 @@ impl Resources {
             // A form that omits /Resources inherits the page's.
             return page.clone();
         };
-        let own = match res {
+        match res {
             Object::Reference(id) => doc
                 .get_dictionary(*id)
                 .map(|d| Resources::read(doc, Some(d)))
                 .unwrap_or_else(|_| page.clone()),
             other => match other.as_dict() {
                 Ok(d) => {
+                    // A form's own maps shadow the page's.
                     let mut merged = page.clone();
                     let own = Resources::read(doc, Some(d));
                     for (k, v) in own.fonts {
@@ -697,8 +698,7 @@ impl Resources {
                 }
                 Err(_) => page.clone(),
             },
-        };
-        own
+        }
     }
 }
 
@@ -879,6 +879,41 @@ fn push_glyphs(out: &mut Vec<ShowItem>, bytes: &[u8], composite: bool) {
 // The removal pass
 // ---------------------------------------------------------------------------
 
+/// Where an XObject is invoked, and what is in force at that point.
+/// Where a text-showing operator sits, and what is in force at that point.
+struct ShowSite<'a> {
+    /// The `Tj` / `TJ` / `'` / `"` operator.
+    op: &'a Operation,
+    /// The text state, advanced past the run either way.
+    gs: &'a mut Gs,
+    /// The resources in force (for the font's widths).
+    resources: &'a Resources,
+    /// The rectangles in play on this page.
+    rects: &'a [Box],
+    /// The 1-based page.
+    page: u32,
+    /// The output stream a surviving operator is appended to.
+    out: &'a mut Vec<Operation>,
+    /// Set when the operator was removed.
+    changed: &'a mut bool,
+}
+
+/// Where an XObject is invoked, and what is in force at that point.
+struct XObjectSite<'a> {
+    /// The `Do` operator.
+    op: &'a Operation,
+    /// The output stream the operator is appended to when it survives.
+    out: &'a mut Vec<Operation>,
+    /// The graphics/text state at the invocation.
+    gs: &'a Gs,
+    /// The resources in force (the page's, or a form's for a nested call).
+    resources: &'a Resources,
+    /// The rectangles still in play.
+    rects: &'a [Box],
+    /// The current form-nesting depth.
+    depth: usize,
+}
+
 /// The mutable accumulator for one redaction pass.
 struct Pass<'a> {
     doc: &'a mut Document,
@@ -987,31 +1022,31 @@ impl<'a> Pass<'a> {
                     gs.tm = gs.tlm;
                     out.push(op);
                 }
-                "Tj" | "TJ" => {
-                    if self.show_or_keep(&op, &mut gs, resources, rects, page, &mut out, &mut changed)
-                    {
-                        continue;
+                "Tj" | "TJ" | "'" | "\"" => {
+                    // `'` and `"` both move to the next line before showing.
+                    if op.operator == "'" || op.operator == "\"" {
+                        gs.tlm = Matrix::translation(0.0, -gs.leading).then(gs.tlm);
+                        gs.tm = gs.tlm;
                     }
-                }
-                "'" => {
-                    gs.tlm = Matrix::translation(0.0, -gs.leading).then(gs.tlm);
-                    gs.tm = gs.tlm;
-                    if self.show_or_keep(&op, &mut gs, resources, rects, page, &mut out, &mut changed)
-                    {
-                        continue;
+                    // `"` sets the word and character spacing first.
+                    if op.operator == "\"" {
+                        if let Some(v) = op.operands.first().and_then(as_f32) {
+                            gs.word_spacing = v;
+                        }
+                        if let Some(v) = op.operands.get(1).and_then(as_f32) {
+                            gs.char_spacing = v;
+                        }
                     }
-                }
-                "\"" => {
-                    if let Some(v) = op.operands.first().and_then(as_f32) {
-                        gs.word_spacing = v;
-                    }
-                    if let Some(v) = op.operands.get(1).and_then(as_f32) {
-                        gs.char_spacing = v;
-                    }
-                    gs.tlm = Matrix::translation(0.0, -gs.leading).then(gs.tlm);
-                    gs.tm = gs.tlm;
-                    if self.show_or_keep(&op, &mut gs, resources, rects, page, &mut out, &mut changed)
-                    {
+                    let mut site = ShowSite {
+                        op: &op,
+                        gs: &mut gs,
+                        resources,
+                        rects,
+                        page,
+                        out: &mut out,
+                        changed: &mut changed,
+                    };
+                    if self.show_or_keep(&mut site) {
                         continue;
                     }
                 }
@@ -1028,9 +1063,15 @@ impl<'a> Pass<'a> {
                     {
                         None => out.push(op),
                         Some(xobj_id) => {
-                            if self.xobject(
-                                page, xobj_id, &op, &mut out, &gs, resources, rects, depth,
-                            ) {
+                            let mut site = XObjectSite {
+                                op: &op,
+                                out: &mut out,
+                                gs: &gs,
+                                resources,
+                                rects,
+                                depth,
+                            };
+                            if self.xobject(page, xobj_id, &mut site) {
                                 changed = true;
                             }
                         }
@@ -1070,16 +1111,18 @@ impl<'a> Pass<'a> {
     /// Measure a show operator; drop it when it intersects a rectangle, else
     /// keep it. Always advances the text matrix so later runs keep position.
     /// Returns `true` when the operator was removed.
-    fn show_or_keep(
-        &mut self,
-        op: &Operation,
-        gs: &mut Gs,
-        resources: &Resources,
-        rects: &[Box],
-        page: u32,
-        out: &mut Vec<Operation>,
-        changed: &mut bool,
-    ) -> bool {
+    fn show_or_keep(&mut self, site: &mut ShowSite<'_>) -> bool {
+        let ShowSite {
+            op,
+            gs,
+            resources,
+            rects,
+            page,
+            out,
+            changed,
+        } = site;
+        let (op, resources, rects, page) = (*op, *resources, *rects, *page);
+        let (gs, out, changed) = (&mut **gs, &mut **out, &mut **changed);
         let metrics = self.metrics(gs, resources);
         let m = measure_run(gs, metrics.as_ref(), op, &self.opts);
         let hit = rects.iter().any(|r| m.box_.intersects(*r));
@@ -1110,18 +1153,17 @@ impl<'a> Pass<'a> {
     }
 
     /// Handle an XObject invocation. Returns whether anything was removed.
-    #[allow(clippy::too_many_arguments)]
-    fn xobject(
-        &mut self,
-        page: u32,
-        xobj_id: ObjectId,
-        op: &Operation,
-        out: &mut Vec<Operation>,
-        gs: &Gs,
-        resources: &Resources,
-        rects: &[Box],
-        depth: usize,
-    ) -> bool {
+    fn xobject(&mut self, page: u32, xobj_id: ObjectId, site: &mut XObjectSite<'_>) -> bool {
+        let XObjectSite {
+            op,
+            out,
+            gs,
+            resources,
+            rects,
+            depth,
+        } = site;
+        let (op, gs, resources, rects, depth) = (*op, *gs, *resources, *rects, *depth);
+        let out = &mut **out;
         let label = op
             .operands
             .first()
@@ -1486,10 +1528,10 @@ pub fn redact_checked(
             // the file (an orphaned object, say) is still a disclosure. A
             // hex- or UTF-16-encoded target never matches this scan, so a
             // failure here is a sound positive, never a false alarm.
-            if contains_bytes(&out, target.as_bytes()) {
-                if !hits.iter().any(|(t, _)| t == target) {
-                    hits.push((target.clone(), 0));
-                }
+            if contains_bytes(&out, target.as_bytes())
+                && !hits.iter().any(|(t, _)| t == target)
+            {
+                hits.push((target.clone(), 0));
             }
         }
         if !hits.is_empty() {
