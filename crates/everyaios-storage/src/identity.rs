@@ -410,8 +410,8 @@ mod windows {
     use windows_sys::Win32::Foundation::{CloseHandle, FILETIME, HANDLE, INVALID_HANDLE_VALUE};
     use windows_sys::Win32::Storage::FileSystem::{
         BY_HANDLE_FILE_INFORMATION, CreateFileW, FILE_FLAG_BACKUP_SEMANTICS, FILE_ID_INFO,
-        FILE_READ_ATTRIBUTES, FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE,
-        FileIdInfo, GetFileInformationByHandle, GetFileInformationByHandleEx, OPEN_EXISTING,
+        FILE_READ_ATTRIBUTES, FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE, FileIdInfo,
+        GetFileInformationByHandle, GetFileInformationByHandleEx, OPEN_EXISTING,
     };
 
     use super::{FileIdentity, IdentityPlatform, IdentityPolicy, Incarnation};
@@ -445,11 +445,7 @@ mod windows {
     /// `CreateFileW` with `FILE_READ_ATTRIBUTES` only — no data access, so no
     /// file content can be read through this handle.
     fn open_attributes_handle(path: &Path) -> Option<HANDLE> {
-        let wide: Vec<u16> = path
-            .as_os_str()
-            .encode_wide()
-            .chain(Some(0))
-            .collect();
+        let wide: Vec<u16> = path.as_os_str().encode_wide().chain(Some(0)).collect();
         // SAFETY: `wide` is NUL-terminated and outlives the call; null
         // security attributes and no template file.
         let h = unsafe {
@@ -463,7 +459,11 @@ mod windows {
                 std::ptr::null_mut(),
             )
         };
-        if h == INVALID_HANDLE_VALUE { None } else { Some(h) }
+        if h == INVALID_HANDLE_VALUE {
+            None
+        } else {
+            Some(h)
+        }
     }
 
     /// SAFETY: `handle` must be a live handle owned by the caller.
@@ -635,8 +635,20 @@ mod tests {
     #[test]
     fn missing_incarnation_evidence_is_indeterminate_not_same() {
         // ReFS-style: the same 128-bit id with no sequence component.
-        let a = FileIdentity::new(IdentityPlatform::Windows, 7, Some(99), Incarnation::Unknown, 1);
-        let b = FileIdentity::new(IdentityPlatform::Windows, 7, Some(99), Incarnation::Unknown, 1);
+        let a = FileIdentity::new(
+            IdentityPlatform::Windows,
+            7,
+            Some(99),
+            Incarnation::Unknown,
+            1,
+        );
+        let b = FileIdentity::new(
+            IdentityPlatform::Windows,
+            7,
+            Some(99),
+            Incarnation::Unknown,
+            1,
+        );
         assert_eq!(a.same_file(b), IdentityVerdict::Indeterminate);
         assert_eq!(a.key(), None, "no discriminator → no key");
     }

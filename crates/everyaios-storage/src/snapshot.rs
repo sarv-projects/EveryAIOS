@@ -116,4 +116,38 @@ mod tests {
         store.publish(s2);
         assert_eq!(store.current().created_at, 2);
     }
+
+    #[test]
+    fn pre_fix_snapshots_still_load_with_an_unknown_identity() {
+        // FIX-10 added `identity` to `FileNode`. A snapshot written before that
+        // must still deserialize — the missing field defaults to the honest
+        // "unknown" identity, never a fabricated zero.
+        let legacy = serde_json::json!({
+            "created_at": 1,
+            "root": "/a",
+            "arena": {
+                "nodes": [{
+                    "id": 0,
+                    "parent": 4294967295u64,
+                    "name": "a",
+                    "path": "/a",
+                    "size": 4,
+                    "mtime": 0,
+                    "is_dir": true,
+                    "nlink": 0,
+                    "dev": 0,
+                    "ino": 0,
+                }],
+            },
+        });
+        let snap: Snapshot = serde_json::from_value(legacy).unwrap();
+        let node = &snap.arena.nodes[0];
+        assert!(
+            node.identity.is_unknown(),
+            "a legacy node is unknown, not real"
+        );
+        assert_eq!(node.identity.legacy_parts().1, 0, "never a fabricated id");
+        // nlink defaults to 1 so a legacy node can never group as a hardlink.
+        assert_eq!(node.identity.nlink(), 1);
+    }
 }

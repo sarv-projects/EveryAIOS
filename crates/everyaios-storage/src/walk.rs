@@ -19,8 +19,8 @@ use std::time::UNIX_EPOCH;
 use crossbeam_deque::{Steal, Stealer, Worker};
 use serde::{Deserialize, Serialize};
 
-use crate::identity::{FileIdentity, IdentityPolicy, identity_from_metadata};
 use crate::StorageError;
+use crate::identity::{FileIdentity, IdentityPolicy, identity_from_metadata};
 
 /// Sentinel arena index meaning "no parent" (the arena root's parent).
 pub const ROOT_ID: u32 = u32::MAX;
@@ -548,8 +548,8 @@ mod tests {
         // real one downstream).
         let root = tmpdir("identity-metadata-only");
         fs::write(root.join("a.txt"), b"hello").unwrap();
-        let records = scan_with_policy(&root, &ScanOptions::default(), IdentityPolicy::MetadataOnly)
-            .unwrap();
+        let records =
+            scan_with_policy(&root, &ScanOptions::default(), IdentityPolicy::MetadataOnly).unwrap();
         let a = records.iter().find(|r| r.path.ends_with("a.txt")).unwrap();
         if !cfg!(unix) {
             assert!(a.identity.is_unknown());

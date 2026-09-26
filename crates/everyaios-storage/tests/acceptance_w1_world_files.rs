@@ -13,6 +13,7 @@
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use everyaios_storage::IdentityPolicy;
 use everyaios_storage::dedup::{DedupOptions, DupCandidate, find_duplicates};
 use everyaios_storage::identity::{IdentityVerdict, Incarnation};
 use everyaios_storage::usn::{
@@ -20,7 +21,6 @@ use everyaios_storage::usn::{
     RescanScope, UsnDeltaSource, UsnReason, UsnRecord,
 };
 use everyaios_storage::walk::{ScanOptions, scan, scan_with_policy};
-use everyaios_storage::IdentityPolicy;
 
 fn tmpdir(tag: &str) -> PathBuf {
     let p = std::env::temp_dir().join(format!(
@@ -45,9 +45,7 @@ fn candidates(root: &Path, ext: &str) -> Vec<DupCandidate> {
     .unwrap();
     records
         .iter()
-        .filter(|r| {
-            !r.is_dir && r.path.extension().and_then(|e| e.to_str()) == Some(ext)
-        })
+        .filter(|r| !r.is_dir && r.path.extension().and_then(|e| e.to_str()) == Some(ext))
         .map(DupCandidate::from_record)
         .collect()
 }
@@ -107,12 +105,8 @@ fn acceptance_file_identity_is_real_and_incs_hardlink_grouping() {
 
     // 4. A metadata-only scan reports *unknown* rather than a fabricated id,
     //    and its numbers are flagged as unprovable.
-    let records = scan_with_policy(
-        &root,
-        &ScanOptions::default(),
-        IdentityPolicy::MetadataOnly,
-    )
-    .unwrap();
+    let records =
+        scan_with_policy(&root, &ScanOptions::default(), IdentityPolicy::MetadataOnly).unwrap();
     for r in records.iter().filter(|r| !r.is_dir) {
         assert_eq!(r.identity.legacy_parts(), (r.dev, r.ino, r.nlink));
     }
@@ -289,7 +283,11 @@ fn acceptance_cursor_resumes_after_restart_and_epoch_reset_rescans() {
     let j = ScriptedJournal::new("C:\\", 0xAAAA_1111, &[100, 101, 102, 103, 104]);
     let mut resumed = UsnDeltaSource::new(j, stored);
     let (records, cursor) = applied(resumed.poll().unwrap());
-    assert_eq!(records.len(), 2, "only what happened after the stored cursor");
+    assert_eq!(
+        records.len(),
+        2,
+        "only what happened after the stored cursor"
+    );
     assert_eq!(cursor, 104);
     resumed.state().save_to(&row_path).unwrap();
 
@@ -317,7 +315,10 @@ fn acceptance_cursor_resumes_after_restart_and_epoch_reset_rescans() {
     let reloaded = CursorRow::load_from(&row_path, JournalSource::Ntfs, "C:\\").unwrap();
     assert_eq!(reloaded.last_gap, Some(GapReason::EpochChanged));
     assert_eq!(reloaded.anomalies, 1);
-    assert!(reloaded.gap_open, "completeness is not claimed while a gap is open");
+    assert!(
+        reloaded.gap_open,
+        "completeness is not claimed while a gap is open"
+    );
 
     let _ = std::fs::remove_dir_all(&dir);
 }
@@ -375,7 +376,10 @@ fn acceptance_gap_anomaly_is_an_observable_event() {
     let signal = gap(source.poll().unwrap());
     let event = source.anomaly(&signal);
     assert_eq!(event.reason, GapReason::JournalDeleted);
-    assert!(event.observed_at > 0, "a real observation stamp is recorded");
+    assert!(
+        event.observed_at > 0,
+        "a real observation stamp is recorded"
+    );
     assert_eq!(event.discarded_cursor, 0);
 
     let json = event.to_json();
@@ -411,9 +415,11 @@ fn acceptance_observed_at_advances_only_on_observation() {
     }
     // "No changes" is still an observation, so the freshness stamp moves.
     assert_eq!(source.state().observed_at, 1_700_000_000);
-    assert!(SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0)
-        > 0);
+    assert!(
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0)
+            > 0
+    );
 }

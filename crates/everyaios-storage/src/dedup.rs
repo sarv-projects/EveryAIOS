@@ -21,8 +21,8 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
-use crate::identity::{FileIdentity, FileKey};
 use crate::StorageError;
+use crate::identity::{FileIdentity, FileKey};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct DedupOptions {

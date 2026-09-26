@@ -352,9 +352,7 @@ impl CursorRow {
     ) -> Result<Self, crate::StorageError> {
         match std::fs::read(path) {
             Ok(bytes) => Ok(serde_json::from_slice(&bytes)?),
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                Ok(Self::new(source, scope))
-            }
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Self::new(source, scope)),
             Err(e) => Err(e.into()),
         }
     }
@@ -512,7 +510,9 @@ impl<R: JournalReader> UsnDeltaSource<R> {
             let (expected, found) = (self.state.epoch, epoch);
             return Ok(self.open_gap(
                 GapReason::EpochChanged,
-                format!("epoch {expected:#x} → {found:#x}: cursor discarded, scope rescan required"),
+                format!(
+                    "epoch {expected:#x} → {found:#x}: cursor discarded, scope rescan required"
+                ),
             ));
         }
         if self.state.epoch == 0 {
@@ -558,7 +558,9 @@ impl<R: JournalReader> UsnDeltaSource<R> {
             Err(JournalError::EpochChanged { expected, found }) => {
                 return Ok(self.open_gap(
                     GapReason::EpochChanged,
-                    format!("epoch {expected:#x} → {found:#x}: cursor discarded, scope rescan required"),
+                    format!(
+                        "epoch {expected:#x} → {found:#x}: cursor discarded, scope rescan required"
+                    ),
                 ));
             }
             Err(JournalError::Unavailable(e)) => {
@@ -735,7 +737,11 @@ mod tests {
         fn first_usn(&mut self) -> Result<u64, JournalError> {
             Ok(self.first)
         }
-        fn read_from(&mut self, from: u64, max_records: usize) -> Result<JournalChunk, JournalError> {
+        fn read_from(
+            &mut self,
+            from: u64,
+            max_records: usize,
+        ) -> Result<JournalChunk, JournalError> {
             if let Some(e) = self.fail.take() {
                 return Err(e);
             }
@@ -914,7 +920,10 @@ mod tests {
                 volume: "C:\\".into()
             }
         );
-        assert!(g.detail.contains("0x1111") && g.detail.contains("0x2222"), "{g:?}");
+        assert!(
+            g.detail.contains("0x1111") && g.detail.contains("0x2222"),
+            "{g:?}"
+        );
 
         let st = s.state();
         assert!(st.gap_open);
@@ -943,7 +952,10 @@ mod tests {
         // The same condition reported by the read itself (the NTFS
         // `ERROR_INVALID_PARAMETER` path) must not look like a clean read.
         let mut j = FakeJournal::with_history(0, &[10]);
-        j.fail_next(JournalError::StartingPointTooOld { from: 3, first: 900 });
+        j.fail_next(JournalError::StartingPointTooOld {
+            from: 3,
+            first: 900,
+        });
         let mut s = UsnDeltaSource::fresh(j);
         let g = gap(s.poll().unwrap());
         assert_eq!(g.reason, GapReason::StartingPointTooOld);
@@ -1081,13 +1093,22 @@ mod tests {
                 .to_string()
                 .contains("below the retained first")
         );
-        assert!(JournalError::JournalDeleted.to_string().contains("truncated"));
+        assert!(
+            JournalError::JournalDeleted
+                .to_string()
+                .contains("truncated")
+        );
         assert!(JournalError::CaughtUp.to_string().contains("caught up"));
     }
 
     #[test]
     fn records_carry_the_usn_file_reference_number() {
-        let r = UsnRecord::new(5, UsnReason::Create, PathBuf::from("C:/a.txt"), Some(0x0002_0000));
+        let r = UsnRecord::new(
+            5,
+            UsnReason::Create,
+            PathBuf::from("C:/a.txt"),
+            Some(0x0002_0000),
+        );
         assert_eq!(r.file_ref, Some(0x0002_0000));
     }
 }

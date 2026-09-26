@@ -106,7 +106,9 @@ fn classify_os_error(op: &str, err: &std::io::Error) -> JournalError {
             // watermark and re-reports the concrete numbers.
             JournalError::StartingPointTooOld { from: 0, first: 0 }
         }
-        Some(code) if code == ERROR_JOURNAL_DELETE_IN_PROGRESS as i32 => JournalError::JournalDeleted,
+        Some(code) if code == ERROR_JOURNAL_DELETE_IN_PROGRESS as i32 => {
+            JournalError::JournalDeleted
+        }
         Some(code) if code == ERROR_HANDLE_EOF as i32 => JournalError::CaughtUp,
         Some(code) if code == ERROR_JOURNAL_NOT_ACTIVE as i32 => {
             JournalError::Unavailable(format!("{op}: journal not active (os error {code})"))
@@ -355,8 +357,9 @@ impl NtfsJournalReader {
     /// [`crate::usn::UsnDeltaSource`]: it bounds the batch and turns failures
     /// into typed gap signals instead of opaque strings.
     pub fn read_since(&mut self, last_usn: u64) -> Result<(Vec<UsnRecord>, u64), String> {
-        let (raws, next_usn) = read_journal_chunk(self.handle, self.journal_id, last_usn, &mut self.buffer)
-            .map_err(|e| format!("FSCTL_READ_USN_JOURNAL failed: {e}"))?;
+        let (raws, next_usn) =
+            read_journal_chunk(self.handle, self.journal_id, last_usn, &mut self.buffer)
+                .map_err(|e| format!("FSCTL_READ_USN_JOURNAL failed: {e}"))?;
         if raws.is_empty() {
             return Ok((Vec::new(), next_usn));
         }
@@ -371,10 +374,13 @@ impl NtfsJournalReader {
     fn resolve_records(&mut self, raws: Vec<UsnRawRecord>) -> Vec<UsnRecord> {
         let mut out = Vec::with_capacity(raws.len());
         for raw in raws {
-            let path = self.frn.path_of(raw.file_ref, &raw.name).unwrap_or_else(|| {
-                // Unresolvable parent chain — raw name at the volume root.
-                PathBuf::from(format!("{}\\{}", self.frn.volume, raw.name))
-            });
+            let path = self
+                .frn
+                .path_of(raw.file_ref, &raw.name)
+                .unwrap_or_else(|| {
+                    // Unresolvable parent chain — raw name at the volume root.
+                    PathBuf::from(format!("{}\\{}", self.frn.volume, raw.name))
+                });
             out.push(UsnRecord {
                 usn: raw.usn,
                 reason: raw.reason,
@@ -390,9 +396,8 @@ impl NtfsJournalReader {
     /// Refresh the journal watermarks, adopting a new journal id if the
     /// journal was recreated (which the driver turns into an epoch reset).
     fn refresh_watermarks(&mut self) -> Result<USN_JOURNAL_DATA_V0, JournalError> {
-        let info = query_journal(self.handle).map_err(|e| {
-            classify_os_error("FSCTL_QUERY_USN_JOURNAL", &e)
-        })?;
+        let info = query_journal(self.handle)
+            .map_err(|e| classify_os_error("FSCTL_QUERY_USN_JOURNAL", &e))?;
         self.journal_id = info.UsnJournalID;
         Ok(info)
     }
@@ -433,21 +438,22 @@ impl JournalReader for NtfsJournalReader {
         let mut out: Vec<UsnRecord> = Vec::new();
         let mut cursor = from;
         loop {
-            let chunk = match read_journal_chunk(self.handle, self.journal_id, cursor, &mut self.buffer)
-                .map_err(|e| classify_os_error("FSCTL_READ_USN_JOURNAL", &e))
-            {
-                Ok(c) => c,
-                // EOF after a partial drain is a drained batch, not a gap; EOF
-                // with nothing buffered is a legitimate "caught up".
-                Err(JournalError::CaughtUp) if !out.is_empty() => {
-                    return Ok(JournalChunk {
-                        records: out,
-                        next_usn: cursor,
-                        exhausted: true,
-                    });
-                }
-                Err(e) => return Err(e),
-            };
+            let chunk =
+                match read_journal_chunk(self.handle, self.journal_id, cursor, &mut self.buffer)
+                    .map_err(|e| classify_os_error("FSCTL_READ_USN_JOURNAL", &e))
+                {
+                    Ok(c) => c,
+                    // EOF after a partial drain is a drained batch, not a gap; EOF
+                    // with nothing buffered is a legitimate "caught up".
+                    Err(JournalError::CaughtUp) if !out.is_empty() => {
+                        return Ok(JournalChunk {
+                            records: out,
+                            next_usn: cursor,
+                            exhausted: true,
+                        });
+                    }
+                    Err(e) => return Err(e),
+                };
             let (raws, next_usn) = chunk;
             if raws.is_empty() {
                 if out.is_empty() {
