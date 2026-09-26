@@ -1,13 +1,15 @@
 # AgentCowork — Architecture v1 — Index & Blueprint
 
 > **Doc set:** AgentCowork architecture **v1** — rebuilt from scratch on the shoulders of v0.
-> **Status:** **v1 FROZEN (2026-09-26)** — docs 00–44 + `AGENTCOWORK-SPEC.md` + `AGENTCOWORK-UI.md` frozen after the P7 SDD wave (`DEC-038…045` promoted to `Locked`; independent review reconciled). Further changes require a superseding `DEC` (`ARCH/04-DECISIONS.md`).
+> **Status:** **v1 FROZEN (2026-09-26)** — docs 00–44 + `AGENTCOWORK-SPEC.md` + `AGENTCOWORK-UI.md` frozen after the P7 SDD wave (`DEC-038…045` promoted to `Locked`; independent review reconciled). Further changes require a superseding `DEC` (`ARCH/04-DECISIONS.md`). **Reopened (2026-09-26, owner-directed):** full verification pass in progress — every doc read line-by-line, understood, and fixed (architect-style: clashes fixed and back-propagated, missing pieces added); the set re-freezes when the pass completes.
 > **Date:** 2026-09-26 · **Repo:** `desktop_app` · **Branch:** `main`
 > **Code:** v1 docs are frozen (2026-09-26) — implementation now proceeds spec-driven, tracked in `TODO.md` (W0–W4) and accepted per `ARCH/42-EVIDENCE-MAP.md`.
 > **v0 archive:** `ARCHIVE/v0/` (local, git-ignored) — see `ARCHIVE/v0/MANIFEST.md`. Nothing in the archive is a contract.
 > **Exempt:** `TODO.md` stays the live delivery tracker and is not part of this rebuild.
 >
 > **v1 FROZEN (2026-09-26):** owner decision after the P7 SDD wave — spec layer (`ARCH/08-REQUIREMENTS.md`, 307 `REQ-*`), traceability (`ARCH/09-FEATURE-MATRIX.md`, 307 rows), `TODO.md` reworked into `TASK-*` units (W0–W4), independent review reconciled; `DEC-038…045` promoted to `Locked` (`DEC-020` stays `Provisional` — branding).
+>
+> **Reopened for verification (2026-09-26, owner-directed):** full architect-style pass across `AGENTCOWORK-SPEC.md` + `AGENTCOWORK-UI.md` + `ARCH/00–44` — read → understand → fix; schema/architecture/LLD clashes fixed with back-propagation; missing pieces added; re-freeze follows completion.
 >
 > **Absorption wave 2 (2026-09-26, before freeze):** provider layer (`DEC-034/035`), async subagents (`DEC-036`), web search (`DEC-037`) — absorbed and registered.
 >
