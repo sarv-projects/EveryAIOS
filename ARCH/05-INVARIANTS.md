@@ -20,7 +20,7 @@
 ### INV-03 — One governed path
 **Invariant:** Every externally visible effect follows DEC-002's single path. Domains, adapters, UI and the native agent are not exempt.
 **Enforcement:** `13-CAPABILITY`, `14-PROVIDERS`; review gate at every module doc.
-**Verification:** architecture sweep (P6); capability tests demonstrating no bypass.
+**Verification:** architecture sweep (P6; re-verified in the P9 pass, 2026-09-26); capability tests demonstrating no bypass.
 
 ### INV-04 — One authorization decider
 **Invariant:** Exactly one component decides ALLOW / ASK / DENY. No second permission system — including "small" ones inside domains, connectors, or agent adapters.
@@ -35,7 +35,7 @@
 ### INV-06 — One owner per state
 **Invariant:** Each durable store has exactly one writer (work store, event store, memory store, artifact store, world state). No second registry, scheduler, or queue exists anywhere.
 **Enforcement:** module boundaries (`10`–`34`).
-**Verification:** interop matrix + ownership table in `ARCH/03-HLD.md §3`; P6 sweep.
+**Verification:** interop matrix + ownership table in `ARCH/03-HLD.md §3`; P6 sweep (re-verified in P9, 2026-09-26).
 
 ### INV-07 — Receipts and events
 **Invariant:** Every externally visible effect produces a receipt and at least one event. No silent effects; no "completed" without evidence.
@@ -75,7 +75,7 @@
 ### INV-14 — Kernel minimality
 **Invariant:** The kernel contains no domain logic. Domains execute; Trust governs; the kernel never special-cases a domain's path.
 **Enforcement:** `10-KERNEL` rule; module reviews.
-**Verification:** dependency-direction check; P6 sweep.
+**Verification:** dependency-direction check; P6 sweep (re-verified in P9, 2026-09-26).
 
 ### INV-15 — Transport isolation
 **Invariant:** Protocol awareness (MCP/ACP/CLI/HTTP) exists only inside provider/channel adapters. Nothing above Capability knows which transport executed an operation.

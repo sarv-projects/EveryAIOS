@@ -92,7 +92,7 @@ invoke(handle, op) → CapabilityResult        // status: completed | guidance |
 descriptors(scope) → CapabilityDescriptor[]
 health(provider_id) → HealthStatus
 ```
-**Guarantees:** `invoke` always walks Guard → Ticket → Execute → Verify → Receipt (DEC-002); handles are epoch-checked (stale ⇒ `InvalidState`); callers never see providers or transports (INV-15).
+**Guarantees:** `invoke` always walks Guard → Ticket → Execute → Verify → Receipt (DEC-002); handles are epoch-checked (DM-012, `13` §4; stale ⇒ `InvalidState`); callers never see providers or transports (INV-15).
 
 ### CTR-010 `ProviderAdapter` (14)
 ```

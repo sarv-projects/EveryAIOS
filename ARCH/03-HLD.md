@@ -189,7 +189,7 @@ Resources are installed/available at Global or Workspace and never duplicated pe
 - **Artifacts & Receipts** (`29`): outputs of work vs reusable inventory (Library); promotion is explicit.
 - **Model Plane** (`18`): one catalog, one router; Agent X and every internal consumer ask the router, never a vendor SDK directly.
 
-## 8. Module interop matrix (first cut — expanded per module in P2/P3, verified in P6)
+## 8. Module interop matrix (first cut — expanded per module in P2/P3, verified in P6; re-verified in P9)
 
 | Module | Exposes (primary) | Consumed by |
 |---|---|---|

@@ -1,13 +1,13 @@
 # CURRENT_RUN — handover log
 
 > Read this first. Working log for agents in `desktop_app`.
-> **v1 docs FROZEN (2026-09-26); P7 SDD finalisation complete — reopened 2026-09-26 for the owner-directed full verification pass (read → understand → fix, architect-style); re-freeze follows; the code phase starts at W0 (`TODO.md`) after the re-freeze.**
+> **v1 docs RE-FROZEN (2026-09-26) after the owner-directed P9 verification pass — the code phase starts at W0 (`TODO.md`).**
 > Previous v0 handover content (≈344 KB) was replaced on 2026-09-26; it remains in git history.
 
 ## Active goal
 Rebuild the AgentCowork docs from scratch as **v1**: ARCH set + SPEC + UI + supporting docs, on the shoulders of the v0 corpus. v0 archived locally (`ARCHIVE/v0/`, git-ignored). `TODO.md` was exempt from the rebuild and now holds the v1 implementation plan (reworked in P7). No scope cuts.
 
-## Where we stopped — 2026-09-26: P0–P7 ✅ complete; v1 FROZEN (owner decision) then reopened for the verification pass (read → understand → fix); re-freeze + code phase W0 next (details below)
+## Where we stopped — 2026-09-26: P0–P9 ✅ complete; v1 FROZEN (owner decision), reopened for the owner-directed verification pass (read → understand → fix), and re-frozen; code phase W0 next (details below)
 **Done:**
 - v0 archived: `ARCH/` (33 entries) → `ARCHIVE/v0/ARCH/`; `RESEARCH/` → `ARCHIVE/v0/RESEARCH/`; 10 root product docs → `ARCHIVE/v0/root/`; manifest at `ARCHIVE/v0/MANIFEST.md`; archive README updated.
 - v1 foundation drafted:
@@ -34,7 +34,7 @@ Rebuild the AgentCowork docs from scratch as **v1**: ARCH set + SPEC + UI + supp
 - Gate state after the re-homing: `check-doc-refs.mjs`, `check-public-surface.mjs` and `gen-release-surface.mjs --check` exit 0.
 - **Pre-existing red (out of scope, left as-is):** `check-doc-sync.mjs` reads archived v0 files (`ARCH/09-FEATURE-MATRIX.md`, `DESKTOP-APP-SPEC.md`, `SPEC-CHANGELOG.md`) and fails on main; it is the only FAIL in release-qualify E3 and is queued for re-homing.
 
-**Working-tree state:** HEAD = the freeze commits (`spec: promote DEC-038…045 for the v1 freeze` + `docs: freeze the v1 doc set`), pushed to `origin/main` on 2026-09-26 after the network returned; earlier P7 head `f3c1cb7`. `ARCHIVE/**` is git-ignored, so the archive side is never committed. Code tree clean — the code phase starts at W0.
+**Working-tree state:** HEAD = the re-freeze commits (`docs: apply P9 independent review findings` + `docs: re-freeze the v1 doc set after the P9 verification pass`), pushed to `origin/main` on 2026-09-26; earlier heads: P9 reconciliation `1cf37f4`, P8 freeze `0abb35a`/`073273b`, P7 `f3c1cb7`. `ARCHIVE/**` is git-ignored, so the archive side is never committed. Code tree clean — the code phase starts at W0.
 
 **SDD finalisation — pass P7 (2026-09-26, ✅ complete):**
 - **Spec layer** (`b646cf1`): `ARCH/08-REQUIREMENTS.md` (behavioral registry — **307 REQs** across 26 domains, each with Statement/priority/source/acceptance/failure cases) + `ARCH/09-FEATURE-MATRIX.md` (307 traceability rows, 1:1) + `.agents/docs/spec-driven-development.md` + `.agents/templates/SPEC.template.md` + `AGENTS.md` §16. HLD fleshing (`5ae5f53`: `03` §3.1/§11/§12, `06` ER, `07` note); batch-1 kit/banner pass (`0644a20`).
@@ -44,22 +44,21 @@ Rebuild the AgentCowork docs from scratch as **v1**: ARCH set + SPEC + UI + supp
 - **UI merge** (`66867b9`): REQ-UI-002…014 appended; REQ-UI-001 narrowed to reasoning-only (004/005 own markdown/mermaid); parity 14↔14.
 - **Edge cases** (`0760255`): `ARCH/41` +56 entries → 126 total (families K–P; gen-30 gap list tracked for owning docs).
 - **SPEC pass** (`342f7c9`) + **TODO rework** (`9f9a6d2`): `TODO.md` 2,902 → 916 lines — the v1 implementation plan (W0 security/FIX wave · W1 plane foundations · W2 domain runtimes · W3 surfaces/events/verification · W4 Agent X with `TASK-AGX-001…014`), 307/307 REQs referenced, history preserved non-authoritatively (`git show 3eeb8f0:TODO.md`).
-- **Independent final review** (oracle → `ARCHIVE/v1-research/v1-sdd/final-review-findings.md`): 1 blocker + 7 majors + ~20 minors; reconciliation applied (`e60adeb` + `ce6a3cb`) — DEC-045/DEC-027 scope, INV-01 qualification (DEC-042), search ownership (CTR-006 façade vs `27` implementation), `Task`-as-projection (OQ-DM-1 closed), DEC-040 propagation, SPEC §16 PENDs, OQ namespace convention, decision citations, minors.
+- **Independent final review** (oracle → `ARCHIVE/v1-research/v1-sdd/final-review-findings.md`): 1 blocker + 7 majors + ~20 minors; reconciliation applied (`e60adeb` + `ce6a3cb`) — DEC-045/DEC-027 scope, INV-01 qualification (DEC-042), search ownership (CTR-006 façade vs `27` implementation), `Task`-as-projection (OQ-DM-01 closed), DEC-040 propagation, SPEC §16 PENDs, OQ namespace convention, decision citations, minors.
 - Evidence deliverables in `ARCHIVE/v1-research/v1-sdd/`: `code-state-inventory.md` (309) · `agentx-opencode-harness-notes.md` (647) · `memory-agent-deep-dive.md` (604) · `agentx-finalization-draft.md` (554) · `req-ui-proposed.md` · `final-review-findings.md`.
 - **v1 freeze (P8, 2026-09-26 — owner decision):** doc statuses flipped to `Frozen v1 (frozen 2026-09-26; drafted Pn)`; `DEC-038…045` promoted to `Locked`; `ARCH/00-INDEX.md` §4 P8 row + §5 freeze record added; commits `spec: promote DEC-038…045 for the v1 freeze` + `docs: freeze the v1 doc set`.
-- Owner items at freeze: `DEC-038…045` promoted to `Locked` (DEC-020 stays `Provisional` — branding); remaining optional: a `Task`-projection DEC (resolved as `06` alignment + OQ-DM-1 close); workspace `.agents/skills/ui-ux/SKILL.md` drift (outside this repo).
+- Owner items: `DEC-038…045` promoted at the P8 freeze, `DEC-046`/`DEC-047` added in P9 and promoted at the re-freeze (`DEC-020` stays `Provisional` — branding); `Task`-projection resolved as `06` alignment + `OQ-DM-01` close; workspace `.agents/skills/ui-ux/SKILL.md` drift (outside this repo, report-only).
 
-**P9 verification wave — 2026-09-26 (owner-directed, in flight):**
-- Owner directive: a full pass is **read → understand → fix**, architect-style — line-by-line, fix as you go; schema/architecture/LLD clashes fixed with back-propagation to earlier docs; missing pieces added. The freeze was reopened for the duration (`9f0c12b`); the set re-freezes after the pass + reconciliation + independent review.
+**P9 verification wave — 2026-09-26 (owner-directed, ✅ complete):**
+- Owner directive: a full pass is **read → understand → fix**, architect-style — line-by-line, fix as you go; schema/architecture/LLD clashes fixed with back-propagation to earlier docs; missing pieces added. The freeze was reopened for the duration (`9f0c12b`) and the set re-froze after the pass + reconciliation + independent review.
 - **Foundation cluster ✅ complete (`8c1d154 docs: verification pass — foundation (SPEC + ARCH/00–09)`):** SPEC + `00`–`09` read line-by-line; fixes applied (SPEC §5/§7/§13/§16/§17; `00-INDEX` §2/§4/§6/§7/§9 incl. OQ-005 redefinition; `01` naming-rule scope; `02` namespace wording; `03` `DelegationService` + epoch cites; `04` P9 banner; `05` verified clean; `06` evidence line + OQ-DM-3; `07` status tail + OQ-CTR resolutions; `08`/`09` registry integrity verified — 307 entries ↔ 307 rows, all seven fields present, IDs unique).
-- Six lanes in flight (each: read every line, understand, fix inline, report cross-cluster clashes; commit `docs: verification pass — <cluster>`; push): `10–14` · `15–18` (Agent X/context/memory/models) · `19–24` · `25–34` · `40–44` + `AGENTS.md`/`README.md`/`.agents/` kit · `AGENTCOWORK-UI.md` (designer).
-- Reconciliation queue: DEC-002 epoch citations → `(DM-012, `13` §4)` at `13-CAPABILITY.md:60/137`, `14-PROVIDERS.md:17/130`, `43-GLOSSARY.md:49`; namespace-consistency items; lane-reported clashes.
+- Six clusters passed (read every line, understand, fix inline; commits pushed): `10–14` (in the `16e23f2` sweep) · `15–18` `3a11f8e` · `19–24` `7b36d3f` + `09e6929` · `25–34` `6b22c66` · `40–44` + `AGENTS.md`/`README.md`/`.agents/` kit `03f4b8e` + `16e23f2` · `AGENTCOWORK-UI.md` (designer) `f266cbe`.
+- Reconciliation + review: `1cf37f4` (foundation + cross-cluster findings), independent review (ora-2 → `ARCHIVE/v1-research/v1-sdd/p9-independent-review.md`) applied in `fcd6f01`; re-freeze batch promotes `DEC-046`/`DEC-047`, marks `00-INDEX` §4 P9 ✅, completes the OQ padding sweep and updates the P6-sweep notes.
 
 ## Next exact steps
-1. ✅ Push complete (`f3c1cb7` and earlier are on `origin/main`); ✅ **v1 frozen** (P8, 2026-09-26); ✅ **reopened** (`9f0c12b`) for the owner-directed P9 verification pass.
-2. **P9 verification pass (in flight):** foundation cluster ✅ (`8c1d154`). Six lanes running (`10–14` · `15–18` · `19–24` · `25–34` · `40–44` + kit · UI doc). On completion: reconcile cross-cluster items → independent review → **re-freeze** (`ARCH/00-INDEX.md` §4 P9 ✅ + banner; this file) → code phase.
-3. **Code phase, W0 first** (after the re-freeze): re-verify `ARCH/42-EVIDENCE-MAP.md` §4 FIX-01…18 → open the P0 wave per §5, plus the inventory's live candidates: FIX-05 `skill_store.rs:442-449`, FIX-06 `fs_cmds.rs:129-137`, FIX-07 `acp_cmds.rs:1676`, FIX-09 (`tools.rs`/`messaging.rs`/`vault/oauth.rs` direct `ureq`), FIX-10 (`walk.rs:146-157`). Work the plan from `TODO.md` (W0→W4) against the `ARCH/09` chain; acceptance per `ARCH/42`.
-4. Open items queued: `check-doc-sync.mjs` re-homing (pre-existing red); gen-30 edge-gap folds into owning docs; workspace `.agents/skills/ui-ux/SKILL.md` drift (outside this repo).
+1. ✅ Push complete; ✅ **v1 frozen** (P8, 2026-09-26); ✅ reopened (`9f0c12b`) and ✅ **P9 verification pass complete — v1 re-frozen** (2026-09-26).
+2. **Code phase, W0 first:** re-verify `ARCH/42-EVIDENCE-MAP.md` §4 FIX-01…18 → open the P0 wave per §5, plus the inventory's live candidates: FIX-05 `skill_store.rs:442-449`, FIX-06 `fs_cmds.rs:129-137`, FIX-07 `acp_cmds.rs:1676`, FIX-09 (`tools.rs`/`messaging.rs`/`vault/oauth.rs` direct `ureq`), FIX-10 (`walk.rs:146-157`). Work the plan from `TODO.md` (W0→W4) against the `ARCH/09` chain; acceptance per `ARCH/42`.
+3. Open items queued: `check-doc-sync.mjs` re-homing (pre-existing red); gen-30 edge-gap folds into owning docs; workspace `.agents/skills/ui-ux/SKILL.md` drift (outside this repo).
 
 ## Decisions & gotchas
 - Names: product **AgentCowork** (working), runtime **Core**, native agent **Agent X** (`ARCH/01-NAMING.md`). Code identifiers (`everyaios-*`) stay until a post-freeze code-phase rename (OQ-003).
@@ -68,4 +67,4 @@ Rebuild the AgentCowork docs from scratch as **v1**: ARCH set + SPEC + UI + supp
 - Do not restore v0 files into tracked paths without a `DEC` entry in `ARCH/04-DECISIONS.md`.
 - `TODO.md` is exempt; `README.md`/`AGENTS.md` v1 sync ✅ done 2026-09-26.
 - SDD: `REQ-*`/`TASK-*`/`TEST-*` IDs are never renumbered or reused; spec changes land as `spec:`/`arch:` commits, implementation as `feat:`/`fix:`, tests as `test:` (`AGENTS.md` §16).
-- Passes do not rewrite locked decision text (e.g. `DEC-026` still ends at P0–P6); current pass status lives in `ARCH/00-INDEX.md` §4.
+- Passes do not rewrite locked decision text (e.g. `DEC-026` still ends at P0–P6, with a dated note); current pass status lives in `ARCH/00-INDEX.md` §4.

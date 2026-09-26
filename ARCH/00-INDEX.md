@@ -1,7 +1,7 @@
 # AgentCowork — Architecture v1 — Index & Blueprint
 
 > **Doc set:** AgentCowork architecture **v1** — rebuilt from scratch on the shoulders of v0.
-> **Status:** **v1 FROZEN (2026-09-26)** — docs 00–44 + `AGENTCOWORK-SPEC.md` + `AGENTCOWORK-UI.md` frozen after the P7 SDD wave (`DEC-038…045` promoted to `Locked`; independent review reconciled). Further changes require a superseding `DEC` (`ARCH/04-DECISIONS.md`). **Reopened (2026-09-26, owner-directed):** full verification pass in progress — every doc read line-by-line, understood, and fixed (architect-style: clashes fixed and back-propagated, missing pieces added); the set re-freezes when the pass completes.
+> **Status:** **v1 FROZEN (2026-09-26)** — docs 00–44 + `AGENTCOWORK-SPEC.md` + `AGENTCOWORK-UI.md` frozen after the P7 SDD wave (`DEC-038…045` promoted to `Locked`; independent review reconciled). Further changes require a superseding `DEC` (`ARCH/04-DECISIONS.md`). **Re-frozen (2026-09-26, after the owner-directed P9 verification pass):** every doc read line-by-line, understood and fixed (architect-style); clashes reconciled with back-propagation; `DEC-046`/`DEC-047` added and promoted to `Locked`; changes again require a superseding `DEC`.
 > **Date:** 2026-09-26 · **Repo:** `desktop_app` · **Branch:** `main`
 > **Code:** v1 docs are frozen (2026-09-26) — implementation now proceeds spec-driven, tracked in `TODO.md` (W0–W4) and accepted per `ARCH/42-EVIDENCE-MAP.md`.
 > **v0 archive:** `ARCHIVE/v0/` (local, git-ignored) — see `ARCHIVE/v0/MANIFEST.md`. Nothing in the archive is a contract.
@@ -9,7 +9,7 @@
 >
 > **v1 FROZEN (2026-09-26):** owner decision after the P7 SDD wave — spec layer (`ARCH/08-REQUIREMENTS.md`, 307 `REQ-*`), traceability (`ARCH/09-FEATURE-MATRIX.md`, 307 rows), `TODO.md` reworked into `TASK-*` units (W0–W4), independent review reconciled; `DEC-038…045` promoted to `Locked` (`DEC-020` stays `Provisional` — branding).
 >
-> **Reopened for verification (2026-09-26, owner-directed):** full architect-style pass across `AGENTCOWORK-SPEC.md` + `AGENTCOWORK-UI.md` + `ARCH/00–44` — read → understand → fix; schema/architecture/LLD clashes fixed with back-propagation; missing pieces added; re-freeze follows completion.
+> **Re-frozen after verification (2026-09-26, owner-directed):** full architect-style pass across `AGENTCOWORK-SPEC.md` + `AGENTCOWORK-UI.md` + `ARCH/00–44` — read → understand → fix completed; schema/architecture/LLD clashes reconciled with back-propagation; missing pieces added; independent review applied; v1 re-frozen.
 >
 > **Absorption wave 2 (2026-09-26, before freeze):** provider layer (`DEC-034/035`), async subagents (`DEC-036`), web search (`DEC-037`) — absorbed and registered.
 >
@@ -114,7 +114,7 @@ v0 grew by accretion: 33 ARCH files, 55 research files, a 355 KB spec, a 606 KB 
 | **P6** ✅ | Viability + evidence sweep; consistency pass; freeze v1; README/AGENTS sync | Sweep run 2026-09-26 (cross-refs/sections/statuses/names clean; `20-WORKFLOW` interop gap fixed); freeze declared for review; README + AGENTS synced |
 | **P7** ✅ | SDD layer: `08-REQUIREMENTS` + `09-FEATURE-MATRIX`; module Requirements/Acceptance sections; `AGENTS.md` §16 + kit protocol | `REQ-*` registry seeded per domain (307); matrix traceable (307 rows); `TODO.md` reworked into `TASK-*` units (W0–W4) |
 | **P8** ✅ | **v1 freeze** — owner decision (2026-09-26): `DEC-038…045` promoted to `Locked`; doc statuses flipped | **Frozen v1 (2026-09-26)** |
-| **P9** ⏳ | Owner-directed verification pass (2026-09-26): every doc read line-by-line, understood, fixed; clashes back-propagated; missing pieces added | Re-freeze when the pass + reconciliation + independent review complete |
+| **P9** ✅ | Owner-directed verification pass (2026-09-26): every doc read line-by-line, understood, fixed; clashes back-propagated; missing pieces added; independent review applied | **Re-frozen v1 (2026-09-26)** |
 
 ---
 
@@ -132,7 +132,7 @@ v0 grew by accretion: 33 ARCH files, 55 research files, a 355 KB spec, a 606 KB 
 - [x] **Security:** enforcement in Core (Guard) not prompts; vault custody preserved; external agents get projections only.
 - [x] **No stale v0 terms:** v1 names only (except `01-NAMING` map and history notes).
 
-> **Freeze record (2026-09-26):** checklist run across the set during P6 + P7 (module passes, line-checks, independent review; findings reconciled). `TEST-*` minting and Windows acceptance records are code-phase (`TODO.md` W0–W4, `ARCH/42-EVIDENCE-MAP.md`).
+> **Freeze record (2026-09-26):** checklist run across the set during P6 + P7 (module passes, line-checks, independent review; findings reconciled; re-run in the P9 verification pass before the re-freeze). `TEST-*` minting and Windows acceptance records are code-phase (`TODO.md` W0–W4, `ARCH/42-EVIDENCE-MAP.md`).
 
 ---
 

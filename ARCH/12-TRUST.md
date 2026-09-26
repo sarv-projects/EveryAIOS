@@ -59,7 +59,7 @@ Guard composes the three into a decision, then issues/validates tickets. Sandbox
 
 - All outbound network through the Guard egress (INV-05): allowlists by domain/method per policy; per-agent and per-session scopes; request metadata audited (never payloads by default).
 - MCP/HTTP/CLI child processes inherit governed network through their environment (`19`).
-- Static checks + P6 sweep verify no direct network clients exist above the adapter layer.
+- Static checks + P6 sweep (re-verified in P9, 2026-09-26) verify no direct network clients exist above the adapter layer.
 
 ## 8. External-agent boundary (DEC-009 — projection enforcement)
 

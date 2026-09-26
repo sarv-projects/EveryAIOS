@@ -55,8 +55,8 @@
 | DEC-043 | External-agent memory boundary: v1 recall-only projection (bound project + own session/task + user preferences); Core never writes native agent stores; provider-session transcripts not harvested; subagent child sessions harvested only when Core-owned with parent linkage; Agent X private notes are session-scope items + session log | Locked | 17, 15, 32 |
 | DEC-044 | Extraction model & disclosure: session provider default; `confidential` scopes local-only or off until enabled; global extraction budget + global/per-scope kill switches + per-run metering; concurrent sessions bounded | Locked | 17, 18, 11 |
 | DEC-045 | Provider-native compaction adoption policy: amends DEC-027's evidence clause only (a verified shipping reference exists — Codex remote compaction v2) and freezes the adoption rules (provider capability event · Guard egress + audit + per-provider off switch · usage via `18` · deterministic checkpoint stays primary); DEC-027 stays Locked with its rules untouched | Locked | 16, 18 |
-| DEC-046 | Verification plane stage completion: completes DEC-023's stage list to five — observe → validate → render → verify → reconcile (DEC-023's rules otherwise unchanged) | Provisional | 34, 12 |
-| DEC-047 | Capability id mapping for adapter-native tools: capability ids stay protocol-neutral; provider adapters own the mapping table (`transport_ref` + native tool name ↔ capability id) at discovery; unmapped native tools are not invocable (guidance, never silent exposure); mapping changes are registry data (epoch-checked), never contract changes | Provisional | 13, 14 |
+| DEC-046 | Verification plane stage completion: completes DEC-023's stage list to five — observe → validate → render → verify → reconcile (DEC-023's rules otherwise unchanged) | Locked | 34, 12 |
+| DEC-047 | Capability id mapping for adapter-native tools: capability ids stay protocol-neutral; provider adapters own the mapping table (`transport_ref` + native tool name ↔ capability id) at discovery; unmapped native tools are not invocable (guidance, never silent exposure); mapping changes are registry data (epoch-checked), never contract changes | Locked | 13, 14 |
 
 ## 2. Details
 
@@ -162,6 +162,7 @@ When an agent has a native way to do something (its own tools, shell, editor), t
 
 ### DEC-026 — Rebuild process
 v1 is written from scratch; v0 is archived locally (`ARCHIVE/v0/`) and is reference-only; docs are built in passes (P0–P6) gated by the viability checklist in `00-INDEX`; external claims require primary evidence; `TODO.md` is exempt.
+**Note (2026-09-26):** the pass series later extended to P7 (SDD layer), P8 (freeze) and P9 (verification pass) — “P0–P6” above records the original gating series; see `ARCH/00-INDEX.md` §4.
 **Affects:** `ARCH/00-INDEX.md`.
 
 ### DEC-027 — Context budget & compaction discipline
@@ -274,7 +275,7 @@ Background extraction defaults to the session's active provider (no *new* disclo
 
 ### DEC-046 — Verification plane stage completion
 **Completion on record:** DEC-023 summarizes the verification plane as "validate → render → verify → reconcile"; `ARCH/34-EFFECT-VERIFICATION.md` §2 and `REQ-VERIFY-003` define the pipeline as five stages — **observe → validate → render → verify → reconcile** — where observation (capturing the actual effect: render, screenshot, state read) precedes validation. This decision completes the stage list; DEC-023's rules are otherwise unchanged and remain Locked. The DEC-023 register row's three-stage short form (validate / render / reconcile) is superseded by this five-stage list.
-**Status note:** Provisional — completion of DEC-023's stage list; promote at the re-freeze.
+**Status note:** Locked (promoted at the re-freeze, 2026-09-26).
 **Evidence:** `ARCH/34-EFFECT-VERIFICATION.md` §2/§7 · `ARCH/08-REQUIREMENTS.md` REQ-VERIFY-003 · P9 verification pass (2026-09-26).
 **Affects:** `34-EFFECT-VERIFICATION`, `12-TRUST`.
 
@@ -282,7 +283,7 @@ Background extraction defaults to the session's active provider (no *new* disclo
 
 **Completion on record (P9, 2026-09-26):** MCP and adapter tool names are protocol-shaped while capability ids must stay protocol-neutral (`ARCH/13-CAPABILITY.md` §1 rule 1; `ARCH/14-PROVIDERS.md` §2 rule 2). `13` §8 and `14` §5 left the mapping owner unstated; this names it: the provider adapter owns the mapping table (`transport_ref` + native tool name ↔ capability id) built at discovery. Unmapped native tools are not invocable — they surface as guidance, never silent exposure. Mapping changes are registry data (epoch-checked — `DM-012`, `13` §4), never contract changes.
 
-**Status note:** Provisional — promote at the re-freeze.
+**Status note:** Locked (promoted at the re-freeze, 2026-09-26).
 
 **Evidence:** `ARCH/13-CAPABILITY.md` §1/§8 · `ARCH/14-PROVIDERS.md` §2/§5/§7 · `ARCH/08-REQUIREMENTS.md` REQ-PROV-007 · P9 verification pass (2026-09-26).
 
