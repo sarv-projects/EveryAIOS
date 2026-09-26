@@ -929,6 +929,13 @@ pub struct ToolService {
     receipt_order: std::collections::VecDeque<String>,
     /// How many receipts the in-memory index retains.
     receipt_index_cap: usize,
+    /// `TASK-CAP-002` — the provider epoch of the in-process native adapter.
+    ///
+    /// A capability handle is minted against this value; an epoch bump (a
+    /// provider restart) invalidates every outstanding handle, and the caller
+    /// must re-resolve rather than retry against a runtime that moved
+    /// (`ARCH/13` §4 · `ARCH/14` §1 rule 4 · `REQ-CAP-002`).
+    provider_epoch: u64,
 }
 
 /// P48.3 — one attached external MCP server: its backend dispatcher plus the
@@ -1116,7 +1123,23 @@ impl ToolService {
             receipts: BTreeMap::new(),
             receipt_order: std::collections::VecDeque::new(),
             receipt_index_cap: RECEIPT_INDEX_CAP,
+            provider_epoch: 1,
         }
+    }
+
+    /// `TASK-CAP-002` — the live provider epoch. A handle carries the epoch it
+    /// was minted at; comparing the two is the stale-handle check.
+    pub fn provider_epoch(&self) -> u64 {
+        self.provider_epoch
+    }
+
+    /// `TASK-CAP-002` — record a provider restart: the epoch bumps and every
+    /// outstanding capability handle is stale by definition. There is no
+    /// "refresh the handle" path — the caller re-resolves (`ARCH/13` §9 "stale
+    /// handle").
+    pub fn restart_provider(&mut self) -> u64 {
+        self.provider_epoch = self.provider_epoch.saturating_add(1);
+        self.provider_epoch
     }
 
     /// P64.11/P69.G5 — attach the kernel spool. Once attached, every committed
@@ -1232,6 +1255,11 @@ impl ToolService {
     ) -> Vec<String> {
         let names = self.registry.register_external(label, tools);
         self.attach_external(label, names.clone(), backend);
+        // Attaching (or re-attaching) an external provider is that provider
+        // starting, so the epoch advances: a handle minted before the attach is
+        // stale and its holder must re-resolve. The in-process adapter is
+        // unaffected — this is one epoch for the *catalog's* provider view.
+        self.restart_provider();
         names
     }
 
@@ -1306,6 +1334,63 @@ impl ToolService {
         &self.registry
     }
 
+    /// `TASK-CAP-002` — the resolver half of CTR-009 over the live catalog.
+    ///
+    /// Returns a handle for the head of the ranked chain, or the typed reason
+    /// there is none. The caller never learns which provider was chosen unless it
+    /// asks for the chain: `include_chain` false returns the handle (or the
+    /// refusal) alone, so provider identity stays below the capability layer
+    /// (INV-15).
+    pub fn resolve_capability(
+        &self,
+        capability_id: &str,
+        constraints: &everyaios_guard::capability_broker::ResolutionConstraints,
+        include_chain: bool,
+    ) -> Value {
+        let now_ms = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as u64)
+            .unwrap_or(0);
+        let resolution = crate::capability_manifest::resolve_capability_at(
+            &self.registry,
+            capability_id,
+            constraints,
+            now_ms,
+            // The runtime's own epoch, so a handle and the stale-handle check in
+            // `tool/exec` can never be derived from two different numbers.
+            self.provider_epoch,
+        );
+        let mut out = json!({
+            "capabilityId": capability_id,
+            "resolved": resolution.is_resolved(),
+        });
+        if let Some(handle) = &resolution.handle {
+            out["handle"] = serde_json::to_value(handle).unwrap_or(Value::Null);
+            out["expiresAtMs"] = json!(handle.expires_at_ms);
+        }
+        if include_chain {
+            out["chain"] = serde_json::to_value(&resolution.chain).unwrap_or_else(|_| json!([]));
+            out["excluded"] =
+                serde_json::to_value(&resolution.excluded).unwrap_or_else(|_| json!([]));
+            out["audit"] = serde_json::to_value(&resolution.audit).unwrap_or_else(|_| json!([]));
+        }
+        if let Some(unresolved) = &resolution.unresolved {
+            // A blocked chain is guidance with a next action, not a dead end.
+            let error = unresolved.as_error(capability_id);
+            out["status"] = json!(match unresolved {
+                everyaios_guard::capability_broker::Unresolved::MissingRequirement {
+                    kind, ..
+                } if kind == "connection" || kind == "environment" => "requires_user_action",
+                _ => "guidance",
+            });
+            out["error"] = json!({ "code": error.code(), "message": error.to_string() });
+            out["nextAction"] =
+                serde_json::to_value(unresolved_next_action(capability_id, unresolved))
+                    .unwrap_or(Value::Null);
+        }
+        out
+    }
+
     pub fn audit_len(&self) -> usize {
         self.audit.len()
     }
@@ -1330,6 +1415,14 @@ impl ToolService {
         match method {
             "tool/list" => {
                 let plane = params.get("plane").and_then(Value::as_str).unwrap_or("all");
+                // `TASK-CAP-003` — the model-facing plane is the **budgeted
+                // capability subset**, never the raw catalog. It is opt-in by
+                // name because the raw plane is still what the UI browser and
+                // the guard pre-flight read (`ARCH/13` §6: catalog mode is known
+                // to the UI, not to the model).
+                if plane == "capabilities" {
+                    return self.capability_subset(params);
+                }
                 let listed: Vec<&RegisteredTool> = match plane {
                     "shared" => self
                         .registry
@@ -1344,6 +1437,16 @@ impl ToolService {
                     "count": listed.len(),
                     "plane": plane,
                 }))
+            }
+            // `TASK-CAP-002` — the capability-plane entry point. Resolution
+            // never executes: `invoke` is the *same* `tool/exec` under a
+            // capability id, so a resolved capability cannot reach a dispatch
+            // path that a raw id could not.
+            "capability/resolve" => {
+                let capability_id = str_param(params, "capabilityId")
+                    .ok_or("capability/resolve requires capabilityId")?;
+                let constraints = resolution_constraints(params);
+                Ok(self.resolve_capability(capability_id, &constraints, true))
             }
             "tool/exec" => self.exec(params),
             "tool/commit" => self.commit(params),
@@ -1362,8 +1465,69 @@ impl ToolService {
         }
     }
 
+    /// `TASK-CAP-003` — the budgeted, loading-mode-honouring capability subset
+    /// for one turn. The response is bounded by construction, and the raw
+    /// catalog is never included, so a caller cannot obtain a flat dump from
+    /// this plane.
+    fn capability_subset(&self, params: &Value) -> Result<Value, String> {
+        let scope = crate::capability_manifest::ActivationScope::new(
+            str_param(params, "agentId").unwrap_or("agent"),
+            str_param(params, "sessionId").unwrap_or("default"),
+            str_param(params, "runId").unwrap_or("run"),
+        );
+        let budget = match params.get("budget") {
+            Some(b) => crate::capability_manifest::ActivationBudget {
+                max_bytes: b.get("maxBytes").and_then(Value::as_u64).unwrap_or(
+                    crate::capability_manifest::DEFAULT_ACTIVATION_BUDGET.max_bytes as u64,
+                ) as usize,
+                max_entries: b.get("maxEntries").and_then(Value::as_u64).unwrap_or(
+                    crate::capability_manifest::DEFAULT_ACTIVATION_BUDGET.max_entries as u64,
+                ) as usize,
+            },
+            None => crate::capability_manifest::DEFAULT_ACTIVATION_BUDGET,
+        };
+        let requested: Vec<String> = params
+            .get("requested")
+            .and_then(Value::as_array)
+            .map(|a| {
+                a.iter()
+                    .filter_map(|v| v.as_str().map(str::to_string))
+                    .collect()
+            })
+            .unwrap_or_default();
+        let requested_refs: Vec<&str> = requested.iter().map(String::as_str).collect();
+        let subset =
+            crate::capability_manifest::activate(&self.registry, &scope, budget, &requested_refs);
+        if !subset.within_budget() {
+            // Unreachable by construction; asserted rather than assumed, because
+            // the whole point of the layer is that a dump cannot cross it.
+            return Err("capability subset exceeded its budget".to_string());
+        }
+        serde_json::to_value(&subset).map_err(|e| e.to_string())
+    }
+
     fn exec(&mut self, params: &Value) -> Result<Value, String> {
         let tool_id = str_param(params, "toolId").ok_or("tool/exec requires toolId")?;
+
+        // `TASK-CAP-002` — the stale-handle check, before anything else happens.
+        // A caller that resolved a capability and carries its handle proves
+        // which provider epoch it believes it holds; if the runtime has moved
+        // since, the call is refused and re-resolution is required. A caller
+        // with no handle is unaffected — the raw plane never promised one.
+        if let Some(minted) = params.get("providerEpoch").and_then(Value::as_u64)
+            && minted != self.provider_epoch
+        {
+            return Ok(json!({
+                "action": "re-resolve",
+                "reason": format!(
+                    "capability handle is stale: minted at provider epoch {minted}, runtime is at {} — re-resolve instead of retrying",
+                    self.provider_epoch
+                ),
+                "providerEpoch": self.provider_epoch,
+                "retryable": false,
+            }));
+        }
+
         let spec = self
             .registry
             .get(tool_id)
@@ -3388,6 +3552,101 @@ fn collect_shell(args: &Value) -> Vec<String> {
 
 fn str_param<'a>(params: &'a Value, key: &str) -> Option<&'a str> {
     params.get(key).and_then(Value::as_str)
+}
+
+// ---------------------------------------------------------------------------
+// `TASK-CAP-002` — capability-plane helpers
+// ---------------------------------------------------------------------------
+
+/// Read the resolution constraints out of request params. The policy snapshot is
+/// named, never supplied: the snapshot id is recorded in the handle so a
+/// mid-session policy change re-validates at ticket time
+/// (`ARCH/13` §4).
+fn resolution_constraints(
+    params: &Value,
+) -> everyaios_guard::capability_broker::ResolutionConstraints {
+    let mut constraints = everyaios_guard::capability_broker::ResolutionConstraints::new(
+        str_param(params, "environmentId").unwrap_or("local"),
+        str_param(params, "policySnapshot").unwrap_or("policy-unpinned"),
+    );
+    if let Some(cost) = params.get("maxCostClass").and_then(Value::as_str) {
+        constraints.max_cost_class = match cost {
+            "free" => Some(everyaios_guard::capability_broker::CostClass::Free),
+            "low" => Some(everyaios_guard::capability_broker::CostClass::Low),
+            "standard" => Some(everyaios_guard::capability_broker::CostClass::Standard),
+            "high" => Some(everyaios_guard::capability_broker::CostClass::High),
+            _ => None,
+        };
+    }
+    if let Some(latency) = params.get("maxLatencyClass").and_then(Value::as_str) {
+        constraints.max_latency_class = match latency {
+            "local" => Some(everyaios_guard::capability_broker::LatencyClass::Local),
+            "fast" => Some(everyaios_guard::capability_broker::LatencyClass::Fast),
+            "standard" => Some(everyaios_guard::capability_broker::LatencyClass::Standard),
+            "slow" => Some(everyaios_guard::capability_broker::LatencyClass::Slow),
+            _ => None,
+        };
+    }
+    constraints
+}
+
+/// The concrete next action a blocked resolution names. A blocked chain is a
+/// result with a next step, never a dead end (`ARCH/13` §3 · `REQ-CAP-005`).
+fn unresolved_next_action(
+    capability_id: &str,
+    unresolved: &everyaios_guard::capability_broker::Unresolved,
+) -> everyaios_guard::capability_contract::NextAction {
+    use everyaios_guard::capability_broker::Unresolved as U;
+    use everyaios_guard::capability_contract::{NextAction, NextActionKind};
+    match unresolved {
+        U::NotRegistered { .. } => NextAction::new(
+            NextActionKind::Install,
+            capability_id,
+            format!("`{capability_id}` is not a registered capability; nothing can invoke it"),
+            "a registered capability with a descriptor and a verification hook",
+        ),
+        U::Deprecated { .. } => NextAction::new(
+            NextActionKind::Configure,
+            capability_id,
+            format!("`{capability_id}` is past its deprecation window and no longer resolves"),
+            "a capability inside its deprecation window",
+        ),
+        U::MissingRequirement {
+            missing,
+            kind,
+            rationale,
+            ..
+        } => {
+            let (kind, instruction) = match kind.as_str() {
+                "connection" => (
+                    NextActionKind::Connect,
+                    format!("connect `{missing}` — {rationale}"),
+                ),
+                "environment" => (
+                    NextActionKind::Install,
+                    format!("provide `{missing}` — {rationale}"),
+                ),
+                _ => (
+                    NextActionKind::Configure,
+                    format!("enable `{missing}` — {rationale}"),
+                ),
+            };
+            NextAction::new(kind, missing.clone(), instruction, capability_id)
+        }
+        U::NoServableProvider { excluded, .. } => NextAction::new(
+            NextActionKind::Configure,
+            capability_id,
+            format!(
+                "no provider can serve `{capability_id}` ({}) — repair or attach one, then retry",
+                excluded
+                    .iter()
+                    .map(|e| format!("{}: {}", e.provider_id, e.reason))
+                    .collect::<Vec<_>>()
+                    .join("; ")
+            ),
+            format!("`{capability_id}` becomes invokable"),
+        ),
+    }
 }
 
 fn now_ms() -> u64 {

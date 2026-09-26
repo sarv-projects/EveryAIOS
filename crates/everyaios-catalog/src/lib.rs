@@ -18,6 +18,7 @@ pub mod pricing;
 pub mod probe;
 pub mod profiles;
 pub mod provider;
+pub mod provider_adapter;
 pub mod provider_seed;
 pub mod routing;
 pub mod routing_feed;
@@ -57,6 +58,12 @@ pub use profiles::{
 pub use provider::{
     ALIASES, AggregatorKind, Auth, DiscoverySource, OPENAI_COMPATIBLE_PROFILES, ProviderRecord,
     ProviderRegistry, Transport, base_registry, normalize,
+};
+pub use provider_adapter::{
+    ADAPTER_CLASS_COUNT, AdapterClass, AdapterError, AdapterRegistry, AuthMethod, AuthSpec,
+    CapabilityInvocation, CustodyFinding, EgressDeclaration, GatewayIdentityPolicy,
+    InvocationRefusal, ProviderEvent, ProviderHealth, ProviderInfo, ProviderRegistration,
+    RegistrationError, TransportToolMapping, custody_findings, validate_registration,
 };
 pub use routing::{RouteFilters, rejection_reasons};
 pub use routing_feed::{

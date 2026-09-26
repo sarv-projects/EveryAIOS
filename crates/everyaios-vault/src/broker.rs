@@ -23,6 +23,7 @@ use crate::keyring::{
 use crate::ledger::{Pricing, Usage, UsageRow, default_pricing};
 use crate::oauth::{OAuthManager, is_oauth_provider};
 use crate::session_budget::SessionBudget;
+use everyaios_guard::netfloor::NetPolicy;
 
 /// Default OpenAI-compatible base URLs per provider (override via
 /// `ProvidersFile.base_url`).
@@ -59,7 +60,7 @@ pub enum WireTransport {
 /// A resolved provider endpoint: where to send, which dialect, which headers
 /// (P55.5). Never a secret — the key still comes from the vault ring at send
 /// time.
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ProviderEndpoint {
     /// Base URL **to the version root** (`…/v1`); the path is appended.
     pub base_url: String,
@@ -71,6 +72,33 @@ pub struct ProviderEndpoint {
     /// Keyless provider (P56.6 OpenCode Free, local proxies): never send an
     /// `Authorization` header, and do not require a key to exist.
     pub keyless: bool,
+    /// Egress floor: this endpoint may reach loopback destinations (a local
+    /// runtime or a local proxy). Mirrors the netfloor policy field of the same
+    /// name, so the declaration and the floor check cannot drift into two
+    /// vocabularies. Private/LAN destinations are never implied by this flag.
+    pub allow_loopback: bool,
+    /// Egress floor: this endpoint may reach private/LAN destinations. Off by
+    /// default — that is the actual SSRF prize, and no provider needs it.
+    pub allow_private: bool,
+}
+
+// Hand-written so the egress floor matches the platform default
+// (`NetPolicy::default()`: loopback permitted, private/LAN refused). A derived
+// `Default` would silently start refusing local runtimes, which are a
+// first-class desktop workflow — the flag is an explicit opt-*out*, not a
+// silent opt-in.
+impl Default for ProviderEndpoint {
+    fn default() -> Self {
+        Self {
+            base_url: String::new(),
+            transport: WireTransport::OpenaiChat,
+            headers: Vec::new(),
+            session_headers: false,
+            keyless: false,
+            allow_loopback: true,
+            allow_private: false,
+        }
+    }
 }
 
 impl ProviderEndpoint {
@@ -99,6 +127,22 @@ impl ProviderEndpoint {
             WireTransport::OpenaiChat => format!("{base}/chat/completions"),
             WireTransport::AnthropicMessages => format!("{base}/messages"),
         }
+    }
+
+    /// Declare that this endpoint may reach a local runtime over loopback. The
+    /// flag is the endpoint's own statement of reach, and it is what the egress
+    /// floor check reads — a local runtime is therefore explicit rather than
+    /// assumed, and no other destination class is implied by it.
+    pub fn with_loopback(mut self) -> Self {
+        self.allow_loopback = true;
+        self
+    }
+
+    /// Declare that this endpoint may reach private/LAN destinations. Off by
+    /// default; an explicit opt-in per endpoint, never a global setting.
+    pub fn with_private_network(mut self) -> Self {
+        self.allow_private = true;
+        self
     }
 
     /// The **model-listing** URL for this provider (P44.4 probe).
@@ -288,9 +332,9 @@ impl<'a> Broker<'a> {
         timeout: Duration,
     ) -> Result<ModelsProbe, BrokerError> {
         let url = self.models_url(provider)?;
-        if !credential_safe_url(&url) {
-            return Err(BrokerError::InsecureEndpoint(provider.to_string()));
-        }
+        // The probe is the other credential-bearing path, so it runs the same
+        // custody + egress floor checks as the chat path (INV-05, CTR-013).
+        self.egress_preflight(provider, &url)?;
         let endpoint = self.endpoints.get(provider).cloned();
         let keyless = endpoint.as_ref().map(|e| e.keyless).unwrap_or(false);
         let key = if keyless {
@@ -368,6 +412,38 @@ impl<'a> Broker<'a> {
             .get(provider)
             .map(|e| e.transport)
             .unwrap_or(WireTransport::OpenaiChat)
+    }
+
+    /// The netfloor policy this provider's declared egress permits.
+    ///
+    /// Derived from the endpoint's own declaration rather than a global
+    /// setting, so a provider cannot be quietly widened and a local runtime has
+    /// to say so. A provider with no registered endpoint falls back to the
+    /// platform default (loopback permitted, private/LAN refused).
+    pub fn floor_policy(&self, provider: &str) -> NetPolicy {
+        match self.endpoints.get(provider) {
+            Some(e) => NetPolicy {
+                allow_loopback: e.allow_loopback,
+                allow_private: e.allow_private,
+                allow_local_names: e.allow_private,
+            },
+            None => NetPolicy::default(),
+        }
+    }
+
+    /// The egress check both credential-bearing paths run: a cleartext-remote
+    /// refusal (custody) and a netfloor preflight (INV-05), in that order, with
+    /// a typed error for each and no fallback route after either.
+    pub fn egress_preflight(&self, provider: &str, url: &str) -> Result<(), BrokerError> {
+        if !credential_safe_url(url) {
+            return Err(BrokerError::InsecureEndpoint(provider.to_string()));
+        }
+        everyaios_guard::netfloor::preflight_url(url, self.floor_policy(provider)).map_err(
+            |denied| BrokerError::EgressDenied {
+                host: denied.url.clone(),
+                reason: format!("{:?}", denied.reason),
+            },
+        )
     }
 
     /// Attach the OAuth manager so subscription accounts get 401→refresh→
@@ -613,6 +689,14 @@ impl<'a> Broker<'a> {
         usage_of: impl Fn(&T) -> Usage,
     ) -> Result<T, BrokerError> {
         let url = self.request_url(provider)?;
+        // INV-05 / REQ-PROV-008 — the one egress choke point. The destination is
+        // floor-checked *before* a credential is selected and before any socket
+        // is opened, and a denial is a typed error with no fallback route: there
+        // is no second attempt and no alternative host to try. Both checks are
+        // needed and neither subsumes the other — `credential_safe_url` refuses
+        // cleartext to a remote host, the floor refuses a destination class the
+        // policy does not permit (link-local, cloud metadata, reserved space).
+        self.egress_preflight(provider, &url)?;
         let keyless = self
             .endpoints
             .get(provider)
@@ -858,15 +942,26 @@ fn parse_retry_after(resp: &ureq::Response) -> Option<u64> {
     Some(secs.min(24 * 60 * 60))
 }
 
-/// Per-conversation OpenCode headers (P56.6).
+/// Per-conversation client-identity + session-affinity headers (P56.6,
+/// `REQ-PROV-009` / `DEC-035`).
 ///
-/// Real OpenCode sends its conversation id on both `X-Session-Id` and
-/// `x-opencode-session` (the deployed gateway reads the former, `handler.ts`
-/// reads the latter) plus request/client identity; a missing session is a
-/// 400 `MissingSessionID`. The keyless free pool is 429-prone, which is why
-/// the session id is the broker's own `session_id` — a new conversation is a
-/// new session, exactly like the upstream client.
-fn session_headers(session_id: &str) -> Vec<(&'static str, String)> {
+/// A gateway-class provider may require (a) a client User-Agent identifying the
+/// **actual** client and (b) a session-affinity header carrying one stable value
+/// per conversation. The deployed gateway reads the session id from both
+/// `X-Session-Id` and `x-opencode-session`; a missing session is a
+/// 400 `MissingSessionID`.
+///
+/// The conversation id is the caller's own `session_id`: a new conversation is a
+/// new session, and one conversation keeps one value across every turn
+/// (stability across compaction and restarts is the provider plane's
+/// responsibility to preserve the same id). The identity is **ours** — never an
+/// impersonated agent and never a generic SDK name.
+///
+/// Public so a host can assert that what goes on the wire matches the identity
+/// policy the provider registry declares; the names themselves are also
+/// asserted in `everyaios-core` against `GatewayIdentityPolicy`, so the two
+/// vocabularies cannot drift.
+pub fn gateway_identity_headers(session_id: &str, request_id: &str) -> Vec<(&'static str, String)> {
     let sid = {
         let t = session_id.trim();
         if t.is_empty() { "everyaios-anon" } else { t }
@@ -874,10 +969,7 @@ fn session_headers(session_id: &str) -> Vec<(&'static str, String)> {
     vec![
         ("X-Session-Id", sid.to_string()),
         ("x-opencode-session", sid.to_string()),
-        (
-            "x-opencode-request",
-            format!("req-{:016x}", rand::random::<u64>()),
-        ),
+        ("x-opencode-request", request_id.to_string()),
         ("x-opencode-client", "cli".to_string()),
         (
             "User-Agent",
@@ -886,7 +978,41 @@ fn session_headers(session_id: &str) -> Vec<(&'static str, String)> {
     ]
 }
 
+/// A fresh per-request correlation id for [`gateway_identity_headers`].
+pub fn new_request_id() -> String {
+    format!("req-{:016x}", rand::random::<u64>())
+}
+
+/// Per-conversation OpenCode headers (P56.6).
+fn session_headers(session_id: &str) -> Vec<(&'static str, String)> {
+    gateway_identity_headers(session_id, &new_request_id())
+}
+
+/// Header names the broker owns: the client identity and the per-conversation
+/// affinity values. A provider endpoint or a trace header may not set them —
+/// `ureq` appends a repeated header rather than replacing it, so a second
+/// value would ride alongside ours on the wire and a gateway reading the wrong
+/// one would see a forged identity or a split session (`REQ-PROV-009`).
+const RESERVED_IDENTITY_HEADERS: &[&str] = &[
+    "user-agent",
+    "x-opencode-session",
+    "x-session-id",
+    "x-opencode-request",
+    "x-opencode-client",
+];
+
+/// Is this a header the broker sets itself?
+fn is_reserved_identity_header(name: &str) -> bool {
+    let lowered = name.trim().to_ascii_lowercase();
+    RESERVED_IDENTITY_HEADERS.contains(&lowered.as_str())
+}
+
 /// Apply trace + endpoint + session headers to a request builder.
+///
+/// Order is deliberate and the reserved-name filter is the load-bearing part:
+/// caller-supplied headers are applied first, then the endpoint's, then the
+/// broker's own identity last — and any attempt to pre-set a reserved name is
+/// dropped rather than appended.
 fn decorate(
     mut req: ureq::Request,
     extra: &HashMap<String, String>,
@@ -894,10 +1020,16 @@ fn decorate(
     session_id: &str,
 ) -> ureq::Request {
     for (k, v) in extra {
+        if is_reserved_identity_header(k) {
+            continue;
+        }
         req = req.set(k, v);
     }
     if let Some(ep) = endpoint {
         for (k, v) in &ep.headers {
+            if is_reserved_identity_header(k) {
+                continue;
+            }
             req = req.set(k, v);
         }
         if ep.session_headers {
@@ -1431,6 +1563,11 @@ pub enum BrokerError {
     /// P44.4 — the provider's endpoint would send the credential in cleartext.
     #[error("refusing to probe '{0}': its endpoint is neither https nor loopback")]
     InsecureEndpoint(String),
+    /// INV-05 / `REQ-PROV-008` — the egress floor refused the destination. The
+    /// destination and the reason are named; there is no fallback route, so a
+    /// denial is terminal for the call rather than a retry elsewhere.
+    #[error("egress denied for {host}: {reason}")]
+    EgressDenied { host: String, reason: String },
     #[error("all keys for provider '{0}' exhausted after 429 failover")]
     AllKeysExhausted(String),
     #[error("session '{session}' stopped: ${limit:.2} limit (spent ${spent:.2})")]
@@ -1461,6 +1598,7 @@ mod tests {
     use std::io::{Read, Write};
     use std::net::TcpListener;
     use std::sync::atomic::{AtomicU32, Ordering};
+    use std::sync::{Arc, Mutex};
     use std::thread;
 
     fn vault() -> &'static Vault {
@@ -1948,6 +2086,270 @@ mod tests {
                 serde_json::json!({"messages": [{"role": "user", "content": "hi"}]}),
             )
             .unwrap();
+    }
+
+    // ---- INV-05 / REQ-PROV-008 — egress floor + custody at the choke point --
+
+    /// Every credential-bearing path is floor-checked before a socket opens, and
+    /// a denial is typed with no fallback route (INV-05 · `REQ-PROV-008`).
+    #[test]
+    fn egress_is_floor_checked_before_a_credential_is_attached() {
+        let v = Vault::open_in_memory("test-key").unwrap();
+        let broker = Broker::new(&v);
+        // A public https destination is permitted under the platform default.
+        assert!(
+            broker
+                .egress_preflight("openai", "https://api.openai.com/v1/chat/completions")
+                .is_ok()
+        );
+        // Cleartext to a remote host is refused on custody grounds (custody is
+        // checked first — the credential must never reach the wire in cleartext).
+        assert!(matches!(
+            broker.egress_preflight("openai", "http://api.openai.com/v1/chat/completions"),
+            Err(BrokerError::InsecureEndpoint(_))
+        ));
+        // Link-local (which includes cloud metadata) is refused by the floor
+        // even over https, and the refusal names the destination.
+        let denied = broker
+            .egress_preflight("openai", "https://169.254.169.254/v1/chat/completions")
+            .expect_err("link-local is always refused");
+        match denied {
+            BrokerError::EgressDenied { host, reason } => {
+                assert!(host.contains("169.254.169.254"), "{host}");
+                assert!(!reason.is_empty());
+            }
+            other => panic!("expected a typed egress denial, got {other:?}"),
+        }
+    }
+
+    /// A local runtime is permitted only when the endpoint says so, and a
+    /// private/LAN destination stays refused unless it is declared.
+    #[test]
+    fn a_local_runtime_is_reachable_only_through_a_declared_endpoint() {
+        let v = Vault::open_in_memory("test-key").unwrap();
+        // A provider with no endpoint falls back to the platform default:
+        // loopback permitted, private refused.
+        let bare = Broker::new(&v);
+        assert!(bare.floor_policy("local").allow_loopback);
+        assert!(!bare.floor_policy("local").allow_private);
+        // An endpoint that opted out of loopback loses it.
+        let strict = bare.with_endpoint(
+            "remote-only",
+            ProviderEndpoint {
+                base_url: "https://api.example.test/v1".into(),
+                allow_loopback: false,
+                ..Default::default()
+            },
+        );
+        assert!(!strict.floor_policy("remote-only").allow_loopback);
+        assert!(
+            strict
+                .egress_preflight("remote-only", "http://127.0.0.1:1234/v1/chat/completions")
+                .is_err(),
+            "a provider that declares no loopback reach must not reach it"
+        );
+        // Private/LAN is refused unless declared per endpoint.
+        let lan = Broker::new(&v).with_endpoint(
+            "lan",
+            ProviderEndpoint {
+                base_url: "https://api.example.test/v1".into(),
+                ..Default::default()
+            },
+        );
+        assert!(
+            lan.egress_preflight("lan", "https://10.0.0.5/v1/chat/completions")
+                .is_err()
+        );
+        let lan_opt_in = Broker::new(&v).with_endpoint(
+            "lan-ok",
+            ProviderEndpoint {
+                base_url: "https://api.example.test/v1".into(),
+                ..Default::default()
+            }
+            .with_private_network(),
+        );
+        assert!(
+            lan_opt_in
+                .egress_preflight("lan-ok", "https://10.0.0.5/v1/chat/completions")
+                .is_ok(),
+            "an explicit per-endpoint opt-in is honoured"
+        );
+    }
+
+    /// A denied egress never becomes a request: the floor runs before the key
+    /// ring is touched, so nothing is spent and no header is built.
+    #[test]
+    fn a_denied_egress_makes_no_request_and_spends_nothing() {
+        let v = Vault::open_in_memory("test-key").unwrap();
+        let broker = Broker::new(&v).with_endpoint(
+            "blocked",
+            ProviderEndpoint {
+                base_url: "https://169.254.169.254/v1".into(),
+                ..Default::default()
+            },
+        );
+        broker
+            .ring()
+            .add_key(spec("blocked", "k1", "sk-blocked"))
+            .unwrap();
+        let err = broker
+            .chat_completion(
+                "blocked",
+                "m",
+                "s1",
+                serde_json::json!({"messages": [{"role": "user", "content": "hi"}]}),
+            )
+            .expect_err("the floor refuses before any socket");
+        assert!(matches!(err, BrokerError::EgressDenied { .. }));
+        // No ledger row, no spend: the call never happened.
+        assert_eq!(broker.session_spent("s1"), 0.0);
+        assert!(v.recent_usage(10).unwrap().is_empty());
+    }
+
+    /// The metadata probe is the other credential-bearing path, so it carries
+    /// the same checks.
+    #[test]
+    fn the_metadata_probe_is_floor_checked_too() {
+        let v = Vault::open_in_memory("test-key").unwrap();
+        let broker = Broker::new(&v).with_endpoint(
+            "blocked",
+            ProviderEndpoint {
+                base_url: "https://169.254.169.254/v1".into(),
+                ..Default::default()
+            },
+        );
+        broker
+            .ring()
+            .add_key(spec("blocked", "k1", "sk-blocked"))
+            .unwrap();
+        assert!(matches!(
+            broker.probe_models("blocked", std::time::Duration::from_millis(50)),
+            Err(BrokerError::EgressDenied { .. })
+        ));
+    }
+
+    /// REQ-PROV-009 — the identity is ours and cannot be spoofed: an endpoint
+    /// that tries to override the User-Agent is overwritten by the broker's own
+    /// identity, and the session value is stable across the conversation.
+    #[test]
+    fn client_identity_cannot_be_spoofed_and_affinity_is_stable() {
+        let seen: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+        let sink = seen.clone();
+        let base = mock_server(move |req| {
+            sink.lock().unwrap().push(req.to_string());
+            (200, r#"{"usage":{"total_tokens":1}}"#.into())
+        });
+        let v = Vault::open_in_memory("test-key").unwrap();
+        let broker = Broker::new(&v).with_endpoint(
+            "opencode",
+            ProviderEndpoint {
+                base_url: base,
+                session_headers: true,
+                // A hostile/naive endpoint trying to impersonate a different
+                // client, and to pin its own session.
+                headers: vec![
+                    ("User-Agent".into(), "SomeOtherClient/9.9".into()),
+                    ("x-opencode-session".into(), "forged-session".into()),
+                ],
+                ..Default::default()
+            },
+        );
+        broker
+            .ring()
+            .add_key(spec("opencode", "zen", "sk-zen"))
+            .unwrap();
+        for _ in 0..2 {
+            broker
+                .chat_completion(
+                    "opencode",
+                    "some-model",
+                    "conv-7",
+                    serde_json::json!({"messages": [{"role": "user", "content": "hi"}]}),
+                )
+                .unwrap();
+        }
+        let requests = seen.lock().unwrap().clone();
+        assert_eq!(requests.len(), 2);
+        for req in &requests {
+            assert!(
+                req.contains("User-Agent: EveryAIOS/"),
+                "the identity is ours, never an impersonation: {req}"
+            );
+            assert!(!req.contains("SomeOtherClient"), "{req}");
+            assert!(req.contains("x-opencode-session: conv-7"), "{req}");
+            assert!(
+                !req.contains("forged-session"),
+                "a reserved header may not be pre-set by an endpoint: {req}"
+            );
+            // Exactly one value per identity header — a second value would be a
+            // split session or an ambiguous identity.
+            assert_eq!(
+                req.matches("x-opencode-session:").count(),
+                1,
+                "the affinity header must appear exactly once: {req}"
+            );
+            assert_eq!(req.matches("User-Agent:").count(), 1, "{req}");
+        }
+        // Affinity is one value per conversation; the per-request id differs.
+        assert!(requests[0].contains("x-opencode-request: req-"));
+        assert_ne!(
+            requests[0]
+                .split("x-opencode-request: ")
+                .nth(1)
+                .unwrap()
+                .split_whitespace()
+                .next(),
+            requests[1]
+                .split("x-opencode-request: ")
+                .nth(1)
+                .unwrap()
+                .split_whitespace()
+                .next(),
+            "the request id is fresh per request while the session id is not"
+        );
+    }
+
+    /// The declared identity helper is the single source for the header set, so
+    /// a host can assert what goes on the wire.
+    #[test]
+    fn gateway_identity_headers_are_built_in_one_place() {
+        let h = gateway_identity_headers("conv-9", "req-abc");
+        let names: Vec<&str> = h.iter().map(|(k, _)| *k).collect();
+        assert_eq!(
+            names,
+            vec![
+                "X-Session-Id",
+                "x-opencode-session",
+                "x-opencode-request",
+                "x-opencode-client",
+                "User-Agent"
+            ]
+        );
+        let value = |name: &str| {
+            h.iter()
+                .find(|(k, _)| *k == name)
+                .map(|(_, v)| v.clone())
+                .unwrap()
+        };
+        assert_eq!(value("X-Session-Id"), "conv-9");
+        assert_eq!(value("x-opencode-session"), "conv-9");
+        assert_eq!(value("x-opencode-request"), "req-abc");
+        assert!(value("User-Agent").starts_with("EveryAIOS/"));
+        // An empty conversation id still yields a real value, never an empty
+        // header (a missing session is a hard error upstream).
+        assert_eq!(
+            value_of(&gateway_identity_headers("", "r"), "x-opencode-session"),
+            "everyaios-anon"
+        );
+        assert!(new_request_id().starts_with("req-"));
+        assert_ne!(new_request_id(), new_request_id());
+    }
+
+    fn value_of(h: &[(&'static str, String)], name: &str) -> String {
+        h.iter()
+            .find(|(k, _)| *k == name)
+            .map(|(_, v)| v.clone())
+            .unwrap_or_default()
     }
 
     /// P55.5 — an Anthropic endpoint posts to `/messages` (never
