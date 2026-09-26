@@ -38,6 +38,11 @@
 //
 // Usage: node scripts/gen-codebase-map.mjs [--check]
 //   --check   exit 1 if the generated section is stale, without rewriting.
+//
+// 2026-09-26: the map is archived at
+// ARCHIVE/v0/repo-cleanup-2026-09-26/CODEBASE-MAP.md; `--check` is no longer
+// wired into CI. Restore the map to the repo root before running this
+// generator (it edits CODEBASE-MAP.md in place).
 
 import { execFileSync } from "node:child_process";
 import { createRequire } from "node:module";

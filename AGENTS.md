@@ -192,19 +192,17 @@ python3 .agents/skills/codebase-intelligence/scripts/codegraph.py path <from> <t
 python3 .agents/skills/codebase-intelligence/scripts/codegraph.py stats
 python3 .agents/skills/codebase-intelligence/scripts/codegraph.py export --format graphml
 
-# Codebase Map (narrative + exhaustive file inventory)
-node scripts/gen-codebase-map.mjs            # regenerate CODEBASE-MAP.md
-node scripts/gen-codebase-map.mjs --check    # exit 1 if stale (CI gate)
-
 # Architecture-invariant gate (no TS credential custody, one authorization
 # decider, one auth vocabulary, one canonical schema)
 node scripts/check-arch-invariants.mjs
 node scripts/ipc-parity.mjs --md             # UI ↔ Tauri command parity
 ```
 
-**Staleness checks:** both tools support a `--check` mode that exits non-zero
-when the output is stale.  Run them after substantial structural changes (new
-files, moved modules, renamed crates) to keep the indexes accurate.
+**Staleness checks:** `node scripts/check-doc-refs.mjs` and
+`node scripts/check-doc-sync.mjs` run in CI; re-run them after substantial
+structural changes (new files, moved modules, renamed crates) so the doc set
+stays consistent. (`check-doc-sync` still reads the archived v0 capability
+chain and is queued for re-homing.)
 
 See `.agents/README.md` for the agent kit layout, `.agents/docs/` for the understanding
 protocol and provider matrix, and `.agents/skills/codebase-intelligence/SKILL.md` for the

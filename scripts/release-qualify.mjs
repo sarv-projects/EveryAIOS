@@ -103,7 +103,10 @@ function e2_suites() {
 
 // ---------------------------------------------------------------- E3
 function e3_docGates() {
-  const gates = ['check-doc-sync.mjs', 'gen-codebase-map.mjs --check', 'ipc-parity.mjs'];
+  // 2026-09-26: `gen-codebase-map.mjs --check` retired (CODEBASE-MAP.md
+  // archived; the map is no longer wired into CI). `check-doc-refs.mjs` takes
+  // the documentation-integrity slot.
+  const gates = ['check-doc-sync.mjs', 'check-doc-refs.mjs', 'ipc-parity.mjs'];
   const failures = [];
   for (const gate of gates) {
     const { ok, out } = sh(`node scripts/${gate}`);
@@ -119,7 +122,7 @@ function e3_docGates() {
     failures.push('ipc-parity: output was not JSON');
   }
   record('P70.E3', 'documentation gates', failures.length ? 'FAIL' : 'PASS',
-    failures.length ? failures.join('; ') : 'doc-sync + codebase-map --check + ipc-parity all exit 0');
+    failures.length ? failures.join('; ') : 'doc-sync + doc-refs + ipc-parity all exit 0');
 }
 
 // ---------------------------------------------------------------- E4

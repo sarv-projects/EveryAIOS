@@ -164,5 +164,7 @@ Working product name: **AgentCowork** · Runtime: **Core** · Native agent: **Ag
 ## 10. P0 archive record
 
 **Archived to `ARCHIVE/v0/`** (git-ignored; see `ARCHIVE/v0/MANIFEST.md`): `ARCH/`, `RESEARCH/`, `DESKTOP-APP-SPEC.md`, `SPEC-CHANGELOG.md`, `COMPETITIVE-POSITIONING.md`, `PACKAGING.md`, `SUPPORT-MATRIX.md`, `TEST-CASES.md`, `testcases.md`, `UI-DESIGN-PROMPT.md`, `UX-TESTING-PLAN.md`, `multiagent.txt`.
-**Kept live:** `TODO.md` (exempt), `README.md`, `AGENTS.md`, `CURRENT_RUN.md`, `CODEBASE-MAP.md` (generated), `CONTRIBUTING.md`, `PRIVACY.md`, `SECURITY.md`, `LICENSE*`, `THIRD-PARTY-NOTICES.md`, `ui/DESIGN-SYSTEM.md` (current theme source), `docs/` (operational; later pass), `.agents/` (agent kit; later pass).
+**Kept live:** `TODO.md` (exempt), `README.md`, `AGENTS.md`, `CURRENT_RUN.md`, `CONTRIBUTING.md`, `PRIVACY.md`, `SECURITY.md`, `LICENSE*`, `THIRD-PARTY-NOTICES.md`, `ui/DESIGN-SYSTEM.md` (current theme source), `docs/` (operational; later pass), `.agents/` (agent kit; later pass).
 **Interpretation:** “docs” = the product/architecture/research corpus. Operational, legal, generated and agent-kit files stay in place until their scheduled v1 sync so the repo keeps working during the rebuild.
+
+**Repo cleanup (2026-09-26):** `CODEBASE-MAP.md`, `docs/codebase/` (10 md + `freshness.json`), `docs/release/post-v1.md`, `docs/release/retrospective-pack.md`, `docs/download.md` and `.agents/docs/research.md` were moved to `ARCHIVE/v0/repo-cleanup-2026-09-26/` (git-ignored; see `ARCHIVE/v0/MANIFEST.md`). The gates and references that depended on them were re-homed the same day (see the manifest's "Gate re-homing" note).

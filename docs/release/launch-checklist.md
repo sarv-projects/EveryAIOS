@@ -18,10 +18,10 @@ ticked today.
 | 8 | Updater key custody + pubkey agreement | `scripts/check-updater-keys.mjs` |
 | 9 | Updater code/config/docs/registry agree | `scripts/check-update-pipeline.mjs` |
 | 10 | Install layout, recovery playbook, diagnostics, platform truth | `scripts/check-diagnostics-surface.mjs` |
-| 11 | Winget manifests + download page name the shipping version | `scripts/gen-release-surface.mjs --check` |
+| 11 | Winget manifests name the shipping version | `scripts/gen-release-surface.mjs --check` |
 | 12 | Legal/policy docs present; no telemetry dependency | `scripts/check-public-surface.mjs` |
 | 13 | Kernel gate clear; honest-capability audit passes | `scripts/release-qualify.mjs` (E1, E3, E11) |
-| 14 | Docs, structural map and IPC parity agree | `check-doc-sync` + `gen-codebase-map --check` + `ipc-parity` |
+| 14 | Docs, cross-document references and IPC parity agree | `check-doc-sync` + `check-doc-refs` + `ipc-parity` |
 
 ## B. Human, on a real host (open — `P70.E8`/`E9`)
 
@@ -39,5 +39,5 @@ ticked today.
 
 **The honest statement:** section A is green; section B is open. A v1 claim made
 today would be a claim about the repository, not about a qualified binary —
-which is exactly what `docs/download.md` "Not yet" says, and what the release
+a distinction the release surface must state plainly, and that the release
 notes carry into the release body.

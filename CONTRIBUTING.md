@@ -2,9 +2,9 @@
 
 ## Before you start
 
-Read [`ARCH/CORE.md`](ARCH/CORE.md) — the root architecture authority — and
+Read [`ARCH/00-INDEX.md`](ARCH/00-INDEX.md) — the architecture door — and
 [`AGENTS.md`](AGENTS.md), which is the durable contract for any agent or human
-working here. [`DESKTOP-APP-SPEC.md`](DESKTOP-APP-SPEC.md) is the product
+working here. [`AGENTCOWORK-SPEC.md`](AGENTCOWORK-SPEC.md) is the product
 contract; [`TODO.md`](TODO.md) is delivery status, not a wish list.
 
 ## The invariants you must not break
@@ -25,7 +25,7 @@ contract; [`TODO.md`](TODO.md) is delivery status, not a wish list.
 pnpm test                                    # JS/TS suites
 pnpm --filter ui tsc --noEmit                # UI typecheck
 node scripts/check-doc-sync.mjs              # docs ↔ capability census
-node scripts/gen-codebase-map.mjs --check    # structural map is current
+node scripts/check-doc-refs.mjs               # cross-document references resolve
 node scripts/ipc-parity.mjs                  # UI ↔ Tauri command parity
 node scripts/release-qualify.mjs             # the release gate (plan mode)
 ```
@@ -35,7 +35,7 @@ Every gate named above runs in CI; a PR that turns one red is not mergeable.
 ## Changes that touch the release surface
 
 - A new file, moved module or renamed crate: re-run
-  `node scripts/gen-codebase-map.mjs`.
+  `node scripts/check-doc-refs.mjs`.
 - A new durable store: register it in `crates/everyaios-core/src/store_schema.rs`
   and add its row to `PACKAGING.md` §6 (`check-store-schemas.mjs` enforces both).
 - A new version number: change it **once** in

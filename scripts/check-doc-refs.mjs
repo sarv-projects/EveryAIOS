@@ -34,6 +34,12 @@ const ACCEPTED = [
     reason:
       "the historical ledger quotes dated agents' reports verbatim; rewriting their section pointers would falsify the record this row's own note calls out as the one accepted exception",
   },
+  {
+    file: 'TODO.md',
+    refs: '*',
+    reason:
+      'the delivery ledger is a dated record; after the v0 corpus was archived (ARCHIVE/v0/), its historical citations name v0 documents (e.g. `ARCH/CORE.md §n`) and its links point at v0 paths (e.g. `ARCH/ADR/*`, `SUPPORT-MATRIX.md`); the ledger is not rewritten by policy, and live pointers are checked in the live docs',
+  },
 ];
 
 /** Docs that participate (the contracts + their subsystems + the process docs). */
@@ -42,7 +48,7 @@ function collectDocs() {
   for (const name of readdirSync(ROOT)) {
     if (name.endsWith('.md')) out.push(name.replace(/\\/g, '/'));
   }
-  for (const dir of ['ARCH', 'docs', 'docs/release', 'docs/packaging', 'docs/codebase', 'RESEARCH']) {
+  for (const dir of ['ARCH', 'docs', 'docs/release', 'docs/packaging', 'RESEARCH']) {
     const abs = join(ROOT, dir);
     if (!existsSync(abs)) continue;
     for (const name of readdirSync(abs)) {
@@ -62,13 +68,11 @@ function collectDocs() {
  *   documents in prose, and its entries are never rewritten by policy.
  * - `DESKTOP-APP-SPEC.md` cites the *archived* `ARCH/17` by number ("§17.1"),
  *   which is a deliberate pointer into `ARCH/archive/`, not a broken cite.
- * - `CODEBASE-MAP.md` is generated and quotes its sources verbatim.
  *
  * They are still checked for named references and links (A/C), where the intent
  * is unambiguous.
  */
 const B_EXEMPT = new Set([
-  'CODEBASE-MAP.md',
   'SPEC-CHANGELOG.md',
   'DESKTOP-APP-SPEC.md',
   'CURRENT_RUN.md',
@@ -80,6 +84,14 @@ const B_EXEMPT = new Set([
   // Check A (named `X.md §n`) still runs against it, where a cite is real.
   'TODO.md',
 ]);
+
+/**
+ * Relative-link exception for check C (same reason as B_EXEMPT): TODO.md is a
+ * dated delivery record whose historical links point at v0 paths archived
+ * under `ARCHIVE/v0/` (e.g. `ARCH/ADR/*`, `SUPPORT-MATRIX.md`); the ledger is
+ * not rewritten by policy.
+ */
+const C_EXEMPT = new Set(['TODO.md']);
 
 /**
  * Is a citation satisfied by a document?
@@ -139,7 +151,7 @@ for (const p of docs) {
   byBasename.get(base).push(norm);
 }
 
-const BASELINE_FILE = 'docs/codebase/doc-ref-baseline.json';
+const BASELINE_FILE = 'scripts/doc-ref-baseline.json';
 const WRITE_BASELINE = process.argv.includes('--write-baseline');
 const problems = [];
 const acceptedHits = [];
@@ -255,6 +267,7 @@ for (const [file, body] of bodyOf) {
 
 // ---------------------------------------------------------------- C
 for (const [file, body] of bodyOf) {
+  if (C_EXEMPT.has(file)) continue;
   const dir = dirname(join(ROOT, file));
   for (const m of body.matchAll(/\]\(([^)\s]+)\)/g)) {
     const href = m[1];

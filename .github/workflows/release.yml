@@ -348,8 +348,9 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # P70.F3 — the public download page must name the version that shipped.
-      - name: Public surface agreement (P70.F2/F3/F5/F6/F8)
+      # P70.F2 — the winget manifests must name the version that shipped.
+      # (P70.F3 retired 2026-09-26: docs/download.md archived with the v0 corpus.)
+      - name: Public surface agreement (P70.F2/F5/F6/F8)
         shell: bash
         run: |
           node scripts/gen-release-surface.mjs --check

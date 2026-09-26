@@ -390,7 +390,6 @@ node scripts/check-prompt-steering.mjs
 node scripts/check-doc-refs.mjs
 node scripts/check-vocabulary.mjs
 node scripts/verify-packaged-e2e.mjs
-node scripts/gen-codebase-map.mjs --check
 node scripts/check-arch-invariants.mjs
 node scripts/ipc-parity.mjs --md
 node scripts/ipc-parity.mjs
@@ -400,8 +399,7 @@ The first group is the docs-sync matrix in `.github/workflows/ci.yml:18-103`;
 the root aliases and their exact script names are in `package.json:12-32`.
 `ipc-parity.mjs` can print a report while still exposing broken counts in JSON;
 the runner treats broken/unregistered counts as failure, not as a successful
-Markdown render. `gen-codebase-map.mjs --check` must use the Git-aware snapshot
-index described in §1.
+Markdown render.
 
 The following package-manager aliases are part of the same current inventory.
 The runner invokes the underlying commands directly so the working directory
@@ -493,7 +491,7 @@ a command's zero exit code. The current harness's exact status contract is in
 |---|---|---|
 | `P70.E1` | Kernel gate section clear | Machine check; no live host required. |
 | `P70.E2` | Rust, UI, vendored core, and coordinator suites, fmt, and clippy | Standard suite; no result is inferred from a skipped leg. |
-| `P70.E3` | Doc sync, codebase map, and IPC parity | Standard gate; broken IPC counts are failure. |
+| `P70.E3` | Doc sync, cross-document references, and IPC parity | Standard gate; broken IPC counts are failure. |
 | `P70.E4` | Security/red-team suite | Standard security gate; missing cargo is `BLOCKED`. |
 | `P70.E5` | Real ACP, Chrome/CDP, Office oracle, and vault hydration | `-Live` only; absent tools/services/hosts are `BLOCKED`. |
 | `P70.E6` | Live model/edit-ladder/shadow-preflight/agent soak | `-Live` plus credentials/repository; never default PASS. |

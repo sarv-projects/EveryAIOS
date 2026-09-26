@@ -5,10 +5,9 @@ body:
   - type: markdown
     attributes:
       value: |
-        Before proposing: check `docs/release/post-v1.md` — much of the deferred
-        work is already registered there, and `TODO.md` owns the live status of
-        every row. Proposals that arrive with evidence and a named owner move
-        fastest; capability claims without evidence do not move at all.
+        Before proposing: check `TODO.md` — items deferred past v1 are labelled
+        `post-v1` there. Proposals that arrive with evidence and a named owner
+        move fastest; capability claims without evidence do not move at all.
   - type: textarea
     id: problem
     attributes:
@@ -20,7 +19,7 @@ body:
     id: proposal
     attributes:
       label: Proposed behaviour
-      description: What the app should do. If it changes an invariant in `ARCH/CORE.md`, say which one and why.
+      description: What the app should do. If it changes an invariant in `ARCH/05-INVARIANTS.md`, say which one and why.
     validations:
       required: true
   - type: dropdown

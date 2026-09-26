@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 // P70.F5 · F6 · F8 (+ G) — the public surface and the release process.
+// 2026-09-26: G4 (post-v1.md) / G5 (retrospective-pack.md) retired — both
+// documents were archived with the v0 corpus and are re-authored post-v1.
 //
 // Two kinds of assertion:
 //
@@ -88,8 +90,6 @@ for (const item of ['Machine-checked', 'Human, on a real host', 'release-qualify
 // ---------------------------------------------------------------- G processes
 for (const [file, sections] of [
   ['docs/release/rollout-and-hotfix.md', ['Rollout monitoring', 'Hotfix process', 'Patch cadence and deprecation policy']],
-  ['docs/release/post-v1.md', ['Deferred by ADR', 'Platform deferrals', 'What "collected" means']],
-  ['docs/release/retrospective-pack.md', ['Contents', 'The rule that keeps it honest']],
 ]) {
   if (!has(file)) { fail(`G: ${file} is missing`); continue; }
   const body = read(file);
@@ -97,8 +97,6 @@ for (const [file, sections] of [
     if (!body.includes(s)) fail(`G: ${file} lost the "${s}" section`);
   }
 }
-// G4's register must point at the live status rather than restating it.
-need(read('docs/release/post-v1.md').includes('TODO.md'), 'G4: post-v1.md no longer defers to TODO.md for live status');
 
 // ---------------------------------------------------------------- result
 if (problems.length) {

@@ -65,7 +65,7 @@ pnpm --filter ui tsc --noEmit      # UI typecheck
 # Repository gates
 node scripts/check-arch-invariants.mjs
 node scripts/ipc-parity.mjs --md
-node scripts/gen-codebase-map.mjs --check
+node scripts/check-doc-refs.mjs
 ```
 
 > **Naming note:** package and crate identifiers still use the historical `everyaios-*` prefix; a rename is scheduled after the v1 docs freeze (tracked as OQ-003).

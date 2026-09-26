@@ -16,7 +16,7 @@ jobs:
   # Fix 2 — capabilities.yaml == ARCH/09 == spec §0, and TODO.md header counts
   # match the file. Fast (no build); catches index-level drift on every PR.
   docs-sync:
-    name: docs-sync (capability index + TODO counts + codebase map)
+    name: docs-sync (capability index + TODO counts)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -71,7 +71,8 @@ jobs:
       # with the blocker named (never silently passed).
       - name: Release qualification (executable items)
         run: node scripts/release-qualify.mjs
-      # P70.F2/F3 — the public download surface names the authoritative version.
+      # P70.F2 — the winget manifests name the authoritative version.
+      # (P70.F3 download-page check retired 2026-09-26: docs/download.md archived.)
       - name: Release surface agreement
         run: node scripts/gen-release-surface.mjs --check
       # P70.F5/F6/F8 + G — legal/policy documents, the telemetry posture and
@@ -95,8 +96,6 @@ jobs:
       # Packaging verification suite: static checks over the shipped surfaces.
       - name: Packaged release verification
         run: node scripts/verify-packaged-e2e.mjs
-      - name: Verify CODEBASE-MAP.md is up to date
-        run: node scripts/gen-codebase-map.mjs --check
       # P69.E — structural invariants: no TS credential custody, no second
       # authorization decider, one auth vocabulary, one canonical schema.
       - name: Architecture invariants

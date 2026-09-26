@@ -493,7 +493,7 @@ function Run-StandardChecks {
         @{ id = 'STANDARD-DOC-REFS'; file = 'scripts/check-doc-refs.mjs'; name = 'Cross-document references' },
         @{ id = 'STANDARD-VOCABULARY'; file = 'scripts/check-vocabulary.mjs'; name = 'Vocabulary' },
         @{ id = 'STANDARD-ARCH-INVARIANTS'; file = 'scripts/check-arch-invariants.mjs'; name = 'Architecture invariants' },
-        @{ id = 'STANDARD-CODEBASE-MAP'; args = @('--check'); file = 'scripts/gen-codebase-map.mjs'; name = 'Codebase map' },
+        # 2026-09-26: STANDARD-CODEBASE-MAP removed — CODEBASE-MAP.md archived (ARCHIVE/v0/repo-cleanup-2026-09-26/).
         @{ id = 'STANDARD-PACKAGED-E2E'; file = 'scripts/verify-packaged-e2e.mjs'; name = 'Packaged verification' }
     )
     foreach ($gate in $nodeGates) {

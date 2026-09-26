@@ -15,9 +15,12 @@
 //
 //   node scripts/gen-release-surface.mjs --artifacts <bundle-dir> --out dist/release
 //
-// `--check` is the CI mode: it verifies the committed winget manifest and the
-// committed download page still name the authoritative version, which is what
-// stops the public surface from drifting from the binary.
+// `--check` is the CI mode: it verifies the committed winget manifest still
+// names the authoritative version, which is what stops the public surface from
+// drifting from the binary.
+//
+// 2026-09-26: the F3 download-page check retired — `docs/download.md` was
+// archived with the v0 corpus and is re-authored with the v1 release surface.
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, statSync } from 'node:fs';
 import { createHash } from 'node:crypto';
@@ -192,23 +195,14 @@ if (CHECK) {
     const got = /PackageVersion:\s*(\S+)/.exec(readFileSync(p, 'utf8'))?.[1];
     if (ref !== got) fail(`F2: ${name} declares v${got}, the app is v${ref}`);
   }
-  const download = resolve(ROOT, 'docs/download.md');
-  if (!existsSync(download)) {
-    fail('F3: docs/download.md is missing');
-  } else {
-    const page = readFileSync(download, 'utf8');
-    const stated = /(?:current release|version)[^\n]*?v?(\d+\.\d+\.\d+)/i.exec(page)?.[1];
-    if (stated && stated !== VERSION) fail(`F3: docs/download.md states v${stated}, the app is v${VERSION}`);
-    for (const section of ['Checksums', 'Verify', 'Support', 'Not yet']) {
-      if (!page.includes(section)) fail(`F3: docs/download.md lost its "${section}" section`);
-    }
-  }
+  // 2026-09-26: F3 (docs/download.md existence/version/sections) retired with
+  // the v0 corpus; the download page is re-authored with the v1 release surface.
   if (problems.length) {
     console.error('release-surface: FAIL');
     for (const p of problems) console.error(`  ✗ ${p}`);
     process.exit(1);
   }
-  console.log(`release-surface: ok (winget + download page name v${VERSION})`);
+  console.log(`release-surface: ok (winget manifests name v${VERSION})`);
   process.exit(0);
 }
 

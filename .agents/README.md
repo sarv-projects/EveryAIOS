@@ -12,8 +12,7 @@ repository. Nothing here is specific to a particular IDE, model vendor, or MCP c
 │   ├── README.md                          # index state vs. understanding artifacts
 │   ├── installation.md                    # dependencies and real invocations
 │   ├── architecture-and-protocol.md       # the 7-phase understanding protocol
-│   ├── agent-agnostic-compatibility.md    # capability surface, not product names
-│   └── research.md                        # integrated open-source patterns
+│   └── agent-agnostic-compatibility.md    # capability surface, not product names
 ├── templates/
 │   └── AGENTS.template.md                 # blank project contract for new repos
 └── skills/
