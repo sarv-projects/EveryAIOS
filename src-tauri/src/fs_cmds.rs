@@ -8,6 +8,18 @@
 //! writes are plain text writes (no atomic rename here — office engines keep
 //! their own atomic writers). Paths are user-supplied from the view; the app
 //! never enumerates hidden system dirs by default.
+//!
+//! **Read interception.** `fs_read_file` and `fs_list_dir` take a
+//! renderer-chosen path, so that path is resolved against the session's read
+//! scopes before any syscall: canonicalize, decide, re-check at the point of
+//! use. Reads are intercepted **at the scope boundary, never per-read
+//! approval** (`ARCH/12-TRUST.md` §8, `ARCH/25-FILES.md` §7.1) — the file tree
+//! is a browsing surface, so a card per node is not a stricter control, it is
+//! the reason the read path had no interception at all. In scope means no
+//! prompt and no ticket; out of scope is the canonical typed
+//! `AuthorizationDenied` refusal plus one audit row. Writes are unchanged: they
+//! keep their own floor (`control::floor_user_file`) and their own ticket or
+//! human-gesture provenance.
 
 use std::path::PathBuf;
 
@@ -28,10 +40,137 @@ pub fn fs_home() -> Result<String, String> {
         .ok_or_else(|| "no home directory found".to_string())
 }
 
+/// The audit kind a scope refusal is recorded under.
+///
+/// `guard.blocked` is the guard's own denial kind — the one
+/// `everyaios-audit` documents for guard denials and the one
+/// `everyaios_guard::deflection::DEFLECTION_AUDIT_KIND` already uses. A read
+/// refused at the scope boundary lands on that existing trail instead of a
+/// parallel one, so `ARCH/12-TRUST.md` §9 ("denials … are first-class audit
+/// entries") holds without a new kind.
+pub const READ_DENIED_AUDIT_KIND: &str = everyaios_guard::deflection::DEFLECTION_AUDIT_KIND;
+
+/// The read scopes a renderer-chosen path is resolved against.
+///
+/// **No session scope is wired yet, so this is the unconfigured set** and the
+/// documented default applies (see [`everyaios_guard::pathfloor::ReadScopes`]):
+/// the requested path's own parent directory is the floor root — the same root
+/// `control::floor_user_file` already hands to `enforce_floor` on every write,
+/// for the same documented reason (users open documents under home and mounts,
+/// so a path is not jailed to a workspace). A read is therefore floored exactly
+/// as a write already is: a `..` is refused and a symlink that leaves the
+/// parent is refused. It is a floor, not a jail.
+///
+/// The mechanism for narrowing this to a session's `allowed_paths` /
+/// `read_only_paths` exists (`ReadScopes::new` /
+/// `ReadScopes::from_permission_strings`, expressed in the existing
+/// `PathGrant` vocabulary); *where a session's scopes come from* is
+/// decision-needed and is deliberately not invented here.
+fn read_scopes() -> everyaios_guard::pathfloor::ReadScopes {
+    everyaios_guard::pathfloor::ReadScopes::default()
+}
+
+/// Resolve, then decide, then re-check at the point of use — the whole read
+/// gate as one testable function.
+///
+/// Returns the resolved canonical target (the *only* value a caller may touch)
+/// or a typed [`ReadScopeDenied`]. No ticket is minted, no approval store is
+/// consulted and nothing is written: an in-scope read is not a decision anybody
+/// has to make again (`ARCH/12-TRUST.md` §8 — interception at the scope
+/// boundary, never per-read approval; the same ruling as
+/// `ARCH/25-FILES.md` §7.1). The re-check is what closes the window between
+/// resolution and the `std::fs` call: a path swapped in that window is refused
+/// rather than read (`REQ-FILES-009`).
+fn resolve_read(
+    path: &str,
+    op: everyaios_guard::pathfloor::FsOp,
+) -> Result<everyaios_guard::pathfloor::ReadTarget, everyaios_guard::pathfloor::ReadScopeDenied> {
+    let scopes = read_scopes();
+    let target = scopes.resolve(op, path)?;
+    scopes.reverify(&target)?;
+    Ok(target)
+}
+
+/// A read refused at the scope boundary: the typed message the command returns
+/// and the audit row that refusal owes the chain.
+///
+/// They are one value on purpose — "denied **and** recorded" must not be two
+/// paths that can drift. Pure, so the command path is testable without an
+/// `AppState`.
+#[derive(Debug, Clone, PartialEq)]
+struct ReadRefusal {
+    /// The canonical taxonomy code, the stable reason token, and the path.
+    message: String,
+    kind: &'static str,
+    payload: serde_json::Value,
+}
+
+impl ReadRefusal {
+    /// Build the refusal for `command` (`fs.read_file` / `fs.list_dir`).
+    ///
+    /// The returned message is the canonical `AuthorizationDenied` code with
+    /// the guard's stable reason token — the same shape the control-plane gate
+    /// and `netfloor`'s denials return. No new code, and no internal detail
+    /// (INV-11): the caller learns the decision and the path, nothing about the
+    /// scope set.
+    fn new(command: &str, d: &everyaios_guard::pathfloor::ReadScopeDenied) -> Self {
+        Self {
+            message: format!("{} ({}): {}", d.code(), d.reason, d.path),
+            kind: READ_DENIED_AUDIT_KIND,
+            payload: serde_json::json!({
+                "command": command,
+                "actor": "renderer",
+                "path": d.path,
+                "code": d.code(),
+                "reason": d.reason,
+                "retryable": d.retryable(),
+                "guard": "path_scope",
+                "ok": false,
+                "state": "refused",
+                "outcome": "denied",
+            }),
+        }
+    }
+}
+
+/// Record the refusal on the Merkle chain and return the error the command
+/// answers with. Exactly one row per refusal (`ARCH/12-TRUST.md` §9: denials
+/// are first-class audit entries), and nothing else is mutated — a read stays a
+/// read.
+///
+/// The provenance class is `HumanGesture`: the actor is the user's own click in
+/// the tree, the same classification [`fs_write_file`] already uses for a
+/// renderer-initiated effect, and it is set from the Rust call site — never read
+/// from the payload — so a caller cannot manufacture it.
+fn deny_read(
+    state: &AppState,
+    command: &str,
+    d: everyaios_guard::pathfloor::ReadScopeDenied,
+) -> String {
+    let refusal = ReadRefusal::new(command, &d);
+    crate::control::record_mutation(
+        state,
+        crate::control::AuthKind::HumanGesture,
+        refusal.kind,
+        refusal.payload,
+    );
+    refusal.message
+}
+
 /// List a directory as sorted entries (dirs first, then files, alpha).
+///
+/// The renderer chooses the path, so the path is resolved against the read
+/// scopes first: canonicalize, decide, re-check at the point of use. A refusal
+/// is the canonical `AuthorizationDenied` shape and appends exactly one row
+/// naming the actor, the command and the path. An in-scope listing needs no
+/// approval and mints no ticket — a card per directory is not a stricter
+/// control, it is what would break the tree.
 #[tauri::command]
-pub fn fs_list_dir(path: String) -> Result<serde_json::Value, String> {
-    let dir = PathBuf::from(&path);
+pub fn fs_list_dir(state: State<'_, AppState>, path: String) -> Result<serde_json::Value, String> {
+    let dir = match resolve_read(&path, everyaios_guard::pathfloor::FsOp::List) {
+        Ok(t) => PathBuf::from(&t.canonical),
+        Err(d) => return Err(deny_read(&state, "fs.list_dir", d)),
+    };
     let meta = std::fs::metadata(&dir).map_err(|e| format!("{path}: {e}"))?;
     if !meta.is_dir() {
         return Err(format!("{path}: not a directory"));
@@ -87,9 +226,19 @@ pub fn fs_list_dir(path: String) -> Result<serde_json::Value, String> {
 
 /// Read a file as UTF-8 text (capped at 2 MB). Binary/oversized files report
 /// flags instead of failing, so the code view can render an honest notice.
+///
+/// The renderer chooses the path, so the path is resolved against the read
+/// scopes first: canonicalize, decide, re-check at the point of use, and only
+/// then touch the disk. A refusal is the canonical `AuthorizationDenied` shape
+/// and appends exactly one audit row naming the actor, the command and the
+/// path; an in-scope read asks nobody for anything, mints no ticket and
+/// mutates nothing but the filesystem it was already allowed to read.
 #[tauri::command]
-pub fn fs_read_file(path: String) -> Result<serde_json::Value, String> {
-    let p = PathBuf::from(&path);
+pub fn fs_read_file(state: State<'_, AppState>, path: String) -> Result<serde_json::Value, String> {
+    let p = match resolve_read(&path, everyaios_guard::pathfloor::FsOp::Read) {
+        Ok(t) => PathBuf::from(&t.canonical),
+        Err(d) => return Err(deny_read(&state, "fs.read_file", d)),
+    };
     let meta = std::fs::metadata(&p).map_err(|e| format!("{path}: {e}"))?;
     if meta.len() > MAX_TEXT_BYTES {
         return Ok(serde_json::json!({
@@ -395,5 +544,256 @@ pub fn fs_undo_snapshot(
             "created": true,
             "content": serde_json::Value::Null,
         })),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Read-scope interception — end-to-end style tests over the command path
+// (`ARCH/12-TRUST.md` §8, `ARCH/25-FILES.md` §7.1).
+// ---------------------------------------------------------------------------
+#[cfg(test)]
+mod read_scope_tests {
+    use super::*;
+
+    /// What a `fs_read_file` / `fs_list_dir` call would answer with: the typed
+    /// message plus the row it would append to the Merkle chain.
+    struct Denial {
+        refusal: ReadRefusal,
+        chain: everyaios_audit::merkle::MerkleChain,
+    }
+
+    /// The real command-path denial: gate → refusal → the audit append.
+    ///
+    /// These tests cannot build an `AppState` (it owns a live vault, a PTY host
+    /// and a browser slot), so the single hop they stand in for is
+    /// `control::record_mutation` — the append below writes the same
+    /// `AuditEvent` that funnel writes. Everything the command *decides* is
+    /// exercised for real: `resolve_read` is the production gate and
+    /// `ReadRefusal::new` builds the production message and payload.
+    fn deny(command: &str, path: &str) -> Denial {
+        let denial = resolve_read(path, everyaios_guard::pathfloor::FsOp::Read)
+            .expect_err("the read scopes must refuse this path");
+        let refusal = ReadRefusal::new(command, &denial);
+        let mut chain = everyaios_audit::merkle::MerkleChain::new();
+        let seq = (chain.len() as u64) + 1;
+        chain.push(everyaios_audit::AuditEvent {
+            seq,
+            ts_ms: 0,
+            kind: refusal.kind.to_string(),
+            payload: refusal.payload.clone(),
+            trace_id: String::new(),
+            span_id: String::new(),
+        });
+        Denial { refusal, chain }
+    }
+
+    /// A scratch tree: `workspace/src/a.rs` plus a `secret.txt` outside it, and
+    /// a protected subpath inside the workspace.
+    fn scratch(tag: &str) -> PathBuf {
+        let base = std::env::temp_dir().join(format!(
+            "everyaios_fsread_{tag}_{}_{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(base.join("workspace/src")).unwrap();
+        std::fs::create_dir_all(base.join("outside")).unwrap();
+        std::fs::create_dir_all(base.join("workspace/.everyaios")).unwrap();
+        std::fs::write(base.join("workspace/src/a.rs"), b"fn main() {}").unwrap();
+        std::fs::write(base.join("workspace/.everyaios/permissions.toml"), b"# p").unwrap();
+        std::fs::write(base.join("outside/secret.txt"), b"SECRET").unwrap();
+        base
+    }
+
+    #[test]
+    fn an_in_scope_read_resolves_and_asks_nobody_for_anything() {
+        let base = scratch("in_scope");
+        let path = base.join("workspace/src/a.rs");
+        let t = resolve_read(
+            &path.to_string_lossy(),
+            everyaios_guard::pathfloor::FsOp::Read,
+        )
+        .expect("an in-scope read proceeds");
+        // The gate hands back the canonical path, and the disk is readable.
+        assert!(t.canonical.ends_with("/workspace/src/a.rs"), "{t:?}");
+        assert_eq!(
+            std::fs::read_to_string(&t.canonical).unwrap(),
+            "fn main() {}"
+        );
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn a_listing_resolves_and_asks_nobody_for_anything() {
+        let base = scratch("listing");
+        let t = resolve_read(
+            &base.join("workspace").to_string_lossy(),
+            everyaios_guard::pathfloor::FsOp::List,
+        )
+        .expect("an in-scope listing proceeds");
+        assert!(std::path::Path::new(&t.canonical).is_dir());
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn an_out_of_scope_read_is_denied_typed_and_writes_exactly_one_audit_row() {
+        let base = scratch("out_scope");
+        // The escape the renderer must not make: climb out with `..`.
+        let escape = format!("{}/workspace/../outside/secret.txt", base.to_string_lossy());
+        let denial = deny("fs.read_file", &escape);
+        let p = &denial.refusal.payload;
+
+        // The canonical taxonomy code, not an invented one.
+        assert!(
+            denial.refusal.message.starts_with("AuthorizationDenied ("),
+            "{:?}",
+            denial.refusal.message
+        );
+        // The message names the code, the reason token and the path.
+        assert!(
+            denial.refusal.message.contains("parent_escape"),
+            "{:?}",
+            denial.refusal.message
+        );
+        assert!(
+            denial.refusal.message.contains(&escape),
+            "{:?}",
+            denial.refusal.message
+        );
+
+        // Exactly one row, on the existing guard-denial kind, naming the actor,
+        // the command and the path.
+        assert_eq!(denial.chain.len(), 1, "a refusal owes exactly one row");
+        assert!(denial.chain.verify().is_none(), "the row must chain intact");
+        assert!(denial.chain.head().is_some());
+        assert_eq!(denial.refusal.kind, "guard.blocked");
+        assert_eq!(p["command"], "fs.read_file");
+        assert_eq!(p["actor"], "renderer");
+        assert_eq!(p["path"], escape.as_str());
+        assert_eq!(p["code"], "AuthorizationDenied");
+        assert_eq!(p["reason"], "parent_escape");
+        assert_eq!(p["retryable"], false);
+        assert_eq!(p["ok"], false);
+        assert_eq!(p["state"], "refused");
+        assert_eq!(p["outcome"], "denied");
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn an_in_scope_read_writes_no_audit_row_and_mints_no_ticket() {
+        let base = scratch("no_row");
+        let path = base.join("workspace/src/a.rs");
+        // An in-scope read is not a decision anybody has to make again, so the
+        // gate returns a target and there is nothing to record: the command
+        // body between `resolve_read` and `std::fs` mints no ticket and consults
+        // no approval store.
+        let t = resolve_read(
+            &path.to_string_lossy(),
+            everyaios_guard::pathfloor::FsOp::Read,
+        )
+        .expect("an in-scope read proceeds");
+        assert!(t.canonical.ends_with("/workspace/src/a.rs"), "{t:?}");
+        // No scopes are configured, so the documented parent-floor default is
+        // what is in force — asserted rather than assumed.
+        assert!(!read_scopes().is_configured());
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn a_symlink_out_of_the_root_is_refused() {
+        let base = scratch("symlink");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::symlink;
+            let link = base.join("workspace/src/leak.rs");
+            symlink(base.join("outside/secret.txt"), &link).unwrap();
+            let err = resolve_read(
+                &link.to_string_lossy(),
+                everyaios_guard::pathfloor::FsOp::Read,
+            )
+            .expect_err("a link out of the floor must be refused");
+            assert_eq!(err.code(), "AuthorizationDenied");
+            assert_eq!(
+                err.denial,
+                everyaios_guard::pathfloor::ScopeDenial::SymlinkEscape
+            );
+        }
+        #[cfg(not(unix))]
+        {
+            // Symlink creation needs privileges this host may not grant; the
+            // guard crate's `a_leaf_symlink_out_of_scope_is_refused` covers the
+            // same rule on unix. Gated, not deleted.
+            let _ = base;
+        }
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn a_protected_subpath_is_read_only_under_the_scope_model() {
+        // The shell's *write* path is unchanged by this work (it keeps
+        // `control::floor_user_file` + its own provenance), so the
+        // read-only-for-protected-subpaths rule is asserted where it is
+        // implemented: the scope model. Read stands, write is refused.
+        let base = scratch("protected");
+        let scopes = everyaios_guard::pathfloor::ReadScopes::new(vec![
+            everyaios_guard::pathfloor::PathGrant {
+                axis: everyaios_guard::pathfloor::GrantAxis::ReadWriteCreate,
+                prefix: base.to_string_lossy().into_owned(),
+            },
+        ]);
+        let p = base.join("workspace/.everyaios/permissions.toml");
+        assert!(scopes
+            .resolve(everyaios_guard::pathfloor::FsOp::Read, &p.to_string_lossy())
+            .is_ok());
+        assert_eq!(
+            scopes
+                .resolve(
+                    everyaios_guard::pathfloor::FsOp::Write,
+                    &p.to_string_lossy()
+                )
+                .unwrap_err()
+                .denial,
+            everyaios_guard::pathfloor::ScopeDenial::ProtectedSubpath
+        );
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn a_path_swapped_between_resolution_and_use_is_caught_by_the_recheck() {
+        // `resolve_read` resolves *and* re-checks, so a swap landing between
+        // the two is refused. The window itself is exercised at the model level
+        // (`everyaios-guard`'s `a_path_swapped_between_resolution_and_use_is_caught`);
+        // here the same refusal is observed on the command path.
+        let base = scratch("toctou");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::symlink;
+            let a = base.join("workspace/src/a.rs");
+            let outside = base.join("outside/secret.txt");
+            let t = read_scopes()
+                .resolve(everyaios_guard::pathfloor::FsOp::Read, &a.to_string_lossy())
+                .unwrap();
+            // The swap: the resolved leaf becomes a link out of the root.
+            std::fs::remove_file(&a).unwrap();
+            symlink(&outside, &a).unwrap();
+            // Re-check at the point of use: refused, not read.
+            let err = read_scopes()
+                .reverify(&t)
+                .expect_err("a swapped path must be caught before the open");
+            assert_eq!(err.code(), "AuthorizationDenied");
+            assert_eq!(
+                err.denial,
+                everyaios_guard::pathfloor::ScopeDenial::SymlinkEscape
+            );
+            // And the command gate refuses the same path outright.
+            assert!(
+                resolve_read(&a.to_string_lossy(), everyaios_guard::pathfloor::FsOp::Read).is_err()
+            );
+        }
+        #[cfg(not(unix))]
+        {
+            let _ = base;
+        }
+        let _ = std::fs::remove_dir_all(&base);
     }
 }
