@@ -18,6 +18,7 @@ pub mod hijack;
 pub mod loopback;
 pub mod manager;
 pub mod npx;
+pub mod preview;
 pub mod protocol;
 pub mod record;
 pub mod remote;
@@ -36,14 +37,20 @@ pub use npx::{
     NpxError, NpxSource, ResolvedLaunch, npx_package_from_args, resolve_stdio_launch,
     resolve_stdio_launch_with, trusted_npx_package,
 };
+pub use preview::{
+    ARTIFACT_URI_SCHEME, BoundedPreview, DEFAULT_PREVIEW_BYTES, artifact_ref, bounded_preview,
+    default_preview,
+};
 pub use remote::{
-    AuthServerMetadata, ClientRegistration, EraCache, EraVerdict, HttpTransport,
-    LEGACY_PROTOCOL_VERSION, MODERN_PROTOCOL_VERSION, McpEra, McpResponse, PkceFlow,
-    ProtectedResource, RemoteError, RemoteTarget, TokenResponse, UreqTransport,
-    build_authorize_url, build_request, cache_era, cached_era, classify_era, clear_era_cache,
-    connect, discover_authorization_server, discover_protected_resource, exchange_code,
-    modern_headers, negotiate_era, origin_of, refresh_token, register_dynamic_client, rpc,
-    rpc_in_era, tool_name,
+    AuthServerMetadata, ClientRegistration, ConnectOptions, EraCache, EraNegotiation, EraSource,
+    EraVerdict, HttpTransport, LEGACY_PROTOCOL_VERSION, MODERN_PROTOCOL_VERSION, McpEra,
+    McpResponse, PROBE_BUDGET, PkceFlow, ProtectedResource, RemoteError, RemoteTarget,
+    STDIO_ERA_KEY_PREFIX, StdioEraProbe, TokenResponse, UreqTransport, build_authorize_url,
+    build_discover_request, build_request, cache_era, cached_era, classify_era, classify_era_body,
+    clear_era_cache, connect, connect_with_options, discover_authorization_server,
+    discover_probe_headers, discover_protected_resource, exchange_code, modern_headers,
+    negotiate_era, negotiate_era_detailed, negotiate_stdio_era, origin_of, refresh_token,
+    register_dynamic_client, rpc, rpc_in_era, stdio_era_key, tool_name,
 };
 pub use server::{
     DISCOVER_METHOD_NAME, DiscoverCapabilities, DiscoverToolCapability, ExternalTool, FacadeError,

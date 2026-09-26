@@ -834,15 +834,72 @@ pub struct RemoteFlowState {
     pub redirect_uri: String,
 }
 
-fn store_url(store_id: &str) -> Result<String, String> {
+/// The stored record for a remote store entry: its URL plus the persisted
+/// per-server options.
+///
+/// Every remote-MCP path reads the record through here so the force-legacy
+/// hatch (DEC-030) can never be honoured on one call path and ignored on
+/// another. The record is a pure function of the bundled index, so it is read
+/// on demand rather than cached in a second store.
+fn store_remote(store_id: &str) -> Result<(String, bool), String> {
     let store = everyaios_mcp::StoreIndex::bundled();
     let entry = store
         .get(store_id)
         .ok_or_else(|| format!("store entry `{store_id}` not found"))?;
-    entry
+    let url = entry
         .url
         .clone()
-        .ok_or_else(|| format!("`{store_id}` is not a remote MCP server"))
+        .ok_or_else(|| format!("`{store_id}` is not a remote MCP server"))?;
+    Ok((url, entry.force_legacy))
+}
+
+fn store_url(store_id: &str) -> Result<String, String> {
+    store_remote(store_id).map(|(url, _)| url)
+}
+
+/// The remote target for a stored entry, with its persisted options applied.
+///
+/// The hatch is a property of the stored record, never a call argument: a
+/// runtime-only flag would be lost on restart and would silently re-pin the
+/// origin to a wrong era, which is exactly the failure the escape hatch exists
+/// to survive.
+fn remote_target(store_id: &str) -> Result<everyaios_mcp::RemoteTarget, String> {
+    let (url, force_legacy) = store_remote(store_id)?;
+    everyaios_mcp::connect_with_options(
+        &url,
+        &everyaios_mcp::UreqTransport,
+        everyaios_mcp::ConnectOptions { force_legacy },
+    )
+    .map_err(|e| e.to_string())
+}
+
+/// The effective era for a stored entry, as a **read-only projection**.
+///
+/// It reports what this process already knows and never probes: a status
+/// command that issued an era probe would turn a read into a network round
+/// trip, and an operator reading the era is exactly the case where a surprise
+/// `400` (or a 10 s stall) must not be possible. The values are:
+///
+/// - `forced` — the record has the hatch armed; detection is skipped entirely
+///   and the legacy revision is spoken from the first call;
+/// - `cached` — a conclusive probe in this process fixed the era;
+/// - `default` — nothing conclusive is known yet, so the modern revision is
+///   what the next call will send (DEC-030 precedence).
+fn effective_era(store_id: &str) -> serde_json::Value {
+    let Ok((url, force_legacy)) = store_remote(store_id) else {
+        return serde_json::Value::Null;
+    };
+    if force_legacy {
+        return serde_json::json!({
+            "era": everyaios_mcp::LEGACY_PROTOCOL_VERSION,
+            "eraSource": "forced",
+        });
+    }
+    let (era, source) = match everyaios_mcp::cached_era(&everyaios_mcp::origin_of(&url)) {
+        Some(cached) => (cached.version(), "cached"),
+        None => (everyaios_mcp::MODERN_PROTOCOL_VERSION, "default"),
+    };
+    serde_json::json!({ "era": era, "eraSource": source })
 }
 
 /// Start a remote-MCP connect: discovery + dynamic client registration +
@@ -854,9 +911,7 @@ pub fn mcp_connect_start(
     state: tauri::State<'_, crate::AppState>,
     store_id: String,
 ) -> Result<serde_json::Value, String> {
-    let url = store_url(&store_id)?;
-    let http = everyaios_mcp::UreqTransport;
-    let target = everyaios_mcp::connect(&url, &http).map_err(|e| e.to_string())?;
+    let target = remote_target(&store_id)?;
 
     // Bind a loopback listener to get the real redirect port.
     let listener = TcpListener::bind("127.0.0.1:0").map_err(|e| e.to_string())?;
@@ -934,6 +989,13 @@ pub fn mcp_connect_start(
         "authUrl": flow.auth_url,
         "state": flow.state,
         "redirectUri": redirect,
+        // Read-only era observability (DEC-030 / ARCH/14 §7 "provider marked
+        // incompatible with reason"): what this server will be spoken in, and
+        // whether that came from the operator's persisted hatch or is still the
+        // modern default awaiting a probe. There is no user-facing toggle for
+        // the hatch in v1 — this is the only way it is observable.
+        "forceLegacy": target.force_legacy,
+        "era": effective_era(&store_id),
     }))
 }
 
@@ -960,6 +1022,10 @@ pub fn remote_access_token(
 
 /// Status: is a remote store entry connected (has a token)?
 /// Checks the in-memory session map first, then the vault keyring.
+///
+/// Also reports the **effective era** and its source, read-only and without a
+/// probe (see [`effective_era`]) so the UI can explain a misreporting server
+/// instead of showing an opaque wire contract.
 #[tauri::command]
 pub fn mcp_remote_status(
     state: tauri::State<'_, crate::AppState>,
@@ -967,6 +1033,8 @@ pub fn mcp_remote_status(
 ) -> Result<serde_json::Value, String> {
     Ok(serde_json::json!({
         "connected": remote_access_token(&state, &store_id).is_some(),
+        "forceLegacy": store_remote(&store_id).map(|(_, forced)| forced).unwrap_or(false),
+        "era": effective_era(&store_id),
     }))
 }
 
@@ -988,11 +1056,10 @@ pub fn mcp_remote_call(
     params: serde_json::Value,
 ) -> Result<serde_json::Value, String> {
     if method != "tools/call" {
-        let url = store_url(&store_id)?;
+        let target = remote_target(&store_id)?;
         let token = remote_access_token(&state, &store_id)
             .ok_or_else(|| format!("`{store_id}` is not connected"))?;
         let http = everyaios_mcp::UreqTransport;
-        let target = everyaios_mcp::connect(&url, &http).map_err(|e| e.to_string())?;
         let resp = everyaios_mcp::rpc(&target, &token, &method, params, &http)
             .map_err(|e| e.to_string())?;
         return Ok(resp);
@@ -1076,11 +1143,10 @@ pub fn mcp_remote_call_commit(
             .map_err(|e| format!("remote MCP call ticket invalid: {e}"))?;
     } // never hold the guard lock across the network call
 
-    let url = store_url(&pending.store_id)?;
+    let target = remote_target(&pending.store_id)?;
     let token = remote_access_token(&state, &pending.store_id)
         .ok_or_else(|| format!("`{}` is not connected", pending.store_id))?;
     let http = everyaios_mcp::UreqTransport;
-    let target = everyaios_mcp::connect(&url, &http).map_err(|e| e.to_string())?;
     let resp = everyaios_mcp::rpc(
         &target,
         &token,
@@ -1125,11 +1191,10 @@ pub fn mcp_remote_tools(
     state: tauri::State<'_, crate::AppState>,
     store_id: String,
 ) -> Result<Vec<RemoteToolInfo>, String> {
-    let url = store_url(&store_id)?;
     let token = remote_access_token(&state, &store_id)
         .ok_or_else(|| format!("`{store_id}` is not connected"))?;
     let http = everyaios_mcp::UreqTransport;
-    let target = everyaios_mcp::connect(&url, &http).map_err(|e| e.to_string())?;
+    let target = remote_target(&store_id)?;
     let resp = everyaios_mcp::rpc(&target, &token, "tools/list", serde_json::json!({}), &http)
         .map_err(|e| e.to_string())?;
     let tools = resp

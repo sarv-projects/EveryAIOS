@@ -19,10 +19,11 @@ use std::net::{SocketAddr, TcpStream};
 use std::time::Duration;
 
 use everyaios_mcp::{
-    AuthServerMetadata, ClientRegistration, DISCOVER_METHOD, EraVerdict, HttpTransport,
-    LEGACY_PROTOCOL_VERSION, METHOD_HEADER, McpEra, McpResponse, McpServer, NAME_HEADER,
-    PROTOCOL_VERSION_HEADER, RemoteError, RemoteTarget, SUPPORTED_PROTOCOL_VERSION,
-    ToolCallHandler, cached_era, classify_era, modern_headers, origin_of, rpc,
+    AuthServerMetadata, ClientRegistration, ConnectOptions, DISCOVER_METHOD, EraSource, EraVerdict,
+    HttpTransport, LEGACY_PROTOCOL_VERSION, METHOD_HEADER, McpEra, McpResponse, McpServer,
+    NAME_HEADER, PROTOCOL_VERSION_HEADER, RemoteError, RemoteTarget, SUPPORTED_PROTOCOL_VERSION,
+    StoreEntry, StoreIndex, StoreKind, ToolCallHandler, cached_era, classify_era,
+    connect_with_options, modern_headers, negotiate_era_detailed, origin_of, rpc,
 };
 use serde_json::Value;
 
@@ -487,6 +488,137 @@ fn acceptance_force_legacy_speaks_the_legacy_contract_and_the_modern_lease_refus
 }
 
 #[test]
+fn acceptance_the_stored_force_legacy_flag_is_reachable_and_skips_detection() {
+    // The hatch used to be a crate-level flag no user could reach, which is dead
+    // code plus a false sense of coverage. It is now persisted on the stored
+    // server record, so this proves both halves: the record round-trips, and a
+    // target built from it skips detection with no wire traffic at all.
+    let mut entry = StoreEntry {
+        id: "operator-forced".into(),
+        kind: StoreKind::RemoteMcp,
+        name: "Operator-forced server".into(),
+        description: "fixture".into(),
+        url: Some("https://forced.example.com/mcp".into()),
+        force_legacy: true,
+        flow: everyaios_mcp::ConnectFlow::Pkce,
+        vault_provider: "fixture".into(),
+        consent: everyaios_mcp::ConnectConsent {
+            scopes_plain: vec!["Read nothing; this entry proves the hatch".into()],
+            can_mutate: false,
+            indexes_into_memory: false,
+        },
+        tool_hint: 0,
+    };
+    let store = StoreIndex::with([entry.clone()]);
+    assert!(
+        store.get("operator-forced").expect("entry").force_legacy,
+        "the hatch must survive the store round trip"
+    );
+    // The field defaults to absent-safe, so an older record cannot arm it.
+    entry.force_legacy = false;
+    let defaults: StoreEntry =
+        serde_json::from_str(r#"{"id":"x","kind":"remote-mcp","name":"x","description":"x","flow":"pkce","consent":{"scopesPlain":["x"]}}"#)
+            .expect("a record written before the field existed");
+    assert!(
+        !defaults.force_legacy,
+        "a record without the field must default to the modern era"
+    );
+
+    let target = RemoteTarget {
+        url: entry.url.clone().expect("url"),
+        auth: AuthServerMetadata {
+            issuer: "https://auth.example.com".into(),
+            authorization_endpoint: String::new(),
+            token_endpoint: String::new(),
+            registration_endpoint: String::new(),
+            scopes_supported: vec![],
+            response_types_supported: vec![],
+        },
+        client: ClientRegistration {
+            client_id: "acceptance".into(),
+            client_secret: String::new(),
+            token_endpoint_auth_method: "none".into(),
+        },
+        // The stored flag reaches the target — this is the whole point.
+        force_legacy: true,
+    };
+    // A transport that would fail the test if it were touched.
+    let http = LeaseHttp {
+        addr: "127.0.0.1:1".parse().expect("loopback"),
+        token: "unused".into(),
+    };
+    let negotiation = negotiate_era_detailed(&target, None, &http);
+    assert_eq!(negotiation.era, McpEra::Legacy);
+    assert_eq!(negotiation.source, EraSource::Forced);
+    assert_eq!(negotiation.version(), LEGACY_PROTOCOL_VERSION);
+    assert!(
+        cached_era(&origin_of(&target.url)).is_none(),
+        "a force-legacy server must not poison the shared origin cache"
+    );
+}
+
+#[test]
+fn acceptance_connect_with_options_is_the_persisted_hatch_seam() {
+    // `connect()` used to hardcode `force_legacy: false`, so no stored value
+    // could ever reach a target. The options struct is the seam the shell reads
+    // the record through, and it must not disturb the OAuth half.
+    let http = DiscoveryOnly;
+    let plain = everyaios_mcp::connect("https://connect.example.com/mcp", &http)
+        .expect("the plain handshake still works");
+    assert!(!plain.force_legacy);
+    let forced = connect_with_options(
+        "https://connect.example.com/mcp",
+        &http,
+        ConnectOptions { force_legacy: true },
+    )
+    .expect("the forced handshake still works");
+    assert!(forced.force_legacy);
+    assert_eq!(forced.url, plain.url);
+    assert_eq!(forced.client.client_id, plain.client.client_id);
+}
+
+/// Serves only the two well-known documents `connect` reads, so the test never
+/// touches the network.
+#[derive(Default)]
+struct DiscoveryOnly;
+
+impl HttpTransport for DiscoveryOnly {
+    fn get_json(&self, url: &str) -> Result<Value, RemoteError> {
+        if url.ends_with("/.well-known/oauth-protected-resource") {
+            return Ok(serde_json::json!({
+                "resource": "https://connect.example.com",
+                "authorization_servers": ["https://auth.example.com"]
+            }));
+        }
+        if url.ends_with("/.well-known/oauth-authorization-server") {
+            return Ok(serde_json::json!({
+                "issuer": "https://auth.example.com",
+                "authorization_endpoint": "https://auth.example.com/authorize",
+                "token_endpoint": "https://auth.example.com/token",
+                "registration_endpoint": "https://auth.example.com/register"
+            }));
+        }
+        Err(RemoteError::Msg(format!("unexpected GET {url}")))
+    }
+
+    fn post_form(&self, url: &str, _form: &[(&str, &str)]) -> Result<Value, RemoteError> {
+        Err(RemoteError::Msg(format!("unexpected form POST {url}")))
+    }
+
+    fn post_json(
+        &self,
+        url: &str,
+        _bearer: Option<&str>,
+        _body: &Value,
+    ) -> Result<Value, RemoteError> {
+        if url.ends_with("/register") {
+            return Ok(serde_json::json!({"client_id": "dyn-client"}));
+        }
+        Err(RemoteError::Msg(format!("unexpected POST {url}")))
+    }
+}
+
+#[test]
 fn acceptance_modern_era_precedence_and_legacy_fallback_are_separable() {
     // The modern era carries the protocol revision, the method, and — for a
     // call — the name.
@@ -529,4 +661,247 @@ fn acceptance_modern_era_precedence_and_legacy_fallback_are_separable() {
         classify_era(401, &serde_json::json!({"error": "unauthorized"})),
         EraVerdict::Inconclusive
     );
+}
+
+// ---------------------------------------------------------------------------
+// The lease revision pin and the single `initialize` exemption (DEC-030)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn acceptance_a_legacy_initialize_completes_on_the_strict_lease() {
+    // `ARCH/14` §4 promises "stateless modern + `initialize` compatibility" and
+    // REQ-PROV-005 requires it. This is the end-to-end proof that the promise
+    // is reachable over the strict lease rather than only in-process.
+    let lease = McpServer::start_http_listener(Echo).expect("start lease");
+    let body = serde_json::json!({
+        "jsonrpc": "2.0", "id": 11, "method": "initialize",
+        "params": {
+            "protocolVersion": LEGACY_PROTOCOL_VERSION,
+            "capabilities": {},
+            "clientInfo": {"name": "legacy-client", "version": "1"}
+        }
+    })
+    .to_string();
+    // No `MCP-Protocol-Version` and no `Mcp-Method`: a legacy client has no
+    // reason to send a header from a contract it does not speak.
+    let response = post_raw(lease.local_addr(), lease.token(), &[], &body);
+
+    assert_eq!(response.status, 200, "body: {}", response.body);
+    let value = response.json();
+    assert_eq!(value["result"]["protocolVersion"], LEGACY_PROTOCOL_VERSION);
+    assert_eq!(value["result"]["serverInfo"]["name"], "everyaios-mcp");
+    // The compat handshake is how a client discovers the window, so the answer
+    // carries it (REQ-CHAN-012).
+    let supported: Vec<&str> = value["result"]["supportedProtocolVersions"]
+        .as_array()
+        .expect("supportedProtocolVersions")
+        .iter()
+        .map(|version| version.as_str().expect("revision string"))
+        .collect();
+    assert!(supported.contains(&SUPPORTED_PROTOCOL_VERSION));
+    assert!(supported.contains(&LEGACY_PROTOCOL_VERSION));
+    // The session-less guarantee is stated, not implied.
+    let instructions = value["result"]["instructions"].as_str().unwrap_or_default();
+    assert!(
+        instructions.contains("no session is created"),
+        "the compat handshake must stay stateless, got: {instructions}"
+    );
+    // No session id is minted: a session-bearing exemption would be a contract
+    // change, not a compat detail.
+    assert!(value["result"].get("sessionId").is_none());
+    lease.close();
+}
+
+#[test]
+fn acceptance_the_revision_pin_holds_for_every_method_except_initialize() {
+    let lease = McpServer::start_http_listener(Echo).expect("start lease");
+    let addr = lease.local_addr();
+    let token = lease.token().to_string();
+    let list = serde_json::json!({
+        "jsonrpc": "2.0", "id": 12, "method": "tools/list", "params": {}
+    })
+    .to_string();
+    let call = serde_json::json!({
+        "jsonrpc": "2.0", "id": 13, "method": "tools/call",
+        "params": {"name": "office.edit", "arguments": {}}
+    })
+    .to_string();
+
+    // A legacy revision on a dispatching method stays refused...
+    for (label, body) in [("tools/list", &list), ("tools/call", &call)] {
+        let refused = post_raw(
+            addr,
+            &token,
+            &[
+                (PROTOCOL_VERSION_HEADER, LEGACY_PROTOCOL_VERSION),
+                (METHOD_HEADER, label),
+                (NAME_HEADER, "office.edit"),
+            ],
+            body,
+        );
+        assert_eq!(refused.status, 400, "{label} must stay pinned");
+        let message = refused.json()["error"]["message"]
+            .as_str()
+            .unwrap_or_default()
+            .to_string();
+        // REQ-CHAN-012: the refusal names the supported window.
+        assert!(
+            message.contains(SUPPORTED_PROTOCOL_VERSION),
+            "{label} refusal must name the pinned revision, got: {message}"
+        );
+        assert!(
+            message.contains(LEGACY_PROTOCOL_VERSION),
+            "{label} refusal must name the window, got: {message}"
+        );
+        assert!(
+            message.contains("initialize"),
+            "{label} refusal must name the one exempt method, got: {message}"
+        );
+        let data = refused.json()["error"]["data"]["supportedProtocolVersions"]
+            .as_array()
+            .expect("window in error data")
+            .clone();
+        assert!(
+            data.iter()
+                .any(|version| version == SUPPORTED_PROTOCOL_VERSION),
+            "the machine-readable window must be present too"
+        );
+    }
+
+    // ...and the same header-less envelope that is admitted for `initialize` is
+    // refused for `tools/call`, so the exemption cannot be widened by swapping
+    // the method on a request that already passed.
+    let refused = post_raw(addr, &token, &[], &call);
+    assert_eq!(refused.status, 400);
+    lease.close();
+}
+
+#[test]
+fn acceptance_a_comma_duplicated_version_header_is_normalized() {
+    let lease = McpServer::start_http_listener(Echo).expect("start lease");
+    let list = serde_json::json!({
+        "jsonrpc": "2.0", "id": 14, "method": "tools/list", "params": {}
+    })
+    .to_string();
+
+    // A proxy that appended the same header twice is a transport artifact, not
+    // a disagreement, so the modern contract still holds.
+    let accepted = post_raw(
+        lease.local_addr(),
+        lease.token(),
+        &[
+            (PROTOCOL_VERSION_HEADER, "2026-07-28, 2026-07-28"),
+            (METHOD_HEADER, "tools/list"),
+        ],
+        &list,
+    );
+    assert_eq!(accepted.status, 200, "body: {}", accepted.body);
+    assert!(accepted.json()["result"]["tools"].is_array());
+
+    // Conflicting revisions are a real disagreement: refused, never resolved by
+    // picking one.
+    let refused = post_raw(
+        lease.local_addr(),
+        lease.token(),
+        &[
+            (PROTOCOL_VERSION_HEADER, "2026-07-28, 2025-11-25"),
+            (METHOD_HEADER, "tools/list"),
+        ],
+        &list,
+    );
+    assert_eq!(refused.status, 400);
+    assert!(
+        refused.body.contains("more than one revision"),
+        "body: {}",
+        refused.body
+    );
+    lease.close();
+}
+
+#[test]
+fn acceptance_the_initialize_exemption_dispatches_nothing() {
+    // The exemption's whole safety argument is that `initialize` is read-only:
+    // it must not reach the handler at all. A shared-facade lease whose handler
+    // counts dispatches proves the compat path grants no execution (INV-03).
+    struct Counting {
+        calls: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+    }
+    impl ToolCallHandler for Counting {
+        fn call(&mut self, _name: &str, _args: &Value) -> Result<Value, String> {
+            self.calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            Ok(serde_json::json!({}))
+        }
+    }
+    let calls = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let lease = McpServer::start_http_listener(Counting {
+        calls: std::sync::Arc::clone(&calls),
+    })
+    .expect("start lease");
+    let initialize = serde_json::json!({
+        "jsonrpc": "2.0", "id": 15, "method": "initialize",
+        "params": {"protocolVersion": LEGACY_PROTOCOL_VERSION, "capabilities": {}}
+    })
+    .to_string();
+    let response = post_raw(lease.local_addr(), lease.token(), &[], &initialize);
+    assert_eq!(response.status, 200, "body: {}", response.body);
+    assert_eq!(
+        calls.load(std::sync::atomic::Ordering::SeqCst),
+        0,
+        "the compatibility handshake must never dispatch a tool"
+    );
+    // A subsequent legacy call is still refused, so the exemption bought one
+    // handshake and nothing else.
+    let call = serde_json::json!({
+        "jsonrpc": "2.0", "id": 16, "method": "tools/call",
+        "params": {"name": "office.edit", "arguments": {}}
+    })
+    .to_string();
+    let refused = post_raw(
+        lease.local_addr(),
+        lease.token(),
+        &[(PROTOCOL_VERSION_HEADER, LEGACY_PROTOCOL_VERSION)],
+        &call,
+    );
+    assert_eq!(refused.status, 400);
+    assert_eq!(
+        calls.load(std::sync::atomic::Ordering::SeqCst),
+        0,
+        "a refused call must not reach the handler either"
+    );
+    lease.close();
+}
+
+#[test]
+fn acceptance_an_unknown_initialize_version_is_answered_not_echoed() {
+    let lease = McpServer::start_http_listener(Echo).expect("start lease");
+    let body = serde_json::json!({
+        "jsonrpc": "2.0", "id": 17, "method": "initialize",
+        "params": {"protocolVersion": "9999-01-01", "capabilities": {}}
+    })
+    .to_string();
+    let response = post_raw(lease.local_addr(), lease.token(), &[], &body);
+    assert_eq!(response.status, 200, "body: {}", response.body);
+    let value = response.json();
+    // Answered with a revision we implement; the untrusted string is never
+    // reflected back to the client.
+    assert_eq!(
+        value["result"]["protocolVersion"],
+        SUPPORTED_PROTOCOL_VERSION
+    );
+    assert!(
+        !response.body.contains("9999-01-01"),
+        "an untrusted revision must never be echoed: {}",
+        response.body
+    );
+    // A header naming an unimplementable revision is refused with the window
+    // rather than negotiated down: we cannot answer that client truthfully.
+    let refused = post_raw(
+        lease.local_addr(),
+        lease.token(),
+        &[(PROTOCOL_VERSION_HEADER, "9999-01-01")],
+        &body,
+    );
+    assert_eq!(refused.status, 400);
+    assert!(refused.body.contains(SUPPORTED_PROTOCOL_VERSION));
+    lease.close();
 }

@@ -76,6 +76,88 @@ fn negotiate_protocol_version(requested: Option<&str>) -> &'static str {
         .unwrap_or(SUPPORTED_PROTOCOL_VERSION)
 }
 
+/// The one method the strict lease exempts from the modern revision pin.
+///
+/// `initialize` is a **read-only discovery handshake**: it creates no session,
+/// mints no capability handle, mutates nothing, and is the only method every
+/// MCP server in existence implements. Exempting exactly it is what makes the
+/// "stateless modern + `initialize` compatibility" façade clause reachable
+/// (ARCH/14 §4, REQ-PROV-005) while the pin still guards every method that can
+/// dispatch work. **If `initialize` ever becomes session-bearing, this
+/// exemption must be revisited** — that condition is the whole safety argument.
+const INITIALIZE_METHOD: &str = "initialize";
+
+/// The `MCP-Protocol-Version` header after normalization (ARCH/32 §8 +
+/// REQ-CHAN-012).
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum ProtocolHeader {
+    /// Absent, or present but empty.
+    Absent,
+    /// Exactly one distinct revision after splitting and trimming.
+    Single(String),
+    /// Two or more **different** revisions: a client (or an intervening proxy)
+    /// that appended a conflicting value. Guessing which one is authoritative
+    /// would let a caller choose the era it is checked against, so this is
+    /// refused rather than resolved.
+    Conflicting,
+}
+
+impl ProtocolHeader {
+    /// Normalize a raw header value.
+    ///
+    /// A proxy that duplicates the header collapses it into one
+    /// comma-joined value (`2026-07-28, 2026-07-28`); that is a transport
+    /// artifact, not a disagreement, and must not read as a mismatch. A
+    /// *conflicting* join is a real disagreement and stays conflicting.
+    fn parse(raw: Option<&str>) -> Self {
+        let Some(raw) = raw else {
+            return Self::Absent;
+        };
+        let mut distinct: Vec<&str> = raw
+            .split(',')
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .collect();
+        distinct.sort_unstable();
+        distinct.dedup();
+        match distinct.len() {
+            0 => Self::Absent,
+            1 => Self::Single(distinct[0].to_string()),
+            _ => Self::Conflicting,
+        }
+    }
+
+    /// The single declared revision, if the header named exactly one.
+    fn revision(&self) -> Option<&str> {
+        match self {
+            Self::Single(value) => Some(value),
+            Self::Absent | Self::Conflicting => None,
+        }
+    }
+}
+
+/// The window this server negotiates, for a refusal body (REQ-CHAN-012).
+///
+/// A bare "wrong version" is undiagnosable for a client that has no way to
+/// learn what we speak, so every version refusal carries the window in both
+/// the message and the error's `data` field.
+fn supported_window_message() -> String {
+    format!(
+        "MCP-Protocol-Version must be {SUPPORTED_PROTOCOL_VERSION} for this method; \
+         this server negotiates [{}] and serves the older revisions only for \
+         `{INITIALIZE_METHOD}`",
+        SUPPORTED_PROTOCOL_VERSIONS.join(", ")
+    )
+}
+
+fn supported_window_data() -> Value {
+    serde_json::json!({
+        "supportedProtocolVersions": SUPPORTED_PROTOCOL_VERSIONS,
+        "protocolVersion": SUPPORTED_PROTOCOL_VERSION,
+        "legacyCompatMethod": INITIALIZE_METHOD,
+    })
+}
+
 /// Is this HTTP `Origin` header value a loopback origin?
 ///
 /// Only a literal loopback authority is accepted.  A prefix check would
@@ -965,6 +1047,12 @@ impl<H: ToolCallHandler> McpServer<H> {
                     id,
                     serde_json::json!({
                         "protocolVersion": negotiated,
+                        // The advertised window, so a client that reached us
+                        // through the compatibility handshake can discover what
+                        // else we speak without reading our source
+                        // (REQ-CHAN-012). This is the same list
+                        // `server/discover` carries.
+                        "supportedProtocolVersions": SUPPORTED_PROTOCOL_VERSIONS,
                         "capabilities": { "tools": {} },
                         "serverInfo": ServerInfo::current(),
                         "instructions": "EveryAIOS shared-plane façades (task-shaped, one per capability family). Stateless: no session is created. Prefer `server/discover` on the 2026-07-28 revision."
@@ -2324,6 +2412,7 @@ fn bearer_matches(expected: Option<&str>, provided: Option<&str>) -> bool {
     difference == 0
 }
 
+#[derive(Debug)]
 struct HttpFailure {
     status: u16,
     body: String,
@@ -2335,6 +2424,19 @@ impl HttpFailure {
         Self {
             status,
             body: rpc_error(Value::Null, code, message),
+            protocol_version: None,
+        }
+    }
+
+    /// A refusal that names the supported window (REQ-CHAN-012).
+    ///
+    /// The window goes in the message *and* in `error.data` so a client can
+    /// read it either way: a human sees it in the message, a client reads the
+    /// list without parsing prose.
+    fn with_window(status: u16, code: i64, message: &str) -> Self {
+        Self {
+            status,
+            body: rpc_error_with_data(Value::Null, code, message, supported_window_data()),
             protocol_version: None,
         }
     }
@@ -2353,9 +2455,13 @@ impl HttpFailure {
         self
     }
 
+    /// Declare the negotiated revision on the reply, but only for a revision
+    /// this server actually speaks. A client must never be told a revision we
+    /// do not implement, and the strict path still requires the exact modern
+    /// value — the `initialize` compat arm is the only wider case.
     fn with_protocol(mut self, protocol_version: Option<&str>) -> Self {
         self.protocol_version = protocol_version
-            .filter(|version| *version == SUPPORTED_PROTOCOL_VERSION)
+            .filter(|version| SUPPORTED_PROTOCOL_VERSIONS.contains(version))
             .map(ToString::to_string);
         self
     }
@@ -2363,11 +2469,18 @@ impl HttpFailure {
 
 impl HttpPolicy {
     fn validate(&self, request: &HttpRequest) -> Result<ParsedJsonRpc, HttpFailure> {
+        // Every refusal on the strict path echoes the request id where one can
+        // be recovered, so a client can correlate a refusal with its call rather
+        // than seeing an uncorrelated error.
         let context = |status, code, message: &str| {
             HttpFailure::new(status, code, message)
                 .with_protocol(request.protocol_version.as_deref())
                 .with_id(json_rpc_id(&request.body))
         };
+        // Gates that are identical for every admitted method. The revision pin
+        // is deliberately *not* one of them: it is applied after the body is
+        // parsed so that `initialize` can be exempted by method name rather
+        // than by guessing at an unparsed body.
         if !self.strict {
             if !bearer_matches(
                 self.bearer_token.as_deref(),
@@ -2419,68 +2532,173 @@ impl HttpPolicy {
                 "Accept must include application/json and text/event-stream",
             ));
         }
-        if request.protocol_version.as_deref() != Some(SUPPORTED_PROTOCOL_VERSION) {
-            return Err(context(
+
+        // A conflicting revision list is refused before anything is parsed: the
+        // declared era is the input to every decision below, so it must be
+        // unambiguous.
+        let header = ProtocolHeader::parse(request.protocol_version.as_deref());
+        if header == ProtocolHeader::Conflicting {
+            return Err(HttpFailure::with_window(
                 400,
                 -32600,
-                "MCP-Protocol-Version must be the supported revision",
-            ));
+                "MCP-Protocol-Version names more than one revision",
+            )
+            .with_protocol(request.protocol_version.as_deref())
+            .with_id(json_rpc_id(&request.body)));
+        }
+
+        let declared = header.revision();
+        // The compat path parses with no fallback so a header-less legacy
+        // `initialize` is negotiated from its own `params.protocolVersion`
+        // rather than inheriting the modern default.
+        let parsed = match parse_json_rpc(&request.body, declared) {
+            Ok(parsed) => parsed,
+            Err(error) => {
+                return Err(context(400, error.code(), error.message()));
+            }
+        };
+
+        // Routing: a request that *declares* the pinned modern revision is held
+        // to the full modern gate for every method (an `initialize` included —
+        // it has to satisfy the same envelope it opted into). Everything else
+        // goes to the compat gate, which admits `initialize` and refuses the
+        // rest with the window. The decision is made here, on the parsed
+        // method, so no unparsed body is ever admitted on a header guess.
+        if declared == Some(SUPPORTED_PROTOCOL_VERSION) {
+            self.admit_modern(request, &parsed, header.revision())
+        } else {
+            self.admit_legacy_initialize(request, &parsed, header.revision())
+        }
+    }
+
+    /// The strict modern contract: the pinned revision plus the full
+    /// `Mcp-Method` / `Mcp-Name` / `Idempotency-Key` cross-validation.
+    ///
+    /// Every method that can dispatch work arrives here, and a request that
+    /// does not declare the modern revision is refused with the window.
+    fn admit_modern(
+        &self,
+        request: &HttpRequest,
+        parsed: &ParsedJsonRpc,
+        declared: Option<&str>,
+    ) -> Result<ParsedJsonRpc, HttpFailure> {
+        let context = |code: i64, message: &str| {
+            HttpFailure::with_window(400, code, message)
+                .with_protocol(request.protocol_version.as_deref())
+                .with_id(parsed.id.clone().unwrap_or(Value::Null))
+        };
+        if declared != Some(SUPPORTED_PROTOCOL_VERSION) {
+            return Err(context(-32600, &supported_window_message()));
         }
         let Some(mcp_method) = request.mcp_method.as_deref() else {
-            return Err(context(400, -32600, "Mcp-Method is required"));
+            return Err(context(-32600, "Mcp-Method is required"));
         };
         if mcp_method.len() > MAX_MCP_METADATA_BYTES || mcp_method.chars().any(char::is_control) {
-            return Err(context(400, -32600, "Mcp-Method is invalid"));
+            return Err(context(-32600, "Mcp-Method is invalid"));
         }
-        let mut parsed = parse_json_rpc(&request.body, request.protocol_version.as_deref())
-            .map_err(|error| {
-                context(400, error.code(), error.message()).with_id(json_rpc_id(&request.body))
-            })?;
+        let mut parsed = parsed.clone();
         if let Some(raw_key) = request.idempotency_key.as_deref() {
-            let key = validate_idempotency_key(raw_key).map_err(|message| {
-                context(400, -32600, &message).with_id(parsed.id.clone().unwrap_or(Value::Null))
-            })?;
+            let key =
+                validate_idempotency_key(raw_key).map_err(|message| context(-32600, &message))?;
             if parsed
                 .idempotency_key
                 .as_ref()
                 .is_some_and(|body_key| body_key != &key)
             {
-                return Err(
-                    context(400, -32600, "Idempotency-Key does not match the request")
-                        .with_id(parsed.id.clone().unwrap_or(Value::Null)),
-                );
+                return Err(context(
+                    -32600,
+                    "Idempotency-Key does not match the request",
+                ));
             }
             parsed.idempotency_key = Some(key);
         }
         if mcp_method != parsed.method {
-            return Err(context(400, -32600, "Mcp-Method does not match JSON-RPC")
-                .with_id(parsed.id.clone().unwrap_or(Value::Null)));
+            return Err(context(-32600, "Mcp-Method does not match JSON-RPC"));
         }
         if parsed.protocol_version != SUPPORTED_PROTOCOL_VERSION {
-            return Err(context(400, -32600, "MCP protocol version does not match")
-                .with_id(parsed.id.clone().unwrap_or(Value::Null)));
+            return Err(context(-32600, "MCP protocol version does not match"));
         }
         if let Some(mcp_name) = request.mcp_name.as_deref() {
             if mcp_name.len() > MAX_MCP_METADATA_BYTES || mcp_name.chars().any(char::is_control) {
-                return Err(context(400, -32600, "Mcp-Name is invalid")
-                    .with_id(parsed.id.clone().unwrap_or(Value::Null)));
+                return Err(context(-32600, "Mcp-Name is invalid"));
             }
         }
         if parsed.method == "tools/call" {
             let Some(name) = parsed.name.as_deref() else {
-                return Err(context(400, -32600, "Mcp-Name is required")
-                    .with_id(parsed.id.clone().unwrap_or(Value::Null)));
+                return Err(context(-32600, "Mcp-Name is required"));
             };
             if request.mcp_name.as_deref() != Some(name) {
-                return Err(context(400, -32600, "Mcp-Name does not match tools/call")
-                    .with_id(parsed.id.clone().unwrap_or(Value::Null)));
+                return Err(context(-32600, "Mcp-Name does not match tools/call"));
             }
         } else if request.mcp_name.is_some() {
-            return Err(
-                context(400, -32600, "Mcp-Name is only valid for tools/call")
-                    .with_id(parsed.id.clone().unwrap_or(Value::Null)),
-            );
+            return Err(context(-32600, "Mcp-Name is only valid for tools/call"));
         }
+        Ok(parsed)
+    }
+
+    /// The single exemption: `initialize`, on a lease that pins the modern
+    /// revision.
+    ///
+    /// This is a **separate admission function, not a branch inside the modern
+    /// gate**, because the weakening has to be structural and auditable
+    /// (INV-03). What it grants is deliberately nothing:
+    ///
+    /// - only `initialize` — any other method lands back in
+    ///   [`Self::admit_modern`] and is pinned;
+    /// - no `Mcp-Method` requirement, so a legacy client that has never heard
+    ///   of the header is not broken by a requirement it cannot satisfy;
+    /// - `Mcp-Name` is refused if sent — a legacy client has no `tools/call`
+    ///   semantics to declare, so accepting one would imply capabilities it
+    ///   does not have;
+    /// - no lease, no session, no capability handle: the handler answers and
+    ///   returns, so the worker accounting is unchanged from any other request
+    ///   on this lease and nothing is recorded as a connected client;
+    /// - the idempotency key is still validated when the body carries one (the
+    ///   parser does that), but the *header* is not cross-checked, because the
+    ///   header contract is part of the revision the client did not speak.
+    fn admit_legacy_initialize(
+        &self,
+        request: &HttpRequest,
+        parsed: &ParsedJsonRpc,
+        declared: Option<&str>,
+    ) -> Result<ParsedJsonRpc, HttpFailure> {
+        let context = |code: i64, message: &str| {
+            HttpFailure::with_window(400, code, message)
+                .with_protocol(declared)
+                .with_id(parsed.id.clone().unwrap_or(Value::Null))
+        };
+        if parsed.method != INITIALIZE_METHOD {
+            // The reason this request is here at all is that it did not declare
+            // the pinned revision, so the refusal is the version refusal — which
+            // names the window and the one exempt method. Every refusal on this
+            // path advertises the window (REQ-CHAN-012).
+            return Err(context(-32600, &supported_window_message()));
+        }
+        // An absent header is the case this exemption exists for: the header is
+        // a modern-contract element, so a legacy client has no reason to send
+        // one. A header naming a revision we do not implement is different —
+        // we cannot answer that client truthfully, so it is refused with the
+        // window rather than negotiated down. The *body's* `protocolVersion`
+        // stays lenient and is never echoed back.
+        if declared.is_some_and(|value| !SUPPORTED_PROTOCOL_VERSIONS.contains(&value)) {
+            return Err(context(-32600, &supported_window_message()));
+        }
+        if request.mcp_name.is_some() {
+            return Err(context(
+                -32600,
+                "Mcp-Name is not accepted for the initialize compatibility handshake",
+            ));
+        }
+        let negotiated = negotiate_protocol_version(
+            parsed
+                .value
+                .get("params")
+                .and_then(Value::as_object)
+                .and_then(|params| params.get("protocolVersion"))
+                .and_then(Value::as_str),
+        );
+        let mut parsed = parsed.clone();
+        parsed.protocol_version = negotiated;
         Ok(parsed)
     }
 }
@@ -2583,6 +2801,7 @@ where
     }
 }
 
+#[derive(Clone, Debug)]
 struct ParsedJsonRpc {
     value: Value,
     method: String,
@@ -2967,6 +3186,8 @@ mod transport_tests {
 #[cfg(test)]
 mod lease_tests {
     use super::*;
+    use crate::protocol::{METHOD_HEADER, NAME_HEADER, PROTOCOL_VERSION_HEADER};
+    use serde_json::json;
     use std::io::{Read, Write};
     use std::net::TcpStream;
     use std::sync::atomic::{AtomicUsize, Ordering};
@@ -3103,6 +3324,323 @@ mod lease_tests {
         let addr = lease.local_addr();
         drop(lease);
         assert!(TcpStream::connect_timeout(&addr, Duration::from_millis(200)).is_err());
+    }
+
+    // -- the revision pin and the single `initialize` exemption (item 4) ----
+
+    /// The strict-lease policy a live lease installs, rebuilt in-process so a
+    /// test can drive `validate` directly against arbitrary header sets.
+    fn strict_policy(addr: SocketAddr, token: &str) -> HttpPolicy {
+        HttpPolicy {
+            strict: true,
+            bearer_token: Some(token.to_string()),
+            http_path: Some("/mcp".to_string()),
+            expected_addr: Some(addr),
+            max_body_bytes: 64 * 1024,
+            read_timeout: Duration::from_millis(250),
+            request_timeout: Duration::from_millis(750),
+        }
+    }
+
+    /// One strict-lease request with an explicit header set, so a test can
+    /// omit, duplicate, or corrupt any single envelope field.
+    fn lease_request(
+        addr: SocketAddr,
+        token: &str,
+        headers: &[(&str, &str)],
+        body: &str,
+    ) -> HttpRequest {
+        let mut request = HttpRequest {
+            method: "POST".to_string(),
+            target: "/mcp".to_string(),
+            body: body.to_string(),
+            keep_alive: false,
+            host: Some(format!("127.0.0.1:{}", addr.port())),
+            origin: Some(format!("http://127.0.0.1:{}", addr.port())),
+            authorization: Some(format!("Bearer {token}")),
+            accept: Some("application/json, text/event-stream".to_string()),
+            content_type: Some("application/json".to_string()),
+            idempotency_key: None,
+            protocol_version: None,
+            mcp_method: None,
+            mcp_name: None,
+        };
+        for (name, value) in headers {
+            match name.to_ascii_lowercase().as_str() {
+                "mcp-protocol-version" => request.protocol_version = Some(value.to_string()),
+                "mcp-method" => request.mcp_method = Some(value.to_string()),
+                "mcp-name" => request.mcp_name = Some(value.to_string()),
+                "idempotency-key" => request.idempotency_key = Some(value.to_string()),
+                other => panic!("unexpected envelope header `{other}`"),
+            }
+        }
+        request
+    }
+
+    fn strict_lease() -> (McpHttpLease<CountingHandler>, HttpPolicy) {
+        let lease = McpServer::start_http_listener(CountingHandler {
+            calls: Arc::new(AtomicUsize::new(0)),
+        })
+        .expect("start loopback lease");
+        let policy = strict_policy(lease.local_addr(), lease.token());
+        (lease, policy)
+    }
+
+    fn initialize_body(requested: &str) -> String {
+        json!({
+            "jsonrpc": "2.0", "id": 7, "method": "initialize",
+            "params": {"protocolVersion": requested, "capabilities": {}}
+        })
+        .to_string()
+    }
+
+    #[test]
+    fn a_legacy_initialize_passes_the_strict_lease_pin() {
+        let (lease, policy) = strict_lease();
+        let body = initialize_body(LEGACY_PROTOCOL_REVISION);
+        // No `MCP-Protocol-Version` at all: the header is a modern-contract
+        // element, so a legacy client has no reason to send one — and no
+        // `Mcp-Method` either.
+        let admitted = policy
+            .validate(&lease_request(
+                lease.local_addr(),
+                lease.token(),
+                &[],
+                &body,
+            ))
+            .expect("a header-less legacy initialize is the exemption");
+        assert_eq!(admitted.method, "initialize");
+        assert_eq!(admitted.protocol_version, LEGACY_PROTOCOL_REVISION);
+        // A declared, supported legacy revision is equally admitted.
+        let admitted = policy
+            .validate(&lease_request(
+                lease.local_addr(),
+                lease.token(),
+                &[(PROTOCOL_VERSION_HEADER, LEGACY_PROTOCOL_REVISION)],
+                &body,
+            ))
+            .expect("a declared legacy revision is the exemption");
+        assert_eq!(admitted.protocol_version, LEGACY_PROTOCOL_REVISION);
+        // The oldest revision in the window is admitted too.
+        let admitted = policy.validate(&lease_request(
+            lease.local_addr(),
+            lease.token(),
+            &[],
+            &initialize_body("2024-11-05"),
+        ));
+        assert!(
+            admitted.is_ok(),
+            "the whole advertised window is negotiable"
+        );
+        lease.close();
+    }
+
+    #[test]
+    fn the_pin_still_refuses_a_legacy_call_and_names_the_window() {
+        let (lease, policy) = strict_lease();
+        let list =
+            json!({"jsonrpc": "2.0", "id": 8, "method": "tools/list", "params": {}}).to_string();
+        let failure = policy
+            .validate(&lease_request(
+                lease.local_addr(),
+                lease.token(),
+                &[
+                    (PROTOCOL_VERSION_HEADER, LEGACY_PROTOCOL_REVISION),
+                    (METHOD_HEADER, "tools/list"),
+                ],
+                &list,
+            ))
+            .expect_err("the pin must hold for every dispatching method");
+        assert_eq!(failure.status, 400);
+        let body: Value = serde_json::from_str(&failure.body).expect("JSON-RPC error");
+        let message = body["error"]["message"].as_str().unwrap_or_default();
+        assert!(
+            message.contains(SUPPORTED_PROTOCOL_VERSION),
+            "the refusal must name the pinned revision, got: {message}"
+        );
+        assert!(
+            message.contains("initialize"),
+            "the refusal must name the one exempt method, got: {message}"
+        );
+        // REQ-CHAN-012: the window is machine-readable, not only prose.
+        let supported: Vec<&str> = body["error"]["data"]["supportedProtocolVersions"]
+            .as_array()
+            .expect("supportedProtocolVersions in data")
+            .iter()
+            .map(|version| version.as_str().expect("revision string"))
+            .collect();
+        assert!(supported.contains(&SUPPORTED_PROTOCOL_VERSION));
+        assert!(supported.contains(&LEGACY_PROTOCOL_REVISION));
+        lease.close();
+    }
+
+    #[test]
+    fn a_comma_duplicated_version_header_is_normalized_not_misread() {
+        let (lease, policy) = strict_lease();
+        let list =
+            json!({"jsonrpc": "2.0", "id": 9, "method": "tools/list", "params": {}}).to_string();
+        let validate = |header: &str| {
+            policy.validate(&lease_request(
+                lease.local_addr(),
+                lease.token(),
+                &[
+                    (PROTOCOL_VERSION_HEADER, header),
+                    (METHOD_HEADER, "tools/list"),
+                ],
+                &list,
+            ))
+        };
+        assert!(
+            validate("2026-07-28, 2026-07-28").is_ok(),
+            "a duplicated identical header is a proxy artifact, not a mismatch"
+        );
+        assert!(
+            validate(" 2026-07-28 ,  2026-07-28 ").is_ok(),
+            "whitespace around a duplicated value is the same artifact"
+        );
+        // Conflicting revisions are a real disagreement and are refused, never
+        // resolved by picking one.
+        let failure = validate("2026-07-28, 2025-11-25").expect_err("a conflict must be refused");
+        assert_eq!(failure.status, 400);
+        assert!(failure.body.contains("more than one revision"));
+        lease.close();
+    }
+
+    #[test]
+    fn a_headerless_initialize_is_exempt_but_a_headerless_call_is_not() {
+        let (lease, policy) = strict_lease();
+        let initialize = initialize_body(LEGACY_PROTOCOL_REVISION);
+        assert!(
+            policy
+                .validate(&lease_request(
+                    lease.local_addr(),
+                    lease.token(),
+                    &[],
+                    &initialize
+                ))
+                .is_ok()
+        );
+        // The very same envelope on a dispatching method is refused.
+        let call = json!({
+            "jsonrpc": "2.0", "id": 10, "method": "tools/call",
+            "params": {"name": "office.edit", "arguments": {}}
+        })
+        .to_string();
+        let failure = policy
+            .validate(&lease_request(
+                lease.local_addr(),
+                lease.token(),
+                &[],
+                &call,
+            ))
+            .expect_err("only `initialize` is exempt");
+        assert_eq!(failure.status, 400);
+        assert!(failure.body.contains("MCP-Protocol-Version"));
+        // And the pinned modern revision on a call is still fully validated.
+        assert!(
+            policy
+                .validate(&lease_request(
+                    lease.local_addr(),
+                    lease.token(),
+                    &[
+                        (PROTOCOL_VERSION_HEADER, SUPPORTED_PROTOCOL_VERSION),
+                        (METHOD_HEADER, "tools/call"),
+                    ],
+                    &call
+                ))
+                .is_err(),
+            "a modern call without `Mcp-Name` stays refused"
+        );
+        lease.close();
+    }
+
+    #[test]
+    fn the_exemption_refuses_mcp_name_and_an_unsupported_declared_revision() {
+        let (lease, policy) = strict_lease();
+        let initialize = initialize_body(LEGACY_PROTOCOL_REVISION);
+        // `Mcp-Name` implies `tools/call` semantics a legacy client does not
+        // have, so it is refused rather than ignored.
+        let failure = policy
+            .validate(&lease_request(
+                lease.local_addr(),
+                lease.token(),
+                &[
+                    (PROTOCOL_VERSION_HEADER, LEGACY_PROTOCOL_REVISION),
+                    (NAME_HEADER, "office.edit"),
+                ],
+                &initialize,
+            ))
+            .expect_err("Mcp-Name is not part of the compat handshake");
+        assert_eq!(failure.status, 400);
+        assert!(failure.body.contains("Mcp-Name"));
+        // A header naming a revision we do not implement cannot be answered
+        // truthfully, so it is refused with the window — the lenient
+        // negotiation is the body's `protocolVersion`, never the header.
+        let failure = policy
+            .validate(&lease_request(
+                lease.local_addr(),
+                lease.token(),
+                &[(PROTOCOL_VERSION_HEADER, "9999-01-01")],
+                &initialize,
+            ))
+            .expect_err("an unimplementable declared revision is refused");
+        assert_eq!(failure.status, 400);
+        assert!(failure.body.contains(SUPPORTED_PROTOCOL_VERSION));
+        lease.close();
+    }
+
+    #[test]
+    fn an_unknown_body_version_is_negotiated_down_and_never_echoed_on_the_lease() {
+        let (lease, policy) = strict_lease();
+        let admitted = policy
+            .validate(&lease_request(
+                lease.local_addr(),
+                lease.token(),
+                &[],
+                &initialize_body("9999-01-01"),
+            ))
+            .expect("an unknown body version is negotiated, not refused");
+        assert_eq!(admitted.protocol_version, SUPPORTED_PROTOCOL_VERSION);
+        assert_ne!(admitted.protocol_version, "9999-01-01");
+        lease.close();
+    }
+
+    #[test]
+    fn protocol_header_normalization_is_exhaustive() {
+        assert_eq!(ProtocolHeader::parse(None), ProtocolHeader::Absent);
+        assert_eq!(ProtocolHeader::parse(Some("")), ProtocolHeader::Absent);
+        assert_eq!(ProtocolHeader::parse(Some("   ")), ProtocolHeader::Absent);
+        assert_eq!(ProtocolHeader::parse(Some(" , , ")), ProtocolHeader::Absent);
+        assert_eq!(
+            ProtocolHeader::parse(Some("2026-07-28")),
+            ProtocolHeader::Single("2026-07-28".into())
+        );
+        // Whitespace around a duplicated value is a proxy artifact, not a
+        // second revision.
+        assert_eq!(
+            ProtocolHeader::parse(Some(" 2026-07-28 ,  2026-07-28 ")),
+            ProtocolHeader::Single("2026-07-28".into())
+        );
+        assert_eq!(
+            ProtocolHeader::parse(Some("2026-07-28, 2025-11-25")),
+            ProtocolHeader::Conflicting
+        );
+        assert_eq!(ProtocolHeader::Absent.revision(), None);
+        assert_eq!(ProtocolHeader::Conflicting.revision(), None);
+        assert_eq!(ProtocolHeader::Single("x".into()).revision(), Some("x"));
+    }
+
+    #[test]
+    fn the_window_message_names_every_supported_revision() {
+        let message = supported_window_message();
+        assert!(message.contains(SUPPORTED_PROTOCOL_VERSION));
+        for version in SUPPORTED_PROTOCOL_VERSIONS {
+            assert!(
+                message.contains(version),
+                "the window must name {version}, got: {message}"
+            );
+        }
+        assert!(message.contains(INITIALIZE_METHOD));
     }
 }
 
@@ -3490,5 +4028,25 @@ mod discover_tests {
             value["result"]["protocolVersion"],
             SUPPORTED_PROTOCOL_VERSION
         );
+    }
+
+    #[test]
+    fn the_initialize_result_advertises_the_supported_window() {
+        // A client that can only reach us through the compatibility handshake
+        // must be able to learn the window from the handshake itself.
+        let mut server = McpServer::new(Noop);
+        let value = request(
+            &mut server,
+            "initialize",
+            json!({"protocolVersion": LEGACY_PROTOCOL_REVISION, "capabilities": {}}),
+        );
+        let supported: Vec<&str> = value["result"]["supportedProtocolVersions"]
+            .as_array()
+            .expect("supportedProtocolVersions")
+            .iter()
+            .map(|version| version.as_str().expect("revision string"))
+            .collect();
+        assert!(supported.contains(&SUPPORTED_PROTOCOL_VERSION));
+        assert!(supported.contains(&LEGACY_PROTOCOL_REVISION));
     }
 }

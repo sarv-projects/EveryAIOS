@@ -33,9 +33,11 @@
 //! mutating call that already ran must not run twice (INV-07, ARCH/14 §7).
 
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
+use std::time::Duration;
 
 use crate::protocol::{
     DISCOVER_METHOD, LEGACY_PROTOCOL_REVISION, METHOD_HEADER, MODERN_PROTOCOL_REVISION,
@@ -47,6 +49,27 @@ pub const MODERN_PROTOCOL_VERSION: &str = MODERN_PROTOCOL_REVISION;
 
 /// The legacy fallback revision.
 pub const LEGACY_PROTOCOL_VERSION: &str = LEGACY_PROTOCOL_REVISION;
+
+/// The budget one era-detection probe may spend (DEC-030 / ARCH/14 §4: a 10 s
+/// cap), on **both** transports.
+///
+/// This is a probe-scoped deadline, never an operation budget: a slow server
+/// must not be able to make a `tools/call` unbounded, and detection must not
+/// inherit the caller's timeout. One definition, two call sites — the HTTP
+/// probe ([`probe_era`]) and the stdio probe (`attach::AttachedServer::attach`)
+/// — so the two transports cannot drift on the cap.
+pub const PROBE_BUDGET: Duration = Duration::from_secs(10);
+
+/// The era-cache namespace prefix for a stdio child process.
+///
+/// DEC-030 says the era is cached "per process/origin".  An *origin* is
+/// `scheme://authority`, which is meaningless for a spawned child, so stdio
+/// verdicts live under this prefix keyed by the launch fingerprint
+/// ([`stdio_era_key`]).  **Spec gap:** neither `ARCH/14` §4 nor DEC-030 names
+/// the stdio cache key; this is the conservative reading (one verdict per
+/// command line, re-probed when the command is edited) and it is recorded as
+/// decision-needed.
+pub const STDIO_ERA_KEY_PREFIX: &str = "stdio:";
 
 #[cfg(test)]
 use std::collections::HashMap;
@@ -151,6 +174,65 @@ pub enum EraVerdict {
     Inconclusive,
 }
 
+/// Where the era now in force came from (observability for ARCH/14 §7's
+/// "provider marked incompatible with reason").
+///
+/// Today a user who hits a misreporting server has no way to see *why* the
+/// wrong era was chosen, so the verdict travels with its provenance.  It is
+/// read-only: nothing in this crate branches on it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum EraSource {
+    /// The per-server force-legacy hatch armed; detection was skipped.
+    Forced,
+    /// A conclusive verdict already cached for this key in this process.
+    Cached,
+    /// This call's `server/discover` probe concluded the era.
+    Probed,
+    /// Detection proved nothing and the modern default was kept (DEC-030
+    /// precedence: the fallback is modern, never a cached guess).
+    Default,
+}
+
+impl EraSource {
+    /// The stable wire spelling a UI can switch on.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Forced => "forced",
+            Self::Cached => "cached",
+            Self::Probed => "probed",
+            Self::Default => "default",
+        }
+    }
+}
+
+/// One negotiated era plus the reason it was chosen.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct EraNegotiation {
+    pub era: McpEra,
+    pub source: EraSource,
+}
+
+impl EraNegotiation {
+    /// The revision string in force.
+    pub fn version(&self) -> &'static str {
+        self.era.version()
+    }
+
+    /// The read-only wire shape a status surface can render.
+    ///
+    /// `era` is the **revision string** (not an enum name) because that is
+    /// what a client compares against, and `source` is the stable spelling
+    /// from [`EraSource::as_str`]. Nothing in this crate reads it back, so it
+    /// cannot become a second decision path.
+    pub fn to_json(self) -> serde_json::Value {
+        serde_json::json!({
+            "era": self.era.version(),
+            "eraSource": self.source.as_str(),
+        })
+    }
+}
+
 /// Body markers that only a modern server produces.  A refusal that names the
 /// modern revision or its headers is a modern server complaining about
 /// something else — never evidence that it is legacy.
@@ -198,6 +280,34 @@ pub fn classify_era(status: u16, body: &serde_json::Value) -> EraVerdict {
         return EraVerdict::Legacy;
     }
     EraVerdict::Inconclusive
+}
+
+/// Classify a `server/discover` reply that has **no HTTP status** — a stdio
+/// reply.
+///
+/// Stdio has no status line, so the modern/legacy decision rests entirely on
+/// the JSON-RPC body.  This shim reuses [`classify_era`] with a synthetic
+/// `200` so the marker tables cannot drift between the two transports: a
+/// `-32601` to `server/discover` is `Legacy` through the same `LEGACY_MARKERS`
+/// that classify the HTTP refusal, and a success is `Modern` through the same
+/// JSON-RPC success test.  A body that proves neither is `Inconclusive` and is
+/// never cached.
+pub fn classify_era_body(body: &serde_json::Value) -> EraVerdict {
+    classify_era(200, body)
+}
+
+/// The one `server/discover` request an era probe sends, on either transport.
+///
+/// Both probes call this, so the modern `_meta` envelope they carry cannot
+/// drift apart: the stateless context rides in `params._meta`
+/// ([`build_request`]) and the header set is [`modern_headers`].
+pub fn build_discover_request(era: McpEra) -> serde_json::Value {
+    build_request(DISCOVER_METHOD, serde_json::json!({}), era, None)
+}
+
+/// The header set an era probe sends on the modern revision.
+pub fn discover_probe_headers() -> Vec<(String, String)> {
+    modern_headers(DISCOVER_METHOD, None)
 }
 
 /// Classify the single legacy `initialize` retry.
@@ -295,6 +405,21 @@ pub fn clear_era_cache() {
     }
 }
 
+/// Serialize the tests that assert on process-global era state.
+///
+/// The cache is deliberately process-wide (DEC-030: "cached per
+/// process/origin"), so a test that reads it cannot also assert *absence*
+/// while a sibling test is populating it. Rust runs unit tests on parallel
+/// threads, so that is a real race, not a theoretical one. Holding this guard
+/// makes the cache observable to exactly one era test at a time; a poisoned
+/// mutex is recovered rather than propagated so one failing test cannot cascade
+/// into every other era test.
+#[cfg(test)]
+pub(crate) fn era_cache_test_guard() -> std::sync::MutexGuard<'static, ()> {
+    static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
 /// The cache key for a server URL: `scheme://authority`.
 ///
 /// Two paths on one host share a verdict; a different host never does, so one
@@ -307,6 +432,34 @@ pub fn origin_of(url: &str) -> String {
         .unwrap_or("")
         .to_ascii_lowercase();
     format!("{scheme}://{authority}")
+}
+
+/// The era-cache key for a stdio child: a digest of its **command
+/// fingerprint** (executable plus every argument, in order).
+///
+/// Two different commands are two different verdicts, and re-probing happens
+/// for free when a user edits a command line.  The fingerprint is hashed
+/// rather than concatenated because the key is process-global state: the raw
+/// argv would retain argument bytes (a token, a path) in a long-lived map.
+/// It is deliberately *not* the resolved absolute path — the same command
+/// resolved through two `PATH`s is one server, and `resolve_stdio_launch`
+/// already owns resolution.
+pub fn stdio_era_key(command: &str, args: &[&str]) -> String {
+    let mut hasher = Sha256::new();
+    // Length-prefix each component so `("a", ["b"])` and `("ab", [])` can
+    // never collide.
+    for part in std::iter::once(command).chain(args.iter().copied()) {
+        hasher.update((part.len() as u64).to_le_bytes());
+        hasher.update(part.as_bytes());
+    }
+    let digest = hasher.finalize();
+    format!(
+        "{STDIO_ERA_KEY_PREFIX}{}",
+        digest
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>()
+    )
 }
 
 /// An in-flight PKCE flow — the shell keeps `state`/`verifier` and opens
@@ -376,6 +529,27 @@ pub trait HttpTransport: Send {
             body: self.post_json(url, bearer, body)?,
         })
     }
+
+    /// The same POST under an explicit **deadline** — the seam that makes
+    /// DEC-030's 10 s probe cap real on the wire.
+    ///
+    /// The default delegates to [`HttpTransport::post_json_rpc`] and therefore
+    /// does **not** enforce the budget.  That is deliberate: a test double must
+    /// not have to model a clock, and a transport that talks to a real server
+    /// **must** override it.  [`UreqTransport`] does.  A production transport
+    /// that inherits the default can stall a probe forever, so the doc contract
+    /// is the same one `post_json_rpc` already carries for the modern headers.
+    fn post_json_rpc_within(
+        &self,
+        url: &str,
+        bearer: Option<&str>,
+        headers: &[(&str, &str)],
+        body: &serde_json::Value,
+        budget: Duration,
+    ) -> Result<McpResponse, RemoteError> {
+        let _ = budget;
+        self.post_json_rpc(url, bearer, headers, body)
+    }
 }
 
 /// Default transport using `ureq` (same client as the vault).
@@ -430,9 +604,42 @@ impl HttpTransport for UreqTransport {
         headers: &[(&str, &str)],
         body: &serde_json::Value,
     ) -> Result<McpResponse, RemoteError> {
+        self.post_json_rpc_optional_budget(url, bearer, headers, body, None)
+    }
+
+    fn post_json_rpc_within(
+        &self,
+        url: &str,
+        bearer: Option<&str>,
+        headers: &[(&str, &str)],
+        body: &serde_json::Value,
+        budget: Duration,
+    ) -> Result<McpResponse, RemoteError> {
+        self.post_json_rpc_optional_budget(url, bearer, headers, body, Some(budget))
+    }
+}
+
+impl UreqTransport {
+    /// One JSON-RPC POST, optionally bounded by an overall deadline.
+    ///
+    /// `ureq`'s per-request `timeout` covers connect **and** read, so the
+    /// budget is a real bound on a hung server rather than a connect-only one.
+    /// A body that is not JSON (an SSE frame, an empty reply) is still
+    /// returned verbatim as `Null` so the caller classifies what arrived.
+    fn post_json_rpc_optional_budget(
+        &self,
+        url: &str,
+        bearer: Option<&str>,
+        headers: &[(&str, &str)],
+        body: &serde_json::Value,
+        budget: Option<Duration>,
+    ) -> Result<McpResponse, RemoteError> {
         let mut req = ureq::post(url)
             .set("Accept", "application/json, text/event-stream")
             .set("Content-Type", "application/json");
+        if let Some(budget) = budget {
+            req = req.timeout(budget);
+        }
         for (name, value) in headers {
             req = req.set(name, value);
         }
@@ -453,6 +660,8 @@ impl HttpTransport for UreqTransport {
                 status,
                 body: response.into_json().unwrap_or(serde_json::Value::Null),
             }),
+            // A budget overrun is a transport failure: no reply, no verdict, so
+            // the probe stays inconclusive and nothing is cached.
             Err(error) => Err(RemoteError::Transport(error.to_string())),
         }
     }
@@ -525,9 +734,39 @@ pub fn register_dynamic_client(
     serde_json::from_value(json).map_err(RemoteError::Json)
 }
 
+/// The persisted, operator-set options that shape how one server is spoken to.
+///
+/// Anything here changes the *wire contract*, not whether a call happens right
+/// now, so it is a stored property of the server record rather than a
+/// per-request argument (DEC-030's force-legacy hatch).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct ConnectOptions {
+    /// Arm the per-server force-legacy escape hatch (DEC-030).
+    ///
+    /// Persisted on the stored server entry and read by the shell; there is no
+    /// user-facing toggle in v1.
+    pub force_legacy: bool,
+}
+
 /// Full connect handshake: discover resource → discover auth server →
 /// register client (or use a supplied one) → return the ready target.
+///
+/// [`connect_with_options`] is the same handshake with the persisted
+/// force-legacy hatch applied.
 pub fn connect(server_url: &str, http: &dyn HttpTransport) -> Result<RemoteTarget, RemoteError> {
+    connect_with_options(server_url, http, ConnectOptions::default())
+}
+
+/// [`connect`], with the stored per-server options applied to the returned
+/// target.
+///
+/// The OAuth handshake is unaffected by the era: the hatch changes which
+/// revision later calls are spoken in, never how the target authenticates.
+pub fn connect_with_options(
+    server_url: &str,
+    http: &dyn HttpTransport,
+    options: ConnectOptions,
+) -> Result<RemoteTarget, RemoteError> {
     if !(server_url.starts_with("https://")
         || server_url.starts_with("http://127.0.0.1")
         || server_url.starts_with("http://localhost"))
@@ -547,7 +786,7 @@ pub fn connect(server_url: &str, http: &dyn HttpTransport) -> Result<RemoteTarge
         url: server_url.to_string(),
         auth,
         client,
-        force_legacy: false,
+        force_legacy: options.force_legacy,
     })
 }
 
@@ -696,6 +935,79 @@ pub fn tool_name<'a>(method: &str, body: &'a serde_json::Value) -> Option<&'a st
         .filter(|name| !name.is_empty() && !name.chars().any(char::is_control))
 }
 
+/// A line-oriented child process that can be asked for its era.
+///
+/// The stdio transport is the *only* place the era cache is keyed by something
+/// other than an origin ([`stdio_era_key`]), so the cache reads/writes are
+/// factored here and the pipe itself stays in `attach`. One probe, one
+/// classification, one cache write — the same rules the HTTP path uses.
+pub trait StdioEraProbe {
+    /// Send one JSON-RPC request and return the parsed reply.
+    ///
+    /// `budget` is the caller's deadline for this exchange. An implementation
+    /// must return rather than block past it; the attach treats a returned
+    /// `Err` as *inconclusive* and refuses to continue the handshake (a late
+    /// reply would desynchronize the ND-JSON stream).
+    fn send(
+        &mut self,
+        request: &serde_json::Value,
+        budget: Duration,
+    ) -> Result<serde_json::Value, RemoteError>;
+}
+
+/// Resolve the era of a stdio child: cache first, then exactly one
+/// `server/discover` probe (DEC-030 / ARCH/14 §4).
+///
+/// Precedence matches the HTTP path minus the force-legacy hatch, which is an
+/// operator property of the *stored remote* record (`store::StoreEntry`) and
+/// has no stdio equivalent in v1 — recorded as decision-needed.
+///
+/// Only a conclusive verdict is cached, and a conclusive verdict is the only
+/// thing that ends detection. An inconclusive probe returns
+/// [`EraSource::Default`] so the caller can distinguish "the server said so"
+/// from "the server said nothing" and decide whether to attempt the legacy
+/// fallback.
+pub fn negotiate_stdio_era(
+    command: &str,
+    args: &[&str],
+    probe: &mut dyn StdioEraProbe,
+) -> EraNegotiation {
+    let key = stdio_era_key(command, args);
+    if let Some(era) = cached_era(&key) {
+        return EraNegotiation {
+            era,
+            source: EraSource::Cached,
+        };
+    }
+    let request = build_discover_request(McpEra::Modern);
+    let Ok(reply) = probe.send(&request, PROBE_BUDGET) else {
+        return EraNegotiation {
+            era: McpEra::Modern,
+            source: EraSource::Default,
+        };
+    };
+    match classify_era_body(&reply) {
+        EraVerdict::Modern => {
+            cache_era(&key, McpEra::Modern);
+            EraNegotiation {
+                era: McpEra::Modern,
+                source: EraSource::Probed,
+            }
+        }
+        EraVerdict::Legacy => {
+            cache_era(&key, McpEra::Legacy);
+            EraNegotiation {
+                era: McpEra::Legacy,
+                source: EraSource::Probed,
+            }
+        }
+        EraVerdict::Inconclusive => EraNegotiation {
+            era: McpEra::Modern,
+            source: EraSource::Default,
+        },
+    }
+}
+
 /// Resolve which era to speak to `target` (DEC-030 precedence).
 ///
 /// 1. the per-server **force-legacy** escape hatch — detection is skipped;
@@ -710,32 +1022,63 @@ pub fn negotiate_era(
     bearer: Option<&str>,
     http: &dyn HttpTransport,
 ) -> McpEra {
+    negotiate_era_detailed(target, bearer, http).era
+}
+
+/// [`negotiate_era`], also reporting **why** that era was chosen.
+///
+/// The source is read-only observability (ARCH/14 §7's "provider marked
+/// incompatible with reason"): no code path in this crate branches on it, and
+/// it exists so a UI can explain a misreporting server instead of showing an
+/// opaque era.
+pub fn negotiate_era_detailed(
+    target: &RemoteTarget,
+    bearer: Option<&str>,
+    http: &dyn HttpTransport,
+) -> EraNegotiation {
     if target.force_legacy {
-        return McpEra::Legacy;
+        return EraNegotiation {
+            era: McpEra::Legacy,
+            source: EraSource::Forced,
+        };
     }
     let origin = origin_of(&target.url);
     if let Some(era) = cached_era(&origin) {
-        return era;
+        return EraNegotiation {
+            era,
+            source: EraSource::Cached,
+        };
     }
     match probe_era(target, bearer, http) {
         Some(era) => {
             cache_era(&origin, era);
-            era
+            EraNegotiation {
+                era,
+                source: EraSource::Probed,
+            }
         }
-        None => McpEra::Modern,
+        None => EraNegotiation {
+            era: McpEra::Modern,
+            source: EraSource::Default,
+        },
     }
 }
 
 /// Probe one origin for its era using read-only methods only.
+///
+/// The probe is deadline-bounded by [`PROBE_BUDGET`]: a server that accepts
+/// the connection and then says nothing must not stall detection for the
+/// caller's whole budget. An overrun is a transport failure, so it is
+/// inconclusive and nothing is cached.
 fn probe_era(
     target: &RemoteTarget,
     bearer: Option<&str>,
     http: &dyn HttpTransport,
 ) -> Option<McpEra> {
-    let discover = build_request(DISCOVER_METHOD, serde_json::json!({}), McpEra::Modern, None);
-    let headers = modern_headers(DISCOVER_METHOD, None);
+    let discover = build_discover_request(McpEra::Modern);
+    let headers = discover_probe_headers();
     let borrowed = header_refs(&headers);
-    match http.post_json_rpc(&target.url, bearer, &borrowed, &discover) {
+    match http.post_json_rpc_within(&target.url, bearer, &borrowed, &discover, PROBE_BUDGET) {
         Ok(response) => match classify_era(response.status, &response.body) {
             EraVerdict::Modern => Some(McpEra::Modern),
             EraVerdict::Legacy => Some(McpEra::Legacy),
@@ -1146,6 +1489,135 @@ impl HttpTransport for MockHttp {
     }
 }
 
+/// A transport that records the budget each POST was given, so the probe cap
+/// can be asserted on the seam rather than inferred from a library default.
+#[cfg(test)]
+struct BudgetRecordingHttp {
+    seen: std::sync::Mutex<Vec<(String, Option<Duration>)>>,
+}
+
+#[cfg(test)]
+impl BudgetRecordingHttp {
+    fn record(
+        &self,
+        body: &serde_json::Value,
+        budget: Option<Duration>,
+    ) -> Result<McpResponse, RemoteError> {
+        let method = body
+            .get("method")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or_default()
+            .to_string();
+        self.seen
+            .lock()
+            .expect("budget lock")
+            .push((method.clone(), budget));
+        Ok(McpResponse {
+            status: 200,
+            body: match method.as_str() {
+                DISCOVER_METHOD => modern_discover_reply(),
+                _ => serde_json::json!({"jsonrpc": "2.0", "id": 2, "result": {}}),
+            },
+        })
+    }
+}
+
+#[cfg(test)]
+impl HttpTransport for BudgetRecordingHttp {
+    fn get_json(&self, _url: &str) -> Result<serde_json::Value, RemoteError> {
+        Err(RemoteError::Msg("no GET route".into()))
+    }
+
+    fn post_form(
+        &self,
+        _url: &str,
+        _form: &[(&str, &str)],
+    ) -> Result<serde_json::Value, RemoteError> {
+        Err(RemoteError::Msg("no form route".into()))
+    }
+
+    fn post_json(
+        &self,
+        _url: &str,
+        _bearer: Option<&str>,
+        _body: &serde_json::Value,
+    ) -> Result<serde_json::Value, RemoteError> {
+        Err(RemoteError::Msg("no plain route".into()))
+    }
+
+    fn post_json_rpc(
+        &self,
+        _url: &str,
+        _bearer: Option<&str>,
+        _headers: &[(&str, &str)],
+        body: &serde_json::Value,
+    ) -> Result<McpResponse, RemoteError> {
+        self.record(body, None)
+    }
+
+    fn post_json_rpc_within(
+        &self,
+        _url: &str,
+        _bearer: Option<&str>,
+        _headers: &[(&str, &str)],
+        body: &serde_json::Value,
+        budget: Duration,
+    ) -> Result<McpResponse, RemoteError> {
+        self.record(body, Some(budget))
+    }
+}
+
+/// A scripted stdio peer: one canned reply, then the request log.
+#[cfg(test)]
+struct ScriptedStdio {
+    reply: Option<serde_json::Value>,
+    sent: Vec<serde_json::Value>,
+    budgets: Vec<Duration>,
+}
+
+#[cfg(test)]
+impl ScriptedStdio {
+    fn new(reply: serde_json::Value) -> Self {
+        Self {
+            reply: Some(reply),
+            sent: Vec::new(),
+            budgets: Vec::new(),
+        }
+    }
+
+    /// A peer that never answers — the hung-server case.
+    fn failing() -> Self {
+        Self {
+            reply: None,
+            sent: Vec::new(),
+            budgets: Vec::new(),
+        }
+    }
+
+    fn methods(&self) -> Vec<String> {
+        self.sent
+            .iter()
+            .filter_map(|body| body.get("method").and_then(serde_json::Value::as_str))
+            .map(str::to_string)
+            .collect()
+    }
+}
+
+#[cfg(test)]
+impl StdioEraProbe for ScriptedStdio {
+    fn send(
+        &mut self,
+        request: &serde_json::Value,
+        budget: Duration,
+    ) -> Result<serde_json::Value, RemoteError> {
+        self.sent.push(request.clone());
+        self.budgets.push(budget);
+        self.reply
+            .clone()
+            .ok_or_else(|| RemoteError::Msg("stdio peer did not answer".into()))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1449,6 +1921,7 @@ mod tests {
 
     #[test]
     fn an_inconclusive_probe_is_not_cached() {
+        let _era = era_cache_test_guard();
         let http = ScriptedHttp::new([
             (DISCOVER_METHOD, 503, serde_json::json!({"error": "down"})),
             ("initialize", 503, serde_json::json!({"error": "down"})),
@@ -1479,6 +1952,7 @@ mod tests {
 
     #[test]
     fn force_legacy_skips_detection_entirely() {
+        let _era = era_cache_test_guard();
         let http = ScriptedHttp::new([(
             "tools/call",
             200,
@@ -1655,6 +2129,7 @@ mod tests {
 
     #[test]
     fn the_process_cache_is_shared_and_clearable() {
+        let _era = era_cache_test_guard();
         let origin = "https://process-cache.example/mcp";
         assert_eq!(cached_era(&origin_of(origin)), None);
         cache_era(&origin_of(origin), McpEra::Legacy);
@@ -1703,5 +2178,293 @@ mod tests {
         let first = build_request("tools/list", serde_json::json!({}), McpEra::Modern, None);
         let second = build_request("tools/list", serde_json::json!({}), McpEra::Modern, None);
         assert_ne!(first["id"], second["id"]);
+    }
+
+    // -- the stored force-legacy hatch (item 2) ------------------------------
+
+    #[test]
+    fn connect_with_options_applies_the_stored_force_legacy_hatch() {
+        let http = server();
+        let plain = connect("https://mcp.example.com", &http).unwrap();
+        assert!(
+            !plain.force_legacy,
+            "the default handshake must not arm the hatch"
+        );
+        let forced = connect_with_options(
+            "https://mcp.example.com",
+            &http,
+            ConnectOptions { force_legacy: true },
+        )
+        .unwrap();
+        assert!(forced.force_legacy);
+        // The OAuth half of the handshake is unchanged by the era: the hatch
+        // changes which revision later calls use, never how we authenticate.
+        assert_eq!(forced.client.client_id, plain.client.client_id);
+        assert_eq!(forced.url, plain.url);
+    }
+
+    #[test]
+    fn connect_with_options_still_refuses_an_insecure_url() {
+        let http = server();
+        assert!(matches!(
+            connect_with_options(
+                "http://evil.example.com/mcp",
+                &http,
+                ConnectOptions { force_legacy: true },
+            ),
+            Err(RemoteError::InsecureUrl(_))
+        ));
+    }
+
+    #[test]
+    fn a_forced_target_reports_forced_without_spending_a_probe() {
+        let _era = era_cache_test_guard();
+        let http = ScriptedHttp::new([(
+            "tools/call",
+            200,
+            serde_json::json!({"jsonrpc": "2.0", "id": 9, "result": {"ok": true}}),
+        )]);
+        let target = target_for("https://observed.example.com/mcp").with_force_legacy(true);
+        let negotiation = negotiate_era_detailed(&target, Some("tok"), &http);
+        assert_eq!(negotiation.era, McpEra::Legacy);
+        assert_eq!(negotiation.source, EraSource::Forced);
+        assert_eq!(negotiation.version(), LEGACY_PROTOCOL_VERSION);
+        assert!(
+            http.seen().is_empty(),
+            "the source must be reachable without any wire traffic"
+        );
+        assert_eq!(
+            negotiation.to_json(),
+            serde_json::json!({"era": "2025-11-25", "eraSource": "forced"})
+        );
+    }
+
+    #[test]
+    fn a_cached_verdict_reports_cached_and_a_probe_reports_probed() {
+        let _era = era_cache_test_guard();
+        let origin = "https://sources.example.com/mcp";
+        clear_era_cache();
+        let http = ScriptedHttp::new([
+            (DISCOVER_METHOD, 200, modern_discover_reply()),
+            (
+                "tools/list",
+                200,
+                serde_json::json!({"jsonrpc": "2.0", "id": 2, "result": {"tools": []}}),
+            ),
+        ]);
+        let target = target_for(origin);
+
+        let first = negotiate_era_detailed(&target, Some("tok"), &http);
+        assert_eq!(first.source, EraSource::Probed);
+        assert_eq!(first.era, McpEra::Modern);
+        let second = negotiate_era_detailed(&target, Some("tok"), &http);
+        assert_eq!(second.source, EraSource::Cached);
+        assert_eq!(second.to_json()["eraSource"], "cached");
+        clear_era_cache();
+    }
+
+    #[test]
+    fn an_inconclusive_probe_reports_default_and_names_the_window_spellings() {
+        let _era = era_cache_test_guard();
+        let http = ScriptedHttp::new([
+            (DISCOVER_METHOD, 503, serde_json::json!({"error": "down"})),
+            ("initialize", 503, serde_json::json!({"error": "down"})),
+        ]);
+        let target = target_for("https://silent.example.com/mcp");
+        let negotiation = negotiate_era_detailed(&target, Some("tok"), &http);
+        assert_eq!(negotiation.source, EraSource::Default);
+        assert_eq!(negotiation.era, McpEra::Modern);
+        // The four source spellings are the read-only wire vocabulary.
+        assert_eq!(EraSource::Forced.as_str(), "forced");
+        assert_eq!(EraSource::Cached.as_str(), "cached");
+        assert_eq!(EraSource::Probed.as_str(), "probed");
+        assert_eq!(EraSource::Default.as_str(), "default");
+    }
+
+    // -- the probe budget (item 3) ------------------------------------------
+
+    #[test]
+    fn the_probe_is_deadline_bounded_and_the_budget_is_ten_seconds() {
+        let _era = era_cache_test_guard();
+        assert_eq!(PROBE_BUDGET, Duration::from_secs(10));
+        // A transport that records the budget it was handed proves the probe
+        // actually asks for the cap rather than relying on library defaults.
+        let http = BudgetRecordingHttp {
+            seen: std::sync::Mutex::new(Vec::new()),
+        };
+        let target = target_for("https://budget.example.com/mcp");
+        negotiate_era(&target, Some("tok"), &http);
+        let seen = http.seen.lock().expect("budget lock").clone();
+        assert_eq!(
+            seen,
+            vec![(DISCOVER_METHOD.to_string(), Some(PROBE_BUDGET))]
+        );
+    }
+
+    #[test]
+    fn the_budget_applies_to_the_probe_only() {
+        let _era = era_cache_test_guard();
+        let http = BudgetRecordingHttp {
+            seen: std::sync::Mutex::new(Vec::new()),
+        };
+        let target = target_for("https://budget-call.example.com/mcp");
+        rpc(
+            &target,
+            "tok",
+            "tools/call",
+            serde_json::json!({"name": "remote.write"}),
+            &http,
+        )
+        .unwrap();
+        let seen = http.seen.lock().expect("budget lock").clone();
+        assert_eq!(
+            seen,
+            vec![
+                (DISCOVER_METHOD.to_string(), Some(PROBE_BUDGET)),
+                // The caller's own operation is never silently bounded by the
+                // detection budget.
+                ("tools/call".to_string(), None),
+            ]
+        );
+    }
+
+    // -- the stdio era path (item 3) ----------------------------------------
+
+    #[test]
+    fn the_stdio_probe_sends_the_same_modern_envelope_as_the_http_probe() {
+        let request = build_discover_request(McpEra::Modern);
+        assert_eq!(request["method"], DISCOVER_METHOD);
+        assert_eq!(request["jsonrpc"], "2.0");
+        // The `_meta` builder is shared, so a stdio probe is stateless-legal in
+        // exactly the way the HTTP probe is.
+        assert_eq!(
+            request["params"]["_meta"]["protocolVersion"],
+            serde_json::json!(MODERN_PROTOCOL_VERSION)
+        );
+        let headers = discover_probe_headers();
+        assert!(headers.iter().any(
+            |(name, value)| name == PROTOCOL_VERSION_HEADER && value == MODERN_PROTOCOL_VERSION
+        ));
+        assert!(
+            headers
+                .iter()
+                .any(|(name, value)| name == METHOD_HEADER && value == DISCOVER_METHOD)
+        );
+        // A legacy probe carries no `_meta`: a server that predates it must see
+        // the wire shape it always saw.
+        let legacy = build_discover_request(McpEra::Legacy);
+        assert!(legacy["params"].get("_meta").is_none());
+    }
+
+    #[test]
+    fn a_stdio_body_is_classified_by_the_same_rules_as_an_http_refusal() {
+        // A JSON-RPC success is modern on either transport.
+        assert_eq!(
+            classify_era_body(&modern_discover_reply()),
+            EraVerdict::Modern
+        );
+        // `-32601` to `server/discover` is the legacy signature.
+        assert_eq!(
+            classify_era_body(&legacy_unknown_method_reply()),
+            EraVerdict::Legacy
+        );
+        // A body that proves neither stays inconclusive, so it is never cached.
+        assert_eq!(
+            classify_era_body(&serde_json::json!({"error": "upstream unavailable"})),
+            EraVerdict::Inconclusive
+        );
+    }
+
+    #[test]
+    fn the_stdio_era_key_is_the_command_fingerprint() {
+        let a = stdio_era_key("npx", &["-y", "@scope/server"]);
+        // Same command line ⇒ same verdict, even from a second process.
+        assert_eq!(a, stdio_era_key("npx", &["-y", "@scope/server"]));
+        // An edited command re-probes.
+        assert_ne!(a, stdio_era_key("npx", &["-y", "@scope/other"]));
+        assert_ne!(a, stdio_era_key("uvx", &["-y", "@scope/server"]));
+        // Component boundaries are length-prefixed, so no two splittings collide.
+        assert_ne!(stdio_era_key("ab", &[]), stdio_era_key("a", &["b"]));
+        // Namespaced away from an HTTP origin, which can never be equal.
+        assert!(a.starts_with(STDIO_ERA_KEY_PREFIX));
+        assert_ne!(a, origin_of("https://x.example"));
+        // The key must not retain the raw argv: a token in an argument would
+        // otherwise live in process-global state.
+        assert!(!a.contains("@scope/server"));
+    }
+
+    #[test]
+    fn a_stdio_probe_concludes_and_caches_its_verdict_under_the_command_key() {
+        let _era = era_cache_test_guard();
+        clear_era_cache();
+        let mut probe = ScriptedStdio::new(modern_discover_reply());
+        let verdict = negotiate_stdio_era("npx", &["-y", "@scope/server"], &mut probe);
+        assert_eq!(verdict.era, McpEra::Modern);
+        assert_eq!(verdict.source, EraSource::Probed);
+        assert_eq!(
+            probe.sent.len(),
+            1,
+            "exactly one discover probe per detection"
+        );
+        assert_eq!(probe.budgets, vec![PROBE_BUDGET]);
+        // The request that went out is the shared modern envelope.
+        assert_eq!(probe.methods(), vec![DISCOVER_METHOD.to_string()]);
+        assert_eq!(
+            cached_era(&stdio_era_key("npx", &["-y", "@scope/server"])),
+            Some(McpEra::Modern)
+        );
+
+        // A second child with the same command line reuses the verdict.
+        let mut second = ScriptedStdio::new(serde_json::json!({"error": "must not be asked"}));
+        let cached = negotiate_stdio_era("npx", &["-y", "@scope/server"], &mut second);
+        assert_eq!(cached.source, EraSource::Cached);
+        assert_eq!(second.sent.len(), 0, "a cached verdict must not re-probe");
+        clear_era_cache();
+    }
+
+    #[test]
+    fn a_legacy_stdio_probe_is_cached_as_legacy() {
+        let _era = era_cache_test_guard();
+        clear_era_cache();
+        let mut probe = ScriptedStdio::new(legacy_unknown_method_reply());
+        let verdict = negotiate_stdio_era("cat", &[], &mut probe);
+        assert_eq!(verdict.era, McpEra::Legacy);
+        assert_eq!(verdict.source, EraSource::Probed);
+        assert_eq!(cached_era(&stdio_era_key("cat", &[])), Some(McpEra::Legacy));
+        clear_era_cache();
+    }
+
+    #[test]
+    fn a_silent_or_broken_stdio_probe_is_inconclusive_and_not_cached() {
+        let _era = era_cache_test_guard();
+        clear_era_cache();
+        for reply in [
+            serde_json::json!({"error": "upstream unavailable"}),
+            serde_json::json!({"jsonrpc": "2.0", "id": 1}),
+        ] {
+            let mut probe = ScriptedStdio::new(reply);
+            let verdict = negotiate_stdio_era("quiet", &[], &mut probe);
+            assert_eq!(verdict.source, EraSource::Default);
+            assert_eq!(verdict.era, McpEra::Modern);
+            assert!(cached_era(&stdio_era_key("quiet", &[])).is_none());
+        }
+        // A transport failure is inconclusive too: no reply, no verdict.
+        let mut broken = ScriptedStdio::failing();
+        let verdict = negotiate_stdio_era("broken", &[], &mut broken);
+        assert_eq!(verdict.source, EraSource::Default);
+        assert!(cached_era(&stdio_era_key("broken", &[])).is_none());
+        clear_era_cache();
+    }
+
+    #[test]
+    fn the_stdio_verdict_does_not_disturb_the_http_origin_cache() {
+        let _era = era_cache_test_guard();
+        clear_era_cache();
+        let mut probe = ScriptedStdio::new(modern_discover_reply());
+        negotiate_stdio_era("npx", &["-y", "@scope/server"], &mut probe);
+        // A stdio child has no origin; the HTTP cache for the same host name
+        // must still be empty rather than inheriting a child verdict.
+        assert!(cached_era("https://@scope/server").is_none());
+        clear_era_cache();
     }
 }

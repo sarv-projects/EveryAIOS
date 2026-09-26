@@ -78,6 +78,16 @@ pub struct StoreEntry {
     /// Empty/None for flat `Connector`s (provider routing lives in the vault).
     #[serde(default)]
     pub url: Option<String>,
+    /// For `RemoteMcp`: the per-server **force-legacy** escape hatch
+    /// (DEC-030 / ARCH/14 §4).
+    ///
+    /// Persisted on the record, not passed per call: it changes the *wire
+    /// contract* this server is spoken in, so a runtime-only flag would be lost
+    /// on restart and silently re-pin the origin to a wrong era. It is
+    /// operator-only — there is no user-facing toggle in v1 — and it is the one
+    /// lever for a server that misreports its era.
+    #[serde(default)]
+    pub force_legacy: bool,
     /// Which flow this entry uses.
     pub flow: ConnectFlow,
     /// Vault `provider` key (matches `everyaios-vault::oauth` ProviderSettings).
@@ -168,6 +178,7 @@ fn bundled_entries() -> Vec<StoreEntry> {
             name: "GitHub".into(),
             description: "Repositories, issues, PRs, code search, Actions state from the official GitHub MCP server.".into(),
             url: Some("https://api.githubcopilot.com/mcp/".into()),
+            force_legacy: false,
             flow: ConnectFlow::DeviceCode,
             vault_provider: "copilot".into(),
             consent: ConnectConsent {
@@ -186,6 +197,7 @@ fn bundled_entries() -> Vec<StoreEntry> {
             name: "Google Drive".into(),
             description: "Read and write files in your Google Drive via the official Drive connector.".into(),
             url: Some("https://mcp.googleapis.com/mcp/".into()),
+            force_legacy: false,
             flow: ConnectFlow::Pkce,
             vault_provider: "google".into(),
             consent: ConnectConsent {
@@ -201,6 +213,7 @@ fn bundled_entries() -> Vec<StoreEntry> {
             name: "Microsoft Graph".into(),
             description: "Outlook mail, OneDrive, and Calendar via the Microsoft Graph connector.".into(),
             url: Some("https://mcp.microsoft.com/mcp/".into()),
+            force_legacy: false,
             flow: ConnectFlow::Pkce,
             vault_provider: "microsoft".into(),
             consent: ConnectConsent {
@@ -220,6 +233,7 @@ fn bundled_entries() -> Vec<StoreEntry> {
             name: "Notion".into(),
             description: "Notion pages, databases, and search from the official Notion connector.".into(),
             url: Some("https://mcp.notion.com/mcp".into()),
+            force_legacy: false,
             flow: ConnectFlow::Pkce,
             vault_provider: "notion".into(),
             consent: ConnectConsent {
@@ -235,6 +249,7 @@ fn bundled_entries() -> Vec<StoreEntry> {
             name: "Slack".into(),
             description: "Channels, messages, and files from the official Slack MCP connector.".into(),
             url: Some("https://api.slack.com/mcp/http".into()),
+            force_legacy: false,
             flow: ConnectFlow::Pkce,
             vault_provider: "slack".into(),
             consent: ConnectConsent {
@@ -254,6 +269,7 @@ fn bundled_entries() -> Vec<StoreEntry> {
             name: "GitHub (device)".into(),
             description: "Flat GitHub connector via device flow — repos/issues/PRs as first-party tools.".into(),
             url: None,
+            force_legacy: false,
             flow: ConnectFlow::DeviceCode,
             vault_provider: "github".into(),
             consent: ConnectConsent {
@@ -272,6 +288,7 @@ fn bundled_entries() -> Vec<StoreEntry> {
             name: "Gmail".into(),
             description: "Read and send email through the local Gmail connector (read-first, approve-before-send).".into(),
             url: None,
+            force_legacy: false,
             flow: ConnectFlow::Pkce,
             vault_provider: "google".into(),
             consent: ConnectConsent {
@@ -343,6 +360,7 @@ mod tests {
             name: "GitHub (custom client)".into(),
             description: "override".into(),
             url: Some("https://custom.example.com/mcp".into()),
+            force_legacy: false,
             flow: ConnectFlow::DeviceCode,
             vault_provider: "copilot".into(),
             consent: ConnectConsent {
