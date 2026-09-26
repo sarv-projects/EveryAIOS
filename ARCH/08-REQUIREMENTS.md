@@ -1600,11 +1600,128 @@ This registry answers one question per entry: **what behavior must this system e
 ### UI (`UI`)
 
 #### REQ-UI-001 — Reasoning is summarized, never raw chain-of-thought
-- **Statement:** GIVEN a model produces reasoning, WHEN it is rendered in chat, THEN the user sees a summarized, structured progress view — never raw chain-of-thought; markdown/mermaid rendering follows the policy-gated pipeline.
+- **Statement:** GIVEN a model produces reasoning, WHEN it is rendered in chat, THEN the user sees a summarized, structured progress view — never raw chain-of-thought.
 - **Priority:** must
-- **Source:** `AGENTCOWORK-SPEC.md` §9 · `AGENTCOWORK-UI.md`
-- **Acceptance:** no raw CoT in stored or displayed transcripts; mermaid renders only through the isolated, policy-gated path.
-- **Failure cases:** raw CoT rendered → defect; unsanitised mermaid → blocked by isolation policy.
+- **Source:** `AGENTCOWORK-SPEC.md` §9 · `AGENTCOWORK-UI.md` §4.4
+- **Acceptance:** no raw CoT in stored or displayed transcripts; reasoning renders only through the `reasoning` projection.
+- **Failure cases:** raw CoT rendered → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-UI-002 — Deterministic-first UI operations
+- **Statement:** GIVEN a UI surface renders, navigates, converts a diagram or discovers references, WHEN the operation runs, THEN it is a pure function of already-fetched state and consumes zero model tokens; only explicit opt-in actions (title generation, summarisation, "what next") may call a model, with visible cost.
+- **Priority:** must
+- **Source:** `AGENTCOWORK-SPEC.md` §9 · `DEC-015` · `INV-13` · `AGENTCOWORK-UI.md` §8 (UI-02)
+- **Acceptance:** a trace of rendering/navigation/diagram/reference paths shows zero provider calls; opt-in actions show a cost affordance.
+- **Failure cases:** a render/navigation path calling a model → defect; a preview silently spending budget → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-UI-003 — Truthful state, never inferred as measured
+- **Statement:** GIVEN a value, state or progress affordance, WHEN the value is not measured, THEN the UI renders `—` or nothing and never a plausible guess, fabricated percentage, fake spinner or progress bar standing in for an unknown.
+- **Priority:** must
+- **Source:** `AGENTCOWORK-UI.md` §1.2 (UI-03, UI-18), §11; `ev: ui/src/components/views/run-projection.tsx:33-56`; `ev: ui/src/lib/store.ts:191-194`
+- **Acceptance:** unknown figures render `—`/absent; no determinate progress without a measured value; no fake spinner on a Core-unavailable banner.
+- **Failure cases:** inferred value shown as measured → defect; fabricated progress → defect; spinner with no work in flight → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-UI-004 — Streaming-safe markdown completeness
+- **Statement:** GIVEN an assistant answer containing headings, tables, blockquotes, `hr`, ordered lists or images, WHEN it renders (streaming or committed), THEN every element renders from the token palette, a GFM table scrolls inside a keyboard-focusable `role="region"`, raw HTML is gated off, math is constrained, in-flight code fences are not re-highlighted, and stream writes coalesce to at most one per animation frame.
+- **Priority:** must
+- **Source:** `AGENTCOWORK-UI.md` §4.1 (R1–R8); evidence §4.1
+- **Acceptance:** a heading + table + 400-line fence renders correctly; a render trace shows no per-delta re-parse; the table is focusable without breaking the bubble.
+- **Failure cases:** borderless/unconstrained table → defect; re-highlight of an open fence → defect; raw HTML rendered → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-UI-005 — Mermaid policy-gated isolated auto-conversion
+- **Statement:** GIVEN a fenced `mermaid` block in the transcript, WHEN the fence closes, THEN it auto-converts with no user action through the policy gate and a `securityLevel: 'strict'` config locked by a `secure:` array, the theme is read from live tokens, output is a blob-`<img>` (never inline SVG/HTML), size is reserved (CLS 0), renders are serialized and bounded, and a rejection/failure leaves copyable source with a status line.
+- **Priority:** must
+- **Source:** `AGENTCOWORK-SPEC.md` §9 · `AGENTCOWORK-UI.md` §4.2 (R10–R18)
+- **Acceptance:** a `mermaid` fence converts automatically; `img:`/`%%{init}%%` source renders as copyable source with a status line; a theme/accent flip re-renders; a failed render leaves the previous image visible (CLS 0).
+- **Failure cases:** render while the fence is open → defect; source bypassing the gate → blocked; inline SVG/HTML injection → forbidden.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-UI-006 — Tool-call states and grouping
+- **Statement:** GIVEN tool calls in a turn, WHEN they stream, run, succeed, fail or are cancelled, THEN the UI renders exactly five states (`proposed · running · succeeded · failed · cancelled`) with streaming mapped to `running` + `tool.progress`, a group containing an error never auto-collapses, a settled turn collapses to one rail line, group identity is the first item's identity, and a Guard-denied call is neutral-with-lock (not red).
+- **Priority:** must
+- **Source:** `ARCH/30-EVENTS.md` §3 · `AGENTCOWORK-UI.md` §4.3 (R21–R27; UI-04, UI-06)
+- **Acceptance:** a failed call never auto-collapses; a settled turn collapses to one line; a resumed session replays the same grouping; denied ≠ failed styling.
+- **Failure cases:** failure auto-collapsed → defect; a sixth `streaming` state → defect; blocked rendered as error → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-UI-007 — Plan bar bound to the running turn
+- **Statement:** GIVEN a plan for the active turn, WHEN the turn runs, THEN a plan bar sits above the composer bound to `turn_id === activeTurnId`, is keyboard-operable (`role="button"`, `aria-expanded`), caps open height at `min(22vh, 180px)`, shows `completed/total`, reports a version delta on a new plan version (never "no change" from an unknown previous list), and renders/reserves nothing when no plan belongs to the turn.
+- **Priority:** must
+- **Source:** `AGENTCOWORK-UI.md` §4.4 (R31); `ev: ui/src/lib/store.ts:197-205,211`
+- **Acceptance:** the bar appears only while its turn runs and disappears with it; a second version reports a delta; the step vocabulary is the existing `ProgressStep` union.
+- **Failure cases:** plan hanging over the next turn → defect; false "no change" → defect; a new status vocabulary → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-UI-008 — Reasoning dial capability-negotiated
+- **Statement:** GIVEN the bound agent's model descriptor, WHEN the reasoning dial is shown, THEN it offers only the levels the model supports (`auto · minimal · low · medium · high · extra_high`), clamps the value on model switch, keeps `auto` off the track on its own row, keeps the pill visible at `auto`, tracks the label live while dragging, states what the current level means, and says the model has no reasoning surface rather than showing a dead control.
+- **Priority:** must
+- **Source:** `ARCH/18-MODEL-ROUTING.md` §5 · `AGENTCOWORK-UI.md` §5.4 (R51); `ev: ui/src/lib/acp.ts:93-101`
+- **Acceptance:** a reasoning-less model shows an honest statement, not a dead slider; an unsupported level is never offered; the value clamps on switch.
+- **Failure cases:** dial offers a level the model rejects → defect; `auto` on the track → defect; silent stale value after model switch → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-UI-009 — Universal DocumentSurface
+- **Statement:** GIVEN a reference, artifact, run, URL or session, WHEN it is opened, THEN one DocumentSurface opens exactly one tab per document identity (a second open focuses the existing tab) with N documents per kind, re-derives content from a persisted light ref, pre-checks existence in the host (a missing file renders an inert *not found* row with a re-link), and opens/renders with zero model tokens.
+- **Priority:** must
+- **Source:** `ARCH/29-ARTIFACTS.md` §7 · `AGENTCOWORK-UI.md` §3 (R45), §2.3
+- **Acceptance:** two spreadsheets and a PDF open together; a per-session reload restores the tab set; a missing file renders inert with a reason; two opens of one identity share one tab.
+- **Failure cases:** a second document of a kind replacing the first → defect; a tab opening onto "file not found" → defect; tab content persisted instead of a light ref → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-UI-010 — Agent picker / agent-owner model / two-pane runtime surface
+- **Statement:** GIVEN an agent binding, WHEN the composer agent control is used or agent configuration is opened, THEN the compact control paints the agent-owned model or an explicit em dash, selection is installed-only (catalog-only rows render a not-installed state with an install affordance), and configuration expands to a two-pane surface (runtimes left; the selected runtime's own model/auth/native capabilities + shared grants right) where a Native model is never offered for an external runtime and an agent with no model surface says "managed by \<agent\>".
+- **Priority:** must
+- **Source:** `AGENTCOWORK-UI.md` §5.3, §5.13; `ev: ui/DESIGN-SYSTEM.md:11,58`; `ev: ui/src/components/chat/agent-model-picker.tsx:474-489,526-549`
+- **Acceptance:** a governance badge and honest hover note per agent; installed-only selectable; catalog-only not selectable; no Native model offered for an external runtime; a switch during a live stream applies to the next turn and says so.
+- **Failure cases:** a catalog row becoming selectable → defect; a Native model offered for an external runtime → defect; the platform inventing a model list → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-UI-011 — Windows-first provenance and truthful readiness
+- **Statement:** GIVEN an agent/runtime row, WHEN it renders, THEN it shows a discriminated location (`managed · windows_path · app_paths · user_path · package_manager · wsl · unavailable`), keeps `installed`/`discovered`/`launchable` distinct (a WSL row is discovered-not-launchable until its spawn adapter exists and is non-selectable with a reason), never treats a catalog/registry row as occupancy, and shows readiness as evidence-gated (`unverified`/`available` until a real Windows acceptance record) rather than fabricated from a mock, preview, catalog entry or unit-only result.
+- **Priority:** must
+- **Source:** `AGENTCOWORK-UI.md` §5.13 (UI-17); workspace UI/UX skill section 8; `ARCH/06-DATA-MODEL.md` DM-014; `ARCH/13-CAPABILITY.md` §6
+- **Acceptance:** a WSL-only row is non-selectable with an honest reason; a catalog row is not occupancy; no verified readiness without a Windows acceptance record; a Linux path is never handed to `CreateProcess`.
+- **Failure cases:** path string instead of a discriminated location → defect; `discovered` treated as `launchable` → defect; fabricated readiness → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-UI-012 — Keyboard-complete accessibility
+- **Statement:** GIVEN any interactive surface, WHEN the user navigates by keyboard, THEN every action (workbench slot, tab, disclosure, approval choice, composer control) is reachable with a visible `focus-visible` ring, the Workbench is a real `role="tab"`/`tabpanel` tablist, composer `@`/`/` use combobox semantics with IME-safe Enter, streaming text is not announced token-by-token while status/approval changes are announced appropriately, and an automated accessibility gate passes.
+- **Priority:** must
+- **Source:** `AGENTCOWORK-UI.md` §9.1 (UI-12); `ev: ui/src/globals.css:791-795`
+- **Acceptance:** keyboard-only traversal of every workflow, tab, disclosure, approval choice and composer control with a visible ring; the a11y gate passes; live-region announcements follow the discipline.
+- **Failure cases:** an interactive with no focus ring → defect; token-by-token live announcement → defect; a11y gate absent → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-UI-013 — Progressive disclosure and non-intrusive product invariants
+- **Statement:** GIVEN advanced detail, a policy-blocked control, or a finishing tool, WHEN the surface renders, THEN advanced detail sits behind a labelled collapsed row (open-by-default only when the content is the answer), a blocked control stays visible marked blocked with its reason and who can change it, and nothing auto-navigates — a tool finishing never steals focus, opens a pane or moves the page.
+- **Priority:** must
+- **Source:** `AGENTCOWORK-UI.md` §1.2 (UI-04, UI-05, UI-07); evidence §3.8 (openwork P3/P4, T1, S5)
+- **Acceptance:** a blocked action is visible with a reason; a completed tool does not move focus or open a pane; advanced detail is behind a labelled disclosure.
+- **Failure cases:** blocked control hidden → defect; auto-navigation on completion → defect; blocked rendered red as a failure → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-UI-014 — Zero layout shift on live regions
+- **Statement:** GIVEN a live region whose content ticks or changes (reasoning timer, tool rail, telemetry readout, streaming diagram, transcript), WHEN its state changes, THEN its space is reserved (`min-h`, fixed readout slots, intrinsic-size hints, viewBox-sized diagram) so CLS is zero and no control moves when a neighbouring state changes.
+- **Priority:** must
+- **Source:** `AGENTCOWORK-UI.md` §1.2 (UI-08), §4.2 (R16); `ev: ui/src/components/chat/message-bubble.tsx:197`; `ev: ui/src/components/chat/tool-chip.tsx:533,541`; `ev: ui/src/components/chat/chat-composer.tsx:929-965`
+- **Acceptance:** CLS measured 0 while a turn streams and a diagram re-renders; telemetry readouts do not move when web-search toggles; the reasoning trigger reserves its height.
+- **Failure cases:** content jumping as a timer ticks → defect; a readout slot resizing on state change → defect; a diagram collapsing to a placeholder on re-render → defect.
 - **Tests:** pending
 - **Status:** seeded
 
@@ -2643,7 +2760,7 @@ This registry answers one question per entry: **what behavior must this system e
 | `TRUST` (10), `CAP` (10) | drafted above + expanded in passes `12`/`13` | verified during passes `12` ✅ / `13` ✅ (2026-09-26) |
 | `PROV` (10) | drafted above + expanded in pass `14` | verified during pass `14` ✅ (2026-09-26) |
 | `AGX` (13) | drafted above + expanded in the Agent X finalisation | verified during the Agent X finalisation (2026-09-26) |
-| `UI` (1) | drafted above | `AGENTCOWORK-UI.md` |
+| `UI` (14) | drafted above + expanded in the P7 UI merge | verified during the P7 UI merge ✅ (2026-09-26) |
 | `KERNEL` (7), `WORK` (8) | drafted above | verified during passes `10` ✅ / `11` ✅ (2026-09-26) |
 | `MEM` (12) | drafted above + expanded in pass `17` | verified during pass `17` ✅ (2026-09-26) |
 | `MODEL` (12) | drafted above + expanded in pass `18` | verified during pass `18` ✅ (2026-09-26) |

@@ -609,7 +609,7 @@ Testable behaviors owned by this module live in `ARCH/08-REQUIREMENTS.md`; the t
 
 | REQ | Behavior (one line) |
 |---|---|
-| `REQ-UI-001` | Reasoning is summarized, never rendered as raw chain-of-thought; markdown/mermaid render only through the policy-gated pipeline (§4.1, §4.2, §4.4; UI-14). |
+| `REQ-UI-001` | Reasoning is summarized, never rendered as raw chain-of-thought; reasoning renders only through the `reasoning` projection (§4.4; UI-14). |
 | `REQ-UI-002` | Rendering, navigation, diagram conversion and reference discovery are local and never spend model tokens (§8; UI-02). |
 | `REQ-UI-003` | An inferred value is never presented as measured — unknown renders `—` or nothing, and no fabricated progress or spinner stands in for a value we lack (§1.2; §11). |
 | `REQ-UI-004` | The answer body renders headings, tables, blockquotes, `hr`, ordered lists and images from the token palette, streaming-safe (block caching, closed-fence code gate, coalesced writes) (§4.1, R1–R8). |

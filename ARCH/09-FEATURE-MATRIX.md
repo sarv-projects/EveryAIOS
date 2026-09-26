@@ -307,6 +307,19 @@ One row per `REQ-*`. Status only from evidence.
 | `REQ-AGX-012` | `15-AGENT-X` | pending | `DEC-009/010`, `CTR-022` | `EDGE-155` | pending | pending | unplanned |
 | `REQ-AGX-013` | `15-AGENT-X` | pending | `DEC-022`, `INV-16/19`, `CTR-003/004` | — | pending | pending | unplanned |
 | `REQ-UI-001` | `AGENTCOWORK-UI` | pending | `—` | — | pending | pending | unplanned |
+| `REQ-UI-002` | `AGENTCOWORK-UI` | pending | `DEC-015`, `INV-13` | — | pending | pending | unplanned |
+| `REQ-UI-003` | `AGENTCOWORK-UI` | pending | `—` | — | pending | pending | unplanned |
+| `REQ-UI-004` | `AGENTCOWORK-UI` | pending | `—` | — | pending | pending | unplanned |
+| `REQ-UI-005` | `AGENTCOWORK-UI` | pending | `—` | — | pending | pending | unplanned |
+| `REQ-UI-006` | `AGENTCOWORK-UI` | pending | `—` | — | pending | pending | unplanned |
+| `REQ-UI-007` | `AGENTCOWORK-UI` | pending | `—` | — | pending | pending | unplanned |
+| `REQ-UI-008` | `AGENTCOWORK-UI` | pending | `—` | — | pending | pending | unplanned |
+| `REQ-UI-009` | `AGENTCOWORK-UI` | pending | `—` | — | pending | pending | unplanned |
+| `REQ-UI-010` | `AGENTCOWORK-UI` | pending | `—` | — | pending | pending | unplanned |
+| `REQ-UI-011` | `AGENTCOWORK-UI` | pending | `DM-014` | — | pending | pending | unplanned |
+| `REQ-UI-012` | `AGENTCOWORK-UI` | pending | `—` | — | pending | pending | unplanned |
+| `REQ-UI-013` | `AGENTCOWORK-UI` | pending | `—` | — | pending | pending | unplanned |
+| `REQ-UI-014` | `AGENTCOWORK-UI` | pending | `—` | — | pending | pending | unplanned |
 
 ## 4. Maintenance
 
