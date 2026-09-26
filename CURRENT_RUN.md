@@ -49,10 +49,17 @@ Rebuild the AgentCowork docs from scratch as **v1**: ARCH set + SPEC + UI + supp
 - **v1 freeze (P8, 2026-09-26 — owner decision):** doc statuses flipped to `Frozen v1 (frozen 2026-09-26; drafted Pn)`; `DEC-038…045` promoted to `Locked`; `ARCH/00-INDEX.md` §4 P8 row + §5 freeze record added; commits `spec: promote DEC-038…045 for the v1 freeze` + `docs: freeze the v1 doc set`.
 - Owner items at freeze: `DEC-038…045` promoted to `Locked` (DEC-020 stays `Provisional` — branding); remaining optional: a `Task`-projection DEC (resolved as `06` alignment + OQ-DM-1 close); workspace `.agents/skills/ui-ux/SKILL.md` drift (outside this repo).
 
+**P9 verification wave — 2026-09-26 (owner-directed, in flight):**
+- Owner directive: a full pass is **read → understand → fix**, architect-style — line-by-line, fix as you go; schema/architecture/LLD clashes fixed with back-propagation to earlier docs; missing pieces added. The freeze was reopened for the duration (`9f0c12b`); the set re-freezes after the pass + reconciliation + independent review.
+- **Foundation cluster ✅ complete (`8c1d154 docs: verification pass — foundation (SPEC + ARCH/00–09)`):** SPEC + `00`–`09` read line-by-line; fixes applied (SPEC §5/§7/§13/§16/§17; `00-INDEX` §2/§4/§6/§7/§9 incl. OQ-005 redefinition; `01` naming-rule scope; `02` namespace wording; `03` `DelegationService` + epoch cites; `04` P9 banner; `05` verified clean; `06` evidence line + OQ-DM-3; `07` status tail + OQ-CTR resolutions; `08`/`09` registry integrity verified — 307 entries ↔ 307 rows, all seven fields present, IDs unique).
+- Six lanes in flight (each: read every line, understand, fix inline, report cross-cluster clashes; commit `docs: verification pass — <cluster>`; push): `10–14` · `15–18` (Agent X/context/memory/models) · `19–24` · `25–34` · `40–44` + `AGENTS.md`/`README.md`/`.agents/` kit · `AGENTCOWORK-UI.md` (designer).
+- Reconciliation queue: DEC-002 epoch citations → `(DM-012, `13` §4)` at `13-CAPABILITY.md:60/137`, `14-PROVIDERS.md:17/130`, `43-GLOSSARY.md:49`; namespace-consistency items; lane-reported clashes.
+
 ## Next exact steps
-1. ✅ Push complete (`f3c1cb7` and earlier are on `origin/main`) and ✅ **v1 frozen** (P8, 2026-09-26).
-2. **Code phase, W0 first**: re-verify `ARCH/42-EVIDENCE-MAP.md` §4 FIX-01…18 → open the P0 wave per §5, plus the inventory's live candidates: FIX-05 `skill_store.rs:442-449`, FIX-06 `fs_cmds.rs:129-137`, FIX-07 `acp_cmds.rs:1676`, FIX-09 (`tools.rs`/`messaging.rs`/`vault/oauth.rs` direct `ureq`), FIX-10 (`walk.rs:146-157`). Work the plan from `TODO.md` (W0→W4) against the `ARCH/09` chain; acceptance per `ARCH/42`.
-3. Open items queued: `check-doc-sync.mjs` re-homing (pre-existing red); gen-30 edge-gap folds into owning docs; workspace `.agents/skills/ui-ux/SKILL.md` drift (outside this repo).
+1. ✅ Push complete (`f3c1cb7` and earlier are on `origin/main`); ✅ **v1 frozen** (P8, 2026-09-26); ✅ **reopened** (`9f0c12b`) for the owner-directed P9 verification pass.
+2. **P9 verification pass (in flight):** foundation cluster ✅ (`8c1d154`). Six lanes running (`10–14` · `15–18` · `19–24` · `25–34` · `40–44` + kit · UI doc). On completion: reconcile cross-cluster items → independent review → **re-freeze** (`ARCH/00-INDEX.md` §4 P9 ✅ + banner; this file) → code phase.
+3. **Code phase, W0 first** (after the re-freeze): re-verify `ARCH/42-EVIDENCE-MAP.md` §4 FIX-01…18 → open the P0 wave per §5, plus the inventory's live candidates: FIX-05 `skill_store.rs:442-449`, FIX-06 `fs_cmds.rs:129-137`, FIX-07 `acp_cmds.rs:1676`, FIX-09 (`tools.rs`/`messaging.rs`/`vault/oauth.rs` direct `ureq`), FIX-10 (`walk.rs:146-157`). Work the plan from `TODO.md` (W0→W4) against the `ARCH/09` chain; acceptance per `ARCH/42`.
+4. Open items queued: `check-doc-sync.mjs` re-homing (pre-existing red); gen-30 edge-gap folds into owning docs; workspace `.agents/skills/ui-ux/SKILL.md` drift (outside this repo).
 
 ## Decisions & gotchas
 - Names: product **AgentCowork** (working), runtime **Core**, native agent **Agent X** (`ARCH/01-NAMING.md`). Code identifiers (`everyaios-*`) stay until a post-freeze code-phase rename (OQ-003).
