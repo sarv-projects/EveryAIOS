@@ -48,6 +48,27 @@
 | DM-026 | `WorldObject` (+`WorldEdge`) | `21` | Structural world state + relationships | ephemeral with freshness stamps |
 | DM-027 | `Skill` | `31` | Reusable know-how package (instructions + capability requirements) | versioned |
 
+### 1.1 Core relationships (load-bearing references)
+
+```mermaid
+erDiagram
+  SESSION ||--o{ WORK : "hosts turns"
+  SESSION ||--o{ SESSION_EVENT : "append-only log"
+  WORK ||--o{ RUN : "executes as"
+  WORK ||--o{ CHECKPOINT : "resumes from"
+  RUN ||--o{ STEP : "tracks progress"
+  RUN ||--o{ RECEIPT : "produces"
+  RUN ||--o{ WORKER_RECEIPT : "collects (delegation)"
+  RUN ||--o{ ARTIFACT : "produces"
+  TICKET ||--o{ RECEIPT : "authorizes"
+  APPROVAL ||--o{ TICKET : "may gate"
+  PROVIDER ||--o{ CAPABILITY_HANDLE : "binds"
+  CAPABILITY_DESCRIPTOR ||--o{ CAPABILITY_HANDLE : "resolves to"
+  WORKFLOW_DEFINITION ||--o{ WORKFLOW_RUN : "pinned version"
+```
+
+*Association lines show load-bearing references, not every field. Epoch checks, projections, and suppression semantics live in the owner docs and §3.*
+
 ## 2. Shared field blocks (cross-cutting entities)
 
 > Detailed SQL/TS lives in owner docs; these are the load-bearing shared fields.
@@ -99,3 +120,8 @@
 ## 5. Evidence
 
 Owner brief schemas (Work/Workflow/Artifact/AgentProfile/DelegationPolicy/WorkerReceipt/CapabilityDescriptor/CapabilityHandle/ProviderAdapter) · `ARCH/15-AGENT-X.md` §2/§7 · `ARCH/16-CONTEXT.md` §2/§3 · `ARCH/17-MEMORY.md` §3 · `ARCHIVE/v1-research/agent-harness-verification.md` §A1–A2 (budgets), §A3–B3 (subagent model), §C1–C2 (log/projection), §D1 (handle/registry/inbox).
+
+## 6. Related
+
+- `ARCH/08-REQUIREMENTS.md` — the behaviors these entities serve; `ARCH/09-FEATURE-MATRIX.md` — REQ → entity/owner traceability.
+- `ARCH/07-CONTRACTS.md` — the interfaces by which entities are observed and mutated (projections and refs only).

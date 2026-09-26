@@ -2,6 +2,8 @@
 
 > **Status:** Draft P0 — architecture root for **HOW** (see `ARCH/00-INDEX.md` §2). Module docs derive from this file; conflicts escalate to a `DEC` entry.
 > **Companion docs:** `ARCH/02-THESIS.md` (identity, principles) · `ARCH/06-DATA-MODEL.md` (entities) · `ARCH/07-CONTRACTS.md` (interfaces).
+> **SDD:** this doc is the L2 architecture layer — it satisfies behaviors registered in `ARCH/08-REQUIREMENTS.md` and must not contradict them; module → REQ traceability accrues in `ARCH/09-FEATURE-MATRIX.md`.
+> **Fleshed:** P7 (2026-09-26) — contract index (§3.1), failure model (§11), non-functional envelope (§12).
 
 ## 1. Shape
 
@@ -102,6 +104,35 @@ flowchart TB
 | 40–42 | Cross | Flows, edge cases, evidence map | all |
 | 44 | Absorb Register | Competitor absorb matrix + licensing ledger | archive/REPO-COMPARE evidence |
 
+### 3.1 Contract index (module → owned contracts)
+
+Every cross-module edge is named in `ARCH/07-CONTRACTS.md`. A module with no owned contract exposes only capability descriptors through CTR-009 until its module pass registers one.
+
+| Module (doc) | Owned contracts |
+|---|---|
+| Kernel (10) | — (types, ids, errors only) |
+| Work (11) | CTR-003 `WorkService` · CTR-004 `SessionLog` · CTR-026 `Scheduler` |
+| Trust (12) | CTR-011 `Guard` · CTR-012 `ApprovalService` · CTR-013 `Vault` |
+| Capability (13) | CTR-009 `CapabilityBroker` |
+| Providers (14) | CTR-010 `ProviderAdapter` |
+| Agent X (15) | CTR-001 `AgentEngine` · CTR-002 `AgentSession` · CTR-007 `ContextController` · CTR-021 `DelegationService` |
+| Context (16) | CTR-005 `CheckpointService` · CTR-006 `ContextProvider` |
+| Memory (17) | CTR-008 `MemoryService` |
+| Models (18) | CTR-014 `ModelRouter` / `ModelAdapter` |
+| Runtime & Environments (19) | CTR-015 `EnvironmentService` |
+| Workflow (20) | CTR-016 `WorkflowEngine` |
+| World Model (21) | CTR-017 `WorldService` |
+| Office (22) · Browser (23) · Computer Use (24) | — (domain interfaces pending their module passes) |
+| Files (25) | CTR-024 `FileIdentity` / `WorkspaceWatcher` / `WriteLeases` |
+| Code (26) | CTR-025 `RepoIntelligence` |
+| Search (27) · Comms (28) | — (capability descriptors through CTR-009) |
+| Artifacts (29) | CTR-018 `ArtifactService` / `ReceiptService` |
+| Events (30) | CTR-019 `EventBus` / `EventStore` |
+| Skills & Plugins (31) | CTR-020 `SkillResolver` |
+| Channels (32) | CTR-022 `AgentGateway` |
+| Effect Verification (34) | CTR-023 `EffectVerifier` |
+| Cross (40–42) · Register (44) | — |
+
 ## 4. Dependency rules
 
 1. **Direction is downward only:** Experience → Work/Orchestration → Agent/Capability → Trust → Execution → Domains; cross-cutting services (events, artifacts, memory, world) are leaves others may depend on, never the reverse.
@@ -178,7 +209,7 @@ Resources are installed/available at Global or Workspace and never duplicated pe
 
 ## 9. Implementation order (after docs freeze; not current work)
 
-1. **Six core contracts first:** `AgentEngine`, `AgentSession`, `ContextController` (+ `ContextProvider`), `CapabilityBroker`, `SubagentManager`, `ModelAdapter`.
+1. **Six core contracts first:** `AgentEngine` (CTR-001), `AgentSession` (CTR-002), `ContextController` + `ContextProvider` (CTR-007/006), `CapabilityBroker` (CTR-009), `SubagentManager` (CTR-021), `ModelAdapter` (CTR-014).
 2. **Minimal native runtime:** model streaming, tool loop, project rules, RepoGraph/RepoMap, filesystem, shell, git, parallel workers, background execution, structured-checkpoint compaction, Core capability access.
 3. **Bolt on domains:** browser, Office, computer-use, MCP provider adapter, plugins/skills, ACP server.
 4. **Workflow Engine** wired to Capability Plane and World Model events.
@@ -197,3 +228,34 @@ Resources are installed/available at Global or Workspace and never duplicated pe
 | RISK-005 | External-agent projection fidelity: enough context to work, not enough to leak. | 12, 16, 32 |
 | RISK-006 | Memory minimalism: retrieval quality with a small algorithm set. | 17 |
 | RISK-007 | Provider adapter counting: capability × provider matrix stays declarative, not hand-maintained. | 13, 14 |
+
+## 11. Failure, recovery, and degradation
+
+The architecture fails **closed** at trust boundaries and **honestly** everywhere else: no component fabricates state to hide a failure, and no failure path bypasses Guard (INV-01, INV-05).
+
+| Failure | Architectural behaviour | Owner |
+|---|---|---|
+| Guard unavailable / cannot decide | DENY — effects never execute on a missing decision; no fallback path exists | 12 |
+| Vault unavailable | Credential *use* fails closed; no plaintext fallback, no cached secret | 12 |
+| Provider down / degraded | Health flips; the resolver may select another provider, otherwise a typed `Unavailable`; executed effects are not silently retried | 13, 14 |
+| Execution crashes mid-effect | Effect state is reconciled at next start; where the outcome cannot be determined, the receipt records uncertainty rather than claiming success | 19, 34 |
+| Domain runtime crash (Office/Browser/CUA) | Host survives; the provider epoch bumps, invalidating stale handles (DEC-002); resident contexts are bounded and released | 22–24 |
+| Agent run crashes | Work is marked failed with its last checkpoint retained; host and other sessions are unaffected | 11, 15 |
+| Workflow runner restarts | Runs resume from checkpoints against their pinned definition version (INV-16) | 20 |
+| World scanner lags | Consumers see `freshness` stamps and must tolerate staleness — never fabricate live state | 21 |
+| Event store temporarily unavailable | Producers/consumers surface the gap and mark projections stale; no shadow state is created (INV-23) | 30 |
+| Memory unavailable | Runs degrade to stateless context — memory is an addition, never a blocker for execution | 17 |
+| UI disconnects | The cockpit re-derives its view from projections on reconnect; no UI-held state is treated as truth | 32 |
+
+## 12. Non-functional envelope
+
+| Axis | Envelope |
+|---|---|
+| Control-path latency | p50 < 2 ms · p95 < 10 ms · p99 < 25 ms for the guarded resolution path (SPEC §4); the effect path is asynchronous and observable |
+| Token discipline | Deterministic operations never call a model (P-14, INV-13); context assembly is budgeted and honest about spend (INV-22) |
+| Platform | Windows is the first release target; macOS/Linux are hosted targets; no design may assume a POSIX-only primitive (`ARCH/19-RUNTIME-ENVIRONMENTS.md`) |
+| Resource isolation | Kernel stays minimal (INV-14); domain runtimes and sandboxed execution carry their own bounds; a failing domain cannot take down the host |
+| Durability | Work, checkpoints, receipts and events survive restart; runs are pinned to versions (INV-16, INV-18) |
+| Security | One authorization decider, one egress path, vault custody (INV-02/04/05); every externally visible effect is auditable (INV-24) |
+| Observability | One event log; usage/cost telemetry derives from it; every effect has a receipt (INV-07, INV-23) |
+| Verification | Depth scales with risk class (`ARCH/34-EFFECT-VERIFICATION.md`); "implemented" ≠ "verified" (SPEC §13) |

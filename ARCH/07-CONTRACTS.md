@@ -2,6 +2,7 @@
 
 > **Status:** Draft P1 — the interface registry. Every named contract that crosses a module boundary lives here. **Owner** = the module that implements/stabilizes it; **consumers** = modules that call it. Module docs carry serialization/transport detail; this doc owns names, semantic signatures, and guarantees. Details marked *provisional* firm up as their owner doc lands.
 > **Rules:** signatures are transport-free (adapters map transports); every contract takes an `actor` context (user / agent / workflow) and is subject to Trust.
+> **SDD:** this registry carries the L3 interface layer for behaviors in `ARCH/08-REQUIREMENTS.md`; REQ ↔ CTR links accrue in `ARCH/09-FEATURE-MATRIX.md`.
 
 ## 0. Conventions
 
@@ -42,6 +43,8 @@
 | CTR-024 | `FileIdentity` + `WorkspaceWatcher` + `WriteLeases` | 25 | 16, 21, 26 | Provisional |
 | CTR-025 | `RepoIntelligence` (graph · map · lsp · git) | 26 | 16, 15 | Provisional |
 | CTR-026 | `Scheduler` (lanes · limits) | 11 | 15, 20, 32 | Provisional |
+
+**Domain contracts.** Office (22), Browser (23), Computer Use (24), Search (27) and Comms (28) deliberately own no named contract yet: their operations resolve through CTR-009 as capability descriptors, and a module pass registers a contract here only if a non-capability edge appears (see `ARCH/03-HLD.md` §3.1).
 
 ## 2. The six core contracts (owner brief)
 
