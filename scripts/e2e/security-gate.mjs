@@ -21,6 +21,13 @@
  *      whose label is not the dedicated guard window (main renderer cannot
  *      approve even though lib/guard.ts can invoke); the guard window
  *      surface (guard.html + guard-main.ts) exists and is dependency-free.
+ *   S7 UI-observable secret corpus — scripts/check-secret-corpus.mjs
+ *      (TASK-UI-001 / FIX-04 / REQ-PROD-002): the detector proves itself
+ *      (--self-test), then no credential-shaped literal is unaccounted for
+ *      in the cockpit, the Tauri command surface, the shell-e2e harness or
+ *      the kernel's secret-vocabulary fixtures. Node-only, so it runs ahead
+ *      of the cargo toolchain guard and cannot be masked by a missing Rust
+ *      toolchain: a leak fails the gate even where the suites skip.
  *
  * Exit: 0 PASS / 1 FAIL / 2 SKIP (no cargo/node toolchain).
  */
@@ -52,6 +59,44 @@ function have(cmd) {
   }
 }
 
+// ---- S7 UI-observable secret corpus (node-only; ahead of the cargo guard) ---
+// Deliberately placed before the toolchain check: a credential leak is a real
+// finding on a host with no Rust toolchain, and a node-only gate that hides
+// behind a cargo SKIP is a gate that does not run where it is needed most.
+console.log("S7 — UI-observable secret-corpus scan (detector self-test + corpus)…");
+if (!have("node")) {
+  fail("secret-corpus scan needs node");
+} else {
+  const run = (args) =>
+    execFileSync("node", args, {
+      cwd: REPO_ROOT,
+      encoding: "utf8",
+      timeout: 120_000,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+
+  // (a) The detector proves itself first. A gate whose detector is broken (or
+  //     over/under-tuned) must not be trusted to have scanned anything.
+  try {
+    const out = run(["scripts/check-secret-corpus.mjs", "--self-test"]);
+    pass(`secret-corpus self-test (${out.trim().split("\n").pop()})`);
+  } catch (e) {
+    fail(`secret-corpus self-test failed (${`${e.stdout ?? ""}`.trim().split("\n")[0] ?? e.message.slice(0, 120)})`);
+  }
+
+  // (b) The scan. The child's location report is forwarded on failure — the
+  //     finding list is the deliverable, not just the verdict.
+  try {
+    const out = run(["scripts/check-secret-corpus.mjs"]);
+    const summary = out.trim().split("\n").filter((l) => l.startsWith("secret-corpus: PASS"))[0] ?? "clean";
+    pass(`secret-corpus: ${summary.replace("secret-corpus: ", "")}`);
+  } catch (e) {
+    const detail = `${e.stdout ?? ""}${e.stderr ?? ""}`.trimEnd();
+    fail(`secret-corpus scan failed — see the report below`);
+    console.error(detail.split("\n").map((l) => `      ${l}`).join("\n"));
+  }
+}
+
 // Cargo is not on PATH in every shell (notably non-interactive WSL shells);
 // resolve it like failure-injection.mjs does: explicit env, else the rustup
 // default install location, else PATH.
@@ -60,7 +105,13 @@ const CARGO_BIN =
   (existsSync(join(homedir(), ".cargo/bin/cargo")) ? join(homedir(), ".cargo/bin/cargo") : "cargo");
 
 if (!have(CARGO_BIN)) {
-  console.log("[P50.5.7] SKIP — no cargo toolchain");
+  // S7 already ran: report its verdict rather than hiding a real leak behind a
+  // toolchain SKIP.
+  if (failures.length > 0) {
+    console.error(`[P50.5.7] FAIL — ${failures.length} node-only gate(s) failed (no cargo toolchain for the crate suites)`);
+    process.exit(1);
+  }
+  console.log("[P50.5.7] SKIP — no cargo toolchain (node-only stages ran clean)");
   process.exit(2);
 }
 
