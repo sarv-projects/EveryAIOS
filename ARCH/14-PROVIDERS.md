@@ -2,6 +2,7 @@
 
 > **Status:** Frozen v1 (frozen 2026-09-26; drafted P2).
 > **P7 pass (2026-09-26):** line-checked; requirements seeded (`REQ-PROV-*`, Requirements section).
+> **P9 verification pass (2026-09-26):** read line-by-line; fixes applied where needed (owner-directed; re-freeze follows).
 > **Role:** the only layer where protocols exist. Providers implement capabilities; nothing above the Capability Plane knows the transport (INV-15).
 > **Dependencies:** `13-CAPABILITY` (resolution) · `12-TRUST` (guard/egress/vault) · `19-RUNTIME-ENVIRONMENTS` (where adapters run) · `30-EVENTS` (health/events).
 > **Evidence:** `ARCHIVE/v1-research/mcp-provider-verification.md` (641 lines, verified citations) · `ARCHIVE/v1-research/agent-harness-verification.md` (§A4 sandbox/approval/exec layers, §B1 ACP surface, §D1 adapter patterns) · product-owner brief.
@@ -48,7 +49,7 @@ Lifecycle: register (discover) → connect → serve → shutdown. `execute` rec
 **Client (we consume MCP servers):**
 - Modern first: revision `2026-07-28` (stateless, context carried in `_meta`, mandatory `server/discover`); legacy fallback `2025-11-25` (`initialize`).
 - Detection per transport: **stdio** probes `server/discover` (10 s cap) and falls back to `initialize`; **HTTP** classifies the `400` body to distinguish era. Era is cached per process/origin; a per-server **force-legacy** escape hatch exists.
-- Implementation: `rmcp` 3.4.x (verified to carry both revisions). TS SDK v2 (npm 2.1.0) does **not** yet carry `2026-07-28` — relevant to the sidecar façade.
+- Implementation: `rmcp` 3.4.x (verified to carry both revisions). The sidecar's current MCP dependency is the TS SDK **v1** line (`@modelcontextprotocol/sdk`, `packages/core-search`), which does not carry `2026-07-28`; the v2 line (`@modelcontextprotocol/client`/`server` 2.1.0) does — relevant if the sidecar façade moves to TS.
 
 **Server façade (we expose ourselves over MCP):**
 - Stateless modern + `initialize` compatibility; MUST implement `server/discover`; MUST validate `Mcp-Method` / `Mcp-Name` headers.
@@ -62,7 +63,7 @@ Lifecycle: register (discover) → connect → serve → shutdown. `execute` rec
 ## 5. Registry, epochs, resolution
 
 - `DM-013 ProviderInfo`: id · kind · version · health · capabilities ref · environments · epoch.
-- Resolver inputs (`13`): capability id → candidate providers ranked by (health, environment fit, permission snapshot, cost, latency class).
+- Resolver inputs (`13`): capability id → candidate providers ranked by (health, environment fit, permission fit, cost, latency class).
 - **Loading modes** (`eager` / `catalog` / `on-demand`) define what the model sees vs what the catalog exposes vs what resolves on demand — the semantic compression layer that keeps raw tool counts out of context.
 - Health events publish on `30`; the UI provider surface reads the registry (no separate store).
 
@@ -85,11 +86,12 @@ Lifecycle: register (discover) → connect → serve → shutdown. `execute` rec
 | Adapter crash | Epoch bump → handles invalidated → health `down` → resolver failover; work re-plans. |
 | Protocol mismatch (dual-era) | Detection retries the other era once; permanent mismatch → provider marked incompatible with reason. |
 | Schema drift (MCP tools changed) | `discover` diffs capabilities; removals update descriptors + emit events; calls to removed caps fail typed. |
+| Schema-violating provider result | The adapter validates against the descriptor/contract schema before anything applies; malformed output is a typed failure, the provider is marked degraded, nothing partial is applied, and it is audited (EDGE-018). |
 | Connect timeout | Bounded retry with backoff; provider degraded; UI never blocks (work is async). |
 | Partial capability failure | Per-capability health; resolver avoids only the failing capability. |
 | Unauthorized egress | Guard DENY → typed error; logged; no silent fallback. |
 | Stream idle/read timeout | Watchdog aborts with a typed reason; retry per the single-owner rule (`18` §4). |
-| Auth token expiry mid-turn | Typed `Authentication`; refresh where supported; else re-auth guidance. |
+| Auth token expiry mid-turn | Typed provider error `Authentication` (`18` §4); refresh where supported; else re-auth guidance. |
 | Provider-reported cost mismatch | Actual overrides estimate; audit event emitted. |
 
 ## 8. Interop

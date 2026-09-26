@@ -2,6 +2,7 @@
 
 > **Status:** Frozen v1 (frozen 2026-09-26; drafted P2).
 > **P7 pass (2026-09-26):** line-checked; requirements seeded (`REQ-KERNEL-*`, Requirements section).
+> **P9 verification pass (2026-09-26):** read line-by-line; fixes applied where needed (owner-directed; re-freeze follows).
 > **Role:** the smallest layer: identity, errors, configuration, time, serialization, and the base conventions every module depends on. **No domain logic** (INV-14).
 > **Evidence:** `ARCH/06-DATA-MODEL.md` (conventions), `ARCH/07-CONTRACTS.md` (contract rules), product-owner brief (“the kernel stays small”), INV-14.
 
@@ -63,6 +64,7 @@ defaults → user (global) → workspace/project → agent profile → session �
 - **Migrations:** forward-only, idempotent, tested; run before the feature that needs them; failures block cleanly (no partial schema).
 - **Content refs over copies:** prefer references; inline only when bounded and reconstructable.
 - **UTF-8 everywhere**; sizes in bytes; token counts only via `18-MODEL-ROUTING`.
+- **Invalid payloads fail typed** — bad UTF-8, non-canonical JSON, or float-unsafe numbers are rejected at the boundary, never lossy-coerced; ids and sizes stay integer-safe (EDGE-113).
 
 ## 7. Contract plumbing (base envelope)
 

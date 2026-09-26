@@ -2,24 +2,25 @@
 
 > **Status:** Frozen v1 (frozen 2026-09-26; drafted P2).
 > **P7 pass (2026-09-26):** line-checked; requirements seeded (`REQ-WORK-*`, Requirements section).
+> **P9 verification pass (2026-09-26):** read line-by-line; fixes applied where needed (owner-directed; re-freeze follows).
 > **Role:** the **universal execution abstraction** (DEC-003). Everything that runs — a chat turn, a workflow run, a background job, a subagent task, an automation — is a `Work` item with one lifecycle, one scheduler, one Runs surface.
 > **Dependencies:** `10-KERNEL` · `12-TRUST` (tickets for effects) · `16-CONTEXT` (checkpoints) · `30-EVENTS` (stream). **Consumers:** `15-AGENT-X` · `20-WORKFLOW` · `32-CHANNELS` · UI.
 > **Evidence:** product-owner brief (lanes, limits, background work, “Work is universal”) · `ARCHIVE/v1-research/agent-harness-verification.md` §A3 (background guidance), §D1/§E4 (durable log + projections, `next-turn`/`next-step`), §C2 (durable history) · `ARCH/06-DATA-MODEL.md` (DM-001…008) · DEC-003 / DEC-027 / INV-16 / INV-23.
 
 ## 1. Purpose & responsibilities
 
-**Owns:** `Work` · `Step` · `Session` · `Run` · `Checkpoint` records (DM-001…007) · the scheduler (lanes, limits, priorities) · durability (checkpoints, resume, cancellation) · budgets (tokens/cost/time) · the Runs projection for the UI (`32`).
+**Owns:** `Work` · `Step` · `Session` · `Run` · `SessionEvent` records (DM-001…005, 007; `Task` DM-003 is the projection in §2) · `Checkpoint` storage (DM-006 — produce/rebuild semantics owned by `16`, `CTR-005`) · the scheduler (lanes, limits, priorities) · durability (checkpoints, resume, cancellation) · budgets (tokens/cost/time) · the Runs projection for the UI (`32`).
 **Never owns:** reasoning (`15`) · execution (`13`/`14`) · workflow control-flow semantics (`20` — workflow runs *appear as* work, but the IR and node execution belong to 20) · UI rendering.
 
 Rules:
 1. **One lifecycle for everything** — no side schedulers, no second job system (DEC-003, INV-06).
 2. **The session log is append-only; every view is a projection** — UI history, prompt history, pending-work (inbox), runs list (DEC-027, INV-23).
 3. **Work is durable** — crash/restart resumes; cancellation is recorded, not implied (INV-16).
-4. **Budgets are maxima** — the scheduler enforces outer bounds; agents decide within them (DEC-029).
+4. **Budgets are maxima** — the scheduler enforces outer bounds; agents decide within them (DEC-029/031).
 
 ## 2. Entity model (detail for DM-001…008)
 
-**`Work` (DM-001)** — `kind`: `session_turn` · `job` · `workflow_run` · `subagent_task` · `automation`; `status`: `queued → running → waiting | paused | awaiting_approval → completed | failed | cancelled | expired`; plus `parent_work_id` (work trees), `session_id`, `agent_id`, `workspace_id`, `objective`, `completion_contract_ref`, `budget {tokens, cost, time}`, `checkpoint_ref`, timestamps.
+**`Work` (DM-001)** — `kind`: `session_turn` · `job` · `workflow_run` · `subagent_task` · `automation`; `status`: `queued → running → waiting | paused | awaiting_approval → completed | failed | cancelled | expired`; plus `parent_work_id` (work trees), `session_id`, `agent_id`, `workspace_id`, `objective`, `priority`, `completion_contract_ref`, `budget {tokens, cost, time}`, `checkpoint_ref`, timestamps.
 
 **`Step` (DM-002)** — one unit of progress inside a run: `pending → active → done | failed | skipped`; inputs/output refs; tool-call refs; timestamps. Steps are checkpoint boundaries.
 
@@ -55,7 +56,8 @@ Rules:
 
 - **Checkpoint cadence:** every step boundary (cheap, incremental); before compaction (`16`); before waits/approvals; before handing off to a worker.
 - **Resume semantics on crash/restart:** `running` → resume or requeue depending on step idempotency; `waiting`/`awaiting_approval` remain; `cancelled` stays cancelled.
-- **Side-effect safety:** tickets + idempotency keys (`07` §5) make retries safe where providers support dedupe; where they do not, the step is marked *interrupted* and verification (`34`) runs before any retry.
+- **Resume target check:** resume re-resolves workspace identity before any write (`25` §5); an unresolvable root yields a typed `NotFound` + re-point guidance — queued work is never replayed against a guessed path (EDGE-009).
+- **Side-effect safety:** tickets + idempotency keys (`07` §5) make retries safe where providers support dedupe; where they do not, the step is marked *interrupted* and verification (`34`) runs before any retry — a keyless effect that cannot be verified lands in `needs_attention`, never a blind re-fire (EDGE-017).
 - **Log + projections:** no mutable session state is authoritative — every view folds the log (harness §D1/§E4 pattern).
 
 ## 5. Budgets & accounting
@@ -122,7 +124,7 @@ Testable behaviors owned by this module live in `ARCH/08-REQUIREMENTS.md`; the t
 | `REQ-WORK-002` | Append-only log, projections only — no mutable session state is authoritative (DEC-027). |
 | `REQ-WORK-003` | Durable work and resume — status-correct recovery; cancellation recorded, not implied (INV-16). |
 | `REQ-WORK-004` | Scheduler lanes and enforced outer bounds — admission rejects over-limit work, never trims silently. |
-| `REQ-WORK-005` | Budgets are maxima — soft warning, hard pause + surface, no silent overrun (DEC-029). |
+| `REQ-WORK-005` | Budgets are maxima — soft warning, hard pause + surface, no silent overrun (DEC-029/031). |
 | `REQ-WORK-006` | Cancellation semantics — interrupt / cancel / dispose, cooperative, parent→child, reason recorded. |
 | `REQ-WORK-007` | Checkpoint cadence and side-effect safety — step boundaries; before waits/compaction/handoff. |
 | `REQ-WORK-008` | Runs projection — work-tree view from typed events; every terminal state has a reason. |

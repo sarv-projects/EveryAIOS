@@ -2,6 +2,7 @@
 
 > **Status:** Frozen v1 (frozen 2026-09-26; drafted P2).
 > **P7 pass (2026-09-26):** line-checked; requirements seeded (`REQ-CAP-*`, Requirements section).
+> **P9 verification pass (2026-09-26):** read line-by-line; fixes applied where needed (owner-directed; re-freeze follows).
 > **Role:** semantic operations — **what** can be done — resolved to providers — **who** does it (DEC-004). The model sees *capabilities*, never raw tool catalogs (semantic compression; DEC-005).
 > **Dependencies:** `10-KERNEL` · `11-WORK` · `12-TRUST` (policy/tickets) · `14-PROVIDERS` (implementations) · `16-CONTEXT` (what enters prompts) · `31-SKILLS-PLUGINS` (skill→capability requirements).
 > **Evidence:** product-owner brief (`CapabilityDescriptor` / `CapabilityResult` / `CapabilityHandle`, capability graph, loading modes, “do not expose 500 raw tools”, L1/L2/L3 progressive model) · `ARCHIVE/v1-research/agent-harness-verification.md` §A2/§E1 (bounded tool fragments), §D1 (scope-tagged registrations) · `ARCH/06-DATA-MODEL.md` DM-011/012 · `ARCH/07-CONTRACTS.md` CTR-009/010 · DEC-004/005/024/025.
@@ -44,7 +45,7 @@ CapabilityResult {
 }
 ```
 
-- **`guidance` / `requires_user_action` are first-class** — a capability may answer *“you need to connect Google Drive first”* with a `next_action`, instead of failing the agent’s plan (P; verified pattern).
+- **`guidance` / `requires_user_action` are first-class** — a capability may answer *“you need to connect Google Drive first”* with a `next_action`, instead of failing the agent’s plan (`AGENTCOWORK-SPEC.md` §5; verified pattern).
 - `completed` always carries (or references) a receipt for externally visible effects (INV-07).
 - `failed` carries a typed error (`10` §3) and `retryable`.
 
@@ -93,8 +94,8 @@ Uses: dependency resolution (`requirements` pulls in other capabilities before i
 
 ## 8. Registry operations & governance
 
-- **Registration paths:** native domains (`22`–`28`), MCP discovery mapping (`14` §4), ACP/CLI/plugin adapters, future connectors (`28`).
-- **Versioning:** additive changes are minor; breaking descriptor changes require a DEC; deprecation windows are explicit and surfaced.
+- **Registration paths:** native domains (`22`–`28`), MCP discovery mapping (`14` §2/§4), ACP/CLI/plugin adapters, future connectors (`28`).
+- **Versioning:** additive changes are minor; breaking descriptor changes require a DEC; deprecation windows are explicit and surfaced. Runs pin the descriptor version they started with; a capability deprecated mid-run keeps serving that run until it completes (EDGE-012).
 - **Census gate:** a test gate asserts unique ids, non-empty affordances/verification, and provider coverage; the census outputs a generated capability catalogue (doc generation, not hand-maintained).
 - **Review checklist for a new capability:** id naming · risk class · affordances · requirements/auth · verification hook · default loading mode · provider(s) · exposure scope.
 
@@ -107,7 +108,7 @@ Uses: dependency resolution (`requirements` pulls in other capabilities before i
 | Version mismatch | Typed error + migration note; deprecated versions keep serving until window ends. |
 | Stale handle | Re-resolve (epoch mismatch ⇒ `InvalidState`); no silent retry against a changed runtime. |
 | Ambiguous resolution | Deterministic tie-break + audit; never random. |
-| Requirement chain incomplete | Blocked with the missing requirement named (capability or auth). |
+| Requirement chain incomplete (rechecked at invocation) | Blocked with the missing requirement named (capability or auth); a revoked/uninstalled requirement fails typed (`NotFound`/guidance) without retaining permissions (EDGE-095). |
 
 ## 10. Interop
 

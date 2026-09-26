@@ -2,6 +2,7 @@
 
 > **Status:** Frozen v1 (frozen 2026-09-26; drafted P2).
 > **P7 pass (2026-09-26):** line-checked; requirements seeded (`REQ-TRUST-*`, Requirements section).
+> **P9 verification pass (2026-09-26):** read line-by-line; fixes applied where needed (owner-directed; re-freeze follows).
 > **Role:** the one place where permission, authorization, custody and audit live. **Guard decides; agents request; prompts never enforce** (P-13, DEC-002).
 > **Dependencies:** `10-KERNEL` · `11-WORK` · `19-RUNTIME-ENVIRONMENTS` (sandbox hosts) · `30-EVENTS` (audit feed). **Consumers:** `13`/`14` (capability execution), `15`, `21` (consent), `22`–`28` (domains), `32` (projections).
 > **Evidence:** product-owner brief (trust section: projections, defaults, isolation) · `ARCHIVE/v1-research/agent-harness-verification.md` §A4 (approval policy enum · sandbox policy · exec-policy engine; anchors `codex-rs/protocol/src/protocol.rs:969-1125`, `sandbox.rs:10-16`, `execpolicy/src/`) · DEC-028 · INV-01…12, 24 · `ARCH/06-DATA-MODEL.md` (DM-009/010) · `ARCH/07-CONTRACTS.md` (CTR-011/012/013).
@@ -31,7 +32,7 @@ Guard composes the three into a decision, then issues/validates tickets. Sandbox
 
 - **Risk tiers** (owner brief defaults): *everyday* → allow (workspace read/write/edit, normal commands/tests/deps, local git, browser navigation, Office editing, MCP reads) · *dangerous* → ask (permanent deletion, destructive shell, credential access, OS/security changes, disk ops, mass external writes, destructive git) · *catastrophic* → always gated, even in Full Access (irreducible gate).
 - **Capability risk classes** (`safe` / `sensitive` / `dangerous`, DM-011) map to default decisions and to verification depth (`34`, INV-19).
-- **Scopes:** policy evaluates innermost-applicable with outer ceilings (global → workspace → agent → session → run).
+- **Scopes:** policy evaluates innermost-applicable with outer ceilings (global → workspace → agent → session → run); an external agent's own settings may narrow the ceiling but never widen it, and conflicts are logged (EDGE-152).
 - **Full Access** is user-activated; it widens the allow tier but never removes the catastrophic gate.
 - **Policy snapshots** are recorded on tickets/handles (`permission_snapshot`) so decisions are reproducible.
 
@@ -39,7 +40,7 @@ Guard composes the three into a decision, then issues/validates tickets. Sandbox
 
 - Issued after ALLOW (or a granted approval); bound to `capability_id`, `provider_id`, `environment_id`, scope (paths/targets/patterns), `uses`, `expires_at`, `provider_epoch`, `approval_ref?`.
 - Validated at execution time; **stale epoch / expired / revoked ⇒ `InvalidState`**; revoke on provider restart or cancellation.
-- Single-use vs bounded-multi-use is declared at issue; effects never execute without one (INV-03).
+- Single-use vs bounded-multi-use is declared at issue; effects never execute without one (INV-03). Bounded-use tickets decrement `uses` atomically at validation; a losing concurrent execution fails `InvalidState` and both outcomes are audited — a ticket can never be spent twice (EDGE-039).
 
 ## 5. Approvals (DM-010, DEC-021)
 
@@ -66,9 +67,9 @@ The Agent Gateway (`32`) *builds* projections; Trust *enforces* them:
 
 | Projection | Enforcement |
 |---|---|
+| Identity / agent contract | Gateway-issued and audited; the session binding fixes the agent id — spoofing is rejected (`32` §3). |
 | Capability set | Effective = Installed × Available × Allowed × Relevant; anything else resolves to `NotFound` for that agent. |
-| Context | Sensitivity-filtered slices (`16`); cross-project/confidential leakage = 0 (INV-10). |
-| Memory | Filtered **recall-only** projection (bound project + own session/task + user preferences; no org, no other projects, `confidential` only with a recorded loadout); scopes and ceilings are **actor-derived**, never caller-supplied; no write path is exposed (`17` §4/§9, DEC-038/042/043). |
+| Context (incl. memory) | Sensitivity-filtered slices (`16`); memory is a filtered **recall-only** projection — bound project + own session/task + user preferences, no org, no other projects, `confidential` only with a recorded loadout — with scopes and ceilings **actor-derived**, never caller-supplied, and no write path exposed (`17` §4/§9, DEC-038/042/043); cross-project/confidential leakage = 0 (INV-10). |
 | Workspace | `allowed_paths` / `read_only_paths`; **interception, not un-discovery** — out-of-scope reads are denied and logged. |
 | Tools / MCP subset | Only the granted subset is mounted; the rest is invisible. |
 | Artifacts | Via the artifact gateway with permissions; never raw storage. |
@@ -92,6 +93,7 @@ Policy evaluated by Trust; records owned by `21`. Required record fields (per co
 | Failure | Behavior |
 |---|---|
 | Policy engine error | **Fail closed** — DENY with reason; audited. |
+| Guard decision deadline exceeded | Bounded decision deadline; timeout ⇒ **DENY** with reason + audit (fail closed); an implicit allow is never returned (EDGE-038). |
 | Vault unavailable | Credentialed calls fail typed (`Unavailable`); no plaintext fallback ever. |
 | Egress engine down | Outbound fails closed; offline capabilities unaffected. |
 | Ticket replay / stale epoch | `InvalidState`; audited; provider epoch bump re-issues. |

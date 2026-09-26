@@ -288,7 +288,7 @@ scripts/                         # CI gates, codegen, tools
 ## 14. Testing Conventions
 
 - Rust: `cargo test` runs all unit + integration tests
-- TS: `pnpm test` runs Vitest suites
+- TS: `pnpm -r test` runs the workspace JS/TS suites (Vitest per package; the coordinator uses `bun test`)
 - Integration tests in `crates/*/tests/` use `acceptance_*` prefix
 - UI tests in `ui/src/**/*.test.tsx` use DOM testing library
 - Security tests: `scripts/e2e/security-gate.mjs`
