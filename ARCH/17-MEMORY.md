@@ -1,6 +1,7 @@
 # 17 — Memory
 
 > **Status:** Draft P2 (early — memory evidence lane integrated 2026-09-26). Must pass the `ARCH/00-INDEX.md` §5 checklist at freeze.
+> **P7 pass (2026-09-26):** line-checked; requirements seeded (`REQ-MEM-*`, Requirements section).
 > **Consumers:** `ARCH/16-CONTEXT.md` (recall), UI (Memory screen), `ARCH/32-CHANNELS.md` (external-agent projection).
 > **Dependencies:** `ARCH/10-KERNEL.md`, `ARCH/30-EVENTS.md`, `ARCH/18-MODEL-ROUTING.md` (extractor call), `ARCH/12-TRUST.md` (authorization + audit).
 > **Evidence:** `ARCHIVE/v1-research/memory.md` — a source-read survey (Claude Code, Codex, OpenCode, Grok Build, Hermes, mem0, Graphiti, Letta, NOOA, claude-mem, anything-llm) with `path:line`/URL citations. Decisions here become `DEC-*` entries in P1; unresolved items are `OQ-MEM-*` until then.
@@ -238,3 +239,22 @@ Sequencing if metrics force upgrades: U1, U2 → U5, U4 → U0. Nothing is built
 ## 15. Evidence index
 
 Primary: `ARCHIVE/v1-research/memory.md` (full citation list). Strongest anchors: Codex pipeline `clone2/codex/codex-rs/memories/README.md:29-152`; Grok Build memory crate `clone2/grok-build/crates/codegen/xai-grok-memory/src/*`; NOOA non-touching read `clone2/nooa/packages/nooa-memory/src/nooa_memory/schema.py:315-331`; mem0 ADD-only `clone2/mem0/mem0/memory/main.py:879-1195`; claude-mem budget `clone2/claude-mem/src/services/context/ContextBudget.ts:4-40`; Claude Code memory docs `https://code.claude.com/docs/en/memory`; TEPA `https://arxiv.org/abs/2608.07429`; STALE `https://arxiv.org/abs/2605.06527`; LongMemEval `https://arxiv.org/abs/2410.10813`.
+
+## 16. Requirements (`REQ-MEM-*`)
+
+Testable behaviors owned by this module live in `ARCH/08-REQUIREMENTS.md`; the traceability chain is in `ARCH/09-FEATURE-MATRIX.md`. This table is a pointer, not a second copy.
+
+| REQ | Behavior (one line) |
+|---|---|
+| `REQ-MEM-001` | Memory v1 algorithm set: SQLite + FTS5; ADD-only extraction with `superseded_by`; suppression-based forget; no vectors/graph/decay (DEC-018) |
+| `REQ-MEM-002` | Write discipline and non-blocking degradation: off the hot path, never fails a turn, secrets rejected, forget permanent; disabled means zero activity (INV-09) |
+| `REQ-MEM-003` | Memory ≠ context: recall returns ranked candidates with provenance; the Context Controller owns inclusion (DEC-019) |
+| `REQ-MEM-004` | Non-touching read: assembly and recall mutate nothing; counters bump only on explicit use (INV-08) |
+| `REQ-MEM-005` | Scope model and lifecycle: five scopes, session TTL 7 d, org schema-ready but v1-disabled, pinned items never auto-pruned |
+| `REQ-MEM-006` | Isolation, sensitivity and projection: sensitivity ≤ caller ceiling, confidential stays project-bound, filtered external-agent view (INV-10, DEC-009) |
+| `REQ-MEM-007` | Extraction trigger discipline: settled boundaries only, signal gate (no signal ⇒ no model call), debounce, bounded harvest |
+| `REQ-MEM-008` | Extractor contract and deterministic validation: ADD/SUPERSEDE/NONE, caps, no scope widening, hash/secret/supersede checks, one transaction |
+| `REQ-MEM-009` | Supersede semantics: ADD-only body plus `superseded_by` pointer; superseded rows retained and filtered; stale return = 0 |
+| `REQ-MEM-010` | Forget and scope wipe are permanent: hard delete + suppression + audit; re-extraction = 0; no FTS orphans (INV-09, INV-24) |
+| `REQ-MEM-011` | Inspect, export, import: provenance visible, per-item delete, per-scope wipe; imports revalidate; round-trip byte-identical |
+| `REQ-MEM-012` | Recall p95 ≤ 50 ms at 10k items; zero relevant hits ⇒ zero injected tokens; whole-item degradation (INV-22) |

@@ -30,7 +30,6 @@ One row per `REQ-*`. Status only from evidence.
 |---|---|---|---|---|---|---|---|
 | `REQ-PROD-001` | `12-TRUST`, `13-CAPABILITY` | governed path: guard + capability planes | `DEC-002`, `INV-01/03` | — | pending | pending | unplanned |
 | `REQ-PROD-002` | `12-TRUST`, `18-MODEL-ROUTING` | `crates/everyaios-vault`, credential consumers | `INV-02` | — | pending | pending | unplanned |
-| `REQ-MEM-001` | `17-MEMORY` | memory store + extraction pipeline | `DEC-018/019` | — | pending | pending | unplanned |
 | `REQ-KERNEL-001` | `10-KERNEL` | none yet — no kernel crate (code-state baseline) | `INV-14` | — | pending | pending | unplanned |
 | `REQ-KERNEL-002` | `10-KERNEL` | pending | `INV-06` | — | pending | pending | unplanned |
 | `REQ-KERNEL-003` | `10-KERNEL` | pending | `INV-11` | — | pending | pending | unplanned |
@@ -86,6 +85,18 @@ One row per `REQ-*`. Status only from evidence.
 | `REQ-CTX-008` | `16-CONTEXT` | pending | `—` | — | pending | pending | unplanned |
 | `REQ-CTX-009` | `16-CONTEXT` | pending | `—` | — | pending | pending | unplanned |
 | `REQ-CTX-010` | `16-CONTEXT` | pending | `DEC-009`, `INV-11` | — | pending | pending | unplanned |
+| `REQ-MEM-001` | `17-MEMORY` | pending | `DEC-018/019`, `DM-018` | — | pending | pending | unplanned |
+| `REQ-MEM-002` | `17-MEMORY` | pending | `INV-09` | — | pending | pending | unplanned |
+| `REQ-MEM-003` | `17-MEMORY` | pending | `DEC-019` | — | pending | pending | unplanned |
+| `REQ-MEM-004` | `17-MEMORY` | pending | `INV-08` | — | pending | pending | unplanned |
+| `REQ-MEM-005` | `17-MEMORY` | pending | `DM-018` | — | pending | pending | unplanned |
+| `REQ-MEM-006` | `17-MEMORY` | pending | `INV-10`, `DEC-009` | — | pending | pending | unplanned |
+| `REQ-MEM-007` | `17-MEMORY` | pending | `DEC-018` | — | pending | pending | unplanned |
+| `REQ-MEM-008` | `17-MEMORY` | pending | `DEC-018` | — | pending | pending | unplanned |
+| `REQ-MEM-009` | `17-MEMORY` | pending | `DEC-018`, `DM-018` | — | pending | pending | unplanned |
+| `REQ-MEM-010` | `17-MEMORY` | pending | `INV-09`, `INV-24` | — | pending | pending | unplanned |
+| `REQ-MEM-011` | `17-MEMORY` | pending | `—` | — | pending | pending | unplanned |
+| `REQ-MEM-012` | `17-MEMORY` | pending | `INV-22` | — | pending | pending | unplanned |
 
 ## 4. Maintenance
 
