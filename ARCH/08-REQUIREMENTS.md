@@ -2288,6 +2288,125 @@ This registry answers one question per entry: **what behavior must this system e
 - **Tests:** pending
 - **Status:** seeded
 
+### Channels (`CHAN`)
+
+#### REQ-CHAN-001 — Surfaces are projections; Core is the only brain
+- **Statement:** GIVEN any surface (desktop · CLI · ACP · A2A · API · mobile-later), WHEN it renders, requests or subscribes, THEN it never owns state — all surfaces project the same Core and the same `AgentEngine` contract.
+- **Priority:** must
+- **Source:** `ARCH/32-CHANNELS.md` §1 · `AGENTCOWORK-SPEC.md` §2 (P-01)/§3
+- **Acceptance:** no surface-local durable state; a surface restart loses nothing; two surfaces observe identical state.
+- **Failure cases:** a surface storing authoritative session state → violation; two surfaces forking state → violation.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-CHAN-002 — One contract, many protocol mappings
+- **Statement:** GIVEN ACP/A2A/API/CLI, WHEN they map onto the internal runtime, THEN all map onto the same contracts (`07`) and no protocol-specific semantics leak inward.
+- **Priority:** must
+- **Source:** `ARCH/32-CHANNELS.md` §1/§4 · `ARCH/05-INVARIANTS.md` INV-15 · `ARCH/07-CONTRACTS.md` §2
+- **Acceptance:** a contract-mapping test per protocol; Core code contains no protocol-vocabulary branching; adapters carry the mapping.
+- **Failure cases:** protocol semantics in Core → violation; a parallel contract per protocol → violation.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-CHAN-003 — The Agent Gateway exposes exactly the 7-item projection
+- **Statement:** GIVEN an external agent, WHEN it connects, THEN it receives only the 7-item projection (identity/agent contract · capability projection · context projection · workspace projection · tool/MCP subset · artifacts · events/task state) and never Core internals, stores, queues, vault, policy internals or other agents' state.
+- **Priority:** must
+- **Source:** `ARCH/32-CHANNELS.md` §3 · `ARCH/07-CONTRACTS.md` CTR-022 · `ARCH/04-DECISIONS.md` DEC-009
+- **Acceptance:** projection-surface test enumerates exactly 7 items; a request for a non-exposed resource is denied; hidden-property scan clean.
+- **Failure cases:** exposing a Core internal → security failure; an implicit 8th surface → violation.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-CHAN-004 — The workspace projection intercepts, never un-discovers
+- **Statement:** GIVEN workspace boundaries, WHEN an external agent targets a path/tool outside its projection, THEN access is intercepted and denied + audited (`allowed_paths`/`read_only_paths` via pathfloor) — never hidden by un-discovery.
+- **Priority:** must
+- **Source:** `ARCH/32-CHANNELS.md` §3 · `ARCH/12-TRUST.md` §8 · `ARCH/41-EDGE-CASES.md` EDGE-035/EDGE-155
+- **Acceptance:** an out-of-scope path is denied + audited; in-scope operations are unaffected; the session is flagged per policy.
+- **Failure cases:** silent omission (un-discovery) → violation; an out-of-scope write allowed → security failure.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-CHAN-005 — Gateway identity is issued, audited and scoped
+- **Statement:** GIVEN any gateway connection, WHEN identity is established, THEN it is gateway-issued and audited; local stdio subprocesses use the local trust model, and remote/API binds use gateway-issued tokens.
+- **Priority:** must
+- **Source:** `ARCH/32-CHANNELS.md` §3/§4 · `ARCH/12-TRUST.md` §3
+- **Acceptance:** identity issuance is audited; a token bind without valid identity is rejected; local-vs-remote trust paths are distinguishable.
+- **Failure cases:** unauthenticated remote bind → security failure; identity not auditable → violation.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-CHAN-006 — Approvals route to the owning channel and stay durable
+- **Statement:** GIVEN an approval request, WHEN it is raised, THEN it routes to the channel bound to the session/work; with no interactive channel attached it waits durably and re-surfaces on the next attach — notification ≠ receipt.
+- **Priority:** must
+- **Source:** `ARCH/32-CHANNELS.md` §7 · `ARCH/04-DECISIONS.md` DEC-021 · `ARCH/20-WORKFLOW.md` §7 · `ARCH/41-EDGE-CASES.md` EDGE-073
+- **Acceptance:** the approval is delivered to the bound channel; a disconnect test keeps it pending; re-attach re-surfaces; no duplicate grant.
+- **Failure cases:** approval lost on disconnect → violation; approval delivered to a non-owning channel → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-CHAN-007 — ACP maps the typed stream in both directions
+- **Statement:** GIVEN ACP, WHEN it operates as a server, THEN it exposes session management + tool registry + typed streaming updates mapping the internal typed stream (`30` §3) onto ACP update classes; as a client, external agents arrive in-process or as stdio ND-JSON subprocesses whose adapters register a factory (`15` §2).
+- **Priority:** must
+- **Source:** `ARCH/32-CHANNELS.md` §4 · `ARCH/30-EVENTS.md` §3 · `ARCH/15-AGENT-X.md` §2
+- **Acceptance:** ACP server update-class mapping test; subprocess factory-registration test; no opaque update channel.
+- **Failure cases:** ACP-specific semantics leaking into Core → violation; an unregistered adapter path → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-CHAN-008 — A2A keeps remote agents opaque
+- **Statement:** GIVEN a remote agent, WHEN it exchanges work, THEN tasks/messages/artifacts are exchanged while its internals stay private; remote runs materialize as Work items like everything else; v1 ships the interface + registry entries only — the transport is explicitly post-v1.
+- **Priority:** must
+- **Source:** `ARCH/32-CHANNELS.md` §2/§5 · `AGENTCOWORK-SPEC.md` §15
+- **Acceptance:** no remote internal state is imported; a remote run appears as regular Work; the transport is absent behind the interface in v1.
+- **Failure cases:** importing remote internals → violation; a second execution model for remote runs → violation.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-CHAN-009 — The CLI is a thin projection that works detached
+- **Statement:** GIVEN the CLI, WHEN it runs a prompt/workspace/serve/status command, THEN it is a thin projection with no separate state and the same gateway rules, and it works when the desktop UI is closed — detached work continues.
+- **Priority:** must
+- **Source:** `ARCH/32-CHANNELS.md` §2/§6 · `ARCH/11-WORK.md` §3/§7
+- **Acceptance:** CLI-driven work continues with the UI closed; no CLI-local state store; the same policy decisions as the desktop surface.
+- **Failure cases:** CLI privileged shortcut → violation; CLI-local session state → violation.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-CHAN-010 — Surfaces declare supported capabilities
+- **Statement:** GIVEN a surface, WHEN UX behavior is decided (e.g. approval prompts), THEN each surface declares what it supports and the UI/composer follows those declarations.
+- **Priority:** must
+- **Source:** `ARCH/32-CHANNELS.md` §1 · `AGENTCOWORK-UI.md` · `AGENTCOWORK-SPEC.md` §9
+- **Acceptance:** an unsupported interaction is never offered; declaration changes are reflected at runtime; no fake controls.
+- **Failure cases:** offering an unsupported interaction → defect; surface behavior diverging from declarations → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-CHAN-011 — Surface crashes are isolated
+- **Statement:** GIVEN a surface crash, WHEN it occurs, THEN Core and other surfaces are unaffected and work continues asynchronously.
+- **Priority:** must
+- **Source:** `ARCH/32-CHANNELS.md` §8 · `ARCH/41-EDGE-CASES.md` EDGE-075
+- **Acceptance:** kill-surface test shows continued work; other surfaces are unaffected; re-attach restores the projection.
+- **Failure cases:** a surface crash affecting Core → violation; work stopped by a surface crash → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-CHAN-012 — Protocol version mismatch is typed with the supported window
+- **Statement:** GIVEN a protocol client with a mismatched version, WHEN it connects, THEN it receives a typed error naming the supported window — never a silently missing stream.
+- **Priority:** must
+- **Source:** `ARCH/32-CHANNELS.md` §8 · `ARCH/41-EDGE-CASES.md` EDGE-079 · `ARCH/30-EVENTS.md` §6
+- **Acceptance:** a mismatch test returns a typed error + window; compatible clients connect; no silent partial stream.
+- **Failure cases:** silent vocabulary drop → violation; untyped rejection → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-CHAN-013 — External-agent disconnects leave no orphaned state
+- **Statement:** GIVEN an ACP/API drop mid-run, WHEN the client re-attaches, THEN work continues as durable Work, the gateway session is held, and the filtered stream replays from the last ack — no orphaned internal state.
+- **Priority:** must
+- **Source:** `ARCH/32-CHANNELS.md` §3/§7 · `ARCH/41-EDGE-CASES.md` EDGE-077 · `ARCH/11-WORK.md` §4 · `ARCH/30-EVENTS.md` §4
+- **Acceptance:** a drop/re-attach test replays from the last ack; Work completes without the client; no state is orphaned by the drop.
+- **Failure cases:** a client disconnect aborting the run → violation; a replay gap → defect.
+- **Tests:** pending
+- **Status:** seeded
+
 ## 5. Seeding status
 
 | Domain | Seeds | Next pass |
@@ -2313,7 +2432,8 @@ This registry answers one question per entry: **what behavior must this system e
 | `ART` (12) | drafted above + expanded in pass `29` | verified during pass `29` ✅ (2026-09-26) |
 | `EVENTS` (12) | drafted above + expanded in pass `30` | verified during pass `30` ✅ (2026-09-26) |
 | `SKILL` (13) | drafted above + expanded in pass `31` | verified during pass `31` ✅ (2026-09-26) |
-| `CHAN`, `VERIFY` | pending | seeded during each module's P7 pass |
+| `CHAN` (13) | drafted above + expanded in pass `32` | verified during pass `32` ✅ (2026-09-26) |
+| `VERIFY` | pending | seeded during each module's P7 pass |
 
 ## 6. Related
 

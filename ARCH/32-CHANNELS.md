@@ -1,6 +1,7 @@
 # 32 — Channels (Surfaces & Protocols)
 
 > **Status:** Draft P3 (early). Must pass the `ARCH/00-INDEX.md` §5 checklist at freeze.
+> **P7 pass (2026-09-26):** line-checked; requirements seeded (`REQ-CHAN-*`, Requirements section).
 > **Role:** every surface is a **projection of Core**, and every external agent connects through the **Agent Gateway** and receives projections only (DEC-009). One internal contract; protocols are mappings.
 > **Dependencies:** `07-CONTRACTS` (CTRs) · `11-WORK` (sessions) · `12-TRUST` (projection enforcement) · `13`/`14` (capability/tool subsetting) · `16-CONTEXT` (context projection) · `29`/`30` (artifact gateway, event filter). **Consumers:** external agents, IDE/CLI users, remote surfaces.
 > **Evidence:** product-owner brief (protocol surfaces: ACP · A2A · API; the 7-item projection model; “surfaces are projections”) · `agent-harness-verification.md` §B1/§B2 (ACP server + session manager + tool registry + typed updates — verified), §C3 (ACP stdio ND-JSON), §D1 (scope-tagged registrations) · DEC-009 · `ARCH/12-TRUST.md` §8 · `ARCH/30-EVENTS.md` §6.
@@ -66,6 +67,7 @@ Approvals (`DEC-021`) route to the channel bound to the session/work: desktop pr
 | Projection leak attempt | Denied by `12`; logged; session flagged. |
 | Channel disconnect mid-approval | Approval stays durable; re-surfaces on attach. |
 | Protocol version mismatch | Typed error + supported-window message. |
+| External agent disconnects mid-run (ACP/API drop) | Work continues as durable Work; the gateway session is held; re-attach replays the filtered stream from the last ack — no orphaned internal state (EDGE-077). |
 | Surface crash | Isolated; Core and other surfaces unaffected (work is async). |
 
 ## 9. Interop
@@ -85,3 +87,23 @@ Approvals (`DEC-021`) route to the channel bound to the session/work: desktop pr
 ## 11. Evidence
 
 Product-owner brief (three protocol surfaces; 7-item projection; “surfaces are projections”) · `agent-harness-verification.md` §B1/§B2 (ACP server + session manager + tool registry + typed updates; anchors `acp_conversion.rs:116,633`, `session/persistence.rs:1605-1606`), §C3 (opencode acp stdio ND-JSON), §D1 (factory/scope patterns) · DEC-009/021 · `ARCH/12-TRUST.md` §8 · `ARCH/30-EVENTS.md` §6 · `ARCH/16-CONTEXT.md` §1.3 · `ARCH/13-CAPABILITY.md` §6.
+
+## 12. Requirements (`REQ-CHAN-*`)
+
+Testable behaviors owned by this module live in `ARCH/08-REQUIREMENTS.md`; the traceability chain is in `ARCH/09-FEATURE-MATRIX.md`. This table is a pointer, not a second copy.
+
+| REQ | Behavior (one line) |
+|---|---|
+| `REQ-CHAN-001` | Surfaces render/request/subscribe; they never own state — Core is the brain (P-01) |
+| `REQ-CHAN-002` | ACP/A2A/API/CLI map onto the same CTRs; no protocol semantics leak inward (INV-15) |
+| `REQ-CHAN-003` | The Agent Gateway exposes exactly the 7-item projection — nothing else (CTR-022, DEC-009) |
+| `REQ-CHAN-004` | Workspace projection intercepts out-of-scope access (deny + audit), never un-discovers (INV-11) |
+| `REQ-CHAN-005` | Gateway-issued, audited identity; local stdio trust vs token binds for remote/API |
+| `REQ-CHAN-006` | Approvals route to the owning channel and wait durably when none is attached (DEC-021) |
+| `REQ-CHAN-007` | ACP server maps the typed stream; ACP clients register adapters via a factory |
+| `REQ-CHAN-008` | A2A remote agents stay opaque; runs materialize as Work; transport is post-v1 |
+| `REQ-CHAN-009` | CLI is a thin projection with no separate state that works detached (`11` §3/§7) |
+| `REQ-CHAN-010` | Channel capability negotiation: surfaces declare support; UI follows declarations |
+| `REQ-CHAN-011` | A surface crash is isolated; Core and other surfaces are unaffected (EDGE-075) |
+| `REQ-CHAN-012` | Protocol version mismatch → typed error naming the supported window (EDGE-079) |
+| `REQ-CHAN-013` | External-agent disconnect: durable work + stream replay from last ack — no orphans (EDGE-077) |

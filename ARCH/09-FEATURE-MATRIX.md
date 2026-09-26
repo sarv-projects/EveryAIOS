@@ -263,6 +263,19 @@ One row per `REQ-*`. Status only from evidence.
 | `REQ-SKILL-011` | `31-SKILLS-PLUGINS` | pending | `—` | `EDGE-094` | pending | pending | unplanned |
 | `REQ-SKILL-012` | `31-SKILLS-PLUGINS` | pending | `—` | `EDGE-093` | pending | pending | unplanned |
 | `REQ-SKILL-013` | `31-SKILLS-PLUGINS` | pending | `—` | `EDGE-096` | pending | pending | unplanned |
+| `REQ-CHAN-001` | `32-CHANNELS` | pending | `—` | — | pending | pending | unplanned |
+| `REQ-CHAN-002` | `32-CHANNELS` | pending | `INV-15` | — | pending | pending | unplanned |
+| `REQ-CHAN-003` | `32-CHANNELS` | pending | `DEC-009`, `CTR-022` | — | pending | pending | unplanned |
+| `REQ-CHAN-004` | `32-CHANNELS` | pending | `INV-11` | `EDGE-035`, `EDGE-155` | pending | pending | unplanned |
+| `REQ-CHAN-005` | `32-CHANNELS` | pending | `—` | — | pending | pending | unplanned |
+| `REQ-CHAN-006` | `32-CHANNELS` | pending | `DEC-021` | `EDGE-073` | pending | pending | unplanned |
+| `REQ-CHAN-007` | `32-CHANNELS` | pending | `DEC-010` | — | pending | pending | unplanned |
+| `REQ-CHAN-008` | `32-CHANNELS` | pending | `—` | — | pending | pending | unplanned |
+| `REQ-CHAN-009` | `32-CHANNELS` | pending | `—` | — | pending | pending | unplanned |
+| `REQ-CHAN-010` | `32-CHANNELS` | pending | `—` | — | pending | pending | unplanned |
+| `REQ-CHAN-011` | `32-CHANNELS` | pending | `—` | `EDGE-075` | pending | pending | unplanned |
+| `REQ-CHAN-012` | `32-CHANNELS` | pending | `—` | `EDGE-079` | pending | pending | unplanned |
+| `REQ-CHAN-013` | `32-CHANNELS` | pending | `INV-16` | `EDGE-077` | pending | pending | unplanned |
 
 ## 4. Maintenance
 
