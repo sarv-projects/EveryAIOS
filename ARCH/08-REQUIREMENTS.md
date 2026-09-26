@@ -1258,6 +1258,116 @@ This registry answers one question per entry: **what behavior must this system e
 - **Tests:** pending
 - **Status:** seeded
 
+### Browser (`BROWSER`)
+
+#### REQ-BROWSER-001 — Managed Chromium default; adapters are integrations
+- **Statement:** GIVEN a browser task, WHEN the runtime selects an engine, THEN AgentCowork-managed Chromium (predictable version, isolated profile, headless/background operation) is the default, and Chrome/Edge/Firefox/Opera/system browsers are selectable adapters — never parallel embedded runtimes — with capability differences declared per adapter.
+- **Priority:** must
+- **Source:** `ARCH/23-BROWSER.md` §1 · `ARCH/04-DECISIONS.md` DEC-012
+- **Acceptance:** default-selection test; the adapter registry declares per-adapter capabilities; no second embedded engine ships.
+- **Failure cases:** a second embedded runtime → architecture violation; undeclared adapter capability difference → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-BROWSER-002 — Browser instances are environments with lifecycle and recovery
+- **Statement:** GIVEN a browser instance, WHEN it runs, THEN it is an environment (`19`) scoped per workspace/task with isolated cookies/storage by default; its lifecycle is launch → ready → operate → park (hibernate) → close; crash recovery re-launches and re-establishes targets; tabs survive where the profile allows.
+- **Priority:** must
+- **Source:** `ARCH/23-BROWSER.md` §2 · `ARCH/19-RUNTIME-ENVIRONMENTS.md` §2 · `ARCH/04-DECISIONS.md` DEC-012
+- **Acceptance:** the instance appears as an environment; isolation test shows no cookie/storage bleed between workspaces; crash-recovery test re-establishes targets; park/close releases resources.
+- **Failure cases:** cross-workspace cookie bleed → security failure; unregistered browser process → defect; crash without target recovery → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-BROWSER-003 — User-browser attach and takeover
+- **Statement:** GIVEN the user's own browser (Chrome/Edge), WHEN attach is requested, THEN the explicit "user browser" mode uses its profile under consent, an attach failure falls back to managed Chromium with a surfaced note, the agent's operation is visibly indicated, and user takeover is supported (the agent yields input).
+- **Priority:** must
+- **Source:** `ARCH/23-BROWSER.md` §2/§7
+- **Acceptance:** attach-mode test; fallback-with-note test; visible-indicator test; takeover test shows the agent yields control.
+- **Failure cases:** silent profile use without consent → violation; attach failure leaving the run stalled → defect; agent ignoring takeover → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-BROWSER-004 — BrowserWorld tab/frame model
+- **Statement:** GIVEN the browser world (`21` W5), WHEN tabs and frames are tracked, THEN tab identity is CDP `targetId` — session-scoped, never persisted across launches, stable ordering — frames carry CDP session ids with cross-origin iframes bounded (expand one level, skip blocked, depth ≈5), and page state includes URL · title · forms · downloads · auth state · freshness.
+- **Priority:** must
+- **Source:** `ARCH/23-BROWSER.md` §3 · `ARCH/06-DATA-MODEL.md` DM-026 · `ARCH/21-WORLD-MODEL.md` §3
+- **Acceptance:** tab-identity test (no persistence across launches); frame-bounded test; page-state fields present.
+- **Failure cases:** persisted tab identity reused across launches → defect; unbounded frame expansion → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-BROWSER-005 — Compact, bounded snapshots with maskable fields
+- **Statement:** GIVEN a page observation, WHEN a snapshot is produced, THEN it is a compact role/name/value graph (≈200–400 tokens for a page, never raw HTML by default), bounded by nodes · depth · text length, with password/protected fields masked.
+- **Priority:** must
+- **Source:** `ARCH/23-BROWSER.md` §3/§4
+- **Acceptance:** snapshot size stays within declared bounds; raw HTML is not the default output; masked protected-field test.
+- **Failure cases:** raw DOM dump by default → defect; unmasked protected field → security failure; unbounded snapshot → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-BROWSER-006 — Ephemeral refs re-resolve after events
+- **Statement:** GIVEN an element ref `@eN`, WHEN the page navigates or any event invalidates it, THEN the ref is invalidated and never recycled within a session, and the next action re-resolves by role+name (or a fresh snapshot) — a stale ref is never clicked, and refs are never a security boundary.
+- **Priority:** must
+- **Source:** `ARCH/23-BROWSER.md` §1/§3/§4/§7
+- **Acceptance:** stale-ref test yields re-resolution, never a click on a stale ref; ref-recycling test fails as designed.
+- **Failure cases:** click on a stale ref → defect; ref treated as authorization → security violation.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-BROWSER-007 — Trusted input and condition-based waits
+- **Statement:** GIVEN a browser action, WHEN input is dispatched, THEN it uses CDP trusted input events (`Input.dispatchMouseEvent`-class), never gestureless `element.click()`-style calls, and waits are condition-based (network/DOM), not sleeps.
+- **Priority:** must
+- **Source:** `ARCH/23-BROWSER.md` §4
+- **Acceptance:** action-path inspection shows trusted input only; wait-policy test shows no fixed sleeps on navigation.
+- **Failure cases:** gestureless click → defect; fixed sleep as the wait strategy → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-BROWSER-008 — Structured-first, vision last inside the browser
+- **Statement:** GIVEN a browser task, WHEN connectors/APIs (`28`), DOM/AX structure, or CDP actions can do the work, THEN screenshot vision is not used; vision runs only when structure fails (canvas/WebGL) or for verification/diff, with size-capped captures and highlight-before-capture preferred.
+- **Priority:** must
+- **Source:** `ARCH/23-BROWSER.md` §1/§4/§6 · `ARCH/04-DECISIONS.md` DEC-011
+- **Acceptance:** capability-routing test; vision-fallback test; capture cost caps honored; diff runs without model cost.
+- **Failure cases:** screenshot-first browser automation → design violation; uncapped image sent → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-BROWSER-009 — Credentials are user-controlled; auth state is surfaced
+- **Statement:** GIVEN logins and sessions, WHEN authentication is needed, THEN the agent never harvests passwords (user-assisted login or connector OAuth via `28`), cookies/storage stay in the managed profile with explicit export/import, and auth state is surfaced in BrowserWorld rather than extracted into context.
+- **Priority:** must
+- **Source:** `ARCH/23-BROWSER.md` §5 · `ARCH/05-INVARIANTS.md` INV-02
+- **Acceptance:** credential-capture scan clean; auth-state projection test (surfaced, not extracted); explicit profile export/import test.
+- **Failure cases:** password harvested into context or logs → security violation; implicit profile export → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-BROWSER-010 — Per-origin policy and session consent records
+- **Statement:** GIVEN browsing, WHEN origins are visited, THEN allowed/blocked/read-only origins and download policy are enforced by `12-TRUST`, and browser-session consent records name the browser instance · profile · origins · granted capabilities.
+- **Priority:** must
+- **Source:** `ARCH/23-BROWSER.md` §5 · `ARCH/12-TRUST.md` §10 · `ARCH/05-INVARIANTS.md` INV-05/INV-20
+- **Acceptance:** per-origin enforcement tests (allow/block/read-only/download); consent-record completeness test.
+- **Failure cases:** blocked origin reachable → security violation; browsing without a consent record → violation.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-BROWSER-011 — Downloads and uploads route through artifacts
+- **Statement:** GIVEN a download or upload, WHEN it occurs, THEN downloads land in a managed staging area and become artifacts (`29`) with provenance, and uploads are user-gated or policy-gated.
+- **Priority:** must
+- **Source:** `ARCH/23-BROWSER.md` §2 · `ARCH/07-CONTRACTS.md` CTR-018
+- **Acceptance:** download → artifact test with provenance; upload gate test (user/policy); no file written outside staging.
+- **Failure cases:** download bypassing artifacts → defect; ungated upload → violation.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-BROWSER-012 — No evasion; CAPTCHA and bot blocks are surfaced
+- **Statement:** GIVEN CAPTCHA/bot checks, site automation blocks, or anti-bot friction, WHEN encountered, THEN the runtime surfaces the situation to the user or returns typed `guidance` — it never solves CAPTCHAs, rotates identities/proxies, or spoofs fingerprints.
+- **Priority:** must
+- **Source:** `ARCH/23-BROWSER.md` §1/§7 · `ARCH/04-DECISIONS.md` DEC-016 · `ARCH/05-INVARIANTS.md` INV-21
+- **Acceptance:** evasion-capability catalogue review finds none; CAPTCHA test surfaces to the user; blocked-site test returns guidance without identity rotation.
+- **Failure cases:** evasion tooling present → violation; automated CAPTCHA solving → catastrophic violation.
+- **Tests:** pending
+- **Status:** seeded
+
 ### Agent X (`AGX`)
 
 #### REQ-AGX-001 — Delegation contract
@@ -1296,7 +1406,8 @@ This registry answers one question per entry: **what behavior must this system e
 | `WF` (11) | drafted above + expanded in pass `20` | verified during pass `20` ✅ (2026-09-26) |
 | `WORLD` (11) | drafted above + expanded in pass `21` | verified during pass `21` ✅ (2026-09-26) |
 | `OFFICE` (11) | drafted above + expanded in pass `22` | verified during pass `22` ✅ (2026-09-26) |
-| `BROWSER`, `CUA`, `FILES`, `CODE`, `SEARCH`, `COMMS`, `ART`, `EVENTS`, `SKILL`, `CHAN`, `VERIFY` | pending | seeded during each module's P7 pass |
+| `BROWSER` (12) | drafted above + expanded in pass `23` | verified during pass `23` ✅ (2026-09-26) |
+| `CUA`, `FILES`, `CODE`, `SEARCH`, `COMMS`, `ART`, `EVENTS`, `SKILL`, `CHAN`, `VERIFY` | pending | seeded during each module's P7 pass |
 
 ## 6. Related
 

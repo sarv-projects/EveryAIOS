@@ -1,6 +1,7 @@
 # 23 — Browser Runtime
 
 > **Status:** Draft P3 (early — browser-world evidence integrated 2026-09-26). Must pass the `ARCH/00-INDEX.md` §5 checklist at freeze.
+> **P7 pass (2026-09-26):** line-checked; requirements seeded (`REQ-BROWSER-*`, Requirements section).
 > **Role:** the managed browser execution environment + **Browser World**. DEC-012: managed Chromium is the default; Chrome/Edge/Firefox/Opera are selectable **adapters**, not parallel embedded runtimes. The browser is an execution environment: research → browser → sources → evidence → artifact.
 > **Dependencies:** `19-RUNTIME-ENVIRONMENTS` (process/environment hosting) · `21-WORLD-MODEL` (W5 browser collector) · `12-TRUST` (per-origin policy, consent) · `29-ARTIFACTS` (downloads/captures) · `14-PROVIDERS` (browser capability descriptors). **Consumers:** `15` (agent browser ops), `28` (web connectors), `34` (verification).
 > **Evidence:** `ARCHIVE/v1-research/world-model-verification.md` §4 (browser world in the clones: `agent-browser`, `rustwright`, `obscura`, `open-computer-use`, CDP patterns) · product-owner brief (managed Chromium; adapter choices; Playwright/CDP facts) · DEC-012 / DEC-016 / INV-21.
@@ -88,3 +89,22 @@ Opera-specific infrastructure beyond the Chromium adapter · multi-browser farms
 ## 11. Evidence
 
 `ARCHIVE/v1-research/world-model-verification.md` §4 — agent-browser role taxonomy + refs (`snapshot.rs:107-179`, `snapshot-refs.md:19-27,81-83`), rustwright a11y snapshot + trusted input (`snapshot.js`, `README.md:116-128`), obscura AX tree + ref table (`accessibility.rs:37-56,520-592`), open-computer-use vision-only outlier · product-owner brief (managed Chromium default; adapters; Playwright/CDP facts) · DEC-012/016 · INV-21.
+
+## 12. Requirements (`REQ-BROWSER-*`)
+
+Testable behaviors owned by this module live in `ARCH/08-REQUIREMENTS.md`; the traceability chain is in `ARCH/09-FEATURE-MATRIX.md`. This table is a pointer, not a second copy.
+
+| REQ | Behavior (one line) |
+|---|---|
+| `REQ-BROWSER-001` | Managed Chromium is the default; Chrome/Edge/Firefox/system browsers are declared adapters, never parallel engines (DEC-012) |
+| `REQ-BROWSER-002` | Browser instances are environments (`19`) with lifecycle + crash recovery; per-workspace/task profile isolation by default |
+| `REQ-BROWSER-003` | User-browser attach is consent-gated with fallback to managed Chromium; agent operation is indicated; user takeover supported |
+| `REQ-BROWSER-004` | BrowserWorld: tab = CDP `targetId` (session-scoped), frames bounded (≈5), page state includes forms/downloads/auth/freshness (DM-026) |
+| `REQ-BROWSER-005` | Compact bounded snapshots (≈200–400 tokens, never raw HTML by default) with masked protected fields |
+| `REQ-BROWSER-006` | Element refs are ephemeral, never recycled, re-resolved by role+name after events; never clicked stale; not a security boundary |
+| `REQ-BROWSER-007` | CDP trusted input only (no gestureless clicks); condition-based waits, never fixed sleeps |
+| `REQ-BROWSER-008` | Structured-first inside the browser (connectors → DOM/AX → CDP → vision); captures size-capped (DEC-011) |
+| `REQ-BROWSER-009` | Credentials are user-controlled (user-assisted/connector OAuth); auth state surfaced, never harvested (INV-02) |
+| `REQ-BROWSER-010` | Per-origin policy (allow/block/read-only/download) enforced by Trust; session consent records name instance/profile/origins (INV-20) |
+| `REQ-BROWSER-011` | Downloads stage into artifacts with provenance; uploads are user- or policy-gated (CTR-018) |
+| `REQ-BROWSER-012` | CAPTCHA/bot blocks are surfaced or return `guidance`; zero evasion, identity rotation or proxy tooling (DEC-016, INV-21) |

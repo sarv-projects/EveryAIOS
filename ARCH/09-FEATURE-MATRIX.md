@@ -153,6 +153,18 @@ One row per `REQ-*`. Status only from evidence.
 | `REQ-OFFICE-009` | `22-OFFICE` | pending | `DEC-023` | — | pending | pending | unplanned |
 | `REQ-OFFICE-010` | `22-OFFICE` | pending | `DEC-023` | — | pending | pending | unplanned |
 | `REQ-OFFICE-011` | `22-OFFICE` | pending | `—` | — | pending | pending | unplanned |
+| `REQ-BROWSER-001` | `23-BROWSER` | pending | `DEC-012` | — | pending | pending | unplanned |
+| `REQ-BROWSER-002` | `23-BROWSER` | pending | `DEC-012` | — | pending | pending | unplanned |
+| `REQ-BROWSER-003` | `23-BROWSER` | pending | `—` | — | pending | pending | unplanned |
+| `REQ-BROWSER-004` | `23-BROWSER` | pending | `DM-026` | — | pending | pending | unplanned |
+| `REQ-BROWSER-005` | `23-BROWSER` | pending | `—` | — | pending | pending | unplanned |
+| `REQ-BROWSER-006` | `23-BROWSER` | pending | `—` | — | pending | pending | unplanned |
+| `REQ-BROWSER-007` | `23-BROWSER` | pending | `—` | — | pending | pending | unplanned |
+| `REQ-BROWSER-008` | `23-BROWSER` | pending | `DEC-011` | — | pending | pending | unplanned |
+| `REQ-BROWSER-009` | `23-BROWSER` | pending | `INV-02` | — | pending | pending | unplanned |
+| `REQ-BROWSER-010` | `23-BROWSER` | pending | `INV-05`, `INV-20` | — | pending | pending | unplanned |
+| `REQ-BROWSER-011` | `23-BROWSER` | pending | `CTR-018` | — | pending | pending | unplanned |
+| `REQ-BROWSER-012` | `23-BROWSER` | pending | `DEC-016`, `INV-21` | — | pending | pending | unplanned |
 
 ## 4. Maintenance
 
