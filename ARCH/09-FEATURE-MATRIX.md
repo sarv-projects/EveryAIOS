@@ -109,6 +109,17 @@ One row per `REQ-*`. Status only from evidence.
 | `REQ-MODEL-010` | `18-MODEL-ROUTING` | pending | `INV-05` | — | pending | pending | unplanned |
 | `REQ-MODEL-011` | `18-MODEL-ROUTING` | pending | `DEC-034` | — | pending | pending | unplanned |
 | `REQ-MODEL-012` | `18-MODEL-ROUTING` | pending | `DEC-027` | — | pending | pending | unplanned |
+| `REQ-RTENV-001` | `19-RUNTIME-ENVIRONMENTS` | pending | `INV-04`, `DEC-028` | — | pending | pending | unplanned |
+| `REQ-RTENV-002` | `19-RUNTIME-ENVIRONMENTS` | pending | `DEC-028` | — | pending | pending | unplanned |
+| `REQ-RTENV-003` | `19-RUNTIME-ENVIRONMENTS` | pending | `CTR-015`, `DM-015` | — | pending | pending | unplanned |
+| `REQ-RTENV-004` | `19-RUNTIME-ENVIRONMENTS` | pending | `DEC-031` | — | pending | pending | unplanned |
+| `REQ-RTENV-005` | `19-RUNTIME-ENVIRONMENTS` | pending | `—` | — | pending | pending | unplanned |
+| `REQ-RTENV-006` | `19-RUNTIME-ENVIRONMENTS` | pending | `INV-07` | — | pending | pending | unplanned |
+| `REQ-RTENV-007` | `19-RUNTIME-ENVIRONMENTS` | pending | `DEC-024`, `INV-02` | — | pending | pending | unplanned |
+| `REQ-RTENV-008` | `19-RUNTIME-ENVIRONMENTS` | pending | `INV-20`, `INV-24` | — | pending | pending | unplanned |
+| `REQ-RTENV-009` | `19-RUNTIME-ENVIRONMENTS` | pending | `INV-16` | — | pending | pending | unplanned |
+| `REQ-RTENV-010` | `19-RUNTIME-ENVIRONMENTS` | pending | `—` | — | pending | pending | unplanned |
+| `REQ-RTENV-011` | `19-RUNTIME-ENVIRONMENTS` | pending | `—` | — | pending | pending | unplanned |
 
 ## 4. Maintenance
 

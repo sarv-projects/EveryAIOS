@@ -854,6 +854,107 @@ This registry answers one question per entry: **what behavior must this system e
 - **Tests:** pending
 - **Status:** seeded
 
+### Runtime environments (`RTENV`)
+
+#### REQ-RTENV-001 — Runtime executes confinement, never decides it
+- **Statement:** GIVEN any process or environment action, WHEN the runtime acts, THEN it executes the policy decided by the single Trust decider and never evaluates its own permission policy; no second permission path exists inside the runtime.
+- **Priority:** must
+- **Source:** `ARCH/05-INVARIANTS.md` INV-04 · `ARCH/04-DECISIONS.md` DEC-028 · `ARCH/19-RUNTIME-ENVIRONMENTS.md` §1
+- **Acceptance:** static check finds no policy evaluation in the runtime; spawn inputs arrive pre-validated by the exec-policy layer; a runtime-local allow-list fails review.
+- **Failure cases:** runtime allowing an action Trust denied → violation; policy logic duplicated in the runtime → review failure.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-RTENV-002 — Sandbox backends fail closed
+- **Statement:** GIVEN a confined action, WHEN the requested sandbox backend is unavailable, THEN the runtime walks the declared ladder (next backend → deny with reason); protected subpaths (e.g. VCS hooks) stay read-only inside writable roots; unconfined execution happens only under an explicit policy flag that is audited and surfaced — never by default.
+- **Priority:** must
+- **Source:** `ARCH/04-DECISIONS.md` DEC-028 · `ARCH/19-RUNTIME-ENVIRONMENTS.md` §1/§4 · `ARCH/42-EVIDENCE-MAP.md` §3
+- **Acceptance:** backend-unavailable test denies after the ladder (or uses the explicitly allowed, audited mode); protected-subpath write test fails; containment/escape results recorded in the evidence map.
+- **Failure cases:** silently unconfined spawn → violation; missing backend treated as success → violation; protected subpath writable → security failure.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-RTENV-003 — Every process belongs to an environment
+- **Statement:** GIVEN any spawned process, WHEN it starts, THEN it belongs to exactly one environment whose identity appears in capability handles and whose declared fields are enforced — kind (`local` · `sandbox` · `worktree`; `remote`/`cloud` later), platform, the confinement profile actually in use, resource limits, workspace roots under pathfloor with scope `shared`/`isolated-worktree`/`sandbox`, network policy ref, and lifetime tied to session/work/detached scope.
+- **Priority:** must
+- **Source:** `ARCH/19-RUNTIME-ENVIRONMENTS.md` §2 · `ARCH/07-CONTRACTS.md` CTR-015 · `ARCH/06-DATA-MODEL.md` DM-015
+- **Acceptance:** environment-identity test (a process without an environment is rejected); limit-enforcement tests; pathfloor test (writes outside workspace roots denied); lifetime test (session end releases session-scoped environments).
+- **Failure cases:** process outside any environment → defect; declared limit not enforced → defect; workspace escape → security violation.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-RTENV-004 — Process trees, orphans and detached work
+- **Statement:** GIVEN a running process tree, WHEN a parent exits or cancellation propagates, THEN children are tracked parent→child, cancellation follows the `ARCH/11-WORK.md` §6 semantics, orphans are reaped on parent death, and detached processes are registered for rehydration — never left as unregistered orphans.
+- **Priority:** must
+- **Source:** `ARCH/19-RUNTIME-ENVIRONMENTS.md` §1/§3 · `ARCH/11-WORK.md` §6 · `ARCH/04-DECISIONS.md` DEC-031
+- **Acceptance:** tree-cancellation test; orphan-reaping test; detached registration + rehydration test; no orphan survives without a registry record.
+- **Failure cases:** orphaned child after parent death → defect; detached process unregistered → defect; cancellation not propagated to children → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-RTENV-005 — Two PTY classes
+- **Statement:** GIVEN a terminal surface, WHEN a PTY is created, THEN it is one of two classes — agent terminal (programmatic, policy-scoped) or user terminal (interactive, user-owned) — served by the same manager under different policies, with class-appropriate authorization.
+- **Priority:** must
+- **Source:** `ARCH/19-RUNTIME-ENVIRONMENTS.md` §3
+- **Acceptance:** class-policy tests (agent PTY actions mediated; user PTY user-owned); same-manager test (one lifecycle/registry path); wrong-class authorization denied.
+- **Failure cases:** agent PTY bypassing policy → violation; user terminal silently scripted by an agent → violation.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-RTENV-006 — Output is durable evidence, bounded to context
+- **Statement:** GIVEN process output, WHEN it is produced, THEN the full output persists bounded to an artifact/event while the model-facing view is a compact representation plus a reference — unbounded output never streams into context, and no evidence is discarded.
+- **Priority:** must
+- **Source:** `ARCH/05-INVARIANTS.md` INV-07 · `ARCH/19-RUNTIME-ENVIRONMENTS.md` §3 · `ARCH/16-CONTEXT.md` §4
+- **Acceptance:** output-persistence test (full output retrievable); bounded-context test (model view size capped; the reference resolves); no lost-output case.
+- **Failure cases:** unbounded output in context → defect; output discarded without artifact/event → evidence loss; compact view without a resolvable reference → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-RTENV-007 — MCP server lifecycle and epoch discipline
+- **Statement:** GIVEN an MCP server requested by an adapter, WHEN the runtime hosts it, THEN it spawns (stdio) or connects (HTTP) with an epoch recorded at start and bumped on restart — invalidating outstanding handles — applies the per-server health/restart policy, shuts down on scope end (global/workspace-scoped servers persist; session-scoped servers end with the session, DEC-024 four-state scoping), and takes config from the provider registry with secrets as vault references only.
+- **Priority:** must
+- **Source:** `ARCH/19-RUNTIME-ENVIRONMENTS.md` §5 · `ARCH/04-DECISIONS.md` DEC-024 · `ARCH/05-INVARIANTS.md` INV-02
+- **Acceptance:** restart test bumps the epoch and rejects stale handles; scope-end shutdown test per scope; server crash routes to the provider health/failover path; no secret value in server config.
+- **Failure cases:** stale handle accepted after restart → defect; session-scoped server outliving its session → leak; secret in server config → custody violation.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-RTENV-008 — Elevated helper is opt-in and degrades loudly
+- **Statement:** GIVEN a capability that needs privileged reads (e.g. the file-index helper), WHEN the helper is used, THEN it requires explicit install and consent, runs with no service/autostart by default, communicates only over a guarded channel where every request is audited, and denial or absence degrades the capability to non-admin modes with a surfaced note — never silent elevation.
+- **Priority:** must
+- **Source:** `ARCH/19-RUNTIME-ENVIRONMENTS.md` §6 · `ARCH/21-WORLD-MODEL.md` §5 · `ARCH/05-INVARIANTS.md` INV-20/INV-24
+- **Acceptance:** install/consent test; no-autostart test; guarded-channel and per-request-audit test; denied-helper test shows degraded mode with a visible note.
+- **Failure cases:** silent elevation → security violation; helper IPC outside the guarded channel → violation; unaudited privileged request → violation.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-RTENV-009 — App lifecycle and crash recovery rebuild from work state
+- **Statement:** GIVEN app start, close or crash, WHEN the runtime reconciles, THEN start rehydrates the process registry from work/event state and adopts, monitors or reconciles strays, close applies and records the per-work-kind policy (keep · suspend · stop), and crash recovery rebuilds environments from work state plus checkpoints — no environment state is authoritative.
+- **Priority:** must
+- **Source:** `ARCH/19-RUNTIME-ENVIRONMENTS.md` §7 · `ARCH/05-INVARIANTS.md` INV-16 · `ARCH/11-WORK.md` §4
+- **Acceptance:** restart test rehydrates detached work; stray reconciliation is audited (killed or re-attached per policy); close decision recorded per work kind; crash rebuild test (no state loss from in-memory environment state).
+- **Failure cases:** environment state authoritative after restart → defect; close silently stopping kept detached work → defect; stray process untracked → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-RTENV-010 — Health and bounded telemetry
+- **Statement:** GIVEN environments, processes and servers, WHEN health changes, THEN each reports `ok` · `degraded` · `down` with a reason, changes publish as events, resource telemetry stays bounded metadata (never payload capture), the UI surfaces environment health for diagnostics, and work items carry their environment ids.
+- **Priority:** must
+- **Source:** `ARCH/19-RUNTIME-ENVIRONMENTS.md` §8 · `ARCH/30-EVENTS.md` §1
+- **Acceptance:** health-state and reason test; event-publication test; telemetry scan shows no payload content; work item carries its environment id.
+- **Failure cases:** health change without an event → defect; payload capture in telemetry → privacy violation; down environment without a reason → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-RTENV-011 — Typed spawn failures and hang handling
+- **Statement:** GIVEN a spawn request or a hung process, WHEN the failure surfaces, THEN spawn failure distinguishes policy denial from OS failure with no retry loop on policy denial, and a hang is handled by watchdogs plus the `ARCH/11-WORK.md` timeouts, ending in interrupt/cancel with a recorded reason.
+- **Priority:** must
+- **Source:** `ARCH/19-RUNTIME-ENVIRONMENTS.md` §9 · `ARCH/11-WORK.md` §6
+- **Acceptance:** typed spawn-error test (denial vs OS failure distinguishable); no-retry-on-denial test; hang-watchdog test ends with a reason; timeout and cancel are distinguished.
+- **Failure cases:** retry loop on policy denial → defect; hang without an abort reason → defect; OS failure reported as policy denial (or vice versa) → defect.
+- **Tests:** pending
+- **Status:** seeded
+
 ### Workflow (`WF`)
 
 #### REQ-WF-001 — Runs pinned to their version
@@ -899,7 +1000,8 @@ This registry answers one question per entry: **what behavior must this system e
 | `KERNEL` (7), `WORK` (8) | drafted above | verified during passes `10` ✅ / `11` ✅ (2026-09-26) |
 | `MEM` (12) | drafted above + expanded in pass `17` | verified during pass `17` ✅ (2026-09-26) |
 | `MODEL` (12) | drafted above + expanded in pass `18` | verified during pass `18` ✅ (2026-09-26) |
-| `RTENV`, `WORLD`, `OFFICE`, `BROWSER`, `CUA`, `FILES`, `CODE`, `SEARCH`, `COMMS`, `ART`, `EVENTS`, `SKILL`, `CHAN`, `VERIFY` | pending | seeded during each module's P7 pass |
+| `RTENV` (11) | drafted above + expanded in pass `19` | verified during pass `19` ✅ (2026-09-26) |
+| `WORLD`, `OFFICE`, `BROWSER`, `CUA`, `FILES`, `CODE`, `SEARCH`, `COMMS`, `ART`, `EVENTS`, `SKILL`, `CHAN`, `VERIFY` | pending | seeded during each module's P7 pass |
 
 ## 6. Related
 

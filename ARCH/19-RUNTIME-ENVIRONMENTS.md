@@ -1,6 +1,7 @@
 # 19 — Runtime & Environments
 
 > **Status:** Draft P2 (early). Must pass the `ARCH/00-INDEX.md` §5 checklist at freeze.
+> **P7 pass (2026-09-26):** line-checked; requirements seeded (`REQ-RTENV-*`, Requirements section).
 > **Role:** where things actually run — processes, sandboxes, environments, lifecycle, health. This module **executes** the platform-confinement layer that `12-TRUST` decides (DEC-028), and hosts provider adapters (`14`) and domain runtimes (`22`–`28`).
 > **Dependencies:** `10-KERNEL` · `12-TRUST` (policy + tickets) · `11-WORK` (lifecycle/lanes) · `30-EVENTS` (health/streams). **Consumers:** `14` (adapters, MCP servers), `21` (collectors + helper), `22`–`28` (domains), `25`/`26` (worktrees/leases handoff).
 > **Evidence:** product-owner brief (execution environments local/sandbox/remote/cloud) · `ARCHIVE/v1-research/agent-harness-verification.md` §A4 (sandbox backends: `SandboxType { MacosSeatbelt, LinuxSeccomp, WindowsRestrictedToken, WindowsMxc }`, protected subpaths; `codex-rs/protocol/src/sandbox.rs:10-16`) · DEC-028/029 · `ARCH/07-CONTRACTS.md` CTR-015 · `ARCH/21-WORLD-MODEL.md` §5 (elevated helper constraints).
@@ -99,3 +100,21 @@ For privileged collectors (MFT/USN file index, `21` W1) the runtime hosts a smal
 ## 12. Evidence
 
 Product-owner brief (environments; sandbox; isolation) · `agent-harness-verification.md` §A4 (backend enum + protected subpaths + three-layer separation; anchors `codex-rs/protocol/src/sandbox.rs:10-16`, `protocol.rs:1055-1125`) · DEC-028/029 · `ARCH/07-CONTRACTS.md` CTR-015 · `ARCH/11-WORK.md` §3/§6 · `ARCH/12-TRUST.md` §2/§7 · `ARCH/21-WORLD-MODEL.md` §5.
+
+## 13. Requirements (`REQ-RTENV-*`)
+
+Testable behaviors owned by this module live in `ARCH/08-REQUIREMENTS.md`; the traceability chain is in `ARCH/09-FEATURE-MATRIX.md`. This table is a pointer, not a second copy.
+
+| REQ | Behavior (one line) |
+|---|---|
+| `REQ-RTENV-001` | Runtime executes confinement; the single Trust decider decides — no runtime-local policy (INV-04, DEC-028) |
+| `REQ-RTENV-002` | Sandbox unavailable ⇒ next backend ⇒ deny with reason; protected subpaths read-only; unconfined only by explicit audited flag |
+| `REQ-RTENV-003` | Every process belongs to one environment: declared limits, workspace scope under pathfloor, lifetime tied to session/work (CTR-015) |
+| `REQ-RTENV-004` | Process trees tracked; cancellation propagates; orphans reaped; detached processes registered, never unregistered orphans (DEC-031) |
+| `REQ-RTENV-005` | Two PTY classes — agent (policy-scoped) and user (user-owned) — one manager, different policies |
+| `REQ-RTENV-006` | Full output persists bounded to artifact/event; the model sees a compact view + reference (INV-07) |
+| `REQ-RTENV-007` | MCP server hosting: epoch recorded and bumped on restart; scope-end shutdown; vault-ref-only secrets (DEC-024, INV-02) |
+| `REQ-RTENV-008` | Elevated helper is opt-in, guarded and audited; denial degrades to non-admin with a surfaced note (INV-20, INV-24) |
+| `REQ-RTENV-009` | App start/close/crash rebuild from work state + checkpoints; close decisions recorded; no environment state is authoritative (INV-16) |
+| `REQ-RTENV-010` | Health `ok`/`degraded`/`down` with reason + events; bounded resource metadata only, never payload capture |
+| `REQ-RTENV-011` | Typed spawn failures (policy denial vs OS failure); hang watchdogs end in interrupt/cancel with a reason |
