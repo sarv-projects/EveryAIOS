@@ -2,6 +2,7 @@
 
 > **Status:** Frozen v1 (frozen 2026-09-26; drafted P2).
 > **P7 pass (2026-09-26):** line-checked; requirements seeded (`REQ-WF-*`, Requirements section).
+> **P9 verification pass (2026-09-26):** read line-by-line; fixes applied where needed (owner-directed; re-freeze follows).
 > **Role:** Core infrastructure, a **peer of the agent runtime** (DEC-008). Deterministic processes that can include agent nodes; agents author workflows and invoke them as tools (P-11).
 > **Dependencies:** `11-WORK` (lifecycle/checkpoints/scheduler) · `13`/`14` (action nodes) · `15` (agent nodes) · `12` (approvals/tickets) · `30-EVENTS` · `21-WORLD-MODEL` (trigger sources).
 > **Evidence:** `ARCHIVE/v1-research/workflow-engine-verification.md` (690 lines; Temporal/n8n/Copilot Studio verified high, Agent Builder deprecation verified with one PARTIAL) · `agent-harness-verification.md` §E8 (Grok scheduler) · DEC-008/021/033 · INV-16/23.
@@ -85,7 +86,7 @@ Run fields: pinned `workflow_version` + digest · occurrence/trigger ref · inpu
 
 **Sleep & clocks:** persisted `wake_at` is “not before” (never wall-clock precision); every boot and wake re-checks persisted times; calendar schedules resolve in the stored IANA zone; an OS-level nudge for a *closed* app is a product decision (OQ-WF-4), not a v1 primitive.
 
-**Deliberately not built:** server timer queues · multi-worker distribution · unlimited retries · history compaction / continue-as-new (retention + terminal pruning suffice) · Nexus/abandon semantics.
+**Deliberately not built:** server timer queues · multi-worker distribution · unlimited retries · history compaction / continue-as-new (retention + terminal pruning suffice) · Temporal Nexus/cross-namespace and child-workflow `ABANDON` bookkeeping (the declared parent-close policy itself is kept, §2/§6).
 
 ## 5. Triggers (verified taxonomy — real vs product-invention)
 

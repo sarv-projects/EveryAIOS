@@ -2,6 +2,7 @@
 
 > **Status:** Frozen v1 (frozen 2026-09-26; drafted P2).
 > **P7 pass (2026-09-26):** line-checked; requirements seeded (`REQ-WORLD-*`, Requirements section).
+> **P9 verification pass (2026-09-26):** read line-by-line; fixes applied where needed (owner-directed; re-freeze follows).
 > **Thesis:** *“Don't make the AI look at the computer. Make the computer explain itself to the AI.”* — structural state first; vision is a fallback rung (`24-COMPUTER-USE`).
 > **Dependencies:** `30-EVENTS` (stream), `25-FILES` (file identity), `23-BROWSER` (browser world), `12-TRUST` (consent/guard), `19-RUNTIME-ENVIRONMENTS` (collector hosts/helpers), `16-CONTEXT` (primary consumer).
 > **Evidence:** `ARCHIVE/v1-research/world-model-verification.md` (359 lines, citations per claim) · clones `agent-browser` · `rustwright` · `obscura` · `open-codex-computer-use` · `Agent-S` · `UI-TARS-desktop` · `open-computer-use` · MS docs (UIA, MFT/USN, `FILE_ID_INFO`) · arXiv 2511.19477 · local code (`crates/everyaios-desktop`, `everyaios-storage`).
@@ -19,7 +20,7 @@ A continuously updated **structural map** of the machine — apps, windows, proc
 
 | ID | Collector | Observation | Delta source | Consent class | v1 |
 |---|---|---|---|---|---|
-| W1 | File inventory + deltas | paths · `FileKey` · size/times/attrs/links (metadata only) | MFT enum (`FSCTL_ENUM_USN_DATA`) + USN journal (`FSCTL_READ_USN_JOURNAL`); RDCW + bounded re-walk fallback | Elevated (admin/helper) for USN/MFT; basic = walk/RDCW | ✅ |
+| W1 | File inventory + deltas | paths · stable file identity (§3) · size/times/attrs/links (metadata only) | MFT enum (`FSCTL_ENUM_USN_DATA`) + USN journal (`FSCTL_READ_USN_JOURNAL`); RDCW + bounded re-walk fallback | Elevated (admin/helper) for USN/MFT; basic = walk/RDCW | ✅ |
 | W2 | Process + window registry | PID+start time · window handle/title/app/bounds · foreground | poll (1–5 s) + `SetWinEventHook` | Standard | ✅ |
 | W3 | UI tree (on demand) | UIA raw/control view, bounded nodes/depth; `AutomationId` as hint only | re-read on action; optional UIA events (pending measurement) | Per-app automation allow-list | ✅ |
 | W4 | Window capture (on demand) | window PNG (WGC → PrintWindow/ScreenDC fallback) | pull only | Screen-recording consent | ✅ (behind W3 miss/verify) |
@@ -82,6 +83,8 @@ Canonical use cases (why the model exists):
 | Chromium UIA provider unavailable | Browser paths use CDP (23), never UIA; native apps use UIA. |
 | Journal deleted / truncated | Discard cursor, rescan that volume; record epoch reset. |
 | Watcher overflow | Scoped rescan + freshness anomaly event (never silent). |
+| Permission denied during scan | Scoped skip + surfaced count (metadata-mode honesty) — never an elevated bypass (EDGE-049). |
+| Canonical-path swap mid-scan (symlink/junction) | The path is re-validated at use; a mismatch denies the read and is recorded (EDGE-046). |
 | Collector crash | Health degraded; stale markers; queries return partial with freshness. |
 | Helper/service absent (elevated mode) | Fall back to non-admin mode with a surfaced capability note. |
 
@@ -99,7 +102,7 @@ W6 devices/registry/network shares · W7 content index/OCR · continuous UIA eve
 
 1. `everyaios-storage/src/walk.rs:131-157` — dev/ino zeroing on Windows corrupts dedup (`dedup.rs:106-118`); replace with `(VolumeSerial, FILE_ID_128)` + incarnation.
 2. `usn_winapi.rs` is present but unwired — wire it as W1's delta source.
-3. `everyaios-desktop` ladder caveats: accessibility rung not uniform per platform (`ladder.rs:16-24`); WGC readiness (`wgc.rs`) needs a Windows acceptance record.
+3. `everyaios-desktop` ladder caveats: accessibility rung not uniform per platform (`ladder.rs:16-24`); WGC readiness (`platform/wgc.rs`) needs a Windows acceptance record.
 4. UIA collector must treat `AutomationId` as a hint, handle UIAccess elevation limits, and use CDP for browser content (Chromium UIA is opt-in).
 
 ## 11. Open questions (`OQ-WM-*`)
@@ -117,7 +120,7 @@ W6 devices/registry/network shares · W7 content index/OCR · continuous UIA eve
 
 ## 12. Evidence
 
-`ARCHIVE/v1-research/world-model-verification.md` — claims A–E with per-claim citations; §2 ladder reality; §3 identity/cursor/freshness; §4 browser-world patterns; §5 collector set + consent; §6 open questions. Key anchors: MS UIA tree/property/pattern docs · MS MFT/USN + `FILE_ID_INFO` docs · Chromium a11y/UIA docs · Agent-S `GroundingAgent.py:164-188,264-305` · open-codex `AccessibilitySnapshot.swift:48-62,92-97` · agent-browser `snapshot-refs.md:19-27,81-83` · local `win.rs:1-23,76-97` · `ladder.rs:16-24` · `walk.rs:131-157`.
+`ARCHIVE/v1-research/world-model-verification.md` — claims A–E with per-claim citations; §2 ladder reality; §3 identity/cursor/freshness; §4 browser-world patterns; §5 collector set + consent; §6 open questions. Key anchors: MS UIA tree/property/pattern docs · MS MFT/USN + `FILE_ID_INFO` docs · Chromium a11y/UIA docs · Agent-S `GroundingAgent.py:164-188,264-305` · open-codex `AccessibilitySnapshot.swift:48-62,92-97` · agent-browser `snapshot-refs.md:19-27,81-83` · local `platform/win.rs:1-23,76-97` · `ladder.rs:16-24` · `walk.rs:131-157`.
 
 ## 13. Requirements (`REQ-WORLD-*`)
 

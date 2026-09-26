@@ -2,10 +2,11 @@
 
 > **Status:** Frozen v1 (frozen 2026-09-26; drafted P3).
 > **P7 pass (2026-09-26):** line-checked; requirements seeded (`REQ-CUA-*`, Requirements section).
+> **P9 verification pass (2026-09-26):** read line-by-line; fixes applied where needed (owner-directed; re-freeze follows).
 > **Role:** operate the desktop when no better rung exists. **The ladder:** native API → structured UI → browser DOM/AX → CLI/MCP → **vision fallback** → raw input.
 > **Honest framing (recorded):** screenshot-first is the industry default (OpenAI computer tool · Anthropic computer-use · UI-TARS “solely perceives the screenshots”). **AgentCowork chooses structured-first** — verified hybrids (Agent-S a11y+OCR, open-codex AX-first, arXiv 2511.19477) outperform where semantics exist; vision remains a first-class rung, not the default.
 > **Dependencies:** `21-WORLD-MODEL` (observations, W3/W4) · `23-BROWSER` (browser rung) · `12-TRUST` (consent/approvals) · `18-MODEL-ROUTING` (vision models). **Consumers:** `15`, `22`–`28`, `34`.
-> **Evidence:** `ARCHIVE/v1-research/world-model-verification.md` §1–§2 (UIA caveats, ladder reality, vision costs) · local `crates/everyaios-desktop` (`win.rs:1-23,76-97`, `ladder.rs:16-24`, `ocr.rs:1-7`, `types.rs:235-247`) · DEC-011/016 · INV-20/21.
+> **Evidence:** `ARCHIVE/v1-research/world-model-verification.md` §1–§2 (UIA caveats, ladder reality, vision costs) · local `crates/everyaios-desktop` (`platform/win.rs:1-23,76-97`, `ladder.rs:16-24`, `ocr.rs:1-7`, `types.rs:235-247`) · DEC-011/016 · INV-20/21.
 
 ## 1. Purpose & rules
 
@@ -29,7 +30,7 @@
 | 4 | Vision | Screenshot-first is the industry default; we use it for canvas/WebGL/poor semantics, verification, and structured misses. |
 | 5 | Raw input | Absolute fallback; gated by human authorization, visibly indicated. |
 
-Local mapping: `win.rs:76-97` is the only full 3-rung click ladder in the repo (accessibility → synthetic event → raw input, raw gated); `ocr.rs:1-7` + `types.rs:235-247` already model “empty tree → vision-fallback path”.
+Local mapping: `platform/win.rs:76-97` is the only full 3-rung click ladder in the repo (accessibility → synthetic event → raw input, raw gated); `ocr.rs:1-7` + `types.rs:235-247` already model “empty tree → vision-fallback path”.
 
 ## 3. Structured UI automation (Windows-first)
 
@@ -71,6 +72,7 @@ Synthetic input with a `HumanAuthorization`-class gate; visible indicator; rate-
 | Tree empty / semantics poor | OCR patch → vision rung (evidence-backed preference). |
 | Ambiguous element | Reject; re-read; escalate to user rather than guess. |
 | Elevation blocked | Mark unknown; surface guidance; no blind synthetic input. |
+| Vision model unavailable when scheduled | Degrade with a recorded gap; dangerous classes require human confirmation instead (EDGE-055). |
 | Vision mislocates | Verify after action (structured re-read or second observation); bounded retries; `needs_attention` on repeat failure. |
 | Input rejected by policy | Typed `AuthorizationDenied`; surfaced; no fallback bypass. |
 
@@ -94,7 +96,7 @@ Cross-platform AT-SPI/AX parity beyond the declared matrix · continuous UIA eve
 
 ## 12. Evidence
 
-`ARCHIVE/v1-research/world-model-verification.md` §1–§2 — UIA docs + caveats; Agent-S `GroundingAgent.py:164-188,264-305` (a11y + OCR patch); open-codex `AccessibilitySnapshot.swift:48-62,92-97` + `ToolDefinitions.swift:34-56` (bounded AX, click methods); open-computer-use (vision-only outlier); Anthropic computer-use doc (2576 px/4784 tokens; zoom; injection guidance); arXiv 2511.19477 (hybrid ≈85%) · local `win.rs:76-97`, `ladder.rs:16-24`, `ocr.rs:1-7` · DEC-011/016 · INV-20/21.
+`ARCHIVE/v1-research/world-model-verification.md` §1–§2 — UIA docs + caveats; Agent-S `GroundingAgent.py:164-188,264-305` (a11y + OCR patch); open-codex `AccessibilitySnapshot.swift:48-62,92-97` + `ToolDefinitions.swift:34-56` (bounded AX, click methods); open-computer-use (vision-only outlier); Anthropic computer-use doc (2576 px/4784 tokens; zoom; injection guidance); arXiv 2511.19477 (hybrid ≈85%) · local `platform/win.rs:76-97`, `ladder.rs:16-24`, `ocr.rs:1-7` · DEC-011/016 · INV-20/21.
 
 ## 13. Requirements (`REQ-CUA-*`)
 

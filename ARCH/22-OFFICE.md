@@ -2,6 +2,7 @@
 
 > **Status:** Frozen v1 (frozen 2026-09-26; drafted P3).
 > **P7 pass (2026-09-26):** line-checked; requirements seeded (`REQ-OFFICE-*`, Requirements section).
+> **P9 verification pass (2026-09-26):** read line-by-line; fixes applied where needed (owner-directed; re-freeze follows).
 > **Role:** the office domain runtime **under the universal document surface** (DEC-013) — not a sidebar mode. Progressive **L1 semantic → L2 structured mutation → L3 raw escape hatch**; documents stay **resident** for active sessions; render/validate before receipts.
 > **Dependencies:** `13`/`14` (capabilities/providers) · `19-RUNTIME-ENVIRONMENTS` · `12-TRUST` (paths/exec) · `29-ARTIFACTS` (previews/versions) · `34` (verification depth). **Consumers:** `15` (agent office work), UI (document surface).
 > **Evidence:** `ARCHIVE/v1-research/office-runtime-verification.md` (448 lines; OfficeCLI verified in source, GenOffice per-domain registries verified) · v0 corpus `ARCHIVE/v0/RESEARCH/desktop_app/28,29` · local `crates/everyaios-office` (frozen reference) · DEC-013.
@@ -46,7 +47,7 @@ Registry mechanics: each op = `{id · input/output schema · risk · executor ·
 - **One resident context per document + exclusive lease**; second writer gets an explicit “in use” result (no merge in any surveyed system — merge is deferred).
 - **Flush policy:** interval + dirty-marker driven; explicit flush on session end; idle eviction under memory bounds.
 - **Crash-safe commit:** write to a staging package → **fsync** → atomic swap (OfficeCLI is process-death safe but not fsynced; we add fsync) → op-log replay on recovery.
-- **Scratch isolation:** temp/work areas confined to declared roots (pathfloor; GenOffice `ALLOWED_ROOTS` pattern).
+- **Scratch isolation:** temp/work areas confined to declared roots (pathfloor; GenOffice `GENOFFICE_ALLOWED_ROOTS` pattern).
 - **Batch atomicity:** a batch applies all-or-nothing with an op log for replay/audit.
 
 ## 5. Render, validate, verify
@@ -68,6 +69,7 @@ Registry mechanics: each op = `{id · input/output schema · risk · executor ·
 | Crash mid-write | Staging package + fsync + swap + op-log replay (never a torn file). |
 | Corrupt/unreadable document | Quarantine + typed error; original untouched. |
 | Engine limitation (charts/pivots/SmartArt) | Typed `guidance` with the limitation named; no silent lossy path. |
+| External engine crash/timeout (LibreOffice headless) | Typed `Unavailable`/`Timeout` naming the engine; the operation aborts without commit and the original stays untouched. |
 | Concurrent open | Lease message + options (read-only render vs wait). |
 | Huge workbook/document | Bounded loads + streaming reads; declared limits. |
 | Validation failure pre-commit | Batch aborts atomically; receipt records the failed check. |
@@ -86,7 +88,7 @@ Pivot authoring · reflow · SmartArt/OLE editing · multi-writer merge · real-
 
 1. **Resident/lease missing** in the current crate (has commit/snapshot primitives) — the main gap for DEC-013.
 2. **PDF “redact” currently annotates** — must remove content (v0 P0 carried forward).
-3. **fsync before atomic swap** in the commit path (OfficeCLI parity + safety).
+3. **fsync before atomic swap** — verified present, not a gap: `atomic::write_atomic` (temp → `sync_all` → rename, plus a best-effort directory fsync on POSIX) is what the office write commands use; every new commit path must keep routing through it (OfficeCLI's no-fsync trade-off is the gap we do not copy).
 4. Declare per-engine fidelity limits in the registry (lossy ops surface as `guidance`).
 
 ## 11. Open questions (`OQ-OFFICE-*`)

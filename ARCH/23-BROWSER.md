@@ -2,6 +2,7 @@
 
 > **Status:** Frozen v1 (frozen 2026-09-26; drafted P3).
 > **P7 pass (2026-09-26):** line-checked; requirements seeded (`REQ-BROWSER-*`, Requirements section).
+> **P9 verification pass (2026-09-26):** read line-by-line; fixes applied where needed (owner-directed; re-freeze follows).
 > **Role:** the managed browser execution environment + **Browser World**. DEC-012: managed Chromium is the default; Chrome/Edge/Firefox/Opera are selectable **adapters**, not parallel embedded runtimes. The browser is an execution environment: research → browser → sources → evidence → artifact.
 > **Dependencies:** `19-RUNTIME-ENVIRONMENTS` (process/environment hosting) · `21-WORLD-MODEL` (W5 browser collector) · `12-TRUST` (per-origin policy, consent) · `29-ARTIFACTS` (downloads/captures) · `14-PROVIDERS` (browser capability descriptors). **Consumers:** `15` (agent browser ops), `28` (web connectors), `34` (verification).
 > **Evidence:** `ARCHIVE/v1-research/world-model-verification.md` §4 (browser world in the clones: `agent-browser`, `rustwright`, `obscura`, `open-computer-use`, CDP patterns) · product-owner brief (managed Chromium; adapter choices; Playwright/CDP facts) · DEC-012 / DEC-016 / INV-21.
@@ -64,6 +65,7 @@ Observation is a **compact text/AX snapshot** (≈200–400 tokens for a page vs
 | Browser crash | Environment restart + target re-establishment; runs resume from world state. |
 | Attach fails (user browser) | Fall back to managed Chromium with a surfaced note. |
 | Stale/invalid ref | Re-resolve; never click by stale ref. |
+| Interrupted download | Staged bytes are never promoted to an artifact; the failure is surfaced — no partial artifact. |
 | Cross-origin iframe blocked | Skip + mark partial snapshot; escalate to vision rung if critical. |
 | CAPTCHA / bot check | **Surface to the user** — no evasion tooling (DEC-016). |
 | Site blocks automation | Report `guidance`; do not rotate identities/proxies. |
