@@ -46,6 +46,26 @@ One row per `REQ-*`. Status only from evidence.
 | `REQ-WORK-006` | `11-WORK` | pending | `DM-001/002` | — | pending | pending | unplanned |
 | `REQ-WORK-007` | `11-WORK` | pending | `INV-16`, `DM-006` | — | pending | pending | unplanned |
 | `REQ-WORK-008` | `11-WORK` | pending | `DM-005/007` | — | pending | pending | unplanned |
+| `REQ-TRUST-001` | `12-TRUST` | pending | `INV-05` | — | pending | pending | unplanned |
+| `REQ-TRUST-002` | `12-TRUST` | pending | `DEC-021`, `DM-010` | — | pending | pending | unplanned |
+| `REQ-TRUST-003` | `12-TRUST` | pending | `INV-04`, `DEC-028` | — | pending | pending | unplanned |
+| `REQ-TRUST-004` | `12-TRUST` | pending | `INV-02`, `CTR-013` | — | pending | pending | unplanned |
+| `REQ-TRUST-005` | `12-TRUST` | pending | `INV-03`, `DM-009` | — | pending | pending | unplanned |
+| `REQ-TRUST-006` | `12-TRUST` | pending | `DEC-028` | — | pending | pending | unplanned |
+| `REQ-TRUST-007` | `12-TRUST` | pending | `INV-24` | — | pending | pending | unplanned |
+| `REQ-TRUST-008` | `12-TRUST` | pending | `DEC-009`, `INV-10/11` | — | pending | pending | unplanned |
+| `REQ-TRUST-009` | `12-TRUST` | pending | `INV-05` | — | pending | pending | unplanned |
+| `REQ-TRUST-010` | `12-TRUST` | pending | `DM-010` | — | pending | pending | unplanned |
+| `REQ-CAP-001` | `13-CAPABILITY` | pending | `INV-13`, `DEC-005`, `DM-011` | — | pending | pending | unplanned |
+| `REQ-CAP-002` | `13-CAPABILITY` | pending | `DEC-002`, `DM-012` | — | pending | pending | unplanned |
+| `REQ-CAP-003` | `13-CAPABILITY` | pending | `DEC-004` | — | pending | pending | unplanned |
+| `REQ-CAP-004` | `13-CAPABILITY` | pending | `DM-011`, `INV-19` | — | pending | pending | unplanned |
+| `REQ-CAP-005` | `13-CAPABILITY` | pending | `INV-07` | — | pending | pending | unplanned |
+| `REQ-CAP-006` | `13-CAPABILITY` | pending | `DEC-005/024`, `INV-13` | — | pending | pending | unplanned |
+| `REQ-CAP-007` | `13-CAPABILITY` | pending | `DM-012` | — | pending | pending | unplanned |
+| `REQ-CAP-008` | `13-CAPABILITY` | pending | `DM-011` | — | pending | pending | unplanned |
+| `REQ-CAP-009` | `13-CAPABILITY` | pending | `—` | — | pending | pending | unplanned |
+| `REQ-CAP-010` | `13-CAPABILITY` | pending | `INV-03/19` | — | pending | pending | unplanned |
 
 ## 4. Maintenance
 

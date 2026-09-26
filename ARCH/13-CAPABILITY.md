@@ -1,6 +1,7 @@
 # 13 — Capability Plane
 
 > **Status:** Draft P2 (early). Must pass the `ARCH/00-INDEX.md` §5 checklist at freeze.
+> **P7 pass (2026-09-26):** line-checked; requirements seeded (`REQ-CAP-*`, Requirements section).
 > **Role:** semantic operations — **what** can be done — resolved to providers — **who** does it (DEC-004). The model sees *capabilities*, never raw tool catalogs (semantic compression; DEC-005).
 > **Dependencies:** `10-KERNEL` · `11-WORK` · `12-TRUST` (policy/tickets) · `14-PROVIDERS` (implementations) · `16-CONTEXT` (what enters prompts) · `31-SKILLS-PLUGINS` (skill→capability requirements).
 > **Evidence:** product-owner brief (`CapabilityDescriptor` / `CapabilityResult` / `CapabilityHandle`, capability graph, loading modes, “do not expose 500 raw tools”, L1/L2/L3 progressive model) · `ARCHIVE/v1-research/agent-harness-verification.md` §A2/§E1 (bounded tool fragments), §D1 (scope-tagged registrations) · `ARCH/06-DATA-MODEL.md` DM-011/012 · `ARCH/07-CONTRACTS.md` CTR-009/010 · DEC-004/005/024/025.
@@ -125,3 +126,20 @@ Uses: dependency resolution (`requirements` pulls in other capabilities before i
 ## 12. Evidence
 
 Product-owner brief (`CapabilityDescriptor`/`Result`/`Handle`, capability graph, loading modes, semantic compression, L1/L2/L3) · `agent-harness-verification.md` §A2 (bounded fragments feeding activation), §E1 (fragment registry), §D1 (scope-tagged tool registration as the per-agent variance mechanism) · `ARCH/06-DATA-MODEL.md` DM-011/012 · DEC-004/005/024/025 · INV-03/19.
+
+## 13. Requirements (`REQ-CAP-*`)
+
+Testable behaviors owned by this module live in `ARCH/08-REQUIREMENTS.md`; the traceability chain is in `ARCH/09-FEATURE-MATRIX.md`. This table is a pointer, not a second copy.
+
+| REQ | Behavior (one line) |
+|---|---|
+| `REQ-CAP-001` | No flat dump — the model sees budgeted capability subsets, never raw tool catalogs (INV-13). |
+| `REQ-CAP-002` | Epoch-checked handles — resolve→invoke→expire; provider epoch bump invalidates stale handles (DEC-002, DM-012). |
+| `REQ-CAP-003` | Capabilities describe what, never who — providers attach to capabilities, never the reverse (DEC-004). |
+| `REQ-CAP-004` | Descriptor contract — every capability has a versioned descriptor with risk class and verification hook (DM-011, INV-19). |
+| `REQ-CAP-005` | Guidance is first-class — `guidance` / `requires_user_action` are results, not failures. |
+| `REQ-CAP-006` | Loading modes and semantic compression — eager/catalog/on-demand; activation scoped per agent/session/run (DEC-005/024). |
+| `REQ-CAP-007` | Deterministic resolution — health→environment→permission→cost/latency ranking; ties audited; failover named. |
+| `REQ-CAP-008` | Capability graph — requirements resolve before invocation; blocked chains name the missing edge. |
+| `REQ-CAP-009` | Registry governance — unique ids, additive versioning, deprecation windows, census gate. |
+| `REQ-CAP-010` | Invocable ⇒ governed — anything invocable carries descriptor + risk class + verification hook (INV-03/19). |

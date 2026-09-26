@@ -286,6 +286,78 @@ This registry answers one question per entry: **what behavior must this system e
 - **Tests:** pending
 - **Status:** seeded
 
+#### REQ-TRUST-003 — One authorization decider
+- **Statement:** GIVEN any mutating effect, WHEN it executes, THEN the decision is made by the single Trust decider (policy evaluation + ticket mint) — no module, prompt, or surface holds a second permission path.
+- **Priority:** must
+- **Source:** `ARCH/05-INVARIANTS.md` INV-04 · `ARCH/12-TRUST.md` §1/§3 · `ARCH/04-DECISIONS.md` DEC-028
+- **Acceptance:** static and runtime checks find exactly one decider entry point; every effect path resolves through it; a bypass attempt fails closed.
+- **Failure cases:** effect executed without a Trust decision → architecture violation; second decider introduced → review failure.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-TRUST-004 — Vault custody, use-only
+- **Statement:** GIVEN any provider credential, WHEN it is used, THEN it lives only in the vault; callers receive scoped use, never the value; secrets never appear in prompts, context, events, logs, receipts or UI.
+- **Priority:** must
+- **Source:** `ARCH/05-INVARIANTS.md` INV-02 · `ARCH/12-TRUST.md` §6 · `ARCH/07-CONTRACTS.md` CTR-013
+- **Acceptance:** secret-corpus scans of prompts/logs/receipts/events are clean; no read-value API exists outside the vault; rotation audited.
+- **Failure cases:** credential surfaced to a model or log → verification failure; plaintext fallback when vault unavailable → rejected (typed Unavailable).
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-TRUST-005 — Tickets bind and validate
+- **Statement:** GIVEN an authorization ticket, WHEN an effect uses it, THEN the ticket is bound (capability, provider, environment, scope, uses, expiry, provider epoch, optional approval) and validated at execution; stale epoch, expiry or revocation ⇒ InvalidState.
+- **Priority:** must
+- **Source:** `ARCH/05-INVARIANTS.md` INV-03 · `ARCH/12-TRUST.md` §4 · `ARCH/06-DATA-MODEL.md` DM-009
+- **Acceptance:** ticket-validation tests per binding dimension; replay beyond use-bound fails; epoch-bump invalidation test.
+- **Failure cases:** ticket reuse beyond declared uses → rejection + audit; unbounded ticket → review failure.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-TRUST-006 — Three policy layers stay distinct
+- **Statement:** GIVEN policy configuration, WHEN confinement, approval policy, and declarative exec rules are evaluated, THEN the three layers remain distinct and none is collapsed into another.
+- **Priority:** must
+- **Source:** `ARCH/04-DECISIONS.md` DEC-028 · `ARCH/12-TRUST.md` §2
+- **Acceptance:** layer-distinction tests (each layer evaluated independently, decisions composed); no single knob replaces another.
+- **Failure cases:** confinement expressed as approval prompt → violation; approval bypassed by rule → rejection.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-TRUST-007 — Audit completeness
+- **Statement:** GIVEN any Trust decision, denial, or forget/delete operation, WHEN it occurs, THEN it is recorded append-only and tamper-evident, and reads of the audit trail are access-controlled.
+- **Priority:** must
+- **Source:** `ARCH/05-INVARIANTS.md` INV-24 · `ARCH/12-TRUST.md` §9
+- **Acceptance:** audit-completeness tests over decision classes; tamper-evidence verification; read access control test.
+- **Failure cases:** unaudited decision → violation; audit readable by an unauthorized surface → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-TRUST-008 — Projection-only external agents
+- **Statement:** GIVEN an external agent boundary, WHEN services are exposed, THEN only the permitted projection (declared capabilities, scoped context, workspace, mediated tools/MCP, artifacts, events) is visible — never topology, stores, queues, scheduler, vault or policy internals, router internals, or other agents.
+- **Priority:** must
+- **Source:** `ARCH/04-DECISIONS.md` DEC-009 · `ARCH/05-INVARIANTS.md` INV-10/11 · `ARCH/12-TRUST.md` §8
+- **Acceptance:** boundary-enumeration test shows no internal surface reachable; projection is least-privilege per binding.
+- **Failure cases:** internal endpoint reachable → security violation; cross-agent visibility → rejection.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-TRUST-009 — Trust infrastructure fails closed
+- **Statement:** GIVEN an unavailable or failing Trust dependency (policy engine, vault, egress mediation), WHEN an effect requests approval/credential/egress, THEN the effect is denied with a typed error — never allowed by fallback.
+- **Priority:** must
+- **Source:** `ARCH/12-TRUST.md` §11 · `ARCH/03-HLD.md` §11
+- **Acceptance:** failure-injection tests per dependency; denial surfaced with typed error + audit.
+- **Failure cases:** open fallback → catastrophic violation; silent allow → verification failure.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-TRUST-010 — Catastrophic gate is irreducible
+- **Statement:** GIVEN a catastrophic-class action, WHEN it is requested, THEN it is gated by explicit approval even under Full Access; no setting, rule or agent capability removes the gate.
+- **Priority:** must
+- **Source:** `ARCH/12-TRUST.md` §3 · `AGENTCOWORK-SPEC.md` §6
+- **Acceptance:** catastrophic-corpus tests under every policy mode show approval required; no bypass path.
+- **Failure cases:** gate bypassed under Full Access → catastrophic violation.
+- **Tests:** pending
+- **Status:** seeded
+
 ### Capability (`CAP`)
 
 #### REQ-CAP-001 — No flat tool dump; budgeted subsets
@@ -303,6 +375,78 @@ This registry answers one question per entry: **what behavior must this system e
 - **Source:** `AGENTCOWORK-SPEC.md` §5 · `DEC-002`
 - **Acceptance:** stale-handle test across a simulated provider restart yields a rejection + re-resolution, not a silent reuse.
 - **Failure cases:** stale handle used after restart → error surfaced; retry without re-resolution → forbidden.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-CAP-003 — Capabilities describe what, never who
+- **Statement:** GIVEN a capability descriptor, WHEN providers are attached, THEN the capability describes the operation and its risk; provider identity is an assignment, never part of the capability's contract.
+- **Priority:** must
+- **Source:** `ARCH/04-DECISIONS.md` DEC-004 · `ARCH/13-CAPABILITY.md` §1/§2
+- **Acceptance:** capability ids and descriptors carry no provider identity; provider swap preserves the capability contract.
+- **Failure cases:** provider baked into capability id or descriptor → review failure.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-CAP-004 — Descriptor contract and census gate
+- **Statement:** GIVEN any capability, WHEN it is registered, THEN it has a versioned descriptor (id, description, affordances, requirements, providers, loading mode, risk class, verification) and passes the census gate (unique id, non-empty affordances and verification).
+- **Priority:** must
+- **Source:** `ARCH/13-CAPABILITY.md` §2/§8 · `ARCH/06-DATA-MODEL.md` DM-011 · `ARCH/05-INVARIANTS.md` INV-19
+- **Acceptance:** census gate rejects incomplete/duplicate descriptors; catalog generation derives providers from the registry.
+- **Failure cases:** invocable capability without descriptor → rejection; duplicate id → rejection.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-CAP-005 — Guidance and requires_user_action are first-class
+- **Statement:** GIVEN a capability invocation that cannot complete alone, WHEN it returns, THEN it yields `guidance` or `requires_user_action` with a next action — a result, not a failure; failures are typed errors with retryability.
+- **Priority:** must
+- **Source:** `ARCH/13-CAPABILITY.md` §3
+- **Acceptance:** result-model tests; UI renders guidance as workable next steps (no dead ends).
+- **Failure cases:** guidance surfaced as failure → defect; completed result without receipt → violation (INV-07).
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-CAP-006 — Loading modes and semantic compression
+- **Statement:** GIVEN agent-facing capability exposure, WHEN capabilities are activated, THEN only the declared loading mode applies (eager/catalog/on-demand) within the context budget; activation is scoped per agent/session/run; raw catalogs are never dumped (L1 semantic → L2 structured → L3 raw on demand).
+- **Priority:** must
+- **Source:** `ARCH/04-DECISIONS.md` DEC-005/024 · `ARCH/05-INVARIANTS.md` INV-13 · `ARCH/13-CAPABILITY.md` §6 · `ARCH/16-CONTEXT.md` §3
+- **Acceptance:** budget tests; activation-scope tests; no flat dump in any prompt assembly.
+- **Failure cases:** catalog dump → budget violation; unscoped activation leaking across agents → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-CAP-007 — Deterministic resolution and failover
+- **Statement:** GIVEN a capability request with constraints, WHEN providers are ranked, THEN order is health → environment fit → permission fit → cost/latency, ties are broken deterministically and audited, and provider failure fails over per policy.
+- **Priority:** must
+- **Source:** `ARCH/13-CAPABILITY.md` §5/§9
+- **Acceptance:** resolution-order tests; determinism test on tie; failover test with an unhealthy provider.
+- **Failure cases:** nondeterministic selection → defect; no-provider → guidance path, never a dead end.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-CAP-008 — Capability graph resolves requirements
+- **Statement:** GIVEN a capability with `requires` edges, WHEN it is invoked, THEN requirement chains resolve before execution and a blocked chain names the missing edge.
+- **Priority:** should
+- **Source:** `ARCH/13-CAPABILITY.md` §7
+- **Acceptance:** graph-resolution tests; blocked-chain error names the unmet requirement.
+- **Failure cases:** silent resolution failure → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-CAP-009 — Registry governance and versioning
+- **Statement:** GIVEN registry evolution, WHEN descriptors change, THEN changes are additive for minor versions; breaking changes require a decision and a deprecation window; deprecated capabilities stay resolvable until the window closes.
+- **Priority:** should
+- **Source:** `ARCH/13-CAPABILITY.md` §8
+- **Acceptance:** versioning-policy tests; deprecation-window enforcement; breaking change without decision → rejected.
+- **Failure cases:** silent breaking change → review failure.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-CAP-010 — Invocable implies governed
+- **Statement:** GIVEN anything invocable (native tool, MCP tool, connector, domain op), WHEN it is exposed, THEN it is a registered capability with descriptor, risk class and verification hook — no unregistered invocation path exists.
+- **Priority:** must
+- **Source:** `ARCH/05-INVARIANTS.md` INV-03/19 · `ARCH/13-CAPABILITY.md` §1
+- **Acceptance:** census test shows every invocable surface has a capability id; dispatch rejects unregistered ids.
+- **Failure cases:** unregistered tool invocable → architecture violation.
 - **Tests:** pending
 - **Status:** seeded
 
@@ -383,7 +527,8 @@ This registry answers one question per entry: **what behavior must this system e
 
 | Domain | Seeds | Next pass |
 |---|---|---|
-| `PROD` (6), `TRUST` (2), `CAP` (2), `CTX` (2), `MEM` (2) | drafted above | verify + split during the P7 module passes (`12`, `13`, `16`, `17`) |
+| `PROD` (6), `CTX` (2), `MEM` (2) | drafted above | verify + split during the P7 module passes (`16`, `17`) |
+| `TRUST` (10), `CAP` (10) | drafted above + expanded in passes `12`/`13` | verified during passes `12` ✅ / `13` ✅ (2026-09-26) |
 | `WF` (1), `AGX` (1), `UI` (1) | drafted above | `20`, Agent X finalisation lane, `AGENTCOWORK-UI.md` |
 | `KERNEL` (7), `WORK` (8) | drafted above | verified during passes `10` ✅ / `11` ✅ (2026-09-26) |
 | `PROV`, `MODEL`, `RTENV`, `WORLD`, `OFFICE`, `BROWSER`, `CUA`, `FILES`, `CODE`, `SEARCH`, `COMMS`, `ART`, `EVENTS`, `SKILL`, `CHAN`, `VERIFY` | pending | seeded during each module's P7 pass |

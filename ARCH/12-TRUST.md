@@ -1,6 +1,7 @@
 # 12 — Trust & Control
 
 > **Status:** Draft P2 (early — DEC-028 and the verified Codex guard model integrated). Must pass the `ARCH/00-INDEX.md` §5 checklist at freeze.
+> **P7 pass (2026-09-26):** line-checked; requirements seeded (`REQ-TRUST-*`, Requirements section).
 > **Role:** the one place where permission, authorization, custody and audit live. **Guard decides; agents request; prompts never enforce** (P-13, DEC-002).
 > **Dependencies:** `10-KERNEL` · `11-WORK` · `19-RUNTIME-ENVIRONMENTS` (sandbox hosts) · `30-EVENTS` (audit feed). **Consumers:** `13`/`14` (capability execution), `15`, `21` (consent), `22`–`28` (domains), `32` (projections).
 > **Evidence:** product-owner brief (trust section: projections, defaults, isolation) · `ARCHIVE/v1-research/agent-harness-verification.md` §A4 (approval policy enum · sandbox policy · exec-policy engine; anchors `codex-rs/protocol/src/protocol.rs:969-1125`, `sandbox.rs:10-16`, `execpolicy/src/`) · DEC-028 · INV-01…12, 24 · `ARCH/06-DATA-MODEL.md` (DM-009/010) · `ARCH/07-CONTRACTS.md` (CTR-011/012/013).
@@ -111,3 +112,20 @@ Policy evaluated by Trust; records owned by `21`. Required record fields (per co
 ## 14. Evidence
 
 Owner brief (projections, permission defaults, isolation: host / agent workspace / vault) · `agent-harness-verification.md` §A4 (three verified layers + anchors) · DEC-028 · INV-01…12/24 · `ARCH/06-DATA-MODEL.md` DM-009/010 · `ARCH/07-CONTRACTS.md` CTR-011/012/013 · `ARCH/21-WORLD-MODEL.md` §5 (consent fields).
+
+## 15. Requirements (`REQ-TRUST-*`)
+
+Testable behaviors owned by this module live in `ARCH/08-REQUIREMENTS.md`; the traceability chain is in `ARCH/09-FEATURE-MATRIX.md`. This table is a pointer, not a second copy.
+
+| REQ | Behavior (one line) |
+|---|---|
+| `REQ-TRUST-001` | Egress fail-closed — one governed outbound path; allowlists; no direct clients above the adapter layer (INV-05). |
+| `REQ-TRUST-002` | One approval primitive — request(prompt, options, context, timeout); durable across waits; recorded once (DEC-021). |
+| `REQ-TRUST-003` | One authorization decider — every mutating effect is decided in Trust; no second permission path (INV-04). |
+| `REQ-TRUST-004` | Vault custody, use-only — credentials never appear in prompts/context/events/logs/receipts; use-style API; scoped and rotated (INV-02). |
+| `REQ-TRUST-005` | Tickets bind and validate — effect tickets carry scope/uses/expiry/provider epoch and are validated at execution (INV-03, DM-009). |
+| `REQ-TRUST-006` | Three policy layers stay distinct — confinement, approval policy, and declarative exec rules never collapse (DEC-028). |
+| `REQ-TRUST-007` | Audit completeness — every decision and denial is append-only, tamper-evident, and access-controlled on read (INV-24). |
+| `REQ-TRUST-008` | Projection-only external agents — never expose topology, stores, queues, vault or policy internals (DEC-009, INV-10/11). |
+| `REQ-TRUST-009` | Trust infrastructure fails closed — policy/vault/egress failure blocks the effect; no plaintext or open fallback. |
+| `REQ-TRUST-010` | Catastrophic gate is irreducible — always gated, even under Full Access (risk tiers, §3). |
