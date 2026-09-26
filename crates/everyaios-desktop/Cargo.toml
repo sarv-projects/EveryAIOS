@@ -24,6 +24,9 @@ windows = { version = "0.58", features = [
     "Win32_UI_Accessibility",
     "Win32_UI_Input_KeyboardAndMouse",
     "Win32_Graphics_Gdi",
+    # The DWM composition probe (`DwmIsCompositionEnabled`) behind the
+    # capture-readiness compositor check (see `platform/win.rs`).
+    "Win32_Graphics_Dwm",
     "Win32_UI_Shell",
     "Win32_UI_WindowsAndMessaging",
     # `ShellExecuteExW` / `SHELLEXECUTEINFOW` are gated behind this in windows 0.58.

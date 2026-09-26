@@ -60,13 +60,13 @@ use windows::Win32::UI::HiDpi::{
     DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2, GetDpiForWindow,
     LogicalToPhysicalPointForPerMonitorDPI, SetProcessDpiAwarenessContext,
 };
-// `FIX-18` — the capture-readiness probe: a live window handle (`IsWindow`) and
-// the window's extent (`GetWindowRect`). The DWM composition flag is **not**
-// probed on this build: the `windows` crate's `Win32_Graphics_Dwm` feature is not
-// enabled in this crate's manifest, and adding one is a dependency decision, not a
-// silent edit. The graphics-capture side of the same question is covered by
+// `FIX-18` — the capture-readiness probe also asks the compositor itself:
+// `DwmIsCompositionEnabled` (`Win32_Graphics_Dwm`, see the manifest) reports
+// whether DWM composition is on, and a disabled compositor is a typed
+// [`CaptureFault::NoCompositor`] rather than a capture that comes back black.
+// The graphics-capture side of the same question is covered by
 // `GraphicsCaptureSession::IsSupported()` plus a live BGRA-capable D3D11 device
-// (see `platform/wgc.rs`). Recorded as a limitation rather than asserted.
+// (see `platform/wgc.rs`).
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_EXTENDEDKEY, KEYEVENTF_KEYUP,
     KEYEVENTF_SCANCODE, MAPVK_VK_TO_VSC, MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP,
@@ -906,7 +906,7 @@ impl crate::capture::CaptureProbe for WinCaptureProbe {
     }
 
     /// Host-scoped checks: an interactive session, WinRT graphics-capture
-    /// support, and a live BGRA-capable D3D11 device.
+    /// support, a live BGRA-capable D3D11 device, and a running compositor.
     fn host(&mut self) -> Result<Vec<CaptureCheck>, CaptureFault> {
         if !WinBackend::interactive_desktop() {
             return Err(CaptureFault::NoInteractiveSession {
@@ -931,6 +931,11 @@ impl crate::capture::CaptureProbe for WinCaptureProbe {
                     .into(),
             });
         }
+        // The compositor step: without DWM composition there is no composited
+        // surface for graphics capture to composite, so a disabled compositor
+        // is a typed `NoCompositor` — its own check and its own fault, never a
+        // boolean folded into the session/device verdict above.
+        verified.push(compositor_verdict(dwm_composition())?);
         Ok(verified)
     }
 
@@ -1016,6 +1021,47 @@ impl crate::capture::CaptureProbe for WinCaptureProbe {
                 detail: format!("{} is not a Windows pipeline", other.as_str()),
             }),
         }
+    }
+}
+
+/// The raw DWM composition flag: `DwmIsCompositionEnabled` as the OS reports
+/// it.
+///
+/// `Ok(enabled)` is the answer; `Err` carries the HRESULT text. The call has
+/// no interesting failure mode on a healthy desktop (it has reported the flag
+/// since Vista), so there is no retry — the verdict below decides what a
+/// failure means.
+fn dwm_composition() -> Result<bool, String> {
+    unsafe {
+        windows::Win32::Graphics::Dwm::DwmIsCompositionEnabled()
+            .map(|enabled| enabled.as_bool())
+            .map_err(|e| format!("DwmIsCompositionEnabled: {e}"))
+    }
+}
+
+/// The compositor step of the capture-readiness chain, as a typed verdict.
+///
+/// This is the `wgc.rs` split applied to DWM: the raw flag in, a named check
+/// (`CompositorRunning`) or its own typed fault (`NoCompositor`) out — never a
+/// boolean folded into the session/device verdict. A *failing call* is also a
+/// `NoCompositor`, deliberately: composition that cannot be confirmed running
+/// must not be promised, and the HRESULT in the detail keeps the two cases
+/// apart on a receipt.
+fn compositor_verdict(query: Result<bool, String>) -> Result<CaptureCheck, CaptureFault> {
+    match query {
+        Ok(true) => Ok(CaptureCheck::CompositorRunning),
+        Ok(false) => Err(CaptureFault::NoCompositor {
+            detail: "DwmIsCompositionEnabled reports composition is off (a Basic theme, or a \
+                     session without composition) — graphics capture has no composited surface \
+                     to composite"
+                .into(),
+        }),
+        Err(call) => Err(CaptureFault::NoCompositor {
+            detail: format!(
+                "{call} — treating composition as off rather than attempting a capture that \
+                 would come back black"
+            ),
+        }),
     }
 }
 
@@ -1858,3 +1904,41 @@ pub fn act(
 
 // P57.6 — Windows.Graphics.Capture (occluded capture) lives in
 // [`crate::platform::wgc`]; `see()` above calls it first and falls back here.
+
+/// The DWM compositor step, tested without a Windows host: the verdict is a
+/// pure function of the injected flag, so the mapping (enabled → named check,
+/// disabled/failed call → typed fault with guidance) is proven here while the
+/// raw `DwmIsCompositionEnabled` call itself is Windows-only. (This module is
+/// `#[cfg(windows)]`-gated, so these tests run on a Windows runner, not on
+/// Linux — the Linux-runnable half is `tests/acceptance_dwm_compositor.rs`,
+/// which proves the same verdict shape through `verify_capture` with a fake.)
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn dwm_enabled_reports_the_named_compositor_check() {
+        assert_eq!(
+            compositor_verdict(Ok(true)),
+            Ok(CaptureCheck::CompositorRunning)
+        );
+    }
+
+    #[test]
+    fn dwm_disabled_surfaces_the_typed_fault_with_its_guidance() {
+        let fault =
+            compositor_verdict(Ok(false)).expect_err("composition off must refuse the check");
+        assert!(matches!(fault, CaptureFault::NoCompositor { .. }));
+        assert_eq!(fault.check(), CaptureCheck::CompositorRunning);
+        assert!(!fault.guidance().is_empty(), "{fault:?}");
+    }
+
+    #[test]
+    fn a_failing_dwm_call_is_a_compositor_fault_not_a_probe_failure() {
+        let fault =
+            compositor_verdict(Err("E_FAIL".into())).expect_err("a failed call must refuse");
+        assert!(matches!(fault, CaptureFault::NoCompositor { .. }));
+        assert_eq!(fault.check(), CaptureCheck::CompositorRunning);
+        assert!(fault.guidance().contains("compositor"), "{fault:?}");
+    }
+}
