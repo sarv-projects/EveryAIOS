@@ -88,7 +88,7 @@ Pivot authoring · reflow · SmartArt/OLE editing · multi-writer merge · real-
 
 1. **Resident/lease missing** in the current crate (has commit/snapshot primitives) — the main gap for DEC-013.
 2. **PDF “redact” currently annotates** — must remove content (v0 P0 carried forward).
-3. **fsync before atomic swap** — verified present, not a gap: `atomic::write_atomic` (temp → `sync_all` → rename, plus a best-effort directory fsync on POSIX) is what the office write commands use; every new commit path must keep routing through it (OfficeCLI's no-fsync trade-off is the gap we do not copy).
+3. **fsync before atomic swap** — partial: the DOCX/PDF command paths use `everyaios_office::write_atomic` (temp → `sync_all` → rename, plus a best-effort directory fsync on POSIX), but the XLSX command path has its own `atomic_write` (`src-tauri/src/xlsx_cmds.rs:301-312`) = write + rename with **no fsync**; route it — and every new commit path — through the fsynced primitive (OfficeCLI's no-fsync trade-off is the gap we do not copy).
 4. Declare per-engine fidelity limits in the registry (lossy ops surface as `guidance`).
 
 ## 11. Open questions (`OQ-OFFICE-*`)
