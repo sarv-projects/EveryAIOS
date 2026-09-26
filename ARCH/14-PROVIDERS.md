@@ -1,6 +1,7 @@
 # 14 — Providers
 
 > **Status:** Draft P2 (early — MCP policy verified 2026-09-26, `DEC-030`).
+> **P7 pass (2026-09-26):** line-checked; requirements seeded (`REQ-PROV-*`, Requirements section).
 > **Role:** the only layer where protocols exist. Providers implement capabilities; nothing above the Capability Plane knows the transport (INV-15).
 > **Dependencies:** `13-CAPABILITY` (resolution) · `12-TRUST` (guard/egress/vault) · `19-RUNTIME-ENVIRONMENTS` (where adapters run) · `30-EVENTS` (health/events).
 > **Evidence:** `ARCHIVE/v1-research/mcp-provider-verification.md` (641 lines, verified citations) · `ARCHIVE/v1-research/agent-harness-verification.md` (§A4 sandbox/approval/exec layers, §B1 ACP surface, §D1 adapter patterns) · product-owner brief.
@@ -114,3 +115,20 @@ MCP server marketplace/auto-install · remote provider federation · per-provide
 **Wave-2 addition:** `ARCHIVE/v1-research/provider-layer-absorption.md` — id-mapping, auth-method enum, and failure rows (A10, G4).
 
 `ARCHIVE/v1-research/mcp-provider-verification.md` (all §4 citations) · `ARCHIVE/v1-research/agent-harness-verification.md` §A4 (three-layer guard), §B1 (ACP server/session/tool-registry), §D1 (handle/factory) · owner brief (adapter classes, capability ≠ provider).
+
+## 12. Requirements (`REQ-PROV-*`)
+
+Testable behaviors owned by this module live in `ARCH/08-REQUIREMENTS.md`; the traceability chain is in `ARCH/09-FEATURE-MATRIX.md`. This table is a pointer, not a second copy.
+
+| REQ | Behavior (one line) |
+|---|---|
+| `REQ-PROV-001` | Adapters interchangeable; no protocol vocabulary above this layer (INV-15, DEC-004). |
+| `REQ-PROV-002` | `ProviderAdapter` contract + lifecycle; `execute` only with validated handle and ticket (CTR-010, INV-03). |
+| `REQ-PROV-003` | Declared adapter classes (native · mcp · acp · http · cli · plugin · remote); ACP preserves native tools (DEC-025). |
+| `REQ-PROV-004` | MCP client dual-era: modern `2026-07-28` first, legacy `2025-11-25` fallback, detection + force-legacy hatch (DEC-030). |
+| `REQ-PROV-005` | MCP server façade: stateless modern + `initialize` compatibility, mandatory `server/discover`, header validation. |
+| `REQ-PROV-006` | Epoch discipline + health-first resolution; degraded skipped before a call fails (DEC-002). |
+| `REQ-PROV-007` | Registry entry shape + id mapping (`catalog_ref`/`transport_ref`); auth-method enum, no values (DM-013). |
+| `REQ-PROV-008` | Adapter egress + custody compliance; typed denial, no silent fallback (INV-02/05, CTR-013). |
+| `REQ-PROV-009` | Gateway client identity + session affinity headers per conversation; multi-protocol gateways (DEC-035). |
+| `REQ-PROV-010` | Provider failures typed and bounded: epoch-bump failover, one era retry, descriptor diff, audit on cost mismatch. |

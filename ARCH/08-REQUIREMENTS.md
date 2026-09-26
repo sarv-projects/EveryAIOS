@@ -450,6 +450,98 @@ This registry answers one question per entry: **what behavior must this system e
 - **Tests:** pending
 - **Status:** seeded
 
+### Providers (`PROV`)
+
+#### REQ-PROV-001 — No protocol vocabulary above the provider layer
+- **Statement:** GIVEN any caller above the provider layer, WHEN it invokes work, THEN it speaks capability ids and never sees MCP tool names, ACP methods, HTTP paths or transport details; adapters are interchangeable behind one capability (one provider may implement many capabilities; one capability may have many providers).
+- **Priority:** must
+- **Source:** `ARCH/14-PROVIDERS.md` §1 · `ARCH/05-INVARIANTS.md` INV-15 · `ARCH/04-DECISIONS.md` DEC-004
+- **Acceptance:** interface review finds no protocol vocabulary above the provider layer; one capability resolves to different providers without caller changes.
+- **Failure cases:** transport name leaking into capability contracts or prompts → defect; caller bound to one provider → rejected.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-PROV-002 — Adapter contract and lifecycle
+- **Statement:** GIVEN a provider adapter, WHEN it is used, THEN it implements the `ProviderAdapter` contract (discover · connect · health · capabilities · execute · shutdown · events) with the register → connect → serve → shutdown lifecycle, and `execute` runs only with a validated handle and a ticket.
+- **Priority:** must
+- **Source:** `ARCH/14-PROVIDERS.md` §2 · `ARCH/07-CONTRACTS.md` CTR-010 · `ARCH/05-INVARIANTS.md` INV-03
+- **Acceptance:** contract-conformance tests per adapter class; an `execute` call without handle or ticket is rejected.
+- **Failure cases:** missing lifecycle call → adapter rejected at review; execute without ticket → `AuthorizationDenied`.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-PROV-003 — Declared adapter classes
+- **Statement:** GIVEN any provider, WHEN it registers, THEN it declares its adapter class — native · mcp · acp · http · cli · plugin · remote — and for `acp` the capability mapping preserves the agent's native tools.
+- **Priority:** must
+- **Source:** `ARCH/14-PROVIDERS.md` §3 · `ARCH/04-DECISIONS.md` DEC-025
+- **Acceptance:** registry entries carry exactly one declared class; `acp` adapters expose tool mappings without flattening native tools.
+- **Failure cases:** undeclared class → registration rejected; flattening native tools in an `acp` adapter → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-PROV-004 — MCP client dual-era policy
+- **Statement:** GIVEN an MCP server connection, WHEN the era is negotiated, THEN the client tries the modern revision `2026-07-28` (stateless, context in `_meta`, `server/discover`) first and falls back to legacy `2025-11-25` (`initialize`), with per-transport detection (stdio probe with 10 s cap; HTTP 400-body classification), era caching per process/origin, and a per-server force-legacy escape hatch.
+- **Priority:** must
+- **Source:** `ARCH/14-PROVIDERS.md` §4 · `ARCH/04-DECISIONS.md` DEC-030 · `ARCHIVE/v1-research/mcp-provider-verification.md`
+- **Acceptance:** dual-era tests against both revisions; detection and cache tests; force-legacy honored; client core carries both revisions (`rmcp` 3.4.x).
+- **Failure cases:** permanent mismatch → provider marked incompatible with reason; detection that loses capabilities → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-PROV-005 — MCP server façade compliance
+- **Statement:** GIVEN our MCP façade, WHEN an external client connects, THEN it serves stateless modern behavior with `initialize` compatibility, MUST implement `server/discover`, and MUST validate `Mcp-Method` and `Mcp-Name` headers.
+- **Priority:** must
+- **Source:** `ARCH/14-PROVIDERS.md` §4
+- **Acceptance:** façade tests cover modern and legacy clients; `server/discover` present; header validation rejects mismatches.
+- **Failure cases:** missing `server/discover` → client cannot negotiate; unvalidated headers → request rejected.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-PROV-006 — Epoch discipline and health-first resolution
+- **Statement:** GIVEN adapter instances and provider health, WHEN an adapter restarts or degrades, THEN its `provider_epoch` bumps and outstanding handles are invalidated, and the resolver skips degraded providers before they fail a call; health events publish on the event plane and the UI reads the registry.
+- **Priority:** must
+- **Source:** `ARCH/14-PROVIDERS.md` §5 · `ARCH/04-DECISIONS.md` DEC-002 · `ARCH/30-EVENTS.md`
+- **Acceptance:** restart invalidates handles; degraded-before-fail ordering test; per-capability health isolates partial failure; no second store for provider health.
+- **Failure cases:** stale handle accepted after epoch bump → `InvalidState`; degraded provider attempted first → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-PROV-007 — Registry entry shape and id mapping
+- **Statement:** GIVEN the provider registry, WHEN entries are stored, THEN each follows `DM-013` (id · kind · version · health · capabilities ref · environments · epoch) and carries distinct `catalog_ref` and `transport_ref` alongside the canonical id, with auth modeled as a typed method enum (api · oauth · well-known) that never holds values.
+- **Priority:** must
+- **Source:** `ARCH/14-PROVIDERS.md` §5 · `ARCH/06-DATA-MODEL.md` DM-013 · `ARCH/12-TRUST.md` §6
+- **Acceptance:** schema tests; several transports may share one catalog entry; auth-method metadata carries no secret material.
+- **Failure cases:** credential value in registry → custody violation; canonical id aliased with a transport id → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-PROV-008 — Adapter egress and custody compliance
+- **Statement:** GIVEN any adapter network or secret access, WHEN it connects or executes, THEN egress passes Guard (allowlists), secrets are `use`-style vault references only, environment scoping (local · sandbox · remote) is part of the handle, and denial is a typed error with no silent fallback.
+- **Priority:** must
+- **Source:** `ARCH/14-PROVIDERS.md` §6 · `ARCH/05-INVARIANTS.md` INV-02/05 · `ARCH/07-CONTRACTS.md` CTR-013
+- **Acceptance:** static checks find no direct egress clients above the adapter layer; unauthorized egress test returns typed deny; secret scan clean.
+- **Failure cases:** silent fallback route after DENY → violation; plaintext secret in adapter config → custody violation.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-PROV-009 — Gateway client identity and session affinity
+- **Statement:** GIVEN a gateway-class provider, WHEN a conversation runs, THEN adapters inject the client-identity User-Agent and the session-affinity header (`x-opencode-session` class) from session identity, and a provider entry carries multiple `transport_ref`s when one gateway hosts several wire protocols.
+- **Priority:** must
+- **Source:** `ARCH/14-PROVIDERS.md` §5 · `ARCH/04-DECISIONS.md` DEC-035 · `ARCH/18-MODEL-ROUTING.md` §4
+- **Acceptance:** header-injection tests per conversation; multi-protocol gateway resolves per transport; identity stable across a conversation.
+- **Failure cases:** missing affinity header → provider-side session split (defect); client identity spoofed or missing → rejected.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-PROV-010 — Typed, bounded provider failures
+- **Statement:** GIVEN provider failures (crash · protocol mismatch · schema drift · connect timeout · stream idle · auth expiry · cost mismatch), WHEN they occur, THEN behavior is typed and bounded: epoch-bump failover, at most one era retry, descriptor diff + typed failures for removed capabilities, watchdog aborts with reason, refresh-or-guidance on auth, actual-cost override with audit event — never silent.
+- **Priority:** must
+- **Source:** `ARCH/14-PROVIDERS.md` §7 · `ARCH/30-EVENTS.md` · `ARCH/34-EFFECT-VERIFICATION.md`
+- **Acceptance:** failure-mode matrix tests (one per row); each failure surfaces a typed error or event; audit event on cost mismatch.
+- **Failure cases:** unbounded retry loop → defect; silent capability removal → defect.
+- **Tests:** pending
+- **Status:** seeded
+
 ### Context (`CTX`)
 
 #### REQ-CTX-001 — Context assembly is a non-touching read
@@ -529,9 +621,10 @@ This registry answers one question per entry: **what behavior must this system e
 |---|---|---|
 | `PROD` (6), `CTX` (2), `MEM` (2) | drafted above | verify + split during the P7 module passes (`16`, `17`) |
 | `TRUST` (10), `CAP` (10) | drafted above + expanded in passes `12`/`13` | verified during passes `12` ✅ / `13` ✅ (2026-09-26) |
+| `PROV` (10) | drafted above + expanded in pass `14` | verified during pass `14` ✅ (2026-09-26) |
 | `WF` (1), `AGX` (1), `UI` (1) | drafted above | `20`, Agent X finalisation lane, `AGENTCOWORK-UI.md` |
 | `KERNEL` (7), `WORK` (8) | drafted above | verified during passes `10` ✅ / `11` ✅ (2026-09-26) |
-| `PROV`, `MODEL`, `RTENV`, `WORLD`, `OFFICE`, `BROWSER`, `CUA`, `FILES`, `CODE`, `SEARCH`, `COMMS`, `ART`, `EVENTS`, `SKILL`, `CHAN`, `VERIFY` | pending | seeded during each module's P7 pass |
+| `MODEL`, `RTENV`, `WORLD`, `OFFICE`, `BROWSER`, `CUA`, `FILES`, `CODE`, `SEARCH`, `COMMS`, `ART`, `EVENTS`, `SKILL`, `CHAN`, `VERIFY` | pending | seeded during each module's P7 pass |
 
 ## 6. Related
 

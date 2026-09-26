@@ -66,6 +66,16 @@ One row per `REQ-*`. Status only from evidence.
 | `REQ-CAP-008` | `13-CAPABILITY` | pending | `DM-011` | — | pending | pending | unplanned |
 | `REQ-CAP-009` | `13-CAPABILITY` | pending | `—` | — | pending | pending | unplanned |
 | `REQ-CAP-010` | `13-CAPABILITY` | pending | `INV-03/19` | — | pending | pending | unplanned |
+| `REQ-PROV-001` | `14-PROVIDERS` | pending | `INV-15`, `DEC-004` | — | pending | pending | unplanned |
+| `REQ-PROV-002` | `14-PROVIDERS` | pending | `CTR-010`, `INV-03` | — | pending | pending | unplanned |
+| `REQ-PROV-003` | `14-PROVIDERS` | pending | `DEC-025` | — | pending | pending | unplanned |
+| `REQ-PROV-004` | `14-PROVIDERS` | pending | `DEC-030` | — | pending | pending | unplanned |
+| `REQ-PROV-005` | `14-PROVIDERS` | pending | `DEC-030` | — | pending | pending | unplanned |
+| `REQ-PROV-006` | `14-PROVIDERS` | pending | `DEC-002`, `DM-013` | — | pending | pending | unplanned |
+| `REQ-PROV-007` | `14-PROVIDERS` | pending | `DM-013`, `CTR-013` | — | pending | pending | unplanned |
+| `REQ-PROV-008` | `14-PROVIDERS` | pending | `INV-02/05`, `CTR-013` | — | pending | pending | unplanned |
+| `REQ-PROV-009` | `14-PROVIDERS` | pending | `DEC-035` | — | pending | pending | unplanned |
+| `REQ-PROV-010` | `14-PROVIDERS` | pending | `—` | — | pending | pending | unplanned |
 
 ## 4. Maintenance
 
