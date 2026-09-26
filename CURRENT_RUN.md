@@ -7,7 +7,7 @@
 ## Active goal
 Rebuild the AgentCowork docs from scratch as **v1**: ARCH set + SPEC + UI + supporting docs, on the shoulders of the v0 corpus. v0 archived locally (`ARCHIVE/v0/`, git-ignored). `TODO.md` untouched by design. No scope cuts.
 
-## Where we stopped — 2026-09-26, passes P0–P6 ✅ (docs v1 complete; frozen for review)
+## Where we stopped — 2026-09-26: P0–P6 ✅ complete; P7 (SDD finalisation) in flight (details below)
 **Done:**
 - v0 archived: `ARCH/` (33 entries) → `ARCHIVE/v0/ARCH/`; `RESEARCH/` → `ARCHIVE/v0/RESEARCH/`; 10 root product docs → `ARCHIVE/v0/root/`; manifest at `ARCHIVE/v0/MANIFEST.md`; archive README updated.
 - v1 foundation drafted:
@@ -34,28 +34,31 @@ Rebuild the AgentCowork docs from scratch as **v1**: ARCH set + SPEC + UI + supp
 - Gate state after the re-homing: `check-doc-refs.mjs`, `check-public-surface.mjs` and `gen-release-surface.mjs --check` exit 0.
 - **Pre-existing red (out of scope, left as-is):** `check-doc-sync.mjs` reads archived v0 files (`ARCH/09-FEATURE-MATRIX.md`, `DESKTOP-APP-SPEC.md`, `SPEC-CHANGELOG.md`) and fails on main; it is the only FAIL in release-qualify E3 and is queued for re-homing.
 
-**Working-tree state:** the v0→v1 doc work was committed by the product owner; the 2026-09-26 tracked-doc cleanup is committed (`573fff0`). `ARCHIVE/**` is git-ignored, so the archive side is never committed. Code tree clean — the code phase has not started.
+**Working-tree state:** the v0→v1 doc work was committed by the product owner; the 2026-09-26 tracked-doc cleanup is committed (`573fff0`); P7 increments continue on top (HEAD `91c8e8c` at this writing — see the P7 section below). `ARCHIVE/**` is git-ignored, so the archive side is never committed. Code tree clean — the code phase has not started.
 
 **SDD finalisation — pass P7 (2026-09-26, in progress):**
-- `b646cf1 spec: add requirements registry, traceability matrix, and SDD protocol` — new `ARCH/08-REQUIREMENTS.md` (REQ-* registry: 26 domains, 17 seeds, GIVEN/WHEN/THEN + acceptance + failure cases), `ARCH/09-FEATURE-MATRIX.md` (REQ→module→DEC→task→test traceability), `.agents/docs/spec-driven-development.md` (protocol), `.agents/templates/SPEC.template.md`; `AGENTS.md` re-chained authority + new §16 (SDD); `ARCH/00-INDEX.md` doc map/passes/IDs updated.
-- `5ae5f53 arch: flesh HLD failure model, NFR envelope, contract index, and data-model ER` — `ARCH/03` §3.1 contract index + §11 failure/recovery + §12 NFR envelope; `ARCH/06` §1.1 ER diagram; `ARCH/07` domain-contracts note.
-- Batch 1 doc pass complete: `ARCH/00–07` line-checked (`01`/`05` complete as-is; SDD banner links added to `02`/`04`/`05`); agent kit aligned (template §13 SDD; kit docs re-pointed at the retired `docs/codebase/` surface; `codebase-intelligence` skill gained the spec-work section).
-- Lanes: `gen-27` code-state inventory ✅ → `ARCHIVE/v1-research/v1-sdd/code-state-inventory.md` (309 lines: 25 ARCH modules → code paths, 7 checks answered). Key: coordinator is shared-plane only (10 IPC methods; 12 modules test-only); **no World-Model owner and no kernel crate exist in code**; `walk.rs:146-157` Windows dev/ino zeroing confirmed live (FIX-10); 367 Tauri commands, 0 broken, 49 dead; UI 12 centers + 22 rail viewports; `check-arch-invariants`/`ipc-parity`/`check-doc-refs` green. `gen-28` OpenCode harness study ✅ → `ARCHIVE/v1-research/v1-sdd/agentx-opencode-harness-notes.md` (647 lines; pinned clone SHAs; recommendations R-01…R-12). Corrections to carry into the module passes: Codex **does** have a provider-native compaction path — `ARCH/16` §4.3/OQ-CTX-01 must be reframed; OpenCode child permissions inherit only parent *deny* rules — `DEC-029`/Guard must intersect; OpenCode V2 has no `task` subagent and its `prune` config has no execution path.
-- Remaining P7 work: module passes `ARCH/10–19` (Requirements/Acceptance/Interfaces + LLD, extending `08`/`09`), then `20–32`, `34`/`40–44`, `AGENTCOWORK-UI.md` (designer lane), Agent X finalisation (fed by `gen-28`), `TODO.md` rework (TASK-* units from `gen-27` + the REQ registry), final consistency + review pass.
+- Commits landed: `b646cf1` spec layer (`ARCH/08` registry + `ARCH/09` matrix + protocol/template + `AGENTS.md` §16) · `5ae5f53` HLD fleshing (`03` §3.1/§11/§12, `06` ER, `07` note) · `0644a20` batch-1 kit/banner pass · `5936b8c` KERNEL+WORK seeds · `80b970f` TRUST+CAP · `65ea68b` PROV · `293af71` CTX · `c453537` MEM · `e12bf45` MODEL · `48e0484` RTENV · `b88b3e5` UI doc pass · `0760255` edge-case coverage · `8a2c17d` WF · `5f7023f` WORLD · `e11dae3` OFFICE · `0c227d3` BROWSER · `91c8e8c` CUA.
+- Batch 1: `ARCH/00–07` line-checked (SDD banner links on `02`/`04`/`05`); agent kit aligned (template §13 SDD; kit docs re-pointed at the retired `docs/codebase/` surface; `codebase-intelligence` skill gained the spec-work section).
+- Module passes done: `10`–`24` (REQ counts: KERNEL 7 · WORK 8 · TRUST 10 · CAP 10 · PROV 10 · CTX 10 · MEM 12 · MODEL 12 · RTENV 11 · WF 11 · WORLD 11 · OFFICE 11 · BROWSER 12 · CUA 12). Every pass: P7 banner + Requirements pointer table + registry entries + §5 row + matrix rows; `check-doc-refs` green per pass. In flight: `25–28` (FILES/CODE/SEARCH/COMMS) and `40`/`42`/`43`/`44` line-checks. Pending: `29–32`, `34`, Agent X finalisation (`15`), UI/memory registry merges, `TODO.md` rework, final review.
+- Evidence lanes: `gen-27` code-state inventory ✅ → `ARCHIVE/v1-research/v1-sdd/code-state-inventory.md` (309 lines; 25 ARCH modules → code paths; key: coordinator is shared-plane only, **no World-Model owner and no kernel crate in code**, `walk.rs:146-157` Windows dev/ino zeroing confirmed live (FIX-10), 367 Tauri commands 0 broken / 49 dead, UI 12 centers + 22 rail viewports). `gen-28` OpenCode harness study ✅ → `agentx-opencode-harness-notes.md` (647 lines; R-01…R-12). `gen-31` memory↔driving-agent deep dive in flight. Corrections to carry: Codex has a provider-native compaction path (`ARCH/16` §4.3/OQ-CTX-01 reframe needed); OpenCode child permissions inherit only parent *deny* rules (`DEC-029`/Guard must intersect); OpenCode V2 lacks the `task` subagent; its `prune` config has no execution path.
+- Edge-case coverage (`0760255`): `ARCH/41` +56 entries (126 total; families K–P for kernel, agent/model plane, runtime environments, code/search/comms, multi-agent coexistence, effect verification); the gen-30 gap list is pending fold-in to the owning docs.
+- UI doc pass (`b88b3e5`): `AGENTCOWORK-UI.md` UI-17/UI-18 + §5.13 + §14 REQ-UI pointer table; proposed REQ-UI-002…014 saved to `ARCHIVE/v1-research/v1-sdd/req-ui-proposed.md`.
 
 ## Next exact steps
 1. Pass P7 (SDD finalisation) — continue in order:
-   - module doc passes `ARCH/10–19` → `20–32` → `34`/`40–44` (line-by-line; add Requirements/Acceptance/Interfaces/LLD sections; extend `ARCH/08` + `ARCH/09` as modules are passed);
-   - reconcile `gen-28` (OpenCode harness notes) → Agent X finalisation (`ARCH/15` + related `14`/`16`/`17`/`18`/`26`/`27`/`28`/`31`);
-   - `AGENTCOWORK-UI.md` final pass via designer lane;
+   - module doc passes: `ARCH/25–28` (in flight) → `29–32` → `34` (line-by-line; Requirements/Acceptance/Interfaces/LLD; extend `ARCH/08` + `ARCH/09` as modules are passed);
+   - reconcile `gen-33` (`40`/`42`/`43`/`44` line-checks) and `gen-31` (memory deep dive → merge MEM findings);
+   - Agent X finalisation (`ARCH/15` + related `14`/`16`/`17`/`18`/`26`/`27`/`28`/`31`) fed by `gen-28` notes;
+   - UI registry merge from `ARCHIVE/v1-research/v1-sdd/req-ui-proposed.md` (decide REQ-UI-001 vs 004/005 overlap);
    - `TODO.md` rework into TASK-* units from the REQ registry + `gen-27` code-state inventory (keep the useful history, no mishmash);
+   - fold the gen-30 edge-case gap list into the owning docs;
    - final consistency check + independent review; commit at each milestone with vendor-neutral messages. Docs remain UNFROZEN until the product owner freezes.
 2. Code-phase prep (after the doc freeze): re-verify `ARCH/42-EVIDENCE-MAP.md` §4 FIX-01…18 → open the P0 wave per §5. Live candidates from `gen-27`: FIX-05 `skill_store.rs:442-449`, FIX-06 `fs_cmds.rs:129-137`, FIX-07 `acp_cmds.rs:1676`, FIX-09 (`tools.rs`/`messaging.rs`/`vault/oauth.rs` direct `ureq`), FIX-10 (`walk.rs:146-157`).
 3. `check-doc-sync.mjs` re-homing decision remains open (pre-existing red; re-home to v1 / retire with the v0 chain / leave until code phase).
 
 ## Decisions & gotchas
 - Names: product **AgentCowork** (working), runtime **Core**, native agent **Agent X** (`ARCH/01-NAMING.md`). Code identifiers (`everyaios-*`) stay until a post-freeze code-phase rename (OQ-003).
-- Authority: SPEC (WHAT, planned P5) → HLD (HOW, currently top) → module docs. Archive/evidence is never authority.
+- Authority: SPEC (WHAT) → `ARCH/08-REQUIREMENTS.md` (testable behaviors) → `ARCH/03-HLD.md` (HOW) → module docs. Archive/evidence is never authority.
 - No-assumptions rule: every external claim needs `path:line` or URL evidence; the lost recon reports must not be cited.
 - Do not restore v0 files into tracked paths without a `DEC` entry in `ARCH/04-DECISIONS.md`.
 - `TODO.md` is exempt; `README.md`/`AGENTS.md` v1 sync ✅ done 2026-09-26.
