@@ -339,8 +339,8 @@ impl PathGrant {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ScopeDenial {
-    /// No scopes were configured and the requested path has no usable parent
-    /// to floor against (empty string, bare root).
+    /// The request was not a path at all (an empty string). Refused rather than
+    /// resolved against the working directory.
     Unusable,
     /// A `..` survived normalization and walks above the root.
     ParentEscape,
@@ -452,18 +452,18 @@ pub struct ReadScopes {
 /// to [`enforce_floor`] on every write — the default is derived from that, not
 /// invented.
 ///
-/// A filesystem root is its own floor (there is no parent to derive one from),
-/// so browsing up to `/` keeps working; a bare relative name falls back to the
-/// working directory, as the write side does.
+/// A filesystem or drive root has no parent to derive one from and is therefore
+/// its own floor, so browsing up to `/` (or a drive root) keeps working. A bare
+/// relative name falls back to the working directory, as the write side does —
+/// deliberately *not* to the name itself, which would make a symlinked leaf
+/// unfloored.
 fn default_root(path: &str) -> String {
     let p = Path::new(path);
-    if p.parent().is_none() && matches!(p.components().next(), Some(Component::RootDir)) {
-        return "/".to_string();
+    match p.parent() {
+        Some(parent) if !parent.as_os_str().is_empty() => parent.to_string_lossy().into_owned(),
+        None if p.has_root() => path.to_string(),
+        _ => ".".to_string(),
     }
-    p.parent()
-        .filter(|parent| !parent.as_os_str().is_empty())
-        .map(|parent| parent.to_string_lossy().to_string())
-        .unwrap_or_else(|| ".".to_string())
 }
 
 impl ReadScopes {
