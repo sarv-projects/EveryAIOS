@@ -122,6 +122,7 @@ Retrieve (search/snapshot) → Select/Rank → Budget → Prune → Compact (if 
 - MMR / cross-encoder / RRF fusion (trigger: near-duplicate flooding).
 - Semantic prompt caching layer (trigger: measured cache-miss cost).
 - Cross-repository context graphs (trigger: multi-repo workspaces ship).
+- Micro-compaction (summarize every turn instead of compacting at boundaries) — telemetry first (trigger: usage telemetry shows a measurable gain).
 
 ## 12. Open questions (`OQ-CTX-*`)
 

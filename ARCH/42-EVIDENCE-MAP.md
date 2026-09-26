@@ -21,7 +21,7 @@
 | `ARCHIVE/v1-research/world-model-verification.md` (359 lines) | UIA reality, MFT/USN identity, watcher overflow semantics, browser-world patterns |
 | `ARCHIVE/v1-research/workflow-engine-verification.md` (690 lines) | Temporal/n8n/Copilot Studio claims, trigger taxonomy, minimal durable design |
 | `ARCHIVE/v1-research/office-runtime-verification.md` (448 lines) | OfficeCLI/GenOffice claims, format-engine reality, resident design, op sets |
-| `REPO-COMPARE/**` | 186-item register, dispositions, license ledger, briefs, clone2 (58 clones) |
+| `REPO-COMPARE/**` | 190-item register (count corrected in `DISPOSITION.md` §a), dispositions, license ledger, briefs, clone2 (55 clones) · clone3 (2) |
 | In-repo code (`crates/**`, `ui/**`, `src-tauri/**`) | Read-only facts about the frozen baseline (bugs, seams, existing primitives) |
 
 ## 3. Acceptance mapping (implementation phase)

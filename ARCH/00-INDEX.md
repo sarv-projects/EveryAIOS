@@ -144,7 +144,7 @@ v0 grew by accretion: 33 ARCH files, 55 research files, a 355 KB spec, a 606 KB 
 
 - v0 docs: `ARCHIVE/v0/ARCH/` (33 entries incl. ADR/ and the archived coordinator loop).
 - v0 research: `ARCHIVE/v0/RESEARCH/` — `2026-ai-landscape/` (10 files), `desktop_app/` (45 files).
-- Comparator work: `~/business_Dev/REPO-COMPARE/` — `MASTER-COMPARISON.md` (186-item register), `DISPOSITION.md`, `LICENSE-LEDGER.md`, `BRIEFS/` (20), `clone2/` (58 full clones), `clone3/`.
+- Comparator work: `~/business_Dev/REPO-COMPARE/` — `MASTER-COMPARISON.md` (190 items — its §1 “186” line is stale; see `DISPOSITION.md` §a), `DISPOSITION.md`, `LICENSE-LEDGER.md`, `BRIEFS/` (20), `clone2/` (55 full clones), `clone3/` (2).
 - v1 lane research (in progress): `ARCHIVE/v1-research/` — memory, agent-harness verification, UI evidence.
 - **Lost:** `/tmp/opencode/recon/` reports 01–29 (temp cleanup, 2026-09-26). Do not cite them; re-verify from surviving sources.
 

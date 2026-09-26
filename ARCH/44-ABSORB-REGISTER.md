@@ -3,7 +3,7 @@
 > **Status:** Draft P3. Must pass the `ARCH/00-INDEX.md` §5 checklist at freeze.
 > **P7 pass (2026-09-26):** line-checked; cross-references verified.
 > **Purpose:** the standing record of **what v1 absorbed from external systems, how, under what licensing, and what was explicitly rejected** — the operational ledger behind DEC-017.
-> **Evidence base (surviving):** `~/business_Dev/REPO-COMPARE/` — `MASTER-COMPARISON.md` (329 lines; 186-item register measured against v0), `DISPOSITION.md` (347 lines; item-level dispositions), `LICENSE-LEDGER.md` (100 lines; fresh-`LICENSE` verified), `BRIEFS/` (20 files), `clone2/` (58 clones) · `ARCHIVE/v1-research/` verification lanes (claim corrections).
+> **Evidence base (surviving):** `~/business_Dev/REPO-COMPARE/` — `MASTER-COMPARISON.md` (329 lines; 190-item register measured against v0 — its §1 “186” line is stale per `DISPOSITION.md` §a), `DISPOSITION.md` (347 lines; item-level dispositions), `LICENSE-LEDGER.md` (100 lines; fresh-`LICENSE` verified), `BRIEFS/` (20 files), `clone2/` (55 clones) · `ARCHIVE/v1-research/` verification lanes (claim corrections).
 
 ## 0. Method & standing rules
 
