@@ -94,6 +94,17 @@ pub const TOOL_OUTPUT_SERIALIZE_CAP: usize = 2_000;
 /// slightly early) rather than optimistically.
 pub const CHARS_PER_TOKEN: usize = 4;
 
+/// **The inline bound, in bytes.** The cap above is a token budget; this is the
+/// same threshold expressed in the unit the delivery path actually measures —
+/// bytes of the compact serialization. The two are the *same line* by
+/// construction (`estimate_tokens(n) > TOOL_OUTPUT_SERIALIZE_CAP` ⟺ `n > 8000`),
+/// so a result the gateway writes is exactly a result the bounded preview has
+/// to cut, and a result it does not write is exactly one that can be inlined
+/// whole. A second, larger inline bound would let a result past the cap through
+/// the whole way, which is the inflation [`TOOL_OUTPUT_SERIALIZE_CAP`] exists to
+/// prevent.
+pub const INLINE_BUDGET_BYTES: usize = TOOL_OUTPUT_SERIALIZE_CAP * CHARS_PER_TOKEN;
+
 /// Head lines kept in the preview.
 pub const PREVIEW_HEAD_LINES: usize = 20;
 
@@ -1137,6 +1148,37 @@ mod tests {
         // Exactly at the cap is not over it; one byte past is.
         assert!(!should_spool(8_000));
         assert!(should_spool(8_001));
+    }
+
+    /// The inline bound and the over-cap trigger are one line, not two numbers
+    /// that have to be kept in step: a result the gateway writes is exactly a
+    /// result a bounded preview has to cut, and vice versa.
+    #[test]
+    fn the_inline_bound_is_the_over_cap_trigger_expressed_in_bytes() {
+        assert_eq!(INLINE_BUDGET_BYTES, 8_000);
+        assert!(!should_spool(INLINE_BUDGET_BYTES));
+        assert!(should_spool(INLINE_BUDGET_BYTES + 1));
+        for bytes in 0..(INLINE_BUDGET_BYTES + 64) {
+            assert_eq!(
+                should_spool(bytes),
+                bytes > INLINE_BUDGET_BYTES,
+                "{bytes} bytes disagreed between the two thresholds"
+            );
+        }
+        // And the protocol crate's bounded preview truncates on the same line,
+        // so a preview can never be cut for a result the gateway did not write.
+        // The two quotes the serialization adds are counted, so "at the bound"
+        // means the *serialized* size, which is what both sides measure.
+        let at_bound = serde_json::json!("x".repeat(INLINE_BUDGET_BYTES - 2));
+        assert_eq!(at_bound.to_string().len(), INLINE_BUDGET_BYTES);
+        assert!(!should_spool(at_bound.to_string().len()));
+        assert!(
+            !everyaios_mcp::bounded_preview(&at_bound, INLINE_BUDGET_BYTES).truncated,
+            "a result at the bound must be inlinable"
+        );
+        let over = serde_json::json!("x".repeat(INLINE_BUDGET_BYTES * 2));
+        assert!(should_spool(over.to_string().len()));
+        assert!(everyaios_mcp::bounded_preview(&over, INLINE_BUDGET_BYTES).truncated);
     }
 
     #[test]

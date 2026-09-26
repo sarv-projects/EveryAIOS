@@ -122,6 +122,14 @@ impl Bucket {
 
 /// The limiter's shape. Both tiers and both bounds are explicit so a caller
 /// can size them to its own surface without editing this module.
+///
+/// The shape is a **product knob, not a spec constant** (`TASK-TRUST-011`): the
+/// kernel configuration owns it as the `controlPlaneRateLimit` entry, whose
+/// *defaults* are [`RateLimitConfig::default`] below. This module stays the one
+/// place the shipped numbers are written down, and the entry reads them from
+/// here rather than repeating them, so the shell's IPC gate (which builds
+/// [`RateLimiter::with_defaults`]) and the kernel tool gate (which builds the
+/// limiter from the resolved entry) cannot be given different limits.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct RateLimitConfig {
     /// Process-wide ceiling (across every caller and command).
@@ -147,6 +155,14 @@ impl Default for RateLimitConfig {
     /// second of hammering, while no human interaction pattern reaches it. The
     /// bound that actually protects the process is the map cap
     /// ([`RateLimitConfig::max_entries`]) plus the TTL, not the token count.
+    ///
+    /// **Where they live now.** These are the *defaults* of the kernel
+    /// configuration's `controlPlaneRateLimit` entry, and this is the one place
+    /// they are written down. The entry layers a user/workspace/agent/session/run
+    /// override on top of them; a host that resolves that entry hands the result
+    /// to both admission gates, so the two read one value. Changing a number
+    /// here changes the shipped default for every gate at once — which is the
+    /// point.
     fn default() -> Self {
         Self {
             global: Limit::new(600, 100.0),
@@ -237,7 +253,14 @@ impl RateLimiter {
         }
     }
 
-    /// Build a limiter with [`RateLimitConfig::default`].
+    /// Build a limiter with [`RateLimitConfig::default`] — the shipped values,
+    /// which are also the `controlPlaneRateLimit` entry's defaults
+    /// (`TASK-TRUST-011`).
+    ///
+    /// A gate that should honour a *resolved* entry (one that a user, workspace,
+    /// agent, session or run overrode) must be built with
+    /// [`RateLimiter::new`] and that entry's value instead; this constructor is
+    /// the un-overridden default, not a second source of numbers.
     pub fn with_defaults() -> Self {
         Self::new(RateLimitConfig::default())
     }

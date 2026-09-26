@@ -946,6 +946,116 @@ pub struct FileUndo {
     pub before: Option<Vec<u8>>,
 }
 
+/// `TASK-ART-003` — what one committed result's delivery decided
+/// (`ARCH/29-ARTIFACTS.md` §7.1).
+///
+/// The three states are exhaustive and each is explicit: delivered whole with no
+/// artifact, delivered as a bounded preview plus the reference a real artifact
+/// write returned, or delivered whole with the *absence* of that artifact
+/// stated. `artifact_ref` is populated in the second state only, because it is
+/// populated only after the write that produced it succeeded.
+struct ResultDelivery {
+    /// The value the caller receives.
+    value: Value,
+    /// The reference the gateway write returned, formatted from its own content
+    /// address. `None` for an inlined result and for a write that did not
+    /// succeed — an unwritten artifact is never advertised.
+    artifact_ref: Option<String>,
+    /// Why the artifact is missing, when it is: the bound was crossed and the
+    /// write did not happen. Its presence is what makes the receipt a gap.
+    artifact_write_failed: Option<String>,
+}
+
+impl ResultDelivery {
+    /// Under the inline bound: the value goes out whole, nothing was written,
+    /// and nothing is claimed about an artifact.
+    fn inlined(value: Value) -> Self {
+        Self {
+            value,
+            artifact_ref: None,
+            artifact_write_failed: None,
+        }
+    }
+
+    /// Over the bound, but the write did not succeed. The value is delivered
+    /// whole — a larger context, which is recoverable; a silently dropped
+    /// payload, which is not — and both the result and the receipt say the
+    /// full value is not reachable by reference.
+    fn artifact_write_failed(value: Value, total_bytes: usize, reason: &str) -> Self {
+        let mut map = match value {
+            Value::Object(map) => map,
+            other => {
+                let mut map = serde_json::Map::new();
+                map.insert("value".into(), other);
+                map
+            }
+        };
+        map.insert("truncated".into(), json!(false));
+        map.insert("totalBytes".into(), json!(total_bytes));
+        map.insert(
+            "artifactWrite".into(),
+            json!({"ok": false, "error": reason}),
+        );
+        Self {
+            value: Value::Object(map),
+            artifact_ref: None,
+            artifact_write_failed: Some(reason.to_string()),
+        }
+    }
+}
+
+/// Why a committed effect's receipt records a gap rather than a clean success
+/// (`ARCH/29-ARTIFACTS.md` §3, the EV1 honesty flag).
+///
+/// The receipt is the honesty surface, so every way a claim can be incomplete
+/// is named here rather than inferred at the point of use. `None` is the only
+/// variant that is not a gap.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum ReceiptGap {
+    /// The effect was observed and its result is reachable.
+    None,
+    /// A mutating effect did not report success, so its state is unknown.
+    EffectUncertain,
+    /// The dispatch reported failure.
+    EffectFailed,
+    /// The result was over the inline bound and the artifact that would have
+    /// carried it was never written, so the full value is not reachable by
+    /// reference (`ARCH/29-ARTIFACTS.md` §7.1, §8).
+    ArtifactNotWritten(String),
+}
+
+impl ReceiptGap {
+    /// Classify one committed effect. Order matters: a failed effect is
+    /// reported as a failure whether or not it was mutating, and an unwritten
+    /// artifact is only judged once the effect itself reported success.
+    fn of(ok: bool, read_only: bool, artifact_write_failed: Option<&str>) -> Self {
+        if !ok && !read_only {
+            Self::EffectUncertain
+        } else if !ok {
+            Self::EffectFailed
+        } else {
+            match artifact_write_failed {
+                Some(reason) => Self::ArtifactNotWritten(reason.to_string()),
+                None => Self::None,
+            }
+        }
+    }
+
+    /// `None` when there is no gap; otherwise the reason the receipt carries.
+    fn uncertainty(&self) -> Option<String> {
+        match self {
+            Self::None => None,
+            Self::EffectUncertain => {
+                Some("effect state uncertain — the dispatch did not report success".into())
+            }
+            Self::EffectFailed => Some("effect dispatch reported failure".into()),
+            Self::ArtifactNotWritten(reason) => Some(format!(
+                "tool result exceeded the inline bound and the artifact was not written ({reason}) — the full value was delivered inline, not by reference"
+            )),
+        }
+    }
+}
+
 impl ToolService {
     /// The workspace root every tool path is floored against. Exposed so the
     /// P64.3 repo-map façade maps the *same* tree the edit tools operate on,
@@ -995,7 +1105,14 @@ impl ToolService {
             ),
             search_transport: Arc::new(UreqSearchTransport),
             spool: None,
-            rate_limiter: Arc::new(everyaios_guard::RateLimiter::with_defaults()),
+            // `TASK-TRUST-011` — the admission shape comes from the kernel
+            // configuration's `controlPlaneRateLimit` entry, so the tool gate
+            // and the shell's IPC gate are built from the same resolved value
+            // (the shell gate uses `RateLimitConfig::default()`, and this
+            // entry's defaults *are* that value).
+            rate_limiter: Arc::new(everyaios_guard::RateLimiter::new(
+                crate::config::default_rate_limit_config(),
+            )),
             receipts: BTreeMap::new(),
             receipt_order: std::collections::VecDeque::new(),
             receipt_index_cap: RECEIPT_INDEX_CAP,
@@ -1009,6 +1126,26 @@ impl ToolService {
     /// without one still works and simply does not compact.
     pub fn attach_spool(&mut self, spool: Arc<crate::spool::Spool>) {
         self.spool = Some(spool);
+    }
+
+    /// `TASK-TRUST-011` — install the admission shape the kernel configuration
+    /// resolved.
+    ///
+    /// The host is the only component that knows the runtime layers (workspace,
+    /// agent profile, session, run), so it resolves
+    /// [`crate::config::Config::resolve_rate_limit`] and hands the result here.
+    /// The type is the same [`everyaios_guard::RateLimitConfig`] the shell's IPC
+    /// gate is built from, so neither gate can be given a shape the other does
+    /// not understand.
+    pub fn with_rate_limit_config(mut self, rate_limit: everyaios_guard::RateLimitConfig) -> Self {
+        self.rate_limiter = Arc::new(everyaios_guard::RateLimiter::new(rate_limit));
+        self
+    }
+
+    /// The admission shape in force, for diagnostics and for a caller that must
+    /// report what the gate is actually enforcing.
+    pub fn rate_limit_config(&self) -> everyaios_guard::RateLimitConfig {
+        *self.rate_limiter.config()
     }
 
     /// The attached spool, if any. Exposed so the shell's `retrieve_original`
@@ -1615,7 +1752,12 @@ impl ToolService {
         // the agent sees a reference. The reference keeps `ok`, so the
         // idempotency and uncertainty rules above are unchanged.
         let result_hash = canonical_args_hash(&result);
-        let result = self.compact_result(result);
+        // TASK-ART-003 — the bounded preview, the artifact-gateway write, and
+        // the reference it earns, in that order (`ARCH/29-ARTIFACTS.md` §7.1).
+        // This is the result path, so it is also the artifact-creation point the
+        // protocol crate's own module doc names as the writer.
+        let delivery = self.deliver_result(&result);
+        let result = delivery.value;
         let uncertain = !ok && !spec.read_only;
 
         let payload = Self::tool_exec_audit_payload(
@@ -1653,16 +1795,18 @@ impl ToolService {
         // Fail-closed (REQ-ART-012): the receipt is built *before* the response
         // is produced, so a mutating effect can never be reported as completed
         // without one. `has_gap` is the honesty flag — a failed or uncertain
-        // mutating effect is recorded as a gap, never as a clean success.
+        // mutating effect is recorded as a gap, never as a clean success, and
+        // so is an artifact that could not be written (TASK-ART-003).
+        let gap = ReceiptGap::of(ok, spec.read_only, delivery.artifact_write_failed.as_deref());
         let receipt = self.record_effect_receipt(
             seq,
             &spec,
             ticket_id,
             &hash,
             &result_hash,
-            ok,
-            uncertain,
+            &gap,
             &operation,
+            delivery.artifact_ref.as_deref(),
         );
         let receipt_value =
             serde_json::to_value(&receipt).map_err(|e| format!("receipt encode: {e}"))?;
@@ -1690,6 +1834,10 @@ impl ToolService {
     /// overflow drops the *oldest index entry* only — the receipt itself is
     /// immutable, was returned in its commit response, and remains derivable
     /// from the append-only audit row.
+    ///
+    /// `artifact_ref` is the reference the artifact write *returned*, never one
+    /// this function could have derived: the caller sets it only after the write
+    /// succeeded, so a receipt can never cite an artifact that does not exist.
     #[allow(clippy::too_many_arguments)]
     fn record_effect_receipt(
         &mut self,
@@ -1698,9 +1846,9 @@ impl ToolService {
         ticket_id: &str,
         args_hash: &str,
         result_hash: &str,
-        ok: bool,
-        uncertain: bool,
+        gap: &ReceiptGap,
         operation: &Operation,
+        artifact_ref: Option<&str>,
     ) -> everyaios_audit::EffectReceipt {
         let receipt_id = format!("rcpt:{seq}");
         let mut receipt = everyaios_audit::EffectReceipt::new(
@@ -1715,16 +1863,19 @@ impl ToolService {
             operation.name(),
         )
         .with_refs(args_hash.to_string(), result_hash.to_string());
-        if uncertain || !ok {
-            // EV1 honesty: a mutating effect that could not be fully observed
-            // is recorded as a gap, with the reason, so a reader never assumes
-            // it landed exactly as claimed.
+        if let Some(artifact_ref) = artifact_ref {
+            // TASK-ART-003 — the receipt cites the artifact that holds the full
+            // result, so evidence replay has somewhere to read the value from.
+            receipt = receipt.with_resource(artifact_ref);
+        }
+        if let Some(reason) = gap.uncertainty() {
+            // EV1 honesty: an effect that could not be fully observed — because
+            // the dispatch failed or was uncertain, or because the artifact that
+            // would have carried its result was never written — is recorded as a
+            // gap, with the reason, so a reader never assumes it landed exactly
+            // as claimed.
             receipt.has_gap = true;
-            receipt.uncertainty = Some(if uncertain {
-                "effect state uncertain — the dispatch did not report success".to_string()
-            } else {
-                "effect dispatch reported failure".to_string()
-            });
+            receipt.uncertainty = Some(reason);
         }
         while self.receipts.len() >= self.receipt_index_cap {
             match self.receipt_order.pop_front() {
@@ -1739,17 +1890,97 @@ impl ToolService {
         receipt
     }
 
-    /// P64.11/P69.G5 — the compaction step for one committed result.
+    /// TASK-ART-003 / `ARCH/29-ARTIFACTS.md` §7.1 — the delivery step for one
+    /// committed result: shape the bounded preview, write the full bytes through
+    /// the artifact gateway, and only then attach the reference.
     ///
-    /// With a spool attached, a result whose serialized size is over
-    /// [`crate::spool::TOOL_OUTPUT_SERIALIZE_CAP`] is written once to the
-    /// content-addressed spool and replaced by a compact reference. Without a
-    /// spool the result passes through untouched — a larger context, which is
-    /// recoverable; a silently dropped payload, which is not.
-    fn compact_result(&self, result: Value) -> Value {
+    /// The order **is** the invariant: a reference is formatted from the content
+    /// address the write returned, so a value that could not be written never
+    /// advertises one. A reference set before its artifact exists points at a
+    /// version nobody can open, which is a worse failure than an oversized
+    /// result.
+    ///
+    /// The honesty rules that come with it:
+    ///
+    /// * **Under the bound** the value is inlined whole and no artifact is
+    ///   written — nothing to reach for, so nothing is written.
+    /// * **Over the bound** the delivered value carries `truncated: true`, the
+    ///   truthful total size, the bound it was cut to, and the reference. It
+    ///   carries *no* inline payload: while a value is truncated
+    ///   [`everyaios_mcp::BoundedPreview::inline`] is `None`, and this path
+    ///   honours that rather than handing a partial value over as the result.
+    /// * **A write that did not succeed** delivers the value whole (a larger
+    ///   context, never a wrong answer) and says so in the result *and* on the
+    ///   receipt as a gap — an unwritten artifact is never a clean success.
+    fn deliver_result(&self, result: &Value) -> ResultDelivery {
+        let preview = everyaios_mcp::bounded_preview(result, crate::spool::INLINE_BUDGET_BYTES);
+        if !preview.truncated {
+            return ResultDelivery::inlined(result.clone());
+        }
+        // The reference the write earns. The preview helper never invents one
+        // (it has no store, no workspace and no work-item identity), so this is
+        // the only place a reference can come from.
+        let total_bytes = preview.total_bytes;
+        let preview_bytes = preview.preview_bytes;
+        if self.spool.is_none() {
+            return ResultDelivery::artifact_write_failed(
+                result.clone(),
+                total_bytes,
+                "no tool-output artifact gateway is attached on this host",
+            );
+        }
+        // 1) write the full bytes through the gateway …
+        let (projected, reference) = self.compact_result(result.clone());
+        // … and 2) only now, holding the address that write returned, set the
+        // reference. A `None` here means the write did not happen: the bound was
+        // crossed (the preview says so) and no blob was produced.
+        let Some(reference) = reference else {
+            return ResultDelivery::artifact_write_failed(
+                result.clone(),
+                total_bytes,
+                "the artifact gateway refused the write",
+            );
+        };
+        let preview = preview.with_artifact_ref(everyaios_mcp::artifact_ref(&reference.hash));
+        let mut compact = match projected {
+            Value::Object(map) => map,
+            // The gateway's projection is an object; a non-object is carried
+            // under its own key rather than dropped.
+            other => {
+                let mut map = serde_json::Map::new();
+                map.insert("value".into(), other);
+                map
+            }
+        };
+        // The reference the write earned — the only source of one.
+        let written_ref = preview
+            .artifact_ref
+            .expect("the reference was attached to the preview above");
+        compact.insert("truncated".into(), json!(true));
+        // The true full size, never the cut length: a consumer must be able to
+        // report the real magnitude instead of guessing from the reference.
+        compact.insert("totalBytes".into(), json!(total_bytes));
+        compact.insert("previewBytes".into(), json!(preview_bytes));
+        compact.insert("artifactRef".into(), json!(written_ref));
+        ResultDelivery {
+            value: Value::Object(compact),
+            artifact_ref: Some(written_ref),
+            artifact_write_failed: None,
+        }
+    }
+
+    /// P64.11/P69.G5 — the write itself: hand one result to the content-addressed
+    /// spool and take back the compact reference it replaced.
+    ///
+    /// The returned pair is `(delivered, reference)`. `reference` is `None` both
+    /// when the result was under the cap (nothing to write) and when a write was
+    /// attempted and did not succeed — the caller distinguishes the two by the
+    /// inline bound, which is the same line as the cap
+    /// ([`crate::spool::INLINE_BUDGET_BYTES`]).
+    fn compact_result(&self, result: Value) -> (Value, Option<crate::spool::SpoolRef>) {
         match self.spool.as_ref() {
-            Some(spool) => spool.project_result(&result, now_ms()).0,
-            None => result,
+            Some(spool) => spool.project_result(&result, now_ms()),
+            None => (result, None),
         }
     }
 
@@ -4140,6 +4371,229 @@ mod tests {
         );
     }
 
+    // =========================================================================
+    // TASK-ART-003 — the bounded preview, the artifact-gateway write, and the
+    // reference it earns (`ARCH/29-ARTIFACTS.md` §7.1).
+    // =========================================================================
+
+    /// A `ToolService` whose result path has an artifact gateway attached. The
+    /// spool is the one managed, content-addressed store the kernel writes
+    /// through; the tests below never create a second one.
+    fn svc_with_spool(
+        dir: &Path,
+    ) -> (
+        ToolService,
+        Arc<Mutex<GuardService>>,
+        Arc<crate::spool::Spool>,
+    ) {
+        let guard = Arc::new(Mutex::new(GuardService::new()));
+        let mut s = ToolService::new(Arc::clone(&guard), dir.to_path_buf());
+        let spool = Arc::new(crate::spool::Spool::new(dir));
+        s.attach_spool(Arc::clone(&spool));
+        (s, guard, spool)
+    }
+
+    /// Blobs currently on disk in a spool, so a test can assert a write happened
+    /// (or did not) rather than inferring it from a field.
+    fn spool_blobs(spool: &crate::spool::Spool) -> Vec<String> {
+        let root = spool.root();
+        let mut names: Vec<String> = fs::read_dir(root)
+            .map(|rd| {
+                rd.flatten()
+                    .filter(|e| e.path().extension().is_some_and(|x| x == "blob"))
+                    .map(|e| e.file_name().to_string_lossy().into_owned())
+                    .collect()
+            })
+            .unwrap_or_default();
+        names.sort();
+        names
+    }
+
+    /// A result under the inline bound is inlined whole and **no** artifact is
+    /// written: nothing was truncated, so there is nothing to reach for and
+    /// nothing may be advertised.
+    #[test]
+    fn a_result_under_the_inline_bound_is_inlined_and_writes_no_artifact() {
+        let dir = tempfile();
+        let (mut s, guard, spool) = svc_with_spool(&dir);
+        let args = json!({"path": "small.txt", "content": "under the bound"});
+        let pre = approved_preflight(&mut s, &guard, "file_ops.write", args.clone());
+        let out = s
+            .handle(
+                "tool/commit",
+                &json!({
+                    "toolId": "file_ops.write",
+                    "ticketId": pre["ticketId"],
+                    "argsHash": pre["argsHash"],
+                    "args": args
+                }),
+            )
+            .expect("commit must run");
+        assert_eq!(out["ok"], true, "{out}");
+        // The value itself is still there, uncut.
+        assert!(out["path"].as_str().is_some(), "{out}");
+        // No artifact was written, so no reference is advertised.
+        assert!(out.get("artifactRef").is_none(), "{out}");
+        assert!(out.get("tool_output_ref").is_none(), "{out}");
+        assert!(out.get("artifactWrite").is_none(), "{out}");
+        assert_eq!(out["receipt"]["has_gap"], false, "{out}");
+        assert!(out["receipt"]["resource"].is_null(), "{out}");
+        assert!(
+            spool_blobs(&spool).is_empty(),
+            "an inlined result must not write a blob"
+        );
+    }
+
+    /// Over the bound: the full bytes go through the artifact gateway **first**,
+    /// and only then is the reference attached — so the reference resolves, the
+    /// receipt cites it, and the truncation is visible rather than passed off as
+    /// a whole result.
+    #[test]
+    fn a_result_over_the_inline_bound_writes_the_artifact_then_attaches_the_reference() {
+        let dir = tempfile();
+        let body = "y".repeat(crate::spool::INLINE_BUDGET_BYTES * 3);
+        fs::write(dir.join("big.txt"), &body).unwrap();
+        let (mut s, guard, spool) = svc_with_spool(&dir);
+        let args = json!({"path": "big.txt"});
+        let pre = approved_preflight(&mut s, &guard, "file_ops.read", args.clone());
+        let out = s
+            .handle(
+                "tool/commit",
+                &json!({
+                    "toolId": "file_ops.read",
+                    "ticketId": pre["ticketId"],
+                    "argsHash": pre["argsHash"],
+                    "args": args
+                }),
+            )
+            .expect("commit must run");
+        assert_eq!(out["ok"], true, "{out}");
+
+        // 1) the full bytes are on disk, under their own content address;
+        let full = json!({"ok": true, "content": body}).to_string();
+        let hash = crate::spool::content_hash(full.as_bytes());
+        let blobs = spool_blobs(&spool);
+        assert_eq!(blobs, vec![format!("{hash}.blob")], "the write happened");
+        let on_disk = fs::read_to_string(spool.root().join(format!("{hash}.blob"))).unwrap();
+        assert_eq!(
+            on_disk.len(),
+            full.len(),
+            "the artifact holds every byte the tool returned"
+        );
+
+        // 2) the reference is the one the write returned …
+        let reference = format!("{}://artifact/{hash}", everyaios_mcp::ARTIFACT_URI_SCHEME);
+        assert_eq!(out["artifactRef"], json!(reference), "{out}");
+        // … and the drilldown the reference implies is offered with it.
+        assert_eq!(out["spooled"], true, "{out}");
+        assert_eq!(out["tool_output_ref"]["hash"], json!(hash), "{out}");
+
+        // 3) the truncation is visible and the accounting is truthful: the full
+        //    size, never the cut length.
+        assert_eq!(out["truncated"], true, "{out}");
+        assert_eq!(out["totalBytes"], json!(full.len()), "{out}");
+        assert_eq!(
+            out["previewBytes"],
+            json!(crate::spool::INLINE_BUDGET_BYTES),
+            "{out}"
+        );
+        // 4) a truncation is never handed over as if it were the value: no
+        //    payload field, and the honest gap marker is absent.
+        assert!(out.get("content").is_none(), "{out}");
+        assert!(out.get("artifactWrite").is_none(), "{out}");
+
+        // 5) the receipt cites the artifact that holds the full result.
+        let receipt = &out["receipt"];
+        assert_eq!(receipt["resource"], json!(reference), "{receipt}");
+        assert_eq!(receipt["has_gap"], false, "{receipt}");
+    }
+
+    /// A write that does not succeed yields an uncertainty receipt, not a
+    /// success: the value is still delivered whole (a larger context, never a
+    /// wrong answer), but nothing advertises an artifact that does not exist and
+    /// the receipt says the effect could not be fully observed.
+    #[test]
+    fn a_failed_artifact_write_is_a_receipt_gap_not_a_clean_success() {
+        let dir = tempfile();
+        // A regular file where the spool root belongs: the gateway write cannot
+        // create its directory, so it cannot write. The write is attempted and
+        // refused — this is the real failure path, not a stubbed one.
+        fs::write(dir.join(crate::spool::SPOOL_DIR_NAME), b"not a directory").unwrap();
+        let body = "z".repeat(crate::spool::INLINE_BUDGET_BYTES * 3);
+        fs::write(dir.join("big.txt"), &body).unwrap();
+        let (mut s, guard, spool) = svc_with_spool(&dir);
+        let args = json!({"path": "big.txt"});
+        let pre = approved_preflight(&mut s, &guard, "file_ops.read", args.clone());
+        let out = s
+            .handle(
+                "tool/commit",
+                &json!({
+                    "toolId": "file_ops.read",
+                    "ticketId": pre["ticketId"],
+                    "argsHash": pre["argsHash"],
+                    "args": args
+                }),
+            )
+            .expect("commit must answer");
+        // The dispatch itself succeeded, so `ok` is true …
+        assert_eq!(out["ok"], true, "{out}");
+        // … the value is delivered whole, because dropping it would be a lie …
+        assert_eq!(out["content"], json!(body), "{out}");
+        // … nothing advertises an artifact …
+        assert!(out.get("artifactRef").is_none(), "{out}");
+        assert!(out.get("tool_output_ref").is_none(), "{out}");
+        // … the missing write is stated, and stated as a failure …
+        assert_eq!(out["artifactWrite"]["ok"], false, "{out}");
+        assert!(out["artifactWrite"]["error"].as_str().is_some(), "{out}");
+        // … the accounting stays truthful about what the real size was …
+        assert_eq!(
+            out["totalBytes"],
+            json!(json!({"ok": true, "content": body}).to_string().len()),
+            "{out}"
+        );
+        // … and the receipt is a gap, not a clean success.
+        let receipt = &out["receipt"];
+        assert_eq!(receipt["has_gap"], true, "{receipt}");
+        assert!(
+            receipt["uncertainty"]
+                .as_str()
+                .unwrap()
+                .contains("artifact was not written"),
+            "{receipt}"
+        );
+        assert!(receipt["resource"].is_null(), "{receipt}");
+        assert!(spool_blobs(&spool).is_empty(), "no blob exists");
+    }
+
+    /// The same seam with no gateway attached at all: still no invented
+    /// reference, still a gap. A result that cannot be reached by reference is
+    /// an honest gap, never a silent partial.
+    #[test]
+    fn an_unattached_gateway_reaches_no_reference_and_is_a_gap() {
+        let dir = tempfile();
+        let body = "w".repeat(crate::spool::INLINE_BUDGET_BYTES * 3);
+        fs::write(dir.join("big.txt"), &body).unwrap();
+        let guard = Arc::new(Mutex::new(GuardService::new()));
+        let mut s = ToolService::new(Arc::clone(&guard), dir);
+        let args = json!({"path": "big.txt"});
+        let pre = approved_preflight(&mut s, &guard, "file_ops.read", args.clone());
+        let out = s
+            .handle(
+                "tool/commit",
+                &json!({
+                    "toolId": "file_ops.read",
+                    "ticketId": pre["ticketId"],
+                    "argsHash": pre["argsHash"],
+                    "args": args
+                }),
+            )
+            .expect("commit must answer");
+        assert_eq!(out["content"], json!(body), "{out}");
+        assert!(out.get("artifactRef").is_none(), "{out}");
+        assert_eq!(out["artifactWrite"]["ok"], false, "{out}");
+        assert_eq!(out["receipt"]["has_gap"], true, "{out}");
+    }
+
     /// FIX-02 / `TASK-TRUST-001` — the tool path refuses a flood with the
     /// canonical taxonomy instead of minting tickets forever.
     #[test]
@@ -4165,6 +4619,94 @@ mod tests {
         assert!(err.contains("Unavailable") || err.contains("retry after"), "{err}");
         // A different caller has its own budget (the refusal is per caller).
         assert!(s.handle("tool/list", &json!({"sessionId": "s2"})).is_ok());
+    }
+
+    /// `TASK-TRUST-011` — the kernel tool gate and the shell's IPC gate read the
+    /// same resolved value, so neither can be a different limit from the other.
+    ///
+    /// The shape assertion is the direct one: the tool gate's limiter is built
+    /// from the `controlPlaneRateLimit` entry, and the shell gate builds
+    /// `RateLimiter::with_defaults()` — so the two are equal by construction. The
+    /// behavioural assertion then proves the equality is load-bearing: both gates
+    /// refuse on the same call, for the same key, with the same shape of error.
+    #[test]
+    fn both_admission_gates_enforce_the_same_resolved_limit() {
+        use crate::config::{Config, ConfigLayer, RateLimitOverrides};
+
+        let dir = tempfile();
+        let mut kernel_gate = svc(&dir);
+        // What the shell's `control_plane_limiter` builds: `with_defaults()`.
+        let shell_gate = everyaios_guard::RateLimiter::with_defaults();
+        assert_eq!(
+            kernel_gate.rate_limit_config(),
+            *shell_gate.config(),
+            "the kernel gate must be the shell gate's shape"
+        );
+        assert_eq!(
+            kernel_gate.rate_limit_config(),
+            Config::default()
+                .resolve_rate_limit(&std::collections::BTreeMap::new())
+                .rate_limit_config(),
+            "both gates read the resolved configuration entry"
+        );
+
+        // A run override is a real layer: the host resolves it and hands the
+        // kernel gate the result, and the gate enforces *that*.
+        let mut layers = std::collections::BTreeMap::new();
+        layers.insert(
+            ConfigLayer::Run,
+            RateLimitOverrides {
+                caller_command_burst: Some(2),
+                caller_command_per_second: Some(0.0),
+                ..RateLimitOverrides::default()
+            },
+        );
+        let resolved = Config::default().resolve_rate_limit(&layers);
+        assert_eq!(
+            resolved.source_of("callerCommandBurst"),
+            Some(ConfigLayer::Run)
+        );
+        kernel_gate = kernel_gate.with_rate_limit_config(resolved.rate_limit_config());
+        assert_eq!(
+            kernel_gate.rate_limit_config().per_caller_command.burst,
+            2.0
+        );
+
+        // Both gates, same key, same stamp: each admits exactly its own burst
+        // and refuses the call after it. The stamp is fixed, so no refill can
+        // blur the boundary.
+        let admitted = |gate: &dyn Fn(&str, &str, u64) -> bool, calls: u32| -> u32 {
+            (0..calls)
+                .take_while(|_| gate("ui", "tool/list", 1_000))
+                .count() as u32
+        };
+        let kernel_cfg = kernel_gate.rate_limit_config();
+        let shell_cfg = *shell_gate.config();
+        let probe = kernel_cfg
+            .per_caller_command
+            .burst
+            .max(shell_cfg.per_caller_command.burst) as u32
+            + 2;
+        let kernel_admitted = admitted(
+            &|caller, method, now| {
+                kernel_gate
+                    .rate_limiter
+                    .check_at(caller, method, now)
+                    .is_ok()
+            },
+            probe,
+        );
+        let shell_admitted = admitted(
+            &|caller, method, now| shell_gate.check_at(caller, method, now).is_ok(),
+            probe,
+        );
+        // The kernel gate is enforcing the run override it was handed …
+        assert_eq!(kernel_admitted, 2, "the run override is what is enforced");
+        // … and the shell gate is enforcing the shipped burst.
+        assert_eq!(
+            shell_admitted, 120,
+            "the shipped per-key burst is unchanged"
+        );
     }
 
     struct FakeBrowser;
