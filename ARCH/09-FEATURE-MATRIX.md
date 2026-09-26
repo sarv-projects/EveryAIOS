@@ -189,6 +189,18 @@ One row per `REQ-*`. Status only from evidence.
 | `REQ-FILES-010` | `25-FILES` | pending | `INV-10` | — | pending | pending | unplanned |
 | `REQ-FILES-011` | `25-FILES` | pending | `DM-024`, `DEC-029` | — | pending | pending | unplanned |
 | `REQ-FILES-012` | `25-FILES` | pending | `INV-20`, `INV-24` | — | pending | pending | unplanned |
+| `REQ-CODE-001` | `26-CODE` | pending | `CTR-025` | — | pending | pending | unplanned |
+| `REQ-CODE-002` | `26-CODE` | pending | `—` | — | pending | pending | unplanned |
+| `REQ-CODE-003` | `26-CODE` | pending | `DEC-027`, `CTR-025` | — | pending | pending | unplanned |
+| `REQ-CODE-004` | `26-CODE` | pending | `CTR-025` | — | pending | pending | unplanned |
+| `REQ-CODE-005` | `26-CODE` | pending | `—` | — | pending | pending | unplanned |
+| `REQ-CODE-006` | `26-CODE` | pending | `DEC-029`, `CTR-025` | — | pending | pending | unplanned |
+| `REQ-CODE-007` | `26-CODE` | pending | `INV-03` | — | pending | pending | unplanned |
+| `REQ-CODE-008` | `26-CODE` | pending | `INV-01/03`, `CTR-025` | — | pending | pending | unplanned |
+| `REQ-CODE-009` | `26-CODE` | pending | `INV-22` | — | pending | pending | unplanned |
+| `REQ-CODE-010` | `26-CODE` | pending | `CTR-025` | — | pending | pending | unplanned |
+| `REQ-CODE-011` | `26-CODE` | pending | `—` | — | pending | pending | unplanned |
+| `REQ-CODE-012` | `26-CODE` | pending | `CTR-025` | — | pending | pending | unplanned |
 
 ## 4. Maintenance
 

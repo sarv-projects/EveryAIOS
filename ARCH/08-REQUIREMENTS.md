@@ -1610,6 +1610,116 @@ This registry answers one question per entry: **what behavior must this system e
 - **Tests:** pending
 - **Status:** seeded
 
+### Code (`CODE`)
+
+#### REQ-CODE-001 — RepoGraph builds incrementally into a per-workspace store
+- **Statement:** GIVEN a workspace, WHEN the RepoGraph index is built or updated, THEN it stores the declared node kinds (File · Symbol · Import · Reference · Call · Test · Config · Document · Command) and typed edges (`imports` · `calls` · `extends/implements` · `references` · `tested_by` · `configured_by` · `generated_by` · `depends_on`), re-parses only hash-changed files, and keeps one store per workspace.
+- **Priority:** must
+- **Source:** `ARCH/26-CODE.md` §1/§2/§8 · `ARCH/07-CONTRACTS.md` CTR-025
+- **Acceptance:** change-one-file test re-parses only that file; a clean rebuild equals the incremental result; a corrupted store rebuilds from source within bounded work; stores do not leak across workspaces.
+- **Failure cases:** full re-parse on every change → defect (bounded-work violation); cross-workspace store leakage → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-CODE-002 — Edge precision is labeled; inference is never presented as certainty
+- **Statement:** GIVEN graph edges and query results, WHEN they are produced, THEN compiler/LSP-grade edges and heuristic (tree-sitter/regex-level) edges are distinct in the data, and consumers can tell which is which — an inferred relationship is never rendered as certain.
+- **Priority:** must
+- **Source:** `ARCH/26-CODE.md` §1/§2/§12
+- **Acceptance:** every edge/query result exposes a precision class; a heuristic-only edge is labeled inferred in agent and UI projections; precision survives projections.
+- **Failure cases:** heuristic edge shown as compiler-grade → defect; precision field lost in a projection → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-CODE-003 — RepoMap is a bounded, deterministic signature projection
+- **Statement:** GIVEN the RepoGraph, a token budget and task hints, WHEN a RepoMap is produced, THEN it is a deterministic signature-level projection (declarations + key refs, not bodies) within the declared token allowance — zero budget yields zero map — with stable ordering for the cache prefix.
+- **Priority:** must
+- **Source:** `ARCH/26-CODE.md` §1/§3 · `ARCH/16-CONTEXT.md` §3/§5 · `ARCH/04-DECISIONS.md` DEC-027
+- **Acceptance:** identical (graph, budget, hints) yields byte-identical output; an oversize case drops whole entries to fit; zero-budget emits nothing; no file bodies appear in the map.
+- **Failure cases:** nondeterministic ordering → defect; budget overrun → defect; body dump → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-CODE-004 — LSP bridge enriches precisely and degrades cleanly
+- **Statement:** GIVEN a language server for the workspace language set, WHEN it is available, THEN definitions/references/hover/diagnostics/symbols resolve through it (rename policy-gated, lifecycle under `19`); WHEN it is absent or crashed, THEN queries degrade to RepoGraph + ripgrep with diagnostics marked unavailable — never a silent empty answer.
+- **Priority:** must
+- **Source:** `ARCH/26-CODE.md` §4 · `ARCH/19-RUNTIME-ENVIRONMENTS.md` §3 · `ARCH/16-CONTEXT.md` §2
+- **Acceptance:** LSP-down test returns graph/search results with an explicit unavailable marker; rename without policy approval is denied; diagnostics surface as context items.
+- **Failure cases:** silent empty result on LSP crash → defect; ungated rename → violation.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-CODE-005 — Retrieval returns refs and bounded excerpts only
+- **Statement:** GIVEN a lexical (ripgrep), structural (graph) or combined query, WHEN results return, THEN each result is a `file:range` ref with a bounded excerpt, path-scoped by policy, and whole-file dumps are never the default.
+- **Priority:** must
+- **Source:** `ARCH/26-CODE.md` §5 · `ARCH/12-TRUST.md` §2 · `ARCH/16-CONTEXT.md` §2
+- **Acceptance:** excerpt-size bound test; out-of-scope search path denied; resolving a result's content is a separate permission-checked read.
+- **Failure cases:** whole-file dump by default → defect; unscoped search → security failure.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-CODE-006 — Worktrees are per-spawn options with explicit merge and cleanup
+- **Statement:** GIVEN isolated coding work, WHEN a worktree is provisioned, THEN isolation is requested per spawn (cheap read-only work does not pay it), the branch strategy is declared per task, the parent holds write leases, merging is an explicit reviewed step with receipts, and abandoned worktrees are cleaned with a receipt.
+- **Priority:** must
+- **Source:** `ARCH/26-CODE.md` §1/§6 · `ARCH/04-DECISIONS.md` DEC-029 · `ARCH/25-FILES.md` §6
+- **Acceptance:** isolation-request test creates a worktree; merge requires diff review + tests and emits a receipt; abandoned-worktree cleanup is receipted.
+- **Failure cases:** silent merge into the parent workspace → violation; worktree leak without a cleanup receipt → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-CODE-007 — Destructive git operations are policy-gated
+- **Statement:** GIVEN a destructive history or remote operation (force-push, reset, rebase rewrite), WHEN it is requested, THEN it is policy-gated and requires explicit approval — no silent history rewrite occurs.
+- **Priority:** must
+- **Source:** `ARCH/26-CODE.md` §6 · `ARCH/12-TRUST.md` §3
+- **Acceptance:** force-push denied without approval; the decision is recorded; a rejected operation leaves the repository unchanged.
+- **Failure cases:** silent rebase/reset → violation; force-push outside policy → catastrophic-class violation.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-CODE-008 — Code execution walks the governed path
+- **Statement:** GIVEN a code execution request (`code.run` · `code.test` · `code.build` · `code.lint`), WHEN it runs, THEN it executes inside a declared environment under exec policy on the governed path with a ticket — never a direct subprocess from the agent.
+- **Priority:** must
+- **Source:** `ARCH/26-CODE.md` §1/§7 · `AGENTCOWORK-SPEC.md` §4 · `ARCH/05-INVARIANTS.md` INV-01/INV-03 · `ARCH/03-HLD.md` §5
+- **Acceptance:** no direct agent subprocess path exists; the wrapper test shows capability handle + ticket + receipt; denial is typed and leaves no side effect.
+- **Failure cases:** direct subprocess from the agent → architecture violation; execution without a ticket → denied + audit.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-CODE-009 — Execution output is bounded with a durable full log
+- **Statement:** GIVEN a build/test/run execution, WHEN it completes, THEN output capture is bounded (full log → artifact ref, compact view → context) and long jobs run on the background lane with observable status.
+- **Priority:** must
+- **Source:** `ARCH/26-CODE.md` §7 · `ARCH/16-CONTEXT.md` §4 · `ARCH/11-WORK.md` §3 · `ARCH/05-INVARIANTS.md` INV-22
+- **Acceptance:** output-bound test keeps the compact view within budget while the full log stays retrievable as an artifact; a long job lands on the background lane; no unbounded output enters context.
+- **Failure cases:** full output into context → INV-22 violation; lost log → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-CODE-010 — Index freshness follows file deltas; stale edges are visible
+- **Statement:** GIVEN file changes reported by `25` watcher deltas, WHEN the index updates, THEN changed files are reindexed, stale edges are flagged rather than served as fresh, and queries prefer fresh subgraphs.
+- **Priority:** must
+- **Source:** `ARCH/26-CODE.md` §2 · `ARCH/25-FILES.md` §3
+- **Acceptance:** watcher-delta test updates only affected files; a stale-edge query is flagged; queries prefer the fresh subgraph.
+- **Failure cases:** stale edge served as current → defect; a delta ignored → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-CODE-011 — Index bounds and the v1 language set are declared
+- **Statement:** GIVEN a large or mixed repository, WHEN indexing runs, THEN ignore rules (node_modules/vendor/build), size caps and the v1 tree-sitter/LSP language set are declared and enforced, and unsupported languages degrade to lexical results instead of failing the index.
+- **Priority:** should
+- **Source:** `ARCH/26-CODE.md` §2/§10
+- **Acceptance:** ignore-rule test excludes declared paths; an oversized file is skipped with a flag; an unsupported-language file remains lexically searchable.
+- **Failure cases:** unbounded index over vendor trees → defect; unsupported language aborting the whole index → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-CODE-012 — Generated files carry provenance; direct edits are flagged
+- **Statement:** GIVEN a generated file, WHEN it is indexed or edited, THEN `generated_by` provenance is recorded and a direct edit to a generated file is flagged rather than silently accepted.
+- **Priority:** should
+- **Source:** `ARCH/26-CODE.md` §2/§8
+- **Acceptance:** provenance resolves to the producing step; an edit-to-generated test raises a flag; regeneration updates the edge.
+- **Failure cases:** generated file edited without a flag → defect; provenance lost → defect.
+- **Tests:** pending
+- **Status:** seeded
+
 ## 5. Seeding status
 
 | Domain | Seeds | Next pass |
@@ -1629,7 +1739,8 @@ This registry answers one question per entry: **what behavior must this system e
 | `BROWSER` (12) | drafted above + expanded in pass `23` | verified during pass `23` ✅ (2026-09-26) |
 | `CUA` (12) | drafted above + expanded in pass `24` | verified during pass `24` ✅ (2026-09-26) |
 | `FILES` (12) | drafted above + expanded in pass `25` | verified during pass `25` ✅ (2026-09-26) |
-| `CODE`, `SEARCH`, `COMMS`, `ART`, `EVENTS`, `SKILL`, `CHAN`, `VERIFY` | pending | seeded during each module's P7 pass |
+| `CODE` (12) | drafted above + expanded in pass `26` | verified during pass `26` ✅ (2026-09-26) |
+| `SEARCH`, `COMMS`, `ART`, `EVENTS`, `SKILL`, `CHAN`, `VERIFY` | pending | seeded during each module's P7 pass |
 
 ## 6. Related
 

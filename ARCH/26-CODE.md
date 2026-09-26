@@ -1,6 +1,7 @@
 # 26 — Code (Repository Intelligence & Execution)
 
 > **Status:** Draft P3 (early). Must pass the `ARCH/00-INDEX.md` §5 checklist at freeze.
+> **P7 pass (2026-09-26):** line-checked; requirements seeded (`REQ-CODE-*`, Requirements section).
 > **Role:** the coding domain runtime — **repo understanding** (RepoGraph → RepoMap) + **code execution** (shell/tests/worktrees). This module produces structure and executes; Agent X supplies the intelligence that uses it (`15`).
 > **Dependencies:** `25-FILES` (identity/watchers) · `16-CONTEXT` (budgets/levels) · `19-RUNTIME-ENVIRONMENTS` (processes/worktrees) · `12-TRUST` (exec policy) · `29-ARTIFACTS` (outputs). **Consumers:** `15` (coder profile), `34` (verification).
 > **Evidence:** product-owner brief (RepoGraph/RepoMap; edit→build→test loop) · `agent-harness-verification.md` §A2/§E1 (bounded fragments + baseline), §A3 (worktree session-bound vs per-spawn — DEC-029) · repo guidance (`.agents/skills/codebase-intelligence/SKILL.md`: tree-sitter/SQLite/graph, incremental hashing, “never present inferred edges as certain”) · local `everyaios-codeintel` crate (read-only reference).
@@ -87,3 +88,22 @@ Cross-repository graphs · remote devboxes · semantic/embedding retrieval · au
 ## 12. Evidence
 
 Product-owner brief (RepoGraph/RepoMap, coding loop) · `agent-harness-verification.md` §A2/§E1 (fragments/baseline), §A3 (worktree models; DEC-029) · `.agents/skills/codebase-intelligence/SKILL.md` (tree-sitter, incremental hashing, SQLite, graph analysis; inference labeling) · local `everyaios-codeintel` (reference only) · `ARCH/16-CONTEXT.md` §2–§5 · `ARCH/25-FILES.md` §2/§6.
+
+## 13. Requirements (`REQ-CODE-*`)
+
+Testable behaviors owned by this module live in `ARCH/08-REQUIREMENTS.md`; the traceability chain is in `ARCH/09-FEATURE-MATRIX.md`. This table is a pointer, not a second copy.
+
+| REQ | Behavior (one line) |
+|---|---|
+| `REQ-CODE-001` | RepoGraph builds incrementally (hash-changed files only) into a per-workspace store; clean rebuild equals incremental (CTR-025) |
+| `REQ-CODE-002` | Compiler/LSP-grade and heuristic edges are labeled distinctly; inferred relationships are never presented as certain |
+| `REQ-CODE-003` | RepoMap is a bounded, deterministic signature projection (no bodies) — zero budget ⇒ zero map (DEC-027) |
+| `REQ-CODE-004` | LSP bridge enriches definitions/references/diagnostics; absence/crash degrades to graph+search, never a silent empty answer |
+| `REQ-CODE-005` | Lexical/structural retrieval returns `file:range` refs + bounded excerpts, path-scoped — not whole-file dumps |
+| `REQ-CODE-006` | Worktrees are per-spawn options; merges and cleanup are explicit steps with receipts (DEC-029) |
+| `REQ-CODE-007` | Destructive git operations (force-push, reset, rebase rewrite) are policy-gated with explicit approval |
+| `REQ-CODE-008` | `code.run`/`test`/`build`/`lint` walk the governed path (capability + environment + exec policy + ticket) — no agent subprocess (INV-01/03) |
+| `REQ-CODE-009` | Execution output is bounded: full log → artifact ref, compact view → context; long jobs go to the background lane (INV-22) |
+| `REQ-CODE-010` | Index freshness follows `25` watcher deltas; stale edges are flagged, queries prefer fresh subgraphs |
+| `REQ-CODE-011` | Ignore rules, size caps and the v1 tree-sitter/LSP language set are declared; unsupported languages degrade to lexical |
+| `REQ-CODE-012` | Generated files carry `generated_by` provenance; direct edits to generated files are flagged |
