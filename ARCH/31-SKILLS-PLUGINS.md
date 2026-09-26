@@ -1,6 +1,7 @@
 # 31 — Skills & Plugins
 
 > **Status:** Draft P3 (early). Must pass the `ARCH/00-INDEX.md` §5 checklist at freeze.
+> **P7 pass (2026-09-26):** line-checked; requirements seeded (`REQ-SKILL-*`, Requirements section).
 > **Role:** **skills** are reusable know-how (instructions + requirements); **plugins** are the declared extension surfaces. Skills teach; capabilities enable; workflows repeat; agents reason.
 > **Dependencies:** `13-CAPABILITY` (requirements resolution) · `11-WORK` (activation scope) · `12-TRUST` (permissions/review) · `19-RUNTIME-ENVIRONMENTS` (sandboxed plugin code) · `29-ARTIFACTS` (library promotion). **Consumers:** `15` (agent skill use), UI (skill/plugin management).
 > **Evidence:** product-owner brief (skills loaded only when relevant; “skills define how; agents define why/what/when”; selective everything-is-a-plugin) · `agent-harness-verification.md` §D1 (scope-tagged registrations; plugin architecture verified), §E (plugin surfaces) · `ARCH/13-CAPABILITY.md` §7 (`described_by`) · `ARCH/06-DATA-MODEL.md` DM-027 · repo conventions (`.agents/skills/*/SKILL.md`).
@@ -71,6 +72,8 @@ Local-first: file/folder install, bundle import/export, Library integration (kin
 | Plugin crash loop | Auto-disable + audit; Core unaffected. |
 | Version skew vs Core contracts | Rejected with compat window explanation. |
 | Malicious/injected skill instructions | Treated as untrusted content: review gate + provenance + the same injection hygiene as other external content. |
+| Hostile skill/plugin package | Extraction bounded and confined to declared roots (pathfloor); manifest + provenance pass the review gate; rejection is typed — nothing lands outside the package (EDGE-094, `25` §7). |
+| Plugin update while executing | In-flight execution finishes on its loaded version; the new version applies at next activation; breaking skew is rejected with the compat window — no hot-swap mid-call (EDGE-096). |
 
 ## 8. Interop
 
@@ -93,3 +96,23 @@ Marketplace/remote registries · auto-update · code-signing infrastructure · a
 ## 11. Evidence
 
 Product-owner brief (skills model, relevance-only loading, agent-vs-skill distinction, selective plugin surfaces) · `agent-harness-verification.md` §D1 (verified plugin registry + scope-tagged registrations), §E (surface patterns) · `ARCH/13-CAPABILITY.md` §7 · `ARCH/06-DATA-MODEL.md` DM-027 · repo `.agents/skills` convention.
+
+## 12. Requirements (`REQ-SKILL-*`)
+
+Testable behaviors owned by this module live in `ARCH/08-REQUIREMENTS.md`; the traceability chain is in `ARCH/09-FEATURE-MATRIX.md`. This table is a pointer, not a second copy.
+
+| REQ | Behavior (one line) |
+|---|---|
+| `REQ-SKILL-001` | Skill ≠ capability: requirements resolve through the capability graph under policy — no bypass of `13`/`12` |
+| `REQ-SKILL-002` | Four-state activation; relevance-loaded and context-bounded — skills are never bulk-dumped |
+| `REQ-SKILL-003` | DM-027 skill model + package format with content-addressed provenance |
+| `REQ-SKILL-004` | Missing requirements → `guidance` naming the gap; activation never grants permissions |
+| `REQ-SKILL-005` | Plugins contribute at declared surfaces only, via manifest — no Core patching |
+| `REQ-SKILL-006` | Install → review gate → explicit per-scope enable (local-first v1) |
+| `REQ-SKILL-007` | Plugin code runs sandboxed under exec policy; grants explicit and recorded |
+| `REQ-SKILL-008` | Versioned updates checked against `07` contract versions; breaking skew rejected typed |
+| `REQ-SKILL-009` | Crash loops auto-disable + audit; a bad plugin never breaks Core |
+| `REQ-SKILL-010` | Uninstall removes code + owned data; Library entries and receipts are preserved |
+| `REQ-SKILL-011` | Package extraction is bounded and confined (pathfloor); hostile packages are rejected typed (EDGE-094) |
+| `REQ-SKILL-012` | Skill/plugin instructions are untrusted content — provenance + injection hygiene (EDGE-093) |
+| `REQ-SKILL-013` | Updates never hot-swap mid-call; new versions apply at next activation (EDGE-096) |

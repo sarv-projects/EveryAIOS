@@ -250,6 +250,19 @@ One row per `REQ-*`. Status only from evidence.
 | `REQ-EVENTS-010` | `30-EVENTS` | pending | `DEC-027` | — | pending | pending | unplanned |
 | `REQ-EVENTS-011` | `30-EVENTS` | pending | `DEC-009`, `INV-11` | `EDGE-079` | pending | pending | unplanned |
 | `REQ-EVENTS-012` | `30-EVENTS` | pending | `—` | — | pending | pending | unplanned |
+| `REQ-SKILL-001` | `31-SKILLS-PLUGINS` | pending | `—` | — | pending | pending | unplanned |
+| `REQ-SKILL-002` | `31-SKILLS-PLUGINS` | pending | `—` | — | pending | pending | unplanned |
+| `REQ-SKILL-003` | `31-SKILLS-PLUGINS` | pending | `DM-027` | — | pending | pending | unplanned |
+| `REQ-SKILL-004` | `31-SKILLS-PLUGINS` | pending | `—` | — | pending | pending | unplanned |
+| `REQ-SKILL-005` | `31-SKILLS-PLUGINS` | pending | `—` | — | pending | pending | unplanned |
+| `REQ-SKILL-006` | `31-SKILLS-PLUGINS` | pending | `—` | — | pending | pending | unplanned |
+| `REQ-SKILL-007` | `31-SKILLS-PLUGINS` | pending | `DEC-028` | — | pending | pending | unplanned |
+| `REQ-SKILL-008` | `31-SKILLS-PLUGINS` | pending | `—` | — | pending | pending | unplanned |
+| `REQ-SKILL-009` | `31-SKILLS-PLUGINS` | pending | `—` | — | pending | pending | unplanned |
+| `REQ-SKILL-010` | `31-SKILLS-PLUGINS` | pending | `—` | — | pending | pending | unplanned |
+| `REQ-SKILL-011` | `31-SKILLS-PLUGINS` | pending | `—` | `EDGE-094` | pending | pending | unplanned |
+| `REQ-SKILL-012` | `31-SKILLS-PLUGINS` | pending | `—` | `EDGE-093` | pending | pending | unplanned |
+| `REQ-SKILL-013` | `31-SKILLS-PLUGINS` | pending | `—` | `EDGE-096` | pending | pending | unplanned |
 
 ## 4. Maintenance
 

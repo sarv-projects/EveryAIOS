@@ -2169,6 +2169,125 @@ This registry answers one question per entry: **what behavior must this system e
 - **Tests:** pending
 - **Status:** seeded
 
+### Skills & Plugins (`SKILL`)
+
+#### REQ-SKILL-001 — A skill is not a capability; requirements resolve through the graph
+- **Statement:** GIVEN a skill's declared requirements, WHEN it runs, THEN it resolves through the capability graph (`13`) under policy (`12`) and never bypasses them to execute effects directly.
+- **Priority:** must
+- **Source:** `ARCH/31-SKILLS-PLUGINS.md` §1/§3 · `ARCH/13-CAPABILITY.md` §7 · `ARCH/12-TRUST.md` §3
+- **Acceptance:** skill invocation produces capability calls only; no direct-executor path exists; requirement resolution uses the graph.
+- **Failure cases:** a skill bypassing `13`/`12` → violation; direct effect execution from a skill → violation.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-SKILL-002 — Activation is scoped and relevance-loaded
+- **Statement:** GIVEN a session/run, WHEN skills activate, THEN the four-state model applies (Installed → Available → Activated → Executing), activation sets are per session/run, and skill bodies are never bulk-dumped into context — only activated instructions enter, bounded by `16`.
+- **Priority:** must
+- **Source:** `ARCH/31-SKILLS-PLUGINS.md` §1/§3 · `ARCH/16-CONTEXT.md` §3
+- **Acceptance:** context contains no inactive skill instructions; activation sets are per session/run; bounded-injection test passes.
+- **Failure cases:** bulk skill dump → violation; skill body in the stable prefix unless pinned → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-SKILL-003 — The skill model and package format are declared with provenance
+- **Statement:** GIVEN a skill, WHEN it is registered, THEN it conforms to `DM-027` (id/version, metadata, instructions ref, capability requirements, I/O contracts, example refs) with a content-addressed digest, and its package is a directory with a manifest + instructions + optional scripts/resources.
+- **Priority:** must
+- **Source:** `ARCH/31-SKILLS-PLUGINS.md` §2 · `ARCH/06-DATA-MODEL.md` DM-027
+- **Acceptance:** schema-conformance test; digest present and verified; package scan matches the declared format.
+- **Failure cases:** skill without provenance/digest → rejected; package format drift → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-SKILL-004 — Missing requirements become guidance; activation never grants permissions
+- **Statement:** GIVEN a skill whose capability requirements are unavailable, WHEN it attempts activation, THEN it activates in `guidance` mode naming the missing requirement, and activation never grants permissions — policy still decides.
+- **Priority:** must
+- **Source:** `ARCH/31-SKILLS-PLUGINS.md` §3 · `ARCH/13-CAPABILITY.md` §3/§9 · `ARCH/12-TRUST.md` §3
+- **Acceptance:** the guidance result names the missing requirement; a permission-requiring invocation still hits policy; no silent-degradation path exists.
+- **Failure cases:** silently skipping requirements → defect; activation widening permissions → violation.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-SKILL-005 — Plugins extend at declared surfaces only
+- **Statement:** GIVEN a plugin, WHEN it is installed, THEN it contributes only through the declared surfaces (capability · skill pack · provider · agent runtime · model adapter · channel · UI contribution · workflow template), carries a manifest (id · version · surfaces[] · permissions · hooks · compat window), and never patches Core.
+- **Priority:** must
+- **Source:** `ARCH/31-SKILLS-PLUGINS.md` §1/§4
+- **Acceptance:** surface-declaration test; an undeclared surface is rejected at review; no privileged Core-patching path exists.
+- **Failure cases:** Core patching → violation; contribution outside declared surfaces → security failure.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-SKILL-006 — Install passes a review gate before explicit enable
+- **Statement:** GIVEN a local file/folder install (v1 local-first), WHEN it is installed, THEN it passes the review gate (declared surfaces · requested permissions · provenance) before any explicit per-scope enable.
+- **Priority:** must
+- **Source:** `ARCH/31-SKILLS-PLUGINS.md` §5 · `AGENTCOWORK-SPEC.md` §12
+- **Acceptance:** install without review is impossible; enable is explicit and scoped; review findings are recorded.
+- **Failure cases:** auto-enable after install → violation; review bypass → security failure.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-SKILL-007 — Plugin code executes sandboxed without ambient authority
+- **Statement:** GIVEN enabled plugin code, WHEN it runs, THEN it executes sandboxed (`19`) under the exec policy (`12`) with explicit, recorded grants and no ambient authority.
+- **Priority:** must
+- **Source:** `ARCH/31-SKILLS-PLUGINS.md` §5 · `ARCH/19-RUNTIME-ENVIRONMENTS.md` §4 · `ARCH/04-DECISIONS.md` DEC-028
+- **Acceptance:** sandbox-confinement test; an undeclared privileged action is denied + audited; grants are recorded per plugin.
+- **Failure cases:** ambient authority → security failure; sandbox escape → catastrophic-class violation.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-SKILL-008 — Updates are versioned and compatibility-checked
+- **Statement:** GIVEN a plugin/skill update, WHEN it lands, THEN it is versioned and checked against Core contract versions (`07` §0); a breaking mismatch is rejected with a typed error and a compat-window explanation.
+- **Priority:** must
+- **Source:** `ARCH/31-SKILLS-PLUGINS.md` §5 · `ARCH/07-CONTRACTS.md` §0
+- **Acceptance:** a skew test rejects with the compat explanation; a compatible update applies; the active version is reported.
+- **Failure cases:** silently applying a breaking version → violation; untyped rejection → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-SKILL-009 — Crash loops auto-disable with audit; failures stay isolated
+- **Statement:** GIVEN repeated plugin crashes, WHEN the threshold is hit, THEN the plugin auto-disables with an audit entry and Core remains unaffected.
+- **Priority:** must
+- **Source:** `ARCH/31-SKILLS-PLUGINS.md` §5/§7
+- **Acceptance:** crash-loop test disables once + audits; Core health is unaffected; no crash propagation.
+- **Failure cases:** crash loop left running → defect; Core instability caused by a plugin crash → violation.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-SKILL-010 — Uninstall removes code + owned data, preserving evidence
+- **Statement:** GIVEN an uninstall, WHEN it completes, THEN code and plugin-owned data are removed, while Library entries and receipts referencing it are preserved.
+- **Priority:** must
+- **Source:** `ARCH/31-SKILLS-PLUGINS.md` §5 · `ARCH/29-ARTIFACTS.md` §6
+- **Acceptance:** post-uninstall scan finds no plugin code/data; library entries + receipts intact; deletion is audited.
+- **Failure cases:** orphaned plugin code/data → defect; receipts deleted with the plugin → violation.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-SKILL-011 — Packages are extracted under bounds and confinement
+- **Statement:** GIVEN a skill/plugin package, WHEN it is extracted, THEN extraction is bounded and confined to declared roots (pathfloor), the manifest + provenance pass the review gate, and rejection is typed — nothing lands outside the package.
+- **Priority:** must
+- **Source:** `ARCH/31-SKILLS-PLUGINS.md` §5 · `ARCH/41-EDGE-CASES.md` EDGE-094 · `ARCH/25-FILES.md` §7
+- **Acceptance:** traversal/oversize corpus test (rejected typed); nothing written outside the declared root; the review gate is invoked.
+- **Failure cases:** path traversal writing outside roots → security failure; unbounded extraction → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-SKILL-012 — Skill/plugin instructions are untrusted content
+- **Statement:** GIVEN skill/plugin instructions, WHEN they enter context or execution, THEN they are treated as untrusted content with provenance and the same injection hygiene as other external content — never as instruction authority.
+- **Priority:** must
+- **Source:** `ARCH/31-SKILLS-PLUGINS.md` §1/§7 · `ARCH/41-EDGE-CASES.md` EDGE-093
+- **Acceptance:** injection-corpus test (embedded instructions do not expand privileges); provenance is shown; the review gate flags suspicious content.
+- **Failure cases:** skill instructions treated as system authority → security failure; an unreviewed package activated → violation.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-SKILL-013 — In-flight executions finish on their loaded version
+- **Statement:** GIVEN a plugin update landing while its code executes, WHEN the update arrives, THEN in-flight execution finishes on the loaded version and the new version applies at the next activation — never a hot-swap mid-call; breaking skew is rejected.
+- **Priority:** must
+- **Source:** `ARCH/31-SKILLS-PLUGINS.md` §5 · `ARCH/41-EDGE-CASES.md` EDGE-096
+- **Acceptance:** update-during-execution test (the call completes on the old version; the next activation uses the new); skew rejected.
+- **Failure cases:** hot-swap mid-call → defect; two versions serving concurrently without declaration → defect.
+- **Tests:** pending
+- **Status:** seeded
+
 ## 5. Seeding status
 
 | Domain | Seeds | Next pass |
@@ -2193,7 +2312,8 @@ This registry answers one question per entry: **what behavior must this system e
 | `COMMS` (13) | drafted above + expanded in pass `28` | verified during pass `28` ✅ (2026-09-26) |
 | `ART` (12) | drafted above + expanded in pass `29` | verified during pass `29` ✅ (2026-09-26) |
 | `EVENTS` (12) | drafted above + expanded in pass `30` | verified during pass `30` ✅ (2026-09-26) |
-| `SKILL`, `CHAN`, `VERIFY` | pending | seeded during each module's P7 pass |
+| `SKILL` (13) | drafted above + expanded in pass `31` | verified during pass `31` ✅ (2026-09-26) |
+| `CHAN`, `VERIFY` | pending | seeded during each module's P7 pass |
 
 ## 6. Related
 
