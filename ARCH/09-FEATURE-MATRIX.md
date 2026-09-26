@@ -90,13 +90,28 @@ One row per `REQ-*`. Status only from evidence.
 | `REQ-MEM-003` | `17-MEMORY` | pending | `DEC-019` | — | pending | pending | unplanned |
 | `REQ-MEM-004` | `17-MEMORY` | pending | `INV-08` | — | pending | pending | unplanned |
 | `REQ-MEM-005` | `17-MEMORY` | pending | `DM-018` | — | pending | pending | unplanned |
-| `REQ-MEM-006` | `17-MEMORY` | pending | `INV-10`, `DEC-009` | — | pending | pending | unplanned |
+| `REQ-MEM-006` | `17-MEMORY` | pending | `INV-10`, `DEC-009/038` | — | pending | pending | unplanned |
 | `REQ-MEM-007` | `17-MEMORY` | pending | `DEC-018` | — | pending | pending | unplanned |
 | `REQ-MEM-008` | `17-MEMORY` | pending | `DEC-018` | — | pending | pending | unplanned |
 | `REQ-MEM-009` | `17-MEMORY` | pending | `DEC-018`, `DM-018` | — | pending | pending | unplanned |
-| `REQ-MEM-010` | `17-MEMORY` | pending | `INV-09`, `INV-24` | — | pending | pending | unplanned |
+| `REQ-MEM-010` | `17-MEMORY` | pending | `INV-09`, `INV-24`, `DEC-039` | `EDGE-170` | pending | pending | unplanned |
 | `REQ-MEM-011` | `17-MEMORY` | pending | `—` | — | pending | pending | unplanned |
-| `REQ-MEM-012` | `17-MEMORY` | pending | `INV-22` | — | pending | pending | unplanned |
+| `REQ-MEM-012` | `17-MEMORY` | pending | `INV-22` | `EDGE-027` | pending | pending | unplanned |
+| `REQ-MEM-013` | `17-MEMORY` | pending | `DEC-038`, `INV-10`, `DM-018` | — | pending | pending | unplanned |
+| `REQ-MEM-014` | `17-MEMORY` | pending | `DEC-036/037`, `INV-11` | `EDGE-093/176` | pending | pending | unplanned |
+| `REQ-MEM-015` | `17-MEMORY` | pending | `—` | — | pending | pending | unplanned |
+| `REQ-MEM-016` | `17-MEMORY` | pending | `DEC-039`, `INV-09/24`, `DM-018` | `EDGE-170` | pending | pending | unplanned |
+| `REQ-MEM-017` | `17-MEMORY` | pending | `—` | `EDGE-175` | pending | pending | unplanned |
+| `REQ-MEM-018` | `17-MEMORY` | pending | `INV-06` | `EDGE-172/173` | pending | pending | unplanned |
+| `REQ-MEM-019` | `17-MEMORY` | pending | `INV-22` | `EDGE-171` | pending | pending | unplanned |
+| `REQ-MEM-020` | `17-MEMORY` | pending | `DEC-040`, `DM-024`, `INV-10` | `EDGE-178` | pending | pending | unplanned |
+| `REQ-MEM-021` | `17-MEMORY` | pending | `DEC-027/041`, `DM-006` | — | pending | pending | unplanned |
+| `REQ-MEM-022` | `17-MEMORY` | pending | `DEC-009/025/029/036/043` | `EDGE-157/158` | pending | pending | unplanned |
+| `REQ-MEM-023` | `17-MEMORY` | pending | `DEC-042`, `INV-01/04/24` | — | pending | pending | unplanned |
+| `REQ-MEM-024` | `17-MEMORY` | pending | `DEC-031/044` | — | pending | pending | unplanned |
+| `REQ-MEM-025` | `17-MEMORY` | pending | `—` | `EDGE-112/177` | pending | pending | unplanned |
+| `REQ-MEM-026` | `17-MEMORY` | pending | `DEC-032`, `DM-018` | `EDGE-179` | pending | pending | unplanned |
+| `REQ-MEM-027` | `17-MEMORY` | pending | `—` | `EDGE-028` | pending | pending | unplanned |
 | `REQ-MODEL-001` | `18-MODEL-ROUTING` | pending | `DEC-004`, `DM-025` | — | pending | pending | unplanned |
 | `REQ-MODEL-002` | `18-MODEL-ROUTING` | pending | `DM-025` | — | pending | pending | unplanned |
 | `REQ-MODEL-003` | `18-MODEL-ROUTING` | pending | `DEC-034` | — | pending | pending | unplanned |

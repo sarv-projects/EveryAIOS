@@ -620,7 +620,7 @@ This registry answers one question per entry: **what behavior must this system e
 - **Statement:** GIVEN repeated model calls in a session, WHEN context is packed, THEN the stable prefix (system contract, agent identity, project rules, stable tool definitions) stays stable, dynamic content lands in a suffix, injection blocks are frozen once computed for the session (memory always-on block computed once), and turns ship baseline + deltas.
 - **Priority:** must
 - **Source:** `ARCH/16-CONTEXT.md` §5
-- **Acceptance:** prefix-stability test across turns (byte-stable until a real change); a frozen injection block is not recomputed mid-session; cache-hit telemetry.
+- **Acceptance:** prefix-stability test across turns (byte-stable until a real change); a frozen injection block is not recomputed mid-session **except on the declared memory mutation-invalidation triggers (`REQ-MEM-019`)**; cache-hit telemetry.
 - **Failure cases:** recomputing the always-on block per turn → defect (cache churn); dynamic content placed in the prefix → defect.
 - **Tests:** pending
 - **Status:** seeded
@@ -637,11 +637,11 @@ This registry answers one question per entry: **what behavior must this system e
 ### Memory (`MEM`)
 
 #### REQ-MEM-001 — Memory v1 algorithm set
-- **Statement:** GIVEN v1 memory, WHEN storage and algorithms are exercised, THEN storage is one Core-owned SQLite file in WAL mode with FTS5 kept in sync by triggers, extraction is ADD-only with a `superseded_by` pointer, forget is suppression-based, and no vectors, graph, decay or consolidation loops are required for v1 to function.
+- **Statement:** GIVEN v1 memory, WHEN storage and algorithms are exercised, THEN storage is one Core-owned SQLite file in WAL mode with FTS5 kept in sync by explicit triggers (trigger DDL is part of the store definition), extraction is ADD-only with a `superseded_by` pointer, forget is suppression-based, no vectors, graph, decay or consolidation loops are required for v1 to function, and recall scoring follows `REQ-MEM-015`.
 - **Priority:** must
-- **Source:** `AGENTCOWORK-SPEC.md` §7 · `ARCH/04-DECISIONS.md` DEC-018 · `ARCH/06-DATA-MODEL.md` DM-018
-- **Acceptance:** the v1 acceptance suite passes with no vector/graph/decay component; supersede and suppression-forget semantics verified; a deterministic integrity check rebuilds FTS from the item store.
-- **Failure cases:** any v1 behaviour requiring vectors/graph/decay → defect; FTS drift after mutations → integrity check rebuilds it, and the test fails if it does not.
+- **Source:** `AGENTCOWORK-SPEC.md` §7 · `ARCH/04-DECISIONS.md` DEC-018 · `ARCH/06-DATA-MODEL.md` DM-018 · `ARCH/17-MEMORY.md` §3
+- **Acceptance:** the v1 acceptance suite passes with no vector/graph/decay component; supersede and suppression-forget semantics verified; a named integrity-check (`integrity-check`/row-count parity) plus `rebuild` procedure with post-rebuild verification restores FTS from the item store; `content_hash` normalization is a versioned function.
+- **Failure cases:** any v1 behaviour requiring vectors/graph/decay → defect; FTS drift after mutations → integrity check + rebuild restores it (with post-rebuild verification), and the test fails if it does not.
 - **Tests:** pending
 - **Status:** seeded
 
@@ -664,11 +664,11 @@ This registry answers one question per entry: **what behavior must this system e
 - **Status:** seeded
 
 #### REQ-MEM-004 — Non-touching read
-- **Statement:** GIVEN context assembly, recall, or inspection, WHEN memory is read, THEN no memory state mutates — no counter, salience or timestamp changes; `used_count`/`last_used_at` bump only on the explicit-use path (or stay deferred), never as a side effect of reading.
+- **Statement:** GIVEN context assembly, recall, or inspection, WHEN memory is read, THEN no memory state mutates — no counter, salience or timestamp changes; `used_count`/`last_used_at` bump only on the explicit-use path (or stay deferred), never as a side effect of reading. Mutation-driven invalidation of a frozen injection block (`REQ-MEM-019`) is not a read-side write: “non-touching” governs recall and inspection only.
 - **Priority:** must
 - **Source:** `ARCH/05-INVARIANTS.md` INV-08 · `ARCH/17-MEMORY.md` §6
-- **Acceptance:** mutation-free recall test (store contents byte-identical before and after assembly); counters unchanged unless explicit use runs; deferred counters leave no hidden writes.
-- **Failure cases:** a read causing a write → violation; implicit usage counting → defect.
+- **Acceptance:** mutation-free recall test (store contents byte-identical before and after assembly); counters unchanged unless explicit use runs; deferred counters leave no hidden writes; block invalidation occurs only as an explicit response to a mutation, never as a recall side effect.
+- **Failure cases:** a read causing a write → violation; implicit usage counting → defect; recall itself recomputing a frozen block → violation.
 - **Tests:** pending
 - **Status:** seeded
 
@@ -682,11 +682,11 @@ This registry answers one question per entry: **what behavior must this system e
 - **Status:** seeded
 
 #### REQ-MEM-006 — Isolation, sensitivity and projection
-- **Statement:** GIVEN a recall or projection request, WHEN items are selected, THEN recall filters current/unexpired items with sensitivity ≤ the caller ceiling, `confidential` items never leave their owning project scope, and an external agent receives only its permitted projection — owning project scope plus its own session/task plus user preferences; no org, no other projects, no `confidential` without an explicit loadout (v1 default: project + user).
+- **Statement:** GIVEN a recall or projection request, WHEN items are selected, THEN recall filters current/unexpired items with sensitivity ≤ the ceiling **derived from the actor binding** (never caller-supplied) over the canonical vocabulary (`public | personal | confidential`, assigned at write with a monotone floor — `REQ-MEM-013`), `confidential` items never leave their owning project scope, the project scope is bound to the stable project identity (`REQ-MEM-020`), and an external agent receives only its permitted projection — owning project scope plus its own session/task plus user preferences; no org, no other projects, no `confidential` without an explicit loadout (v1 default: project + user).
 - **Priority:** must
-- **Source:** `ARCH/05-INVARIANTS.md` INV-10 · `ARCH/04-DECISIONS.md` DEC-009 · `ARCH/12-TRUST.md` §8 · `ARCH/17-MEMORY.md` §4/§9
-- **Acceptance:** cross-project leakage = 0; external-agent view test shows no org, other-project or confidential items; sensitivity-ceiling test rejects above-ceiling items; superseded items are never served as current.
-- **Failure cases:** confidential item in a broader assembly → verification failure; projection leaking another project → security violation; superseded item served as current → defect.
+- **Source:** `ARCH/05-INVARIANTS.md` INV-10 · `ARCH/04-DECISIONS.md` DEC-009/038 · `ARCH/12-TRUST.md` §8 · `ARCH/17-MEMORY.md` §4/§9 · `REQ-MEM-013/020`
+- **Acceptance:** cross-project leakage = 0; external-agent view test shows no org, other-project or confidential items; sensitivity-ceiling matrix per surface rejects above-ceiling items; a caller-supplied scope/ceiling cannot widen the actor's permitted set; superseded items are never served as current.
+- **Failure cases:** confidential item in a broader assembly → verification failure; projection leaking another project → security violation; caller-supplied scope honored → security failure; superseded item served as current → defect.
 - **Tests:** pending
 - **Status:** seeded
 
@@ -718,29 +718,164 @@ This registry answers one question per entry: **what behavior must this system e
 - **Status:** seeded
 
 #### REQ-MEM-010 — Forget and scope wipe are permanent
-- **Statement:** GIVEN a user forget or scope wipe, WHEN it executes, THEN forget hard-deletes the item, writes a content-hash suppression (blocking re-extraction of identical content) and an audit entry; a scope wipe removes that scope's items, superseded rows and suppressions; both are permanent, and replaying the same history cannot resurrect the item.
+- **Statement:** GIVEN a user forget or scope wipe, WHEN it executes, THEN forget hard-deletes the item, writes a content-hash suppression (blocking re-extraction **and import** of identical content) and an audit entry; a scope wipe removes that scope's items and superseded rows but retains suppressions; deletion of a superseding item never fails and never resurrects an older item (no dangling `superseded_by`); erasure follows the declared policy/threat model (DEC-039); both are permanent, and replaying the same history cannot resurrect the item (`REQ-MEM-016`).
 - **Priority:** must
-- **Source:** `ARCH/05-INVARIANTS.md` INV-09/INV-24 · `ARCH/17-MEMORY.md` §4/§7
-- **Acceptance:** re-extraction after forget = 0; wipe leaves no FTS orphans; every forget/wipe audited append-only; suppression survives re-ingestion.
-- **Failure cases:** forgotten item re-appearing → defect; unaudited delete → violation; scope wipe leaving superseded rows or suppressions behind → defect.
+- **Source:** `ARCH/05-INVARIANTS.md` INV-09/INV-24 · `ARCH/17-MEMORY.md` §4/§7 · `ARCH/04-DECISIONS.md` DEC-039 · `REQ-MEM-016`
+- **Acceptance:** re-extraction after forget = 0; import after forget = 0; delete-of-superseding-item leaves no resurrection and no FK error; pointer-integrity check passes; wipe leaves no FTS orphans and no lost suppressions; every forget/wipe audited append-only.
+- **Failure cases:** forgotten item re-appearing via extraction/import/replay → security failure; delete failing on a pointer reference → defect; scope wipe re-opening re-extraction of a suppressed hash → failure; unaudited delete → violation.
 - **Tests:** pending
 - **Status:** seeded
 
 #### REQ-MEM-011 — Inspect, export and import
-- **Statement:** GIVEN the Memory UI or tooling, WHEN a user inspects, exports or imports memory, THEN every item shows scope/source/created-at and supports per-item delete and per-scope wipe; `memory.export` / `memory.import` support `json | md`; imports re-run hash and secret checks and land as `source='import'`; an export → import round-trip is byte-identical.
+- **Statement:** GIVEN the Memory UI or tooling, WHEN a user inspects, exports or imports memory, THEN every item shows scope/source/created-at and supports per-item delete and per-scope wipe; `memory.export` / `memory.import` support `json | md`; imports re-run hash and secret checks and land as `source='import'`; an export → import round-trip is byte-identical for unchanged identity, and remapped imports follow the declared id/scope rules (`REQ-MEM-027`).
 - **Priority:** must
-- **Source:** `ARCH/17-MEMORY.md` §4/§13 · `AGENTCOWORK-SPEC.md` §7
-- **Acceptance:** provenance visible for every item; delete/wipe reachable from the UI; round-trip byte-identical; imported duplicates dedupe by hash; secret scan runs on import.
+- **Source:** `ARCH/17-MEMORY.md` §4/§13 · `AGENTCOWORK-SPEC.md` §7 · `REQ-MEM-027`
+- **Acceptance:** provenance visible for every item; delete/wipe reachable from the UI; round-trip byte-identical for unchanged identity; imported duplicates dedupe by hash; secret scan runs on import; remapped imports are explicit and audited.
 - **Failure cases:** missing provenance → defect; import bypassing validation → rejected; import silently widening scope → defect.
 - **Tests:** pending
 - **Status:** seeded
 
 #### REQ-MEM-012 — Recall performance and injection budget honesty
-- **Statement:** GIVEN recall and injection under the memory budget, WHEN queries run at 10k items, THEN recall p95 is ≤ 50 ms, zero relevant hits inject zero tokens, degradation drops whole items — never truncating an item — with injection measured on rendered output, and extraction cost stays visible through `memory.extraction.run` events.
+- **Statement:** GIVEN recall and injection under the memory budget, WHEN queries run at 10k items, THEN recall p95 is ≤ 50 ms, zero **query-relevant** hits inject zero tokens **in the relevant block** (the always-on block is separately budgeted and present only when pinned items exist), degradation drops whole items — never truncating an item — with injection measured on rendered output, extraction cost stays visible through `memory.extraction.run` events, and ranking correctness follows `REQ-MEM-015`.
 - **Priority:** must
-- **Source:** `ARCH/05-INVARIANTS.md` INV-22 · `ARCH/17-MEMORY.md` §6/§10
-- **Acceptance:** p95 ≤ 50 ms at 10k measured in the eval suite; zero-hit = zero-token test; no partial item in rendered injection; extraction cost events present per run.
-- **Failure cases:** idle tokens injected → budget test fails; truncated item → invalid injection; extraction spend without an event → telemetry defect.
+- **Source:** `ARCH/05-INVARIANTS.md` INV-22 · `ARCH/17-MEMORY.md` §6/§10 · `REQ-MEM-015/019`
+- **Acceptance:** p95 ≤ 50 ms at 10k measured in the eval suite; zero-query-hit test shows zero relevant-block tokens with the always-on block measured separately; whole-item drop only; extraction cost events present per run.
+- **Failure cases:** idle tokens in the relevant block → budget test fails; truncating an item → invalid injection; extraction spend without an event → telemetry defect; always-on tokens counted as relevant hits → test-boundary defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-MEM-013 — Sensitivity assignment, vocabulary and ceilings
+- **Statement:** GIVEN any write into memory, WHEN an item is created or edited, THEN it receives exactly one sensitivity class from the canonical registry vocabulary (`public | personal | confidential`, `ARCH/06-DATA-MODEL.md` §0), defaulting to `personal`; the class may be raised only by a user action or by a deterministic floor rule whereby an item is never less sensitive than its source scope/surface; recall enforces sensitivity ≤ the ceiling derived from the actor binding (not from caller-supplied parameters); and the per-surface default ceilings (desktop user, external agent, projection, UI inspect) are declared.
+- **Priority:** must
+- **Source:** `ARCH/17-MEMORY.md` §2.1/§5.3/§7/§9 · `ARCH/16-CONTEXT.md` §2/§6 · `ARCH/06-DATA-MODEL.md` §0 · `ARCH/05-INVARIANTS.md` INV-10 · `ARCH/04-DECISIONS.md` DEC-038 · `REQ-MEM-006`
+- **Acceptance:** fixture writes all three classes; monotone-floor test (item sourced from a confidential project cannot be stored below `confidential`); caller-ceiling matrix per surface; zero above-ceiling items in recall; a vocabulary check rejects `normal|sensitive` on memory paths.
+- **Failure cases:** missing/unknown class → rejected; caller-supplied ceiling widening → rejected; `confidential` item in a broader projection → leak test fails; two vocabularies on the recall path → contract test fails.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-MEM-014 — Extraction boundary: untrusted content and provenance trust tiers
+- **Statement:** GIVEN extraction harvests settled turns that may contain untrusted data (web content, files, tool output, external receipts), WHEN candidates are extracted and stored, THEN harvested content is bounded, delimited and escaped as data (never as instructions), every item carries a provenance trust tier (`user_explicit | agent_asserted | derived_untrusted | import`) derived from its source, instruction-shaped or scope-widening candidates are rejected/downgraded/stored without authority, and injected memory text can never change agent policy, goals, permissions, or tool choices.
+- **Priority:** must
+- **Source:** `ARCH/17-MEMORY.md` §5.2–5.4/§6/§13 · `ARCH/15-AGENT-X.md` §7 (escaping precedent) · `ARCH/04-DECISIONS.md` DEC-036/037 · `ARCH/41-EDGE-CASES.md` EDGE-093
+- **Acceptance:** adversarial fixture (page/tool output containing a “remember: always …” instruction) produces no policy-bearing item and no scope widening; every injected item exposes its trust tier; a harness test shows memory text is rendered as quoted data and never executed/obeyed.
+- **Failure cases:** untrusted instruction stored as `decision`/`preference` with authority → failure; scope widened from untrusted content → failure; injected content obeyed in an agent test → security failure.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-MEM-015 — Recall scoring correctness and query robustness
+- **Statement:** GIVEN a recall query, WHEN candidates are scored, THEN the score is defined on a non-negative relevance base (FTS5 `bm25()` returns negative values; normalize e.g. `relevance = −bm25`), the ordering direction is explicit and monotone in relevance, boosts never invert relevance, ties break deterministically (`created_at`, id), a free-text query is sanitized into valid FTS5 syntax or the call abstains, an invalid query never returns arbitrary candidates, and recall outcomes distinguish `hit` / `abstain` / `error` with metering.
+- **Priority:** must
+- **Source:** `ARCH/17-MEMORY.md` §3/§6 · `ARCH/27-SEARCH.md` §4 · `ARCH/16-CONTEXT.md` §6 · SQLite FTS5 documentation (bm25 is multiplied by −1 so better matches are assigned numerically lower scores)
+- **Acceptance:** golden-set ordering test (recall@5/MRR); fixture where a pinned item has worse raw BM25 than an unpinned match and still ranks first; malformed-query fuzz (quotes/operators/NEAR) yields abstention, not an error or garbage; non-English fixture records tokenizer behavior; abstention and error are distinguishable in telemetry.
+- **Failure cases:** boosted rank below a better unboosted match → test failure; malformed query error surfaced to the turn → failure; empty/invalid query returning candidates → defect; error reported as abstention (or vice versa) → telemetry defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-MEM-016 — Forget, supersede pointers and erasure integrity
+- **Statement:** GIVEN a forget, scope wipe, supersede or import, WHEN the store mutates, THEN stored text is never rewritten; a forgotten item is hard-deleted with its suppression recorded; a `superseded_by` pointer is never left dangling and deleting a superseding item neither fails nor resurrects an older item; import re-checks suppression and cannot resurrect a forgotten hash; scope-wipe suppression semantics are explicit; and “permanent” states the physical-erasure policy (secure delete/checkpoint/VACUUM/FTS rebuild) or an explicit threat-model boundary.
+- **Priority:** must
+- **Source:** `ARCH/17-MEMORY.md` §3/§4/§7 · `ARCH/05-INVARIANTS.md` INV-09/INV-24 · `ARCH/04-DECISIONS.md` DEC-039 · `REQ-MEM-009/010` · SQLite pragma documentation
+- **Acceptance:** forget→re-extract = 0; forget→import = 0; delete-of-superseding-item leaves no resurrection and no FK error; wipe leaves no FTS orphans; pointer-integrity check passes; suppression digest uses the decided keyed scheme; audit payload contains no item body.
+- **Failure cases:** forgotten item returns via any path (extraction, import, replay) → security failure; delete fails due to a pointer reference → defect; old item resurrects after deleting the new one unless explicitly decided → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-MEM-017 — Growth bounds, item caps, retention and expiry
+- **Statement:** GIVEN long-running use, WHEN memory grows, THEN every writable scope has a declared bound (max items and/or bytes), a single item is capped at the declared byte size with oversize rejected at validate, session/task TTLs have a defined anchor plus a sweeper that deletes, syncs FTS and audits per policy, `memory_jobs` is garbage-collected, and the durable scopes' bound (or declared intentional unboundedness) is a named product knob measured by the drift simulation.
+- **Priority:** must
+- **Source:** `ARCH/17-MEMORY.md` §7/§10/§13 · `ARCH/11-WORK.md` §7
+- **Acceptance:** oversize item rejected with no partial write; per-scope cap test; TTL-anchor test; sweeper leaves no FTS orphans; jobs-GC test; 1k/10k/50k-item recall benchmarks; drift simulation reports store size and top-k waste.
+- **Failure cases:** unbounded growth with no declared bound → freeze-checklist failure; oversize item stored → defect; expired item recalled → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-MEM-018 — Concurrency, single-writer and corruption semantics
+- **Statement:** GIVEN multiple surfaces and processes (desktop, CLI, detached work, extractor, UI), WHEN memory is written or read, THEN exactly one writer owns the store through a named mechanism, lock contention is bounded (busy timeout + backoff + per-call degradation) and never disables memory for a whole session or fails a turn, and corruption is detected, quarantined, surfaced and repaired via export/rebuild without blocking chat.
+- **Priority:** must
+- **Source:** `ARCH/17-MEMORY.md` §3/§8 · `ARCH/05-INVARIANTS.md` INV-06 · `ARCH/11-WORK.md` §3 · `ARCH/32-CHANNELS.md` §6
+- **Acceptance:** two-process write test (contention retries; no lost writes; no turn failure); forced-lock test shows bounded degradation only; corrupt-file test shows quarantine + surfaced repair + chat unaffected; detached/CLI write test.
+- **Failure cases:** silent lost write → defect; corruption disabling chat → violation; `BUSY` propagated as a turn failure → violation.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-MEM-019 — Mutation invalidation and frozen-injection budget semantics
+- **Statement:** GIVEN injection blocks computed under budget, WHEN a memory mutation occurs (forget, edit, pin/unpin, supersede, scope wipe, enable/disable), THEN the next turn reflects it — frozen blocks are invalidated for forget/edit/disable with cache-bust accepted — zero query-relevant hits inject zero tokens in the relevant block, the always-on block is separately budgeted and present only when pinned items exist, and degradation drops whole items.
+- **Priority:** must
+- **Source:** `ARCH/16-CONTEXT.md` §5/§6/§7 · `ARCH/17-MEMORY.md` §6 · `ARCH/05-INVARIANTS.md` INV-22 · `REQ-MEM-012`
+- **Acceptance:** delete-mid-session test (deleted item absent from the immediate next turn's rendered context); pin/edit/disable invalidation test; zero-hit rendering shows zero relevant-block tokens and no empty headers; render test with always-on present/absent.
+- **Failure cases:** forgotten item injected after a turn boundary → privacy failure; zero-hit injection > 0 relevant tokens → INV-22 failure; truncated item → failure.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-MEM-020 — Project identity, re-keying and cross-project isolation
+- **Statement:** GIVEN a project scope, WHEN it is bound or re-bound, THEN the scope key is a stable project identity (`DM-024 project_identity`), not a raw path; canonicalization handles Windows case/junction/short-name/long-path and POSIX symlink cases; clone/move/rename/worktree behavior is explicit; and no recall path can return an item whose project identity is not in the actor's permitted set.
+- **Priority:** must
+- **Source:** `ARCH/17-MEMORY.md` §2.1 · `ARCH/25-FILES.md` §5/§7 · `ARCH/21-WORLD-MODEL.md` §3 · `ARCH/06-DATA-MODEL.md` DM-024 · `ARCH/04-DECISIONS.md` DEC-040 · INV-10
+- **Acceptance:** two-project leakage test = 0 under move/clone/re-key; non-git folder test; worktree sharing test; Windows canonicalization matrix with recorded results.
+- **Failure cases:** path-keyed scope attached to a new project at the same path → leak; worktree/clone unexpectedly sharing or losing memory without a recorded decision → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-MEM-021 — Checkpoint is authoritative; memory summaries reference, never duplicate
+- **Statement:** GIVEN long-horizon work, WHEN summaries exist in both the checkpoint path and memory, THEN the checkpoint (`DM-006`, DEC-027 projection) is authoritative for work state, a memory `summary` item carries a `source_ref` to its checkpoint/session and is never served as work state, a live checkpoint in the assembly supersedes a stale memory summary, and no second timeline exists.
+- **Priority:** must
+- **Source:** `ARCH/17-MEMORY.md` §2.3 · `ARCH/16-CONTEXT.md` §4 · `ARCH/11-WORK.md` §2 · `ARCH/04-DECISIONS.md` DEC-027/041 · INV-16/INV-23
+- **Acceptance:** fixture where checkpoint and memory summary disagree → assembled context uses the checkpoint; summary provenance resolves; deleting the checkpoint leaves the summary annotated, not silently authoritative; no recall path serves `summary` as `checkpoint` state.
+- **Failure cases:** two divergent timelines injected → defect; memory summary overriding a live checkpoint → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-MEM-022 — Multi-agent boundary: external agents and subagents
+- **Statement:** GIVEN external agents and subagents, WHEN they interact with memory, THEN v1 exposure is read-only filtered recall (bound project + own session/task + user preferences; no org, no other projects, no `confidential` without a recorded loadout); Core never writes an external agent's native memory/config/session stores; external provider-session transcripts are never harvested; child-session harvesting, if enabled, is explicit with parent linkage; receipts enter extraction only as untrusted data; and imports are user-initiated, read-only to the source, and audited.
+- **Priority:** must
+- **Source:** `ARCH/17-MEMORY.md` §4/§5/§9 · `ARCH/15-AGENT-X.md` §5/§7 · `ARCH/04-DECISIONS.md` DEC-009/025/029/036/043 · `ARCH/32-CHANNELS.md` §3
+- **Acceptance:** external-agent view matrix test; test that no write occurs to a fixture external memory directory; receipt-only parent context test; child-session extraction policy test; import audit test.
+- **Failure cases:** an external agent's native files written → violation; receipt transcript in parent context → violation; external transcript harvested → violation.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-MEM-023 — Mutation classification, authorization and actor-derived scope sets
+- **Statement:** GIVEN any memory call, WHEN authorization is evaluated, THEN memory writes are classified as local persistent mutations (policy-gated per scope, audited, not per-write tickets) while boundary-crossing operations (export/import to disk, sharing) follow the guarded path (pathfloor/egress and tickets as applicable); the permitted scope set is derived by the service from the actor context and never trusted from caller parameters; and every mutation — including forget/wipe/import and policy-driven deletes — is audited with no item body in the audit record.
+- **Priority:** must
+- **Source:** `ARCH/17-MEMORY.md` §4/§9 · `ARCH/07-CONTRACTS.md` §0/§5 · `ARCH/05-INVARIANTS.md` INV-01/INV-04/INV-24 · `ARCH/12-TRUST.md` §7/§8/§9 · `ARCH/04-DECISIONS.md` DEC-042
+- **Acceptance:** classification-matrix test (local write vs export → effect path); confused-deputy test (caller passes another project's scope → denied by construction); audit coverage census = 100% of memory mutations; audit payload contains no content body.
+- **Failure cases:** caller-chosen scope honored → security failure; export bypassing Guard → violation; unaudited mutation → violation.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-MEM-024 — Extractor budget, model policy and kill switch
+- **Statement:** GIVEN background extraction, WHEN it runs, THEN it is metered against a declared global budget (calls/tokens per period) with global and per-scope kill switches; the model respects a disclosure policy (default: the provider already in use; `confidential` scopes follow the resolved local/no-extraction policy); concurrent sessions cannot exceed the budget; and cost/outcome is reported per run.
+- **Priority:** must
+- **Source:** `ARCH/17-MEMORY.md` §5.1/§9 · `ARCH/04-DECISIONS.md` DEC-031/044
+- **Acceptance:** budget-cap test (N+1st extraction deferred, not run); kill-switch test (zero model calls, zero writes); confidential-scope policy test; concurrent-session test; metering event per run.
+- **Failure cases:** unbounded extraction calls → cost/security defect; confidential content sent to a disallowed model → violation; kill switch ignored → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-MEM-025 — Time correctness and clock-skew resilience
+- **Statement:** GIVEN wall-clock timestamps used for ranking, TTL and leases, WHEN the clock moves backwards or jumps, THEN invariants hold: recency ordering never promotes an older item over a newer one because of a backwards clock; TTL uses the declared anchor and neither expires fresh items nor resurrects expired ones; job leases fail safe; and non-monotonic observations are clamped and recorded.
+- **Priority:** must
+- **Source:** `ARCH/17-MEMORY.md` §3/§6/§7 · `ARCH/06-DATA-MODEL.md` §0 · `ARCH/41-EDGE-CASES.md` EDGE-112/EDGE-177 (alignment)
+- **Acceptance:** simulated backwards-clock test (ordering + TTL + lease); DST/timezone irrelevance test (epoch ms only); skew event recorded.
+- **Failure cases:** a clock jump changes the ranking order of fixed items → defect; TTL reversal → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-MEM-026 — Provenance integrity under deletion and edit
+- **Statement:** GIVEN provenance references (turn/event/artifact ids), WHEN referenced sources are deleted or pruned, THEN recall never dereferences them, rendering tolerates missing refs with a “source unavailable” annotation, user edits create a new item with `source='user'` while the prior item is superseded (history preserved), pinned-item delete/wipe confirmation is defined, and no item becomes unusable solely because its source is gone.
+- **Priority:** must
+- **Source:** `ARCH/17-MEMORY.md` §3/§4/§7 · `ARCH/04-DECISIONS.md` DEC-032 · `ARCH/06-DATA-MODEL.md` DM-018 · `ARCH/29-ARTIFACTS.md`
+- **Acceptance:** deleted-artifact test (item still recalls, annotated); user-edit test (new item + superseded old + provenance); pinned-item wipe confirmation test; provenance rendering with missing refs.
+- **Failure cases:** dangling ref breaks injection → defect; user edit rewrites the body in place → violation; lost edit provenance → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-MEM-027 — Schema versioning, migration and import/export fidelity
+- **Statement:** GIVEN store evolution (U0–U11) and cross-machine import/export, WHEN the schema changes or a file is imported, THEN the database carries a schema version with forward migrations tested from every shipped version, export/import defines id/scope remapping rules (project identity is not assumed portable) and suppression handling, and “byte-identical round-trip” is defined against those remapping rules.
+- **Priority:** must
+- **Source:** `ARCH/17-MEMORY.md` §4/§12/§13 · `ARCH/06-DATA-MODEL.md` §0
+- **Acceptance:** migration test from each version; import into a different project identity with explicit mapping/abstention; suppression-hash check on import; round-trip comparison per the defined rule.
+- **Failure cases:** silent schema drift → defect; import attaching items to a wrong project → leak; import resurrecting suppressed content → failure.
 - **Tests:** pending
 - **Status:** seeded
 
@@ -2011,7 +2146,7 @@ This registry answers one question per entry: **what behavior must this system e
 - **Status:** seeded
 
 #### REQ-SEARCH-008 — Ranking is deterministic and explained by declared factors
-- **Statement:** GIVEN two comparable results, WHEN they are ranked, THEN order derives from source-native score × recency × pin/priority boosts with deterministic tie-breaks, and no personalization beyond the declared factors exists in v1.
+- **Statement:** GIVEN two comparable results, WHEN they are ranked, THEN order derives from a non-negative relevance base (`ARCH/27-SEARCH.md` §4: `relevance = −bm25` for FTS5) × recency × pin/priority boosts with deterministic tie-breaks, and no personalization beyond the declared factors exists in v1.
 - **Priority:** must
 - **Source:** `ARCH/27-SEARCH.md` §4/§9
 - **Acceptance:** tie-break determinism test; ranking factors observable per result; no personalized-ranking code path.
@@ -2762,7 +2897,7 @@ This registry answers one question per entry: **what behavior must this system e
 | `AGX` (13) | drafted above + expanded in the Agent X finalisation | verified during the Agent X finalisation (2026-09-26) |
 | `UI` (14) | drafted above + expanded in the P7 UI merge | verified during the P7 UI merge ✅ (2026-09-26) |
 | `KERNEL` (7), `WORK` (8) | drafted above | verified during passes `10` ✅ / `11` ✅ (2026-09-26) |
-| `MEM` (12) | drafted above + expanded in pass `17` | verified during pass `17` ✅ (2026-09-26) |
+| `MEM` (27) | drafted above + expanded in pass `17` and the P7 memory merge (`REQ-MEM-013…027`) | verified during pass `17` ✅ / P7 memory merge ✅ (2026-09-26) |
 | `MODEL` (12) | drafted above + expanded in pass `18` | verified during pass `18` ✅ (2026-09-26) |
 | `RTENV` (11) | drafted above + expanded in pass `19` | verified during pass `19` ✅ (2026-09-26) |
 | `WF` (11) | drafted above + expanded in pass `20` | verified during pass `20` ✅ (2026-09-26) |
