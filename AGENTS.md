@@ -158,9 +158,11 @@ L0  External Agents    peer agents (DEC-010), MCP servers, browsers
 
 ### The One Invariant (summary)
 
-**Surfaces propose; Core disposes.** Every mutating effect requires an
-authorization ticket minted in Core, and provider credentials never leave the
-vault ([`INV-01`](ARCH/05-INVARIANTS.md), [`INV-02`](ARCH/05-INVARIANTS.md)).
+**Surfaces propose; Core disposes.** Every externally visible mutating effect
+requires an authorization ticket minted in Core; local persistent mutations
+(in-store memory writes, DEC-042) are policy-gated and audited. Provider
+credentials never leave the vault ([`INV-01`](ARCH/05-INVARIANTS.md),
+[`INV-02`](ARCH/05-INVARIANTS.md)).
 The full invariant set lives in [`ARCH/05-INVARIANTS.md`](ARCH/05-INVARIANTS.md).
 
 ## 11. Development Commands

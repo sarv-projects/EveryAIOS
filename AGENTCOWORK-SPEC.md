@@ -116,7 +116,7 @@ A2A transport implementation · remote/cloud environments · mobile surfaces · 
 
 ## 16. Open questions
 
-`OQ-001…006` (`00-INDEX` §9) + `PEND-04…06` (`04-DECISIONS` §3) remain open; product-owner decisions where flagged.
+`OQ-001…006` (`00-INDEX` §9) + `PEND-04…05` (`04-DECISIONS` §3) remain open; PEND-06 is closed by DEC-039 (Provisional) and PEND-07 by DEC-032; product-owner decisions where flagged.
 
 ## 17. Change control
 

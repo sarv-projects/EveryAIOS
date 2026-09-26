@@ -33,7 +33,7 @@
 |---|---|---|
 | 1 | **Identity / agent contract** — agent id, workspace id, declared capabilities (Agent Card analogue) | Gateway-issued; audited |
 | 2 | **Capability projection** — Effective = Installed × Available × Allowed × Relevant | `13` §6 + `12` §8 |
-| 3 | **Context projection** — scoped slice (workspace root, rules, RepoMap, relevant files, git status, recent history, **memory — filtered recall projection**) | `16` §1.3 + `17` §4, sensitivity-filtered |
+| 3 | **Context projection** — scoped slice (workspace root, rules, RepoMap, relevant files, git status, recent history, **memory — filtered recall projection**) | `16` §1.3 + `17` §4 (recall-only boundary, DEC-043), sensitivity-filtered |
 | 4 | **Workspace projection** — `allowed_paths` / `read_only_paths`; interception, not un-discovery | `12` §8, pathfloor |
 | 5 | **Tool/MCP subset** — only the granted subset is mounted | `13`/`14` |
 | 6 | **Artifacts** — via the artifact gateway (refs; permissions) | `29` §5 |

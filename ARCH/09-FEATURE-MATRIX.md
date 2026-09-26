@@ -79,7 +79,7 @@ One row per `REQ-*`. Status only from evidence.
 | `REQ-CTX-002` | `16-CONTEXT` | pending | `INV-22` | — | pending | pending | unplanned |
 | `REQ-CTX-003` | `16-CONTEXT` | pending | `DEC-007` | — | pending | pending | unplanned |
 | `REQ-CTX-004` | `16-CONTEXT` | pending | `INV-08` | — | pending | pending | unplanned |
-| `REQ-CTX-005` | `16-CONTEXT` | pending | `DEC-027` | — | pending | pending | unplanned |
+| `REQ-CTX-005` | `16-CONTEXT` | pending | `DEC-027/045` | — | pending | pending | unplanned |
 | `REQ-CTX-006` | `16-CONTEXT` | pending | `—` | — | pending | pending | unplanned |
 | `REQ-CTX-007` | `16-CONTEXT` | pending | `INV-23` | — | pending | pending | unplanned |
 | `REQ-CTX-008` | `16-CONTEXT` | pending | `—` | — | pending | pending | unplanned |
@@ -202,7 +202,7 @@ One row per `REQ-*`. Status only from evidence.
 | `REQ-FILES-008` | `25-FILES` | pending | `DEC-029`, `INV-24` | — | pending | pending | unplanned |
 | `REQ-FILES-009` | `25-FILES` | pending | `—` | — | pending | pending | unplanned |
 | `REQ-FILES-010` | `25-FILES` | pending | `INV-10` | — | pending | pending | unplanned |
-| `REQ-FILES-011` | `25-FILES` | pending | `DM-024`, `DEC-029` | — | pending | pending | unplanned |
+| `REQ-FILES-011` | `25-FILES` | pending | `DM-024`, `DEC-029`, `DEC-040` | — | pending | pending | unplanned |
 | `REQ-FILES-012` | `25-FILES` | pending | `INV-20`, `INV-24` | — | pending | pending | unplanned |
 | `REQ-CODE-001` | `26-CODE` | pending | `CTR-025` | — | pending | pending | unplanned |
 | `REQ-CODE-002` | `26-CODE` | pending | `—` | — | pending | pending | unplanned |
@@ -216,7 +216,7 @@ One row per `REQ-*`. Status only from evidence.
 | `REQ-CODE-010` | `26-CODE` | pending | `CTR-025` | — | pending | pending | unplanned |
 | `REQ-CODE-011` | `26-CODE` | pending | `—` | — | pending | pending | unplanned |
 | `REQ-CODE-012` | `26-CODE` | pending | `CTR-025` | — | pending | pending | unplanned |
-| `REQ-SEARCH-001` | `27-SEARCH` | pending | `CTR-009` | — | pending | pending | unplanned |
+| `REQ-SEARCH-001` | `27-SEARCH` | pending | `CTR-006`, `CTR-009` | — | pending | pending | unplanned |
 | `REQ-SEARCH-002` | `27-SEARCH` | pending | `DEC-015`, `INV-13` | — | pending | pending | unplanned |
 | `REQ-SEARCH-003` | `27-SEARCH` | pending | `INV-10` | — | pending | pending | unplanned |
 | `REQ-SEARCH-004` | `27-SEARCH` | pending | `DEC-009`, `INV-11` | — | pending | pending | unplanned |

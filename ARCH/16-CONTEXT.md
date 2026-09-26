@@ -4,7 +4,7 @@
 > **P7 pass (2026-09-26):** line-checked; requirements seeded (`REQ-CTX-*`, Requirements section).
 > **Core idea (DEC-007):** *Context is a platform capability; context control is an agent capability.* Core answers **“what context exists?”**; Agent X answers **“what should the model see right now?”**
 > **Dependencies:** `10-KERNEL`, `17-MEMORY`, `25-FILES`, `26-CODE`, `21-WORLD-MODEL`, `29-ARTIFACTS`, `30-EVENTS`, `11-WORK` (sessions), `18-MODEL-ROUTING` (windows/tokenizers), `12-TRUST` (sensitivity/projections), `15-AGENT-X` (control side).
-> **Evidence:** `ARCHIVE/v1-research/agent-harness-verification.md` §A1/§A2/§C1/§C2/§E1/§E2 · `ARCHIVE/v1-research/memory.md` §4 · product-owner brief. Key decisions: DEC-007, DEC-015, DEC-019, DEC-027, INV-08, INV-22.
+> **Evidence:** `ARCHIVE/v1-research/agent-harness-verification.md` §A1/§A2/§C1/§C2/§E1/§E2 · `ARCHIVE/v1-research/memory.md` §4 · product-owner brief. Key decisions: DEC-007, DEC-015, DEC-019, DEC-027, DEC-045, INV-08, INV-22.
 
 ## 1. The two-layer split
 
@@ -68,7 +68,7 @@ Retrieve (search/snapshot) → Select/Rank → Budget → Prune → Compact (if 
    1. deterministic pruning (no LLM);
    2. **structured checkpoint** — deterministic reconstruction from Work/Events/Artifacts/Git (objective/requirements/decisions/completed/active/files/tests/artifacts/workers/blockers/next_actions);
    3. model-written summary for the **non-reconstructable residue** (why-decisions, preferences) — stored as checkpoint narrative, never as the sole state;
-   4. provider-native compaction — **a path we design ourselves** when a provider actually exposes one (open item OQ-CTX-01; no verified shipping reference implements it — OpenCode summarizes with the model in both generations).
+   4. provider-native compaction — **a verified shipping path exists** (Codex remote compaction v2; the correction to DEC-027's earlier evidence clause is recorded in DEC-045). Adoption is per provider behind capability detection under DEC-045's rules (Guard egress + audit + per-provider off switch; usage rolls into `18`; the deterministic checkpoint stays primary) — open item OQ-CTX-01.
 4. **Overflow recovery:** `compact-after-overflow → retry the same step`; bounded retries, then surface. Transport retries belong to `18` (single owner, DEC-034) — this is the agent's turn-level recovery, not a second retry layer.
 5. **Hooks:** pre-compact / post-compact extension points (plugin surface, `31`).
 
@@ -127,7 +127,7 @@ Retrieve (search/snapshot) → Select/Rank → Budget → Prune → Compact (if 
 
 ## 12. Open questions (`OQ-CTX-*`)
 
-1. Provider-native compaction: verify whether any provider exposes one; if yes, design the adapter path ourselves (ties OQ-AX-06).
+1. Provider-native compaction: which providers adopt it, behind capability detection and the DEC-045 rules (a verified shipping reference exists — Codex remote compaction v2); ties OQ-AX-06.
 2. Default `buffer`/`keep`/`reserve` per model class (small local models need different constants).
 3. Tokenizer strategy: per-provider tokenizers vs conservative estimation (ties `18`).
 4. `fork_context` default policy per worker role (ties OQ-AX-02).
@@ -136,7 +136,7 @@ Retrieve (search/snapshot) → Select/Rank → Budget → Prune → Compact (if 
 
 ## 13. Evidence
 
-`ARCHIVE/v1-research/agent-harness-verification.md`: §A1 (resolved window + feasibility), §A2/§E1 (bounded fragments + baseline/deltas), §C1–C2 (budget vocabulary, overflow recovery, checkpoint projection, durable log, pruning V1-only), §E2 (named constants), §E3 (typed stream), §E4 (log + projections). `ARCHIVE/v1-research/memory.md`: §4 (non-touching recall, budget-as-maximum, whole-item degradation). Anchors: `clone2/codex/codex-rs/core/src/session/mod.rs:4560-4587` · `clone2/opencode/packages/core/src/session/compaction.ts:12-15, 178, 232-243` · `to-llm-message.ts:152-162` · `history.ts:13-80`.
+`ARCHIVE/v1-research/agent-harness-verification.md`: §A1 (resolved window + feasibility), §A2/§E1 (bounded fragments + baseline/deltas), §C1–C2 (budget vocabulary, overflow recovery, checkpoint projection, durable log, pruning V1-only), §E2 (named constants), §E3 (typed stream), §E4 (log + projections). `ARCHIVE/v1-research/memory.md`: §4 (non-touching recall, budget-as-maximum, whole-item degradation). Provider-native compaction correction: DEC-045. Anchors: `clone2/codex/codex-rs/core/src/session/mod.rs:4560-4587` · `clone2/opencode/packages/core/src/session/compaction.ts:12-15, 178, 232-243` · `to-llm-message.ts:152-162` · `history.ts:13-80`.
 
 ## 14. Requirements (`REQ-CTX-*`)
 
@@ -148,7 +148,7 @@ Testable behaviors owned by this module live in `ARCH/08-REQUIREMENTS.md`; the t
 | `REQ-CTX-002` | Budget honesty — zero relevant hits means zero injected tokens (INV-22) |
 | `REQ-CTX-003` | Two-layer split: Core context infrastructure vs agent context control (DEC-007) |
 | `REQ-CTX-004` | References over copies; sources stay read-only through the service (INV-08) |
-| `REQ-CTX-005` | Pre-turn feasibility with named budget terms; overflow never discovered at the provider (DEC-027) |
+| `REQ-CTX-005` | Pre-turn feasibility with named budget terms; overflow never discovered at the provider (DEC-027, DEC-045) |
 | `REQ-CTX-006` | Prune before compact; full pruned output stays durable as artifact/event |
 | `REQ-CTX-007` | Compaction is a projection over the durable session log — the log is never rewritten |
 | `REQ-CTX-008` | Checkpoints are reconstructable; `rebuild` prefers live state over stale checkpoints |

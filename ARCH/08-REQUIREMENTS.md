@@ -583,7 +583,7 @@ This registry answers one question per entry: **what behavior must this system e
 #### REQ-CTX-005 — Pre-turn feasibility, named budget terms
 - **Statement:** GIVEN a model call, WHEN the turn is prepared, THEN the usable window is computed as model_window_resolved − output_reserve − reasoning_reserve − summary_output_reserve − tool_schema_reserve − system_reserve − safety_buffer and feasibility is checked BEFORE send — overflow is never discovered from the provider; values are product-visible knobs.
 - **Priority:** must
-- **Source:** `ARCH/16-CONTEXT.md` §3 · `ARCH/04-DECISIONS.md` DEC-027
+- **Source:** `ARCH/16-CONTEXT.md` §3 · `ARCH/04-DECISIONS.md` DEC-027, DEC-045
 - **Acceptance:** budget math unit tests per model class; an oversized turn is caught pre-send and recovered (never surfaced as a provider error while recovery options remain); telemetry shows the named terms.
 - **Failure cases:** provider-side overflow after send → defect; missing reserve term → defect; silent rounding that overruns → defect.
 - **Tests:** pending
@@ -2083,9 +2083,9 @@ This registry answers one question per entry: **what behavior must this system e
 ### Search (`SEARCH`)
 
 #### REQ-SEARCH-001 — One search implementation
-- **Statement:** GIVEN any search need (UI, agent, service, workflow), WHEN it is served, THEN it resolves through the single kernel search service via contracts — no second search path, index or parallel implementation exists.
+- **Statement:** GIVEN any search need (UI, agent, service, workflow), WHEN it is served, THEN it resolves through the single Core search service (`ARCH/27-SEARCH.md`, consumed through contracts; `context.search` — `CTR-006` — is the assembly-facing façade) — no second search path, index or parallel implementation exists.
 - **Priority:** must
-- **Source:** `ARCH/27-SEARCH.md` §1 · `ARCH/03-HLD.md` §4 · `AGENTCOWORK-SPEC.md` §8
+- **Source:** `ARCH/27-SEARCH.md` §1 · `ARCH/03-HLD.md` §4 · `ARCH/16-CONTEXT.md` §1.1 · `AGENTCOWORK-SPEC.md` §8
 - **Acceptance:** static check finds one search implementation; every consumer calls through the service; no module-local ad-hoc search over another owner's store.
 - **Failure cases:** a second search path → architecture violation; a consumer querying a source store directly → review failure.
 - **Tests:** pending

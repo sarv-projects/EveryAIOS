@@ -60,7 +60,7 @@ Rules:
 
 ## 5. Budgets & accounting
 
-- Per-work budget: tokens · cost · wall-time; aggregated per work tree.
+- Per-work budget: tokens · cost · wall-time; aggregated per work tree (background memory extraction is metered under its own declared budget and kill switches — DEC-044).
 - Hard ceilings enforced by the scheduler; soft thresholds emit warning events (UI surfacing).
 - Usage flows to `30` (telemetry) and summarizes into receipts (`29`) and runs.
 - Background work never silently exceeds session budget — exceeding **pauses and surfaces** (kill only by explicit policy).

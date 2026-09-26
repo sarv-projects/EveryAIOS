@@ -125,7 +125,8 @@ Every cross-module edge is named in `ARCH/07-CONTRACTS.md`. A module with no own
 | Office (22) · Browser (23) · Computer Use (24) | — (domain interfaces pending their module passes) |
 | Files (25) | CTR-024 `FileIdentity` / `WorkspaceWatcher` / `WriteLeases` |
 | Code (26) | CTR-025 `RepoIntelligence` |
-| Search (27) · Comms (28) | — (capability descriptors through CTR-009) |
+| Search (27) | — (implements the Core search service behind `CTR-006 context.search`; capability descriptors through CTR-009) |
+| Comms (28) | — (capability descriptors through CTR-009) |
 | Artifacts (29) | CTR-018 `ArtifactService` / `ReceiptService` |
 | Events (30) | CTR-019 `EventBus` / `EventStore` |
 | Skills & Plugins (31) | CTR-020 `SkillResolver` |

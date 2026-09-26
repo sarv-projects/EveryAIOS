@@ -22,7 +22,7 @@
 |---|---|---|---|---|
 | DM-001 | `Work` | `11` | Universal execution unit (chat turn, job, workflow run, subagent task, automation) | queued → running → waiting/paused/awaiting_approval → completed/failed/cancelled/expired |
 | DM-002 | `Step` | `11` | Unit of progress inside a run | pending → active → done/failed/skipped |
-| DM-003 | `Task` | `11` | Named decomposable goal attached to work or a worker | open → claimed → done/blocked/cancelled |
+| DM-003 | `Task` | `11` | **Projection** over `Work` + `Step` + assignment metadata — not a standalone durable table (`11` §2) | derived (open → claimed → done/blocked/cancelled) |
 | DM-004 | `Session` | `11` | Durable conversation/agent-context container | active → hibernated → archived |
 | DM-005 | `Run` | `11` | One concrete execution of an agent (or workflow node) | started → streaming → waiting → terminal |
 | DM-006 | `Checkpoint` | `16` (stored `11`) | Durable state-reconstruction point (work · context · workflow) | immutable |
@@ -111,7 +111,7 @@ erDiagram
 
 ## 4. Open questions (`OQ-DM-*`)
 
-1. Is `Task` a real durable entity or a projection over `Work` + `Step`? (`11` decides; registry keeps the placeholder.)
+1. **Resolved (`11` §2, v1):** `Task` is a **projection** over `Work` + `Step` + assignment metadata, not a separate durable entity; the id is kept for traceability. Revisit only with evidence (e.g. cross-work task graphs).
 2. `WorldObject.identity_key` per kind (file identity rules live in `25`).
 3. `ContextItem` durability: registry assumes ephemeral + references; confirm in `16` final.
 4. `SessionEvent` vs `Event` boundary: confirm which event classes are session-local vs published (`11`/`30`).

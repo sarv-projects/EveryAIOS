@@ -2,16 +2,16 @@
 
 > **Status:** Draft P3 (early). Must pass the `ARCH/00-INDEX.md` §5 checklist at freeze.
 > **P7 pass (2026-09-26):** line-checked; requirements seeded (`REQ-SEARCH-*`, Requirements section).
-> **Role:** **one** search service over all context sources. Deterministic retrieval — **never an LLM call** (DEC-015). The kernel owns search; other modules register index adapters.
+> **Role:** **one** search service over all context sources. Deterministic retrieval — **never an LLM call** (DEC-015). `27` is the one Core-side search implementation and indexing surface (the baseline's "kernel search" names this service, not module `10`); other modules register index adapters, and `16`'s `context.search` (`CTR-006`) is the assembly-facing façade over it.
 > **Dependencies:** source owners (`17` memory · `21` world · `25` files · `26` repo · `29` artifacts · `30` events) · `12-TRUST` (scope/sensitivity). **Consumers:** `16` (retrieval), `15` (agent queries), UI (global search), `32` (external-agent projection).
-> **Evidence:** repo principle (kernel search = the one implementation; `everyaios-search`) · product-owner brief (search/file-index rows are explicitly token-free) · `ARCH/16-CONTEXT.md` §1, `ARCH/17-MEMORY.md` §6, `ARCH/21-WORLD-MODEL.md` §4.
+> **Evidence:** repo principle (one Core search implementation — `everyaios-search`; `AGENTS.md` §12's "Kernel search" names the Rust crate workspace, not module `10`) · product-owner brief (search/file-index rows are explicitly token-free) · `ARCH/16-CONTEXT.md` §1, `ARCH/17-MEMORY.md` §6, `ARCH/21-WORLD-MODEL.md` §4.
 
 ## 1. Purpose & rules
 
 **Owns:** the unified search surface (query → ranked results across sources) · per-source index adapters · ranking & result-shaping policy · scope + sensitivity filtering at query time · the result citation format (refs + bounded snippets).
 **Never owns:** source data (each owner owns its store) · context selection (`16` consumes results) · answer synthesis (the agent’s job).
 
-1. **One implementation** — a single kernel search service; sidecar/UI call it through contracts. No second search path anywhere.
+1. **One implementation** — a single Core search service (this module); sidecar/UI and context assembly call it through contracts (`context.search` is the assembly façade, `CTR-006`). No second search path anywhere.
 2. **Deterministic first** — lexical/structured queries; semantic retrieval is deferred behind a measured trigger (`16` §11).
 3. **Scoped by construction** — every query carries scopes + a sensitivity ceiling; cross-project leakage is a defect (INV-10).
 4. **Refs, not copies** — results are references with bounded snippets; resolving content is a separate, permission-checked read.
@@ -78,7 +78,7 @@ Semantic/vector search (trigger: recall misses) · cross-repository federation �
 
 ## 11. Evidence
 
-Repo principle: kernel search is the single implementation (`everyaios-search`; AGENTS.md) · product-owner brief (search/files-index rows explicitly zero-token) · `ARCH/16-CONTEXT.md` §1/§4 · `ARCH/17-MEMORY.md` §6 (non-negative relevance, abstention) · `ARCH/21-WORLD-MODEL.md` §4 (index-not-walk) · `ARCH/26-CODE.md` §5 (structural queries owned by `26`).
+Repo principle: one Core search implementation (`everyaios-search`; `AGENTS.md` §12) · product-owner brief (search/files-index rows explicitly zero-token) · `ARCH/16-CONTEXT.md` §1/§4 · `ARCH/17-MEMORY.md` §6 (non-negative relevance, abstention) · `ARCH/21-WORLD-MODEL.md` §4 (index-not-walk) · `ARCH/26-CODE.md` §5 (structural queries owned by `26`).
 
 ## 12. Requirements (`REQ-SEARCH-*`)
 
@@ -86,7 +86,7 @@ Testable behaviors owned by this module live in `ARCH/08-REQUIREMENTS.md`; the t
 
 | REQ | Behavior (one line) |
 |---|---|
-| `REQ-SEARCH-001` | One kernel search implementation, consumed through contracts — no second path, index or module-local search |
+| `REQ-SEARCH-001` | One Core search implementation (this module), consumed through contracts; `context.search` (`CTR-006`) is the assembly-facing façade — no second path, index or module-local search |
 | `REQ-SEARCH-002` | Deterministic, model-free, network-free queries (DEC-015, INV-13) |
 | `REQ-SEARCH-003` | Scopes + sensitivity ceiling applied before querying; out-of-scope sources are never touched (INV-10) |
 | `REQ-SEARCH-004` | External agents get a filtered projection — own project + granted scopes, deny-by-default (DEC-009, INV-11) |

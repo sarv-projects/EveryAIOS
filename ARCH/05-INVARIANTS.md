@@ -7,9 +7,9 @@
 ---
 
 ### INV-01 — Core disposes
-**Invariant:** Every mutating effect requires authorization minted in Core; agents, surfaces and adapters only propose. No surface, domain, adapter or agent may execute an effect on its own authority.
-**Enforcement:** `12-TRUST` (Guard → Ticket) on the governed path; `13`, `14`.
-**Verification:** no effect path exists without a ticket; every receipt references its ticket.
+**Invariant:** Every **externally visible** mutating effect requires authorization minted in Core; agents, surfaces and adapters only propose. No surface, domain, adapter or agent may execute an externally visible effect on its own authority. Local persistent mutations that never leave the machine (e.g. in-store memory writes) are not ticket-bearing: they are policy-gated per scope and audited (DEC-042, INV-24).
+**Enforcement:** `12-TRUST` (Guard → Ticket) on the governed path; `13`, `14`; `17` (local-mutation class, DEC-042).
+**Verification:** no externally visible effect path exists without a ticket; every receipt references its ticket; the local-mutation audit census is complete (INV-24).
 
 ### INV-02 — Vault custody
 **Invariant:** Provider credentials exist only in the vault. They never appear in prompts, context, events, logs, receipts, or code.

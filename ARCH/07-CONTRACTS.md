@@ -44,7 +44,7 @@
 | CTR-025 | `RepoIntelligence` (graph · map · lsp · git) | 26 | 16, 15 | Provisional |
 | CTR-026 | `Scheduler` (lanes · limits) | 11 | 15, 20, 32 | Provisional |
 
-**Domain contracts.** Office (22), Browser (23), Computer Use (24), Search (27) and Comms (28) deliberately own no named contract yet: their operations resolve through CTR-009 as capability descriptors, and a module pass registers a contract here only if a non-capability edge appears (see `ARCH/03-HLD.md` §3.1).
+**Domain contracts.** Office (22), Browser (23), Computer Use (24) and Comms (28) deliberately own no named contract yet: their operations resolve through CTR-009 as capability descriptors, and a module pass registers a contract here only if a non-capability edge appears (see `ARCH/03-HLD.md` §3.1). Search (27) implements the one Core search service behind the **CTR-006 `context.search`** façade (owned by `16`) and resolves its other operations through CTR-009 — no separate Search contract is minted.
 
 ## 2. The six core contracts (owner brief)
 

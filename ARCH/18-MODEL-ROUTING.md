@@ -50,7 +50,7 @@ The resolved window feeds the `16` pre-turn feasibility check (`window − reser
 - **Streaming:** one typed chunk vocabulary shared with `15` §4 (message deltas · tool-call deltas · usage · errors); cancellation and backpressure are mandatory adapter behaviors.
 - **Streaming contract (A1):** one typed stream-event union above the adapter — `step-start · text-start/delta/end · reasoning-start/delta/end · tool-input-start/delta/end · tool-call · tool-result · tool-error · step-finish · finish · provider-error` — explicit block ids (synthesized when absent); step-finish vs turn-finish distinct; consumers never branch on provider id.
 - **Watchdogs (A13):** header timeout · chunk/idle timeout · read timeout are explicit abort reasons; a network-error finish fails the step rather than silently ending it.
-- **Retries (A7 — single-owner rule):** request-start transport retries (exponential + jitter; honors `retry-after` in seconds/ms/HTTP-date) · **pre-content** stream interruptions via buffer-until-proven (discarded-attempt usage is summed, never lost; a user abort anywhere vetoes retry) · **post-content** failures handled at the turn level. Exactly one layer retries per failure class; context overflow is terminal **at this layer** — the adapter surfaces the typed `ContextOverflow` and never re-requests; the agent's turn-level recovery owns the single compact-and-retry of the same step (`16` §4) and never becomes a second transport retry.
+- **Retries (A7 — single-owner rule):** request-start transport retries (exponential + jitter; honors `retry-after` in seconds/ms/HTTP-date) · **pre-content** stream interruptions via buffer-until-proven (discarded-attempt usage is summed, never lost; a user abort anywhere vetoes retry) · **post-content** failures handled at the turn level. Exactly one layer retries per failure class; context overflow is terminal **at this layer** — the adapter surfaces the typed `ContextOverflow` and never re-requests; the agent's turn-level recovery owns the single compact-and-retry of the same step (`16` §4) and never becomes a second transport retry. Provider-native compaction, when a provider exposes it, is adopted per DEC-045 — a capability event with Guard egress/audit and a per-provider off switch; its usage/cost counts in §7 as a second inference call.
 - **Typed provider errors (A8):** `InvalidRequest · Authentication · RateLimit{retryAfterMs} · QuotaExceeded · ContentPolicy · ProviderInternal · Transport · ContextOverflow`; `retryable` derived from the type (typed-first, structural-walk-second classification).
 - **Schema lowering (A12):** tool JSON schemas are lowered per wire protocol inside the adapter — callers keep one schema shape.
 - **Idempotency:** non-stream requests carry idempotency keys.
@@ -88,7 +88,7 @@ Usage events → `30` with the **usage contract (A2):** inclusive totals **plus*
 ## 9. Interop
 
 **Depends on:** `10` · `12` (vault/policy) · `16` (constants/tokenization) · `30` (events).
-**Exposes to:** `15` · `17` (extractor selection) · `20` · `24` (vision models) · UI (model picker via `32`).
+**Exposes to:** `15` · `17` (extractor selection — disclosure policy and kill switches per DEC-044) · `20` · `24` (vision models) · UI (model picker via `32`).
 **DAG check:** the model plane never calls agents; it serves them.
 
 ## 10. Open questions (`OQ-MODEL-*`)

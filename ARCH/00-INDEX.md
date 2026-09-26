@@ -133,7 +133,9 @@ v0 grew by accretion: 33 ARCH files, 55 research files, a 355 KB spec, a 606 KB 
 ## 6. Conventions
 
 - **Keywords:** MUST / SHOULD / MAY (RFC-2119 semantics).
-- **IDs:** `DEC-###` decisions · `REQ-###` requirements · `TASK-###` tasks · `TEST-###` tests · `INV-###` invariants · `DM-###` data-model entities · `CTR-###` contracts · `MOD-###` module anchors · `FLOW-###` flows · `EDGE-###` edge cases · `RISK-###` risks · `OQ-###` open questions.
+- **IDs:** `DEC-###` decisions · `REQ-<DOMAIN>-<NNN>` requirements · `TASK-<DOMAIN>-<NNN>` tasks · `TEST-<DOMAIN>-<NNN>` tests · `INV-NN` invariants · `DM-###` data-model entities · `CTR-###` contracts · `FLOW-###` flows · `EDGE-###` edge cases · `RISK-###` risks · `FIX-##` code-phase fix register · `PEND-###` pending decisions.
+- **Open questions:** cross-cutting `OQ-###` are registered in §9; module-scoped questions use `OQ-<MNEMONIC>-<n>` (e.g. `OQ-CTX-01`, `OQ-MEM-03`) and are defined by the owning module doc's Open questions section. Both forms are referenced inline; ids are never renumbered or reused.
+- **World-model collectors:** `W1…W7` as defined in `ARCH/21-WORLD-MODEL.md` §2.
 - **Evidence format:** `ev: path:line` (repo) · `ev: URL` (web) · confidence `H/M/L` · `UNVERIFIED` must be temporary and carry what would verify it.
 - **Status labels:** `Planned` → `Draft Pn` → `Review Pn` → `Frozen`.
 - **Cross-references:** use file paths (`ARCH/17-MEMORY.md`), not section numbers, so docs can evolve.
