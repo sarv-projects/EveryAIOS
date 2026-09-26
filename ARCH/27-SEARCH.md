@@ -66,7 +66,7 @@ Local indexes only; no network in the search path; no model calls. Targets (decl
 
 ## 9. Not in v1
 
-Semantic/vector search (trigger: recall misses) · cross-repository federation · personalized ranking · content indexing (deferred W7) · web search (that is a capability, `28`/`14`, not the local search plane).
+Semantic/vector search (trigger: recall misses) · cross-repository federation · personalized ranking · content indexing (deferred W7) · web search (that is a capability, `28`/`14`, not the local search plane — now specified in `28` §Web as `web.search`/`web.fetch`, `DEC-037`).
 
 ## 10. Open questions (`OQ-SRCH-*`)
 

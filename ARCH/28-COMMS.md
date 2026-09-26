@@ -32,8 +32,19 @@
 | Mail | `mail.search` · `mail.read` · `mail.thread` · `mail.labels` → `mail.draft` · `mail.reply-draft` · `mail.send` (approval) · attachment via artifact refs | read: sensitive · send: dangerous |
 | Calendar | `calendar.list` · `calendar.availability` · `calendar.briefing` → `calendar.create` · `calendar.update` (external invites approval-gated) | read: sensitive · write: sensitive→dangerous |
 | Messaging | `messaging.search` · `messaging.read` → `messaging.send` (approval) | read: sensitive · send: dangerous |
+| Web | `web.search` · `web.fetch` (bounded results/content + provenance) | read: sensitive · content is untrusted |
 
 Every capability carries a descriptor, risk class, and verification hook (`13` §2); sends produce receipts with the exact content reference.
+
+**Web search & fetch (`DEC-037`)** — capabilities, not the local search plane (`27` stays network-free):
+
+- **`web.search`** — affordances: query · count (≤20) · freshness (`fallback|preferred`) · type · domain allow/block · locale. Providers: native/server-side search · MCP search server · browser-driven (degraded).
+- **`web.fetch`** — affordances: url · format (text/markdown/html) · timeout (≤120 s) · max chars/tokens · `fresh` cache bypass. Providers: guarded local fetch · native fetch API · browser (JS-rendered pages only).
+- **Custody & egress:** provider keys only via the vault (headers/refs — **never** keys in URLs, INV-02); all traffic through Guard egress with domain allow/block policy that **overrides model requests** (INV-05); SSRF floor (no localhost/no-dot/private/link-local/metadata; resolve-then-check).
+- **Caps:** fetch 5 MB · search response 256 KiB · default 8 results (hard max 20) · synthesis context ≤10k chars · per-session search budget (default 200, counted across subagents).
+- **Caching:** fetch per-session TTL (default 15 min) keyed `(normalized URL, format)` with an explicit `fresh` bypass; cached results always surface `retrieved_at`; never silently serve a different page.
+- **Citations & provenance:** every result carries `{ref, url, title?, retrieved_at, …}` (+ `sha256` for fetched content); citations are never dropped or merged into prose without the source ref; full content stays as an artifact ref (`29`).
+- **Safety:** fetched content is **untrusted input** — never instructions; URL-provenance option (fetch only URLs already present in the conversation); cross-host redirects are surfaced, not silently followed; no JS/anti-bot/CAPTCHA evasion (DEC-016); robots/ToS honored.
 
 ## 4. Events & triggers
 

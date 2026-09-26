@@ -65,6 +65,12 @@ Lifecycle: register (discover) → connect → serve → shutdown. `execute` rec
 - **Loading modes** (`eager` / `catalog` / `on-demand`) define what the model sees vs what the catalog exposes vs what resolves on demand — the semantic compression layer that keeps raw tool counts out of context.
 - Health events publish on `30`; the UI provider surface reads the registry (no separate store).
 
+**Id mapping (absorbed, A10):** registry entries carry distinct `catalog_ref` (catalog key) and `transport_ref` (runtime transport id) alongside the canonical provider id — several transports may share one catalog entry.
+
+**Auth methods (absorbed, G4):** provider auth is a typed surface — `api` (key) · `oauth` (authorize/callback/refresh/expiry) · `well-known` — with optional prompt/validation metadata. Credentials still land in the vault (`12` §6); only the *method* is modeled here.
+
+**Client identity & session headers (gateway class, `DEC-035`):** gateway providers may mandate (a) a client User-Agent identifying the actual client and (b) a session-affinity header per conversation (`x-opencode-session` class). Adapters inject both from the session identity (`18` §4; `11` §2). One gateway may host several wire protocols (`/v1/responses` · `/v1/chat/completions` · `/v1/messages` — the OpenCode Go shape), so a provider entry carries multiple `transport_ref`s (A10).
+
 ## 6. Execution & egress
 
 - Adapters run inside an environment (`19`): local process · sandbox · remote. The environment is part of the handle.
@@ -81,6 +87,9 @@ Lifecycle: register (discover) → connect → serve → shutdown. `execute` rec
 | Connect timeout | Bounded retry with backoff; provider degraded; UI never blocks (work is async). |
 | Partial capability failure | Per-capability health; resolver avoids only the failing capability. |
 | Unauthorized egress | Guard DENY → typed error; logged; no silent fallback. |
+| Stream idle/read timeout | Watchdog aborts with a typed reason; retry per the single-owner rule (`18` §4). |
+| Auth token expiry mid-turn | Typed `Authentication`; refresh where supported; else re-auth guidance. |
+| Provider-reported cost mismatch | Actual overrides estimate; audit event emitted. |
 
 ## 8. Interop
 
@@ -101,5 +110,7 @@ MCP server marketplace/auto-install · remote provider federation · per-provide
 5. HTTP connector auth patterns for v1 (`28` decides).
 
 ## 11. Evidence
+
+**Wave-2 addition:** `ARCHIVE/v1-research/provider-layer-absorption.md` — id-mapping, auth-method enum, and failure rows (A10, G4).
 
 `ARCHIVE/v1-research/mcp-provider-verification.md` (all §4 citations) · `ARCHIVE/v1-research/agent-harness-verification.md` §A4 (three-layer guard), §B1 (ACP server/session/tool-registry), §D1 (handle/factory) · owner brief (adapter classes, capability ≠ provider).

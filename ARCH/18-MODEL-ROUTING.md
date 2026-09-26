@@ -28,6 +28,10 @@
 
 **Catalog sources:** cloud catalog data (models.dev-class; *data, not runtime*) + local discovery + manual entries. Offline behavior: vendored snapshot + local scan; no model available ⇒ typed `Unavailable` with guidance.
 
+**Descriptor additions (absorbed, A2/A3/A5/A6/A9/A10):** `status` (lifecycle `alpha|beta|deprecated|active` + visibility: whitelist/blacklist, experimental flag) · `family` + `release_date` · `variants` (named per-model option maps; config-mergeable; `disabled` removals) · per-model `options`/`headers` · `transport_ref` + `catalog_ref` (catalog key ≠ generated id ≠ runtime transport id) · `prompt_cache` (inferred from cache-cost fields) · `cost` extended to `{ in, out, cache_read, cache_write, tiers[]?, over_200k?, reported_actual? }` — cache-class-aware; provider-reported actual overrides catalog estimates; included plans are exactly 0 · `privacy` (training-use + retention class from the provider's disclosure — `confidential` scopes must not route to training-enabled models; e.g. the OpenCode Go privacy table).
+
+**Catalog refresh discipline (absorbed, A4):** short TTL (≈5 min) · atomic `tmp`+rename writes · cross-process lock · compiled/vendored snapshot fallback (offline) · scheduled refresh (≈60 min) emitting a refresh event · refresh failures logged and swallowed (never block the UI). Resolves the cadence half of OQ-1; the **data license** of the catalog source remains open (`44` §5).
+
 ## 3. Router (CTR-014)
 
 ```
@@ -43,7 +47,13 @@ The resolved window feeds the `16` pre-turn feasibility check (`window − reser
 - **Adapter kinds:** cloud-native shapes + OpenAI-compatible; local servers (probe + list); embedded runtimes later.
 - **Auth:** vault `use`-style references only (CTR-013, INV-02); endpoint config carries secret *refs*; keys never appear in logs, prompts, or telemetry.
 - **Streaming:** one typed chunk vocabulary shared with `15` §4 (message deltas · tool-call deltas · usage · errors); cancellation and backpressure are mandatory adapter behaviors.
-- **Retries:** bounded, typed (`10` §3); non-stream requests carry idempotency keys.
+- **Streaming contract (A1):** one typed stream-event union above the adapter — `step-start · text-start/delta/end · reasoning-start/delta/end · tool-input-start/delta/end · tool-call · tool-result · tool-error · step-finish · finish · provider-error` — explicit block ids (synthesized when absent); step-finish vs turn-finish distinct; consumers never branch on provider id.
+- **Watchdogs (A13):** header timeout · chunk/idle timeout · read timeout are explicit abort reasons; a network-error finish fails the step rather than silently ending it.
+- **Retries (A7 — single-owner rule):** request-start transport retries (exponential + jitter; honors `retry-after` in seconds/ms/HTTP-date) · **pre-content** stream interruptions via buffer-until-proven (discarded-attempt usage is summed, never lost; a user abort anywhere vetoes retry) · **post-content** failures handled at the turn level. Exactly one layer retries per failure class; context overflow is terminal.
+- **Typed provider errors (A8):** `InvalidRequest · Authentication · RateLimit{retryAfterMs} · QuotaExceeded · ContentPolicy · ProviderInternal · Transport · ContextOverflow`; `retryable` derived from the type (typed-first, structural-walk-second classification).
+- **Schema lowering (A12):** tool JSON schemas are lowered per wire protocol inside the adapter — callers keep one schema shape.
+- **Idempotency:** non-stream requests carry idempotency keys.
+- **Provider client identity & session affinity (gateway class):** providers may require an identifying User-Agent (**ours** — never impersonation or a generic SDK name) and a stable per-conversation session header (`x-opencode-session` class) mapped from the logical session id (`DM-004`, `11` §2). Stability: one value per conversation — unchanged across turns, compaction and restarts; a new conversation ⇒ a new value; each subagent session is its own conversation. Provider traffic policies (typical coding-agent traffic; monitored for abuse) are conditions of enabling the provider (`12`/`44`) — no evasion. Worked example: **OpenCode Go** — one gateway, three wire protocols per model (`/v1/responses` · `/v1/chat/completions` · `/v1/messages`), ids `opencode-go/<model-id>` (`DEC-035`).
 
 ## 5. Reasoning mapping
 
@@ -57,7 +67,7 @@ Normalized dial: `auto · minimal · low · medium · high · extra_high` → pr
 
 ## 7. Accounting
 
-Usage events → `30`: tokens in/out · cost estimate · latency · model id · work/session refs. Per-work ceilings are enforced by `11` §5. **No prompt or completion content in telemetry.**
+Usage events → `30` with the **usage contract (A2):** inclusive totals **plus** non-overlapping breakdown (`non_cached_input` · `cache_read` · `cache_write` · `reasoning`) with the invariant written down and values clamped — consumers never subtract (this removes the underflow bug class). Unnormalized provider fields ride along as an escape hatch for billing audits. **Cost (A3/A14):** cache-class-aware (read/write pricing · context-size tiers · >200k class) · provider-reported actual overrides catalog estimates · included/free plans are exactly 0. Latency · model id · work/session refs included. Per-work ceilings are enforced by `11` §5. **No prompt or completion content in telemetry.**
 
 ## 8. Failure modes
 
@@ -70,6 +80,9 @@ Usage events → `30`: tokens in/out · cost estimate · latency · model id · 
 | Local server version drift | Health re-probe; descriptor refresh; degraded marking. |
 | Cost surprise | Ceilings pause work and surface (no silent overrun). |
 | Reasoning param unsupported | Descriptor declares support; unsupported levels are not offered. |
+| Stream stalls (idle/read watchdog) | Typed abort reason; step retried per the single-owner rule; never a silent hang. |
+| Auth token expires mid-turn | Typed `Authentication`; one refresh attempt where supported; else re-auth guidance — never a silent failover. |
+| Provider-reported cost mismatch | Actual overrides estimate; mismatch logged as an event for audit. |
 
 ## 9. Interop
 
@@ -79,7 +92,7 @@ Usage events → `30`: tokens in/out · cost estimate · latency · model id · 
 
 ## 10. Open questions (`OQ-MODEL-*`)
 
-1. Catalog sync policy: fetch cadence, offline snapshot strategy, staleness tolerance.
+1. ~~Catalog sync policy~~ → resolved by the absorbed refresh discipline (§2); remaining opens: catalog **data license** (`44` §5) · prompt-cache policy defaults (joint `16`↔`18`) · cross-provider failover invalidation semantics (cache breakpoints · signed reasoning blocks · in-flight tool-call ids).
 2. Reasoning-param behavior on models that partially support levels (ignore vs map vs error).
 3. Tokenizer strategy details (shared with OQ-CTX-03): per-provider tokenizers vs conservative estimates.
 4. Which local models qualify for the vision rung (`24` decision).
@@ -87,5 +100,7 @@ Usage events → `30`: tokens in/out · cost estimate · latency · model id · 
 6. Multi-modal input scope for v1 (images for vision; audio/video later).
 
 ## 11. Evidence
+
+**Wave-2 addition:** `ARCHIVE/v1-research/provider-layer-absorption.md` (OpenCode `fe3f3a4` · Cline `254f40c` · pinned) — absorb list A1–A14, gaps G1–G16, rejects R1–R5; behavior changes locked as `DEC-034`.
 
 Product-owner brief (ModelAdapter surface, local model UX, model independence) · `agent-harness-verification.md` §A1 (resolved window; pre-turn feasibility; anchors `codex-rs/core/src/session/mod.rs:4560-4587`), §C1 (keep/buffer/reserve vocabulary) · `ARCH/06-DATA-MODEL.md` DM-025 · `ARCH/07-CONTRACTS.md` CTR-014 · `ARCH/16-CONTEXT.md` §3 · `ARCHIVE/v1-research/memory.md` §7 (extraction model = disclosure boundary).

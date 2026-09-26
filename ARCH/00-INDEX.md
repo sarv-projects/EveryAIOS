@@ -8,6 +8,8 @@
 > **Exempt:** `TODO.md` stays the live delivery tracker and is not part of this rebuild.
 >
 > **v1 freeze for review (2026-09-26):** passes P0–P6 complete — 37 `ARCH/` docs + `AGENTCOWORK-SPEC.md` + `AGENTCOWORK-UI.md` + README/AGENTS syncs. Further changes go through `DEC` entries (`ARCH/04-DECISIONS.md`).
+>
+> **Owner reopening (2026-09-26):** absorption wave 2 ✅ complete — provider layer (`DEC-034/035`), async subagents (`DEC-036`), web search (`DEC-037`). Docs re-frozen for review.
 
 ---
 

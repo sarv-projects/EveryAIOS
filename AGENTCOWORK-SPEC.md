@@ -74,6 +74,7 @@ Every externally visible effect: `Work → Capability → Provider → Handle �
 | Code | RepoGraph → RepoMap under budget; LSP bridge; per-spawn worktrees; governed execution | `26` |
 | Search | One kernel implementation; deterministic; scoped; abstention allowed | `27` |
 | Comms | Capability layer over connectors; sends approval-gated; no bulk ingest | `28` |
+| Web | `web.search`/`web.fetch` capabilities — provider variants (native · MCP · guarded fetch; browser fallback); citations/provenance; fetched content untrusted; caps + TTL cache | `28` (`DEC-037`) |
 
 ## 9. Experience contract
 

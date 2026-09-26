@@ -29,12 +29,12 @@
 | 2.3 Browser / CDP | `23` | Managed Chromium + adapters; stale-ref/document-identity invalidation; role+nth disambiguation (already present per verification); trusted-input actions. |
 | 2.4 Office | `22` | L1/L2/L3; resident contexts + flush; batch atomicity; dump/replay; render/validate; per-domain op registries + docs-sync gate (GenOffice). Corrections applied (§4). |
 | 2.5 Codeintel | `26` | RepoGraph/RepoMap (Aider-lineage ranking); inference labeling; LSP bridge; rollback snapshot already present. |
-| 2.6 Routing / BYOK | `18` | Provider-state ownership; half-open permit accounting + error-rate trip (RTE-3/4); catalog-as-data (models.dev-class); local discovery. |
+| 2.6 Routing / BYOK | `18` | Provider-state ownership; half-open permit accounting + error-rate trip (RTE-3/4); catalog-as-data (models.dev-class); local discovery; provider-layer normalization contract (`DEC-034`); gateway client-identity/session-affinity headers incl. OpenCode Go (`DEC-035`). |
 | 2.7 Coordinator / context / IPC | `16`, `11`, `32` | Budget scaling + live-zone rule; admission-around-Work (COO-10); typed `stop_reason` vocabulary (COO-11); engine-hosting seam → adapter/provider model. |
-| 2.8 Blueprint / subagents / skills | `15`, `31` | Child session per subagent + receipts + per-spawn worktree option (verified); max_concurrent/loop-detection already present; scope-tagged registrations (DeepSeek D1). |
+| 2.8 Blueprint / subagents / skills | `15`, `31` | Child session per subagent + receipts + per-spawn worktree option (verified); max_concurrent/loop-detection already present; scope-tagged registrations (DeepSeek D1); async lifecycle: completion modes · wake gate · typed child stream · report-trust scanning (`DEC-036`, wave 2). |
 | 2.9 Work / scheduler / recovery / audit | `11`, `20` | Occurrence/lease/refresh state machines; liveness diagnostics with named repair actions; richer receipts + owner-native joins. |
 | 2.10 Session / storage | `11`, `25`, `29` | Retention classes; single-session rule (multi-run rejected, §2-12); identity/lease model. |
-| 2.11 Connectors / MCP | `28`, `14` | Connector-hub patterns (pattern-read); MCP dual-era policy (DEC-030). |
+| 2.11 Connectors / MCP | `28`, `14` | Connector-hub patterns (pattern-read); MCP dual-era policy (DEC-030); web search/fetch capability contract (`DEC-037`, wave 2). |
 | 2.12 UI / UX | `AGENTCOWORK-UI.md` (P5) | Settings decision table (UI-8); preview/editor/artifact surfaces; workbench model. |
 | 2.13 Docs / process / verification | `00`, `42` | Evidence-first discipline; source-frontmatter conventions (DOC-1); docs-sync gates (adopted: op-registry drift gate, `22` §3). |
 | 2.14 Telemetry / analytics / cost | `30` | Usage/cost telemetry; **micro-compaction deferred with telemetry first** (hermes self-rejection adopted as policy). |
@@ -85,7 +85,7 @@ From `MASTER-COMPARISON §3`, each mapped to the v1 invariant that enforces it:
 | vibe-kanban | Apache-2.0 — **sunsetting upstream** | pattern source only (no dependency) |
 | termic / acp.el | AGPL / GPLv3 (rejected candidates) | recorded; never cloned |
 
-**Permissive-reuse set (attribution hygiene required):** codex (Apache-2.0) · opencode (MIT) · genoffice (Apache-2.0) · mem0 (Apache-2.0) · graphiti (Apache-2.0 + CLA) · nooa (Apache-2.0) · rustwright (MIT) · hermes (MIT) · obscura (Apache-2.0) · agent-browser (Apache-2.0) · deerflow (MIT) · jan (Apache-2.0) · cc-switch (MIT) · openclaw host (MIT) · openchamber (MIT) · zeroclaw (MIT OR Apache-2.0) · headroom (Apache-2.0) · ccmanager / agent-client-protocol / acpx / mosoo-agent-driver / codex-acp (MIT/Apache-2.0) · prompts.chat (MIT code + CC0 data) · everything-search skill (MIT) · open-cowork / NextCoWork / AionUi / tide / open-design / atlas / sovereign-agentic-os (MIT/Apache-2.0 grouped) · Composio (MIT) · modelcontextprotocol/registry / mcp-context-forge / dify-plugin-daemon / open-connector / Observal (Apache-2.0) · mcpm.sh (MIT) · anything-llm (MIT) · claude-mem (Apache-2.0).
+**Permissive-reuse set (attribution hygiene required):** codex (Apache-2.0) · opencode (MIT) · genoffice (Apache-2.0) · mem0 (Apache-2.0) · graphiti (Apache-2.0 + CLA) · nooa (Apache-2.0) · rustwright (MIT) · hermes (MIT) · obscura (Apache-2.0) · agent-browser (Apache-2.0) · deerflow (MIT) · jan (Apache-2.0) · cc-switch (MIT) · openclaw host (MIT) · openchamber (MIT) · zeroclaw (MIT OR Apache-2.0) · headroom (Apache-2.0) · ccmanager / agent-client-protocol / acpx / mosoo-agent-driver / codex-acp (MIT/Apache-2.0) · prompts.chat (MIT code + CC0 data) · everything-search skill (MIT) · open-cowork / NextCoWork / AionUi / tide / open-design / atlas / sovereign-agentic-os (MIT/Apache-2.0 grouped) · Composio (MIT) · modelcontextprotocol/registry / mcp-context-forge / dify-plugin-daemon / open-connector / Observal (Apache-2.0) · mcpm.sh (MIT) · anything-llm (MIT) · claude-mem (Apache-2.0) · cline (Apache-2.0, © 2026 Cline Bot Inc.) · grok-build (Apache-2.0 + SpaceXAI notice).
 
 `MASTER-COMPARISON §5` priority ordering (P0: SEC-1/2/3/21) remains the code-phase entry sequence.
 
@@ -103,6 +103,8 @@ From `MASTER-COMPARISON §3`, each mapped to the v1 invariant that enforces it:
 | Browser-event / completion-chained workflow triggers | No precedent — product inventions if shipped | `workflow-engine-verification.md` §3 |
 
 ## 5. Open questions
+
+> **Wave-2 additions:** (4) catalog **data** license (models.dev-class source) — UNVERIFIED; decide before vendoring a snapshot. (5) Prompt-cache policy defaults — joint `16`↔`18` decision before enabling. (6) Cross-provider failover invalidation semantics (cache breakpoints · signed reasoning blocks · in-flight tool-call ids).
 
 1. Re-clone policy for line-level provenance when a future claim needs it (README caveat stands).
 2. Whether P0 code items (SEC-1/2/3/21) enter the code phase as one wave or independently.

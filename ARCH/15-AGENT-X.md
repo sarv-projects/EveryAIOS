@@ -89,6 +89,17 @@ Per DEC-029 (evidence §A3 / §B3 / §E7):
 
 Overlapping writes go through workspace leases (queue / rebase / ask) — never silent overwrite.
 
+**Async lifecycle (absorbed wave 2 — `DEC-036`):**
+- **Spawn returns immediately** — `{agent_id, nickname?, session_ref, status, parent_turn_id}`; spawn is never coupled to child completion unless a bounded `await` is requested.
+- **Two completion modes:** a **bounded foreground wait** (declared tiers; used sparingly) or a **queue-only wake at a turn boundary** (`next-turn`/`next-step`) — completion is admitted as a typed `subagent.completed` event plus a queued prompt only if the parent is live and the child was not cancelled.
+- **Wake-suppression gate:** `backgrounded && !cancelled && wake_enabled && !block_waited && !explicitly_killed && !goal_loop_active && parent_channel_open`; **a cancelled child never wakes the parent**; `will_wake` is explicit so clients never promise a wake that will not happen.
+- **Typed child stream:** `subagent.spawned` (emitted before the first prompt dispatch) · `subagent.progress` (≈2 s) · `subagent.finished` (status · error · tool calls · turns · duration · tokens · output · `will_wake`).
+- **Bounded waits auto-background** — a wait that exceeds its budget moves the child to the background lane instead of freezing the parent turn.
+- **Concurrency:** slots are **held until closed** (not just until finished); admission is queue-on-limit by default with a `fail` opt-in; per-lane defaults + depth are declared and enforced via `11` (DEC-031).
+- **Cancellation:** cooperative and token-based — parent cancel ⇒ child cancel; session teardown ⇒ cancel with **no completion rebuffer**; explicit close cascades to descendants; cancelled runs are terminal and never wake; queued spawns are swept within a bounded interval.
+- **Report trust:** child receipts are **untrusted data** — scanned for instruction-shaped patterns and delivered under a no-authority header; background completion notices are framed as automated events, never as messages.
+- **Child sessions are durable:** child transcripts live in their own log projections, survive parent compaction, and are addressable by `agent_id` for resume/steer; receipt delivery is at-most-once per parent incarnation, size-capped with a full-log artifact ref; `usage` rolls up to the parent.
+
 ## 8. Recovery
 
 Bounded retry · replan · tool-failure recovery · context recovery (DEC-027) · stuck detection (no progress across N steps → escalate via the approval/question primitive, DEC-021). Crash recovery: session log + inbox projection reconstruct pending work; runs resume (INV-16). Memory/extractor failures never affect the turn (`17`).
