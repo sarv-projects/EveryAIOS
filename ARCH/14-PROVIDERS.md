@@ -49,14 +49,16 @@ Lifecycle: register (discover) → connect → serve → shutdown. `execute` rec
 **Client (we consume MCP servers):**
 - Modern first: revision `2026-07-28` (stateless, context carried in `_meta`, mandatory `server/discover`); legacy fallback `2025-11-25` (`initialize`).
 - Detection per transport: **stdio** probes `server/discover` (10 s cap) and falls back to `initialize`; **HTTP** classifies the `400` body to distinguish era. Era is cached per process/origin; a per-server **force-legacy** escape hatch exists.
-- Implementation: `rmcp` 3.4.x (verified to carry both revisions). The sidecar's current MCP dependency is the TS SDK **v1** line (`@modelcontextprotocol/sdk`, `packages/core-search`), which does not carry `2026-07-28`; the v2 line (`@modelcontextprotocol/client`/`server` 2.1.0) does — relevant if the sidecar façade moves to TS.
+- Implementation: the **in-crate hand-rolled client** (`crates/everyaios-mcp/src/remote.rs`), whose dual-era logic is transport-agnostic behind a small HTTP seam and **patch-owned by us**; `rmcp` is **not** adopted (`DEC-048`; `OQ-PRV-1` closed). The sidecar's MCP dependency is the TS SDK **v1** line (`@modelcontextprotocol/sdk`, `packages/core-search`), which does not carry `2026-07-28`; the v2 line (`@modelcontextprotocol/client`/`server` 2.1.0) does — relevant if the sidecar façade moves to TS, and a reason not to leave two protocol cores to reconcile.
 
 **Server façade (we expose ourselves over MCP):**
 - Stateless modern + `initialize` compatibility; MUST implement `server/discover`; MUST validate `Mcp-Method` / `Mcp-Name` headers.
 
 **Non-goals:** HTTP+SSE transport · protocol sessions/resumability · sampling · roots · logging.
 
-**Corrections on record:** HTTP+SSE has been deprecated since `2025-03-26` (~18 months; the removal clock is SEP-2596 — Final 2026-05-18 + 3 months ⇒ eligible ≈2026-08-18, not yet removed) — the earlier “≥12 months” framing was wrong. Code-phase fixes identified: the existing remote client sends no `_meta`/modern headers; `server/discover` is absent from the current façade.
+**Clarifications (`DEC-048`, closing `OQ-PRV-1`):** the per-server **force-legacy hatch is persisted on the stored server record** (`StoreEntry.force_legacy`), never passed as a call argument — it changes the wire contract that server is spoken in, so a runtime-only flag would be lost on restart; the **effective era plus its source** (`forced` · `cached` · `probed` · `default`) is surfaced as a **read-only projection**, and reading it never probes the network; **era caching is keyed per origin for HTTP and per command fingerprint for stdio** (an origin is meaningless for a child process), re-probed when the command line is edited; the **era probe carries a 10 s budget on both transports** (one definition, so the two cannot drift).
+
+**Corrections on record:** HTTP+SSE has been deprecated since `2025-03-26` (~18 months; the removal clock is SEP-2596 — Final 2026-05-18 + 3 months ⇒ eligible ≈2026-08-18, not yet removed) — the earlier “≥12 months” framing was wrong. ~~Code-phase fixes identified: the existing remote client sends no `_meta`/modern headers; `server/discover` is absent from the current façade.~~ **Both resolved** (`DEC-048`): the remote client now sends the `_meta` envelope and the modern protocol-version/Mcp-Method/Mcp-Name headers, and `server/discover` is served on the modern lease (`acceptance_server_discover_is_served_on_the_modern_lease`).
 
 **Evidence:** `ARCHIVE/v1-research/mcp-provider-verification.md` — spec changelog/versioning/transports/deprecated pages · `clone2/grok-build/crates/codegen/xai-grok-mcp/src/servers.rs:3782-3910` · `clone2/codex/codex-rs/rmcp-client/src/protocol_mode.rs:9-51` · `rmcp@3.4.1` · SEP-2596.
 
@@ -85,6 +87,7 @@ Lifecycle: register (discover) → connect → serve → shutdown. `execute` rec
 |---|---|
 | Adapter crash | Epoch bump → handles invalidated → health `down` → resolver failover; work re-plans. |
 | Protocol mismatch (dual-era) | Detection retries the other era once; permanent mismatch → provider marked incompatible with reason. |
+| stdio era probe times out | The attach **fails typed** — the child is not attached, because a late `server/discover` reply would desynchronise the ND-JSON stream and mis-attribute reconciled tools (`DEC-048`). A child that cannot answer within the 10 s budget is not attached; worst case is a 10 s cold start on a silent server, paid **once per command fingerprint** (the verdict is cached). |
 | Schema drift (MCP tools changed) | `discover` diffs capabilities; removals update descriptors + emit events; calls to removed caps fail typed. |
 | Schema-violating provider result | The adapter validates against the descriptor/contract schema before anything applies; malformed output is a typed failure, the provider is marked degraded, nothing partial is applied, and it is audited (EDGE-018). |
 | Connect timeout | Bounded retry with backoff; provider degraded; UI never blocks (work is async). |
@@ -106,7 +109,7 @@ MCP server marketplace/auto-install · remote provider federation · per-provide
 
 ## 10. Open questions (`OQ-PRV-*`)
 
-1. Hand-rolled vs `rmcp` for the client core (confirm dual-era behavior under guard/egress constraints in the code phase).
+1. ~~Hand-rolled vs `rmcp` for the client core~~ → **closed as `DEC-048`**: the client core stays hand-rolled, dual-era and patch-owned; `rmcp` is not adopted, with the revisit trigger and its three written questions recorded there.
 2. Façade compatibility-window advertising (`supported` vs `preferred` revisions).
 3. CLI adapter schema format + its interaction with exec-policy rules (DEC-028).
 4. Provider isolation default: per-provider process vs shared runtime (`19` decides).
@@ -115,6 +118,8 @@ MCP server marketplace/auto-install · remote provider federation · per-provide
 ## 11. Evidence
 
 **Wave-2 addition:** `ARCHIVE/v1-research/provider-layer-absorption.md` — id-mapping, auth-method enum, and failure rows (A10, G4).
+
+**DEC-048 lanes:** `ARCHIVE/v1-research/v1-sdd/mcp-engine-opencode.md` §10.1–§10.4 (client-core ownership, force-legacy surface, stdio probe, lease pin) · `ARCHIVE/v1-research/v1-sdd/mcp-engine-apps.md` §5.1–§5.4 (the same four questions across the studied products) — prior-art studies of the code we now own, cited by path so the repository history stays vendor-neutral.
 
 `ARCHIVE/v1-research/mcp-provider-verification.md` (all §4 citations) · `ARCHIVE/v1-research/agent-harness-verification.md` §A4 (three-layer guard), §B1 (ACP server/session/tool-registry), §D1 (handle/factory) · owner brief (adapter classes, capability ≠ provider).
 

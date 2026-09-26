@@ -72,6 +72,18 @@ Exchange via refs only: `artifact_id` · `mime_type` · `uri`. Supported verbs (
 
 Previews are **projections** (thumbnail/render refs) produced by domains (`22`–`24`) — artifacts store refs, not pixels. The UI opens them through the universal document surface (`AGENTCOWORK-UI.md`); opening/rendering consumes zero model tokens (DEC-015).
 
+### 7.1 Bounded tool-result previews — helper landed, integration seam pending
+
+A large tool result is **referenced, never inlined raw**. The bounded preview is the result-side of the same principle as `13` §6's loading modes: the model must never receive a dump it cannot use. The invariant is that **truncation never claims success** —
+
+- a truncated preview reports `truncated: true` together with the **true full size**, so a consumer can never mistake it for the whole value;
+- its **inline form yields nothing while truncated**, so the one use that would be a silent loss (passing a partial value off as *the* result) is refused by construction;
+- it **never invents a reference**. A ref is only as good as the artifact behind it, and writing one is a local persistent mutation owned here — so the ref is a field the caller fills *after* its own write succeeds, and an unwritten artifact can never be advertised.
+
+**The required order is: write the artifact, then attach the reference.** The component that must own the write is the **work/capability result path** — the same place a receipt is emitted (§3) and where artifact creation already belongs. It shapes the bounded preview, writes the full bytes through the artifact gateway, and only then sets the reference it received. The order *is* the invariant: a ref set before its artifact exists advertises a version that cannot be opened, which is a worse failure than an oversized result.
+
+**Status: pending.** The helper is landed (`everyaios-mcp/src/preview.rs`, exported from `everyaios-mcp/src/lib.rs:21,40-42`) and unit-tested, but it has **no caller in the tree** — the seam above is unwired. It stays that way deliberately: a writer inside the MCP protocol crate would be a second artifact store, and the protocol layer has no workspace, no store and no work-item identity. The seam is recorded here rather than papered over; nothing in the doc set treats it as wired.
+
 ## 8. Failure modes
 
 | Failure | Behavior |
@@ -79,6 +91,7 @@ Previews are **projections** (thumbnail/render refs) produced by domains (`22`�
 | Write fails mid-version | Version is atomic — no partial versions visible; retry or discard; audit. |
 | Location moved/deleted | Identity check (`25`) marks artifact `unresolved`; receipts referencing it keep the digest; surfaced for re-link. |
 | Receipt missing for a visible effect | Blocked before commit (INV-07); the effect path cannot complete without it. |
+| Truncated result delivered as if whole | Refused by construction: the inline form is empty while truncated and a ref is never invented, so the caller must write the artifact first and then attach the reference (§7.1). A result that cannot be delivered whole is an honest gap, never a silent partial. |
 | Disk full / write failure during artifact or receipt write | Typed failure; no partial version or receipt becomes visible; a mandatory-receipt effect pauses with reason (EDGE-104, INV-07). |
 | Cross-workspace gateway request | Denied typed with no path leakage; v1 is workspace-scoped — cross-workspace sharing is explicit export only (EDGE-105, INV-11). |
 | GC vs receipt race | Receipt pin check runs in the GC transaction; pinned versions are skipped. |
@@ -100,7 +113,7 @@ Previews are **projections** (thumbnail/render refs) produced by domains (`22`�
 
 ## 11. Evidence
 
-Product-owner brief (`Artifact`, `ProvenanceChain`, `LibraryItem`; promotion lifecycle; receipts) · `ARCH/06-DATA-MODEL.md` DM-019/020/023 · `ARCH/07-CONTRACTS.md` CTR-018 · DEC-014/022/023/032 · INV-07/18/24 · `ARCH/17-MEMORY.md` (export/import pattern).
+Product-owner brief (`Artifact`, `ProvenanceChain`, `LibraryItem`; promotion lifecycle; receipts) · `ARCH/06-DATA-MODEL.md` DM-019/020/023 · `ARCH/07-CONTRACTS.md` CTR-018 · DEC-014/022/023/032 · INV-07/18/24 · `ARCH/17-MEMORY.md` (export/import pattern) · `everyaios-mcp/src/preview.rs` (§7.1 bounded preview + ref seam; landed, no caller yet).
 
 ## 12. Requirements (`REQ-ART-*`)
 

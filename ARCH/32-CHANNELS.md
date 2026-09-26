@@ -108,3 +108,5 @@ Testable behaviors owned by this module live in `ARCH/08-REQUIREMENTS.md`; the t
 | `REQ-CHAN-011` | A surface crash is isolated; Core and other surfaces are unaffected (EDGE-075) |
 | `REQ-CHAN-012` | Protocol version mismatch → typed error naming the supported window (EDGE-079) |
 | `REQ-CHAN-013` | External-agent disconnect: durable work + stream replay from last ack — no orphans (EDGE-077) |
+
+MCP version negotiation itself is **not** restated here: the dual-era rules — the persisted force-legacy hatch, the effective era plus its source as a read-only projection, era caching per origin (HTTP) and per command fingerprint (stdio), the 10 s probe budget, and the lease-less, method-restricted `initialize` exemption that `REQ-CHAN-012`'s refusal is served from — are owned by `ARCH/14-PROVIDERS.md` §4 and `ARCH/04-DECISIONS.md` DEC-048.

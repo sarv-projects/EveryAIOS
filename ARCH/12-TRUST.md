@@ -9,7 +9,7 @@
 
 ## 1. Purpose & rules
 
-**Owns:** policy evaluation · Guard (three layers) · tickets · approvals · vault custody · egress control · audit hooks · consent policy · enforcement of the external-agent projection boundary.
+**Owns:** policy evaluation · Guard (three layers) · **control-plane admission control** · tickets · approvals · vault custody · egress control · audit hooks · consent policy · enforcement of the external-agent projection boundary.
 **Never owns:** domain logic · collector implementations (`21` records consent; Trust evaluates it) · UI copy.
 
 1. **One decider** — exactly one component returns ALLOW / ASK / DENY (INV-04).
@@ -17,6 +17,16 @@
 3. **Custody** — provider credentials exist only in the vault; contracts use `use`-style APIs, never reads (INV-02, CTR-013).
 4. **Enforcement lives here, never in prompts** — no agent instruction is a security boundary (P-13).
 5. **Every decision is audited** — including denials and forget/delete (INV-24).
+
+### 1.1 Control-plane admission (rate limiting)
+
+The control plane — the `nativeCall`/IPC surface and the kernel tool path — is rate-limited at its entry, so one caller cannot saturate the policy engine, the ticket store or the audit chain. Admission is a **bounded token-bucket gate**: it is *not* a fourth policy layer and *not* a second egress path. It never returns ALLOW / ASK / DENY for an effect; it only decides whether a request is looked at at all.
+
+- **Two tiers compose.** One global bucket for the whole control plane, plus one bucket per `(caller, command)`. Both must have a token to proceed, so one noisy command cannot starve the rest of the surface and one noisy caller cannot spend another's budget. A refusal on either tier spends nothing on the other.
+- **The shape is the contract; the numbers are not.** The **steady rate is the control** — the sustained rate one caller may reach; the per-key burst only has to absorb a legitimate bursty turn. The **map cap is the memory bound**: tracked buckets are LRU-capped and idle buckets expire on a TTL, so a churning key space cannot pin memory. The concrete rates, bursts, map cap and TTL are a **product knob** (configuration), *not* a constant this doc fixes — a change to them is not a spec change.
+- **Fails closed.** An unavailable limiter is a denial, never an allow. The gate runs *before* any command body, state lock, disk access or ticket minting, so a refused call performs no work and there is no second path around it.
+- **Refusal shape.** The canonical `Unavailable` code — provider/agent/environment down or degraded, retryable with backoff (`10` §3) — carrying a stable `rate_limited` reason, the **scope** that refused (`global` or `caller_command`), and a `retryAfterMs` backoff. The kernel error taxonomy is canonical and extending it requires a `DEC`, so a rate-limited refusal introduces **no new error code**.
+- **The clock is caller-supplied** (monotonic epoch-ms), never a wall-clock delta, so durations are correct across a clock adjustment and the gate is testable without sleeping.
 
 ## 2. The three layers (DEC-028) — never collapsed into one enum
 
@@ -70,12 +80,16 @@ The Agent Gateway (`32`) *builds* projections; Trust *enforces* them:
 | Identity / agent contract | Gateway-issued and audited; the session binding fixes the agent id — spoofing is rejected (`32` §3). |
 | Capability set | Effective = Installed × Available × Allowed × Relevant; anything else resolves to `NotFound` for that agent. |
 | Context (incl. memory) | Sensitivity-filtered slices (`16`); memory is a filtered **recall-only** projection — bound project + own session/task + user preferences, no org, no other projects, `confidential` only with a recorded loadout — with scopes and ceilings **actor-derived**, never caller-supplied, and no write path exposed (`17` §4/§9, DEC-038/042/043); cross-project/confidential leakage = 0 (INV-10). |
-| Workspace | `allowed_paths` / `read_only_paths`; **interception, not un-discovery** — out-of-scope reads are denied and logged. |
+| Workspace | `allowed_paths` / `read_only_paths`; **interception, not un-discovery** — out-of-scope reads are denied and logged (interception point and its open part below). |
 | Tools / MCP subset | Only the granted subset is mounted; the rest is invisible. |
 | Artifacts | Via the artifact gateway with permissions; never raw storage. |
 | Events | Filtered stream; never the internal bus. |
 
 Never exposed: service topology, stores/schema, queues, scheduler internals, vault, policy-engine internals, model-router internals, other agents' state (INV-11).
+
+**Read interception (owner ruling).** Reads are intercepted at the **scope boundary, never per-read approval**: every read path resolves through the session's path scopes and the protected-subpath rules (`25` §7.1). Out-of-scope is a **typed denial plus an audit row**; an in-scope read requires **no approval and no prompt**. Approval-gating each read is not a stronger control here, it is a broken one — the file tree is a browsing surface, and a prompt per node is what made the gap unclosable by patching. The scope boundary is where a human's decision (which roots this session may see) is actually made, so that is where reads are checked. `25` §7.1 carries the same ruling for the file module.
+
+**Still open — a tracked follow-up, not a completed fix.** The *renderer-chosen path* is **not yet resolved against the scopes in code**: `fs_read_file` (`src-tauri/src/fs_cmds.rs:91`) and `fs_list_dir` (`src-tauri/src/fs_cmds.rs:33`) pass the caller's `path` straight to `std::fs`, with no interception — the write path already floors (`src-tauri/src/fs_cmds.rs:149` → `control::floor_user_file`). The behavior above is therefore **specified but not implemented**; it is a tracked follow-up alongside the open `fs_*` authority item in the code-phase fix register (`42` §4, FIX-06), and no claim of enforcement is made until the read commands resolve their path through the session's scopes.
 
 ## 9. Audit
 
@@ -99,6 +113,8 @@ Policy evaluated by Trust; records owned by `21`. Required record fields (per co
 | Ticket replay / stale epoch | `InvalidState`; audited; provider epoch bump re-issues. |
 | Approval timeout | Per-class expiry policy (default deny). |
 | Policy conflict (scopes disagree) | Innermost decision applies unless an outer **ceiling** forbids; conflicts logged. |
+| Control-plane rate limit reached | Typed `Unavailable` refusal (`rate_limited` + scope + `retryAfterMs`) **before** any work: no command body, no state lock, no disk, no ticket minted; audited (§1.1). Never queued, never silently dropped, never served by a second path. |
+| Limiter state unavailable (poisoned lock) | Denial with the same typed shape — fail closed, never an implicit allow (§1.1). |
 
 ## 12. Interop
 
@@ -117,6 +133,8 @@ Policy evaluated by Trust; records owned by `21`. Required record fields (per co
 ## 14. Evidence
 
 Owner brief (projections, permission defaults, isolation: host / agent workspace / vault) · `agent-harness-verification.md` §A4 (three verified layers + anchors) · DEC-028 · INV-01…12/24 · `ARCH/06-DATA-MODEL.md` DM-009/010 · `ARCH/07-CONTRACTS.md` CTR-011/012/013 · `ARCH/21-WORLD-MODEL.md` §5 (consent fields).
+
+**Code-phase anchors (§1.1, §8):** `crates/everyaios-guard/src/ratelimit.rs` (the limiter) · `src-tauri/src/lib.rs:845` + `:82-149` (the IPC gate, wrapping the `invoke_handler`) · `crates/everyaios-core/src/tools.rs:1176-1192` (the tool-path gate) · `src-tauri/src/fs_cmds.rs:33,91,149` (read commands un-intercepted, write command floored — the open part of §8).
 
 ## 15. Requirements (`REQ-TRUST-*`)
 

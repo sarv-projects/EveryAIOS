@@ -482,8 +482,8 @@ This registry answers one question per entry: **what behavior must this system e
 #### REQ-PROV-004 — MCP client dual-era policy
 - **Statement:** GIVEN an MCP server connection, WHEN the era is negotiated, THEN the client tries the modern revision `2026-07-28` (stateless, context in `_meta`, `server/discover`) first and falls back to legacy `2025-11-25` (`initialize`), with per-transport detection (stdio probe with 10 s cap; HTTP 400-body classification), era caching per process/origin, and a per-server force-legacy escape hatch.
 - **Priority:** must
-- **Source:** `ARCH/14-PROVIDERS.md` §4 · `ARCH/04-DECISIONS.md` DEC-030 · `ARCHIVE/v1-research/mcp-provider-verification.md`
-- **Acceptance:** dual-era tests against both revisions; detection and cache tests; force-legacy honored; client core carries both revisions (`rmcp` 3.4.x).
+- **Source:** `ARCH/14-PROVIDERS.md` §4 · `ARCH/04-DECISIONS.md` DEC-030, DEC-048 · `ARCHIVE/v1-research/mcp-provider-verification.md`
+- **Acceptance:** dual-era tests against both revisions; detection and cache tests; force-legacy honored; the client core is the hand-rolled, patch-owned in-crate implementation carrying both revisions (DEC-048 — no SDK core), with the era verdict cached per origin (HTTP) and per command fingerprint (stdio) and the era probe bounded at 10 s on both transports.
 - **Failure cases:** permanent mismatch → provider marked incompatible with reason; detection that loses capabilities → defect.
 - **Tests:** pending
 - **Status:** seeded
@@ -491,8 +491,8 @@ This registry answers one question per entry: **what behavior must this system e
 #### REQ-PROV-005 — MCP server façade compliance
 - **Statement:** GIVEN our MCP façade, WHEN an external client connects, THEN it serves stateless modern behavior with `initialize` compatibility, MUST implement `server/discover`, and MUST validate `Mcp-Method` and `Mcp-Name` headers.
 - **Priority:** must
-- **Source:** `ARCH/14-PROVIDERS.md` §4
-- **Acceptance:** façade tests cover modern and legacy clients; `server/discover` present; header validation rejects mismatches.
+- **Source:** `ARCH/14-PROVIDERS.md` §4 · `ARCH/04-DECISIONS.md` DEC-030, DEC-048
+- **Acceptance:** façade tests cover modern and legacy clients; `server/discover` present; header validation rejects mismatches; and `initialize` compatibility is reachable **on the strict lease**, method-restricted (only `initialize` is exempt from the revision pin) and session-less (no lease, no session, no capability handle) — `crates/everyaios-mcp/tests/acceptance_mcp_dual_era.rs::acceptance_a_legacy_initialize_completes_on_the_strict_lease`.
 - **Failure cases:** missing `server/discover` → client cannot negotiate; unvalidated headers → request rejected.
 - **Tests:** pending
 - **Status:** seeded
@@ -2752,11 +2752,11 @@ This registry answers one question per entry: **what behavior must this system e
 #### REQ-CHAN-012 — Protocol version mismatch is typed with the supported window
 - **Statement:** GIVEN a protocol client with a mismatched version, WHEN it connects, THEN it receives a typed error naming the supported window — never a silently missing stream.
 - **Priority:** must
-- **Source:** `ARCH/32-CHANNELS.md` §8 · `ARCH/41-EDGE-CASES.md` EDGE-079 · `ARCH/30-EVENTS.md` §6
-- **Acceptance:** a mismatch test returns a typed error + window; compatible clients connect; no silent partial stream.
+- **Source:** `ARCH/32-CHANNELS.md` §8 · `ARCH/41-EDGE-CASES.md` EDGE-079 · `ARCH/30-EVENTS.md` §6 · `ARCH/04-DECISIONS.md` DEC-048
+- **Acceptance:** a mismatch test returns a typed error + window; compatible clients connect; no silent partial stream; the refusal carries the window as data, not only as prose — `error.data.supportedProtocolVersions` on the MCP façade (DEC-048).
 - **Failure cases:** silent vocabulary drop → violation; untyped rejection → defect.
-- **Tests:** pending
-- **Status:** seeded
+- **Tests:** `crates/everyaios-mcp/tests/acceptance_mcp_dual_era.rs::{acceptance_the_revision_pin_holds_for_every_method_except_initialize, acceptance_a_comma_duplicated_version_header_is_normalized, acceptance_an_unknown_initialize_version_is_answered_not_echoed}`
+- **Status:** implemented
 
 #### REQ-CHAN-013 — External-agent disconnects leave no orphaned state
 - **Statement:** GIVEN an ACP/API drop mid-run, WHEN the client re-attaches, THEN work continues as durable Work, the gateway session is held, and the filtered stream replays from the last ack — no orphaned internal state.

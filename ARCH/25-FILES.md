@@ -61,6 +61,14 @@
 - Canonicalization: symlinks/junctions resolved before policy checks (TOCTOU-aware); case sensitivity per platform; Windows long-path handling declared.
 - Protected subpaths (e.g. VCS hooks, system dirs) stay read-only inside writable roots (`12` §2).
 
+### 7.1 Read interception (owner ruling)
+
+Reads are intercepted at the **scope boundary, never per-read approval**. Every read path resolves through the session's path scopes and the protected-subpath rules above; out-of-scope is a **typed denial plus an audit row**; an in-scope read requires **no approval and no prompt**.
+
+Why the boundary and not the read: the tree is a *browsing* surface, so a prompt per node is not a stricter control — it is the reason the read path had no interception at all. The human's decision (which roots this session may see) is made once, at the scope; the read check enforces that decision. Interception is also what "no un-discovery" means here — the file is reachable, and reaching it is what is denied. `12` §8 carries the same ruling for the trust plane.
+
+**Open — a tracked follow-up, not a completed fix.** The *renderer-chosen path* is **not yet resolved against those scopes in code**. `fs_read_file` (`src-tauri/src/fs_cmds.rs:91`) and `fs_list_dir` (`src-tauri/src/fs_cmds.rs:33`) take the caller's `path` straight to `std::fs`; the write path already floors (`src-tauri/src/fs_cmds.rs:149` → `control::floor_user_file`). The rule above is **specified**; the read commands are not yet **wired** to it, and nothing here claims they are.
+
 ## 8. Failure modes
 
 | Failure | Behavior |
@@ -92,7 +100,7 @@ Content index/OCR · thumbnails · SMB/network shares · ReFS 128-bit edge cases
 
 ## 12. Evidence
 
-`ARCHIVE/v1-research/world-model-verification.md` §3 (identity table, collector mechanics, cursor/freshness) with MS docs (`FILE_ID_INFO`, MFT, USN change-journal identifiers) · local `walk.rs:131-157`, `dedup.rs:106-118`, `usn.rs:77-90`, `usn_winapi.rs` (unwired) · DEC-029 · INV-20 · `ARCH/21-WORLD-MODEL.md` §3–§5.
+`ARCHIVE/v1-research/world-model-verification.md` §3 (identity table, collector mechanics, cursor/freshness) with MS docs (`FILE_ID_INFO`, MFT, USN change-journal identifiers) · local `walk.rs:131-157`, `dedup.rs:106-118`, `usn.rs:77-90`, `usn_winapi.rs` (unwired) · DEC-029 · INV-20 · `ARCH/21-WORLD-MODEL.md` §3–§5 · `src-tauri/src/fs_cmds.rs:33,91,149` (§7.1 read-interception ruling and its open part).
 
 ## 13. Requirements (`REQ-FILES-*`)
 
