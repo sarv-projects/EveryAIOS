@@ -2,9 +2,10 @@
 
 > **Status:** Frozen v1 (frozen 2026-09-26; drafted P3).
 > **P7 pass (2026-09-26):** line-checked; requirements seeded (`REQ-COMMS-*`, Requirements section).
+> **P9 verification pass (2026-09-26):** read line-by-line; fixes applied where needed (owner-directed; re-freeze follows).
 > **Role:** an **agentic action layer** over communication systems — email, calendar, messaging — delivered as **capabilities over connectors**. Not another messaging client (owner brief).
 > **Dependencies:** `13-CAPABILITY` (descriptors) · `14-PROVIDERS` (transport/auth) · `12-TRUST` (permissions, vault, egress) · `30-EVENTS` (arrival events) · `29-ARTIFACTS` (attachments) · `20-WORKFLOW` (triggers). **Consumers:** `15` (agent), UI (`32`).
-> **Evidence:** product-owner brief (communication section: read/classify/draft/reply; calendar; Slack/Teams/WhatsApp/Discord; “don’t make it another messaging client”; permission defaults) · `ARCH/12-TRUST.md` §3 · `ARCH/13-CAPABILITY.md` · v0 connector evidence (`REPO-COMPARE/BRIEFS/02-connectors-nango.md`, `12`, `13` — pattern reference only, not authority).
+> **Evidence:** product-owner brief (communication section: read/classify/draft/reply; calendar; Slack/Teams/WhatsApp/Discord; “don’t make it another messaging client”; permission defaults) · `ARCH/12-TRUST.md` §3 · `ARCH/13-CAPABILITY.md` · v0 connector evidence (`REPO-COMPARE/BRIEFS/02-connectors-nango.md`, `18-mcp-plugins-skills-connectors.md` — pattern reference only, not authority).
 
 ## 1. Purpose & rules
 
@@ -74,7 +75,7 @@ Connector-originated events (`email.arrived` · `message.received` · `calendar.
 
 ## 8. Interop
 
-**Depends on:** `10` · `12` (auth/egress/approvals) · `13`/`14` · `19` (flows where needed) · `29` · `30`.
+**Depends on:** `10` · `12` (auth/egress/approvals) · `13`/`14` · `19` (adapter execution hosts) · `29` · `30`.
 **Exposes to:** `15` (comm actions), `20` (triggers), UI (`32`: compose/review surfaces live in the UI doc), `17` (explicit “remember this thread” promotions).
 **DAG check:** connectors never write memory or work state directly; they act through capabilities and emit events.
 
@@ -92,7 +93,7 @@ Full mailbox mirror/search index · real-time chat presence/typing · SMS/voice 
 
 ## 11. Evidence
 
-Product-owner brief (comms capabilities; permission table; “not another messaging client”) · `ARCH/12-TRUST.md` §3 (dangerous tier), §6 (vault), §7 (egress) · `ARCH/13-CAPABILITY.md` §2–§3 · `ARCH/20-WORKFLOW.md` §5 (trigger feeding), §7 (edit semantics) · `ARCH/29-ARTIFACTS.md` §5 (gateway) · v0 `REPO-COMPARE/BRIEFS/{02,12,13}` (connector patterns — reference only).
+Product-owner brief (comms capabilities; permission table; “not another messaging client”) · `ARCH/12-TRUST.md` §3 (dangerous tier), §6 (vault), §7 (egress) · `ARCH/13-CAPABILITY.md` §2–§3 · `ARCH/20-WORKFLOW.md` §5 (trigger feeding), §7 (edit semantics) · `ARCH/29-ARTIFACTS.md` §5 (gateway) · v0 `REPO-COMPARE/BRIEFS/{02,18}` (connector patterns — reference only).
 
 ## 12. Requirements (`REQ-COMMS-*`)
 
@@ -101,7 +102,7 @@ Testable behaviors owned by this module live in `ARCH/08-REQUIREMENTS.md`; the t
 | REQ | Behavior (one line) |
 |---|---|
 | `REQ-COMMS-001` | Communication ships as capability verbs (`mail.*`/`calendar.*`/`messaging.*`/`web.*`) — never a second inbox client or mirrored mailbox |
-| `REQ-COMMS-002` | Connectors are providers behind the `14` adapter contract; nothing above Capability knows the transport (DEC-025) |
+| `REQ-COMMS-002` | Connectors are providers behind the `14` adapter contract; nothing above Capability knows the transport (DEC-005) |
 | `REQ-COMMS-003` | Connector descriptors + per-instance consent; auth flows local, tokens only in the vault (INV-02) |
 | `REQ-COMMS-004` | On-demand queries + subscriptions; bounded caches; no bulk ingestion or default mirroring |
 | `REQ-COMMS-005` | Sends follow draft → approval → send → receipt; uncertain outcomes land in `needs_attention` (DEC-021, INV-07) |

@@ -2,6 +2,7 @@
 
 > **Status:** Frozen v1 (frozen 2026-09-26; drafted P2).
 > **P7 pass (2026-09-26):** line-checked; requirements seeded (`REQ-ART-*`, Requirements section).
+> **P9 verification pass (2026-09-26):** read line-by-line; fixes applied where needed (owner-directed; re-freeze follows).
 > **Role:** **Artifacts** are work products — versioned, provenance-carrying, scoped to work. **Receipts** are durable evidence of effects. **Library** is the reusable inventory; promotion is explicit (DEC-014).
 > **Dependencies:** `10-KERNEL` · `25-FILES` (identity/locations) · `30-EVENTS` (stream, telemetry) · `34-EFFECT-VERIFICATION` (verification precedes receipts). **Consumers:** `15`, `20`, UI (`32`), external agents (artifact gateway).
 > **Evidence:** product-owner brief (`Artifact` / `ProvenanceChain` / `LibraryItem` schemas; “Save to Library”; receipts first-class) · `ARCH/06-DATA-MODEL.md` DM-019/020/023 · `ARCH/07-CONTRACTS.md` CTR-018 · DEC-014 / DEC-022 / DEC-023 / DEC-032 · INV-07 / INV-18.
@@ -69,7 +70,7 @@ Exchange via refs only: `artifact_id` · `mime_type` · `uri`. Supported verbs (
 
 ## 7. Previews & rendering handoff
 
-Previews are **projections** (thumbnail/render refs) produced by domains (`22`) — artifacts store refs, not pixels. The UI opens them through the universal document surface (`AGENTCOWORK-UI.md`); opening/rendering consumes zero model tokens (DEC-015).
+Previews are **projections** (thumbnail/render refs) produced by domains (`22`–`24`) — artifacts store refs, not pixels. The UI opens them through the universal document surface (`AGENTCOWORK-UI.md`); opening/rendering consumes zero model tokens (DEC-015).
 
 ## 8. Failure modes
 

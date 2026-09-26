@@ -2,6 +2,7 @@
 
 > **Status:** Frozen v1 (frozen 2026-09-26; drafted P3).
 > **P7 pass (2026-09-26):** line-checked; requirements seeded (`REQ-VERIFY-*`, Requirements section).
+> **P9 verification pass (2026-09-26):** read line-by-line; fixes applied where needed (owner-directed; re-freeze follows).
 > **Role:** the **verification plane** — `observe → validate → render → verify → reconcile` before any receipt. Verification depth scales with the capability’s risk class (INV-19; DEC-022/023). “Implemented but unverified” can never masquerade as complete.
 > **Dependencies:** `13-CAPABILITY` (hooks/risk classes) · domains (`22`–`28` provide validators/renderers) · `19-RUNTIME-ENVIRONMENTS` (execution of checks) · `29-ARTIFACTS` (receipts/records) · `30-EVENTS`. **Consumers:** the governed path itself.
 > **Evidence:** product-owner brief (verification plane; render→inspect→fix loop; “verification loop is critical”) · `ARCH/22-OFFICE.md` §5 (format validation hooks) · `ARCH/29-ARTIFACTS.md` §3 (receipt policy) · `ARCH/26-CODE.md` §7 (tests as verification) · DEC-022/023 · INV-19.
@@ -51,7 +52,7 @@ Per-capability overrides live in descriptors (`13` §2 `verification` field); th
 ## 6. Reconciliation
 
 - **Postconditions** are declared per operation (“cell B2 = 42”, “file exists with hash H”, “tab URL = X”, “message accepted by provider”).
-- **Partial outcomes** (some batch operations applied) are recorded explicitly; batch atomicity (§`22`) prevents them where declared.
+- **Partial outcomes** (some batch operations applied) are recorded explicitly; batch atomicity (`22` §4) prevents them where declared.
 - **Repair** = a new work item/operation with its own ticket and receipt — never a silent re-execution.
 
 ## 7. Failure modes
@@ -67,7 +68,7 @@ Per-capability overrides live in descriptors (`13` §2 `verification` field); th
 ## 8. Interop
 
 **Depends on:** `10` · `13` (hooks/risk) · `19` · `22`–`28` (validators/renderers) · `29` · `30`.
-**Exposes to:** the governed path (receipts cite records), `15` (repair decisions), UI (verification visibility).
+**Exposes to:** the governed path (receipts cite records), `15` (repair decisions), UI (verification visibility) — through `CTR-023` (`EffectVerifier`; `07` §1).
 **DAG check:** verification observes; it never authors effects and never decides policy.
 
 ## 9. Not in v1

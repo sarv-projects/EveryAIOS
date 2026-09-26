@@ -2,6 +2,7 @@
 
 > **Status:** Frozen v1 (frozen 2026-09-26; drafted P3).
 > **P7 pass (2026-09-26):** line-checked; requirements seeded (`REQ-EVENTS-*`, Requirements section).
+> **P9 verification pass (2026-09-26):** read line-by-line; fixes applied where needed (owner-directed; re-freeze follows).
 > **Role:** **one event store + one bus**. UI projections, workflow triggers, world updates, telemetry and audit feeds all derive from it — no hidden side channels (INV-23).
 > **Boundary:** `SessionEvent` (DM-007, owned by `11`) is the session-local append-only log; `Event` (DM-008, owned here) is the **published system stream**. Everything material emits ≥1 published event; session logs remain the session’s truth.
 > **Dependencies:** `10-KERNEL` · `11-WORK` (producers) · all modules (producers/consumers). **Consumers:** UI (`32`), `20` (triggers), `21` (world updates), `12` (audit feed), telemetry.
@@ -42,9 +43,10 @@
 | Context | `context.compacting` · `context.compacted` |
 | Verification | `verification.started` · `verification.completed` |
 | Artifacts | `artifact.created` · `artifact.updated` · `receipt.recorded` |
-| Memory | `memory.item.added` · `memory.item.superseded` · `memory.item.forgotten` · `memory.extraction.run` |
+| Memory | `memory.item.added` · `memory.item.superseded` · `memory.item.forgotten` · `memory.extraction.run` · `memory.recall.outcome` |
 | Workflow | `wf.occurrence.materialized` · `wf.run.claimed` · `wf.node.settled` · `wf.wait.armed` · `wf.lease.reaped` |
 | World | `world.file.changed` · `world.tab.navigated` · `world.window.focused` · `world.rescan` |
+| Comms | `email.arrived` · `message.received` · `calendar.event.upcoming` |
 | Provider | `provider.health.changed` · `provider.epoch.bumped` |
 
 Namespacing rules: `<domain>.<noun>.<verb>`; additive evolution preferred; deprecations are declared with a window. `model.delta` (streaming tokens) is **ephemeral delivery only** — deltas are not persisted as individual events (the settled message is). Subagent events follow DEC-036: `subagent.spawned` is emitted before the first prompt dispatch, and `subagent.finished` carries status · error · tool calls · turns · duration · tokens · output · `will_wake`.
@@ -81,7 +83,7 @@ External agents receive a **filtered stream** for their own work only: session/r
 ## 8. Interop
 
 **Depends on:** `10` · storage.
-**Exposes to:** UI (`32`), `20` (triggers), `21` (world), `12` (audit feed), analytics, `32` (external-agent projection).
+**Exposes to:** UI (`32`), `20` (triggers), `21` (world), `12` (audit feed), analytics, external agents (via `32`) — through `CTR-019` (`EventBus`/`EventStore`; `07` §1).
 **DAG check:** the event store never calls into producers; it records what they publish.
 
 ## 9. Not in v1

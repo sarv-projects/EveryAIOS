@@ -2,6 +2,7 @@
 
 > **Status:** Frozen v1 (frozen 2026-09-26; drafted P3).
 > **P7 pass (2026-09-26):** line-checked; requirements seeded (`REQ-CHAN-*`, Requirements section).
+> **P9 verification pass (2026-09-26):** read line-by-line; fixes applied where needed (owner-directed; re-freeze follows).
 > **Role:** every surface is a **projection of Core**, and every external agent connects through the **Agent Gateway** and receives projections only (DEC-009). One internal contract; protocols are mappings.
 > **Dependencies:** `07-CONTRACTS` (CTRs) · `11-WORK` (sessions) · `12-TRUST` (projection enforcement) · `13`/`14` (capability/tool subsetting) · `16-CONTEXT` (context projection) · `29`/`30` (artifact gateway, event filter). **Consumers:** external agents, IDE/CLI users, remote surfaces.
 > **Evidence:** product-owner brief (protocol surfaces: ACP · A2A · API; the 7-item projection model; “surfaces are projections”) · `agent-harness-verification.md` §B1/§B2 (ACP server + session manager + tool registry + typed updates — verified), §C3 (ACP stdio ND-JSON), §D1 (scope-tagged registrations) · DEC-009 · `ARCH/12-TRUST.md` §8 · `ARCH/30-EVENTS.md` §6.
@@ -57,7 +58,7 @@ Remote agents remain **opaque**: exchange tasks/messages/artifacts; their intern
 
 ## 7. Approvals & interaction routing
 
-Approvals (`DEC-021`) route to the channel bound to the session/work: desktop prompts, CLI prompts, or API callbacks; if no interactive channel is available, the request waits durably (`11`, `20` §7) and surfaces on the next channel attach. Notification ≠ receipt (`20` §7 note).
+Approvals (`DEC-021`) route to the channel bound to the session/work: desktop prompts, CLI prompts, or API callbacks; if no interactive channel is available, the request waits durably (`11`, `20` §7) and surfaces on the next channel attach. Notification ≠ receipt (REQ-CHAN-006).
 
 ## 8. Failure modes
 

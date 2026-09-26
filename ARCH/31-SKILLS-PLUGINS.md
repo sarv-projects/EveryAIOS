@@ -2,6 +2,7 @@
 
 > **Status:** Frozen v1 (frozen 2026-09-26; drafted P3).
 > **P7 pass (2026-09-26):** line-checked; requirements seeded (`REQ-SKILL-*`, Requirements section).
+> **P9 verification pass (2026-09-26):** read line-by-line; fixes applied where needed (owner-directed; re-freeze follows).
 > **Role:** **skills** are reusable know-how (instructions + requirements); **plugins** are the declared extension surfaces. Skills teach; capabilities enable; workflows repeat; agents reason.
 > **Dependencies:** `13-CAPABILITY` (requirements resolution) · `11-WORK` (activation scope) · `12-TRUST` (permissions/review) · `19-RUNTIME-ENVIRONMENTS` (sandboxed plugin code) · `29-ARTIFACTS` (library promotion). **Consumers:** `15` (agent skill use), UI (skill/plugin management).
 > **Evidence:** product-owner brief (skills loaded only when relevant; “skills define how; agents define why/what/when”; selective everything-is-a-plugin) · `agent-harness-verification.md` §D1 (scope-tagged registrations; plugin architecture verified), §E (plugin surfaces) · `ARCH/13-CAPABILITY.md` §7 (`described_by`) · `ARCH/06-DATA-MODEL.md` DM-027 · repo conventions (`.agents/skills/*/SKILL.md`).
@@ -78,7 +79,7 @@ Local-first: file/folder install, bundle import/export, Library integration (kin
 ## 8. Interop
 
 **Depends on:** `10` · `12` (review/permissions) · `13` (requirements) · `14`/`18`/`19` (surface hosts) · `29` (library).
-**Exposes to:** `15` (skills), UI (management), `32` (channel contributions).
+**Exposes to:** `15` (skills), UI (management), `32` (channel contributions) — through `CTR-020` (`SkillResolver`; `07` §1).
 **DAG check:** skills resolve capabilities; they never execute effects directly, and plugins never patch Core.
 
 ## 9. Not in v1
