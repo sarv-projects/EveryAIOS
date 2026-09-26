@@ -2890,7 +2890,7 @@ This registry answers one question per entry: **what behavior must this system e
 
 | Domain | Seeds | Next pass |
 |---|---|---|
-| `PROD` (6) | drafted above | product-wide — verify in the finalisation lane |
+| `PROD` (6) | drafted above | verified during the P9 verification pass ✅ (2026-09-26) |
 | `CTX` (10) | drafted above + expanded in pass `16` | verified during pass `16` ✅ (2026-09-26) |
 | `TRUST` (10), `CAP` (10) | drafted above + expanded in passes `12`/`13` | verified during passes `12` ✅ / `13` ✅ (2026-09-26) |
 | `PROV` (10) | drafted above + expanded in pass `14` | verified during pass `14` ✅ (2026-09-26) |
@@ -2914,6 +2914,8 @@ This registry answers one question per entry: **what behavior must this system e
 | `SKILL` (13) | drafted above + expanded in pass `31` | verified during pass `31` ✅ (2026-09-26) |
 | `CHAN` (13) | drafted above + expanded in pass `32` | verified during pass `32` ✅ (2026-09-26) |
 | `VERIFY` (13) | drafted above + expanded in pass `34` | verified during pass `34` ✅ (2026-09-26) |
+
+> **P9 verification (2026-09-26):** registry integrity verified — 307 entries ↔ 307 matrix rows, every entry carries all seven fields, IDs unique and never reused; `PROD` re-verified against `AGENTCOWORK-SPEC.md`; every other domain re-checked in the P9 verification wave.
 
 ## 6. Related
 

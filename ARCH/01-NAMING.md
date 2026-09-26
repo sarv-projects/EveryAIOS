@@ -2,6 +2,7 @@
 
 > **Status:** Frozen v1 (frozen 2026-09-26; drafted P0) — provisional **working names** per product-owner direction (2026-09-26). Nothing here is final branding; the layer is centralized so a rename is mechanical.
 > **Rule of use:** all v1 docs use the **v1 names** only. v0 names appear only in the rename map below or in explicit historical notes.
+> **P9 verification pass (2026-09-26):** read line-by-line; fixes applied where needed (owner-directed; re-freeze follows).
 
 ## 1. Working names
 
@@ -36,7 +37,7 @@
 
 1. **Docs use v1 names only.** The only places v0 names may appear: this map; archive references; explicit “v0 called this X” history notes.
 2. **Renames are decisions.** Changing any working name = update this doc + a `DEC` entry in `ARCH/04-DECISIONS.md` + a mechanical sweep of docs.
-3. **Commit hygiene** (carried from `AGENTS.md`): never mention AI tool/agent vendor names in commits, code, or docs. This is separate from product naming.
+3. **Commit hygiene** (carried from `AGENTS.md` §7): never attribute an edit to the authoring tool, model, or agent in commits, code, or docs. Naming external systems as prior art or absorbed technology (e.g. Codex, OpenCode, Cline) is allowed when the reference is about that software. This is separate from product naming.
 4. **Code identifiers are frozen.** `everyaios-*` crate/package names, `EveryAIOS` strings, and the CLI binary keep their current names during the docs phase; the code-phase rename is planned *after* v1 freezes so docs and code move once, together (OQ-003).
 5. **Product positioning** does not rename with the brand: AgentCowork is described as an AI-native execution environment layered on the user’s existing computer — never as an OS/kernel replacement (`ARCH/02-THESIS.md`).
 

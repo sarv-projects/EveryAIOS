@@ -2,6 +2,7 @@
 
 > **Status:** Frozen v1 (frozen 2026-09-26; drafted P5). **Authority:** root for **WHAT** the product must be (`ARCH/00-INDEX.md` §2). HOW lives in `ARCH/03-HLD.md` and the module docs; schemas in `ARCH/06-DATA-MODEL.md`/`07-CONTRACTS.md`; flows in `ARCH/40-FLOWS.md`.
 > **P7 pass (2026-09-26):** line-checked; requirements registry (`ARCH/08-REQUIREMENTS.md`) cross-referenced.
+> **P9 verification pass (2026-09-26):** read line-by-line; fixes applied where needed (owner-directed; re-freeze follows).
 > **Names:** product **AgentCowork** (working), runtime **Core**, native agent **Agent X** (`ARCH/01-NAMING.md`).
 > **v1.0 scope:** Windows-first desktop, local-first, single-user. No scope cuts carried from here — deferrals are explicit (§15).
 > **SDD:** testable behaviors derived from this SPEC are registered as `REQ-*` in `ARCH/08-REQUIREMENTS.md`; traceability accrues in `ARCH/09-FEATURE-MATRIX.md`; process: `.agents/docs/spec-driven-development.md`.
@@ -46,7 +47,7 @@ Every externally visible effect: `Work → Capability → Provider → Handle �
 - Capabilities are **semantic operations** (`office.spreadsheet.edit`); providers implement them; transports are invisible above the Capability Plane.
 - Descriptor / result / handle shapes are canonical (`DM-011/012`; `13` §2–§4). `guidance` and `requires_user_action` are first-class results with concrete `next_action`.
 - Models see task-relevant capability subsets under budget — **never** a flat dump of raw tools (semantic compression; loading modes eager/catalog/on-demand).
-- Handles are epoch-checked; provider restarts invalidate them (`DEC-002`).
+- Handles are epoch-checked; provider restarts invalidate them (`DM-012`, `ARCH/13-CAPABILITY.md` §4).
 
 ## 6. Trust contract
 
@@ -60,8 +61,8 @@ Every externally visible effect: `Work → Capability → Provider → Handle �
 ## 7. Data & state contract
 
 - Canonical entities `DM-001…027` (`06`); interfaces `CTR-001…026` (`07`).
-- One writer per store; logs are append-only; every view is a projection (`INV-06`, `INV-23`, `DEC-027`).
-- Checkpoints are reconstructable records; workflow runs pin their version; step attempts carry idempotency keys (`DEC-033`).
+- One writer per store; logs are append-only; every view is a projection (`INV-06`, `INV-23`).
+- Checkpoints are reconstructable records (`DEC-027`, `DM-006`); workflow runs pin their version and step attempts carry idempotency keys (`DEC-033`).
 - Memory v1: SQLite + FTS5; ADD-only extraction with `superseded_by`; suppression-based forget; **no vectors/graph/decay in v1** (`DEC-018/019`).
 - Artifacts: immutable versions, mandatory provenance; receipt-pinned versions never GC'd (`DEC-032`).
 
@@ -104,7 +105,7 @@ Skills teach (activation-scoped, relevance-loaded); plugins extend at declared s
 ## 13. Evidence & acceptance
 
 - Evidence rules and the acceptance map: `ARCH/42-EVIDENCE-MAP.md`. “Implemented” ≠ verified; Windows readiness requires real acceptance records.
-- Code-phase fix register (FIX-01…18) is owned by the post-freeze code phase.
+- Code-phase fix register (FIX-01…18) is owned by the code phase (`TODO.md` W0; `ARCH/42-EVIDENCE-MAP.md` §4).
 
 ## 14. Non-goals (normative)
 
@@ -116,8 +117,8 @@ A2A transport implementation · remote/cloud environments · mobile surfaces · 
 
 ## 16. Open questions
 
-`OQ-001…006` (`00-INDEX` §9) + `PEND-04…05` (`04-DECISIONS` §3) remain open; PEND-06 is closed by DEC-039 (Provisional) and PEND-07 by DEC-032; product-owner decisions where flagged.
+`OQ-001…006` (`00-INDEX` §9) + `PEND-04…05` (`04-DECISIONS` §3) remain open; PEND-06 is closed by DEC-039 and PEND-07 by DEC-032; product-owner decisions where flagged.
 
 ## 17. Change control
 
-Changes to this SPEC or any authority doc require a `DEC` entry; module docs must not contradict the SPEC; conflicts escalate per `00-INDEX` §2. v1 freezes at P6; post-freeze changes are v1.x via the same process.
+Changes to this SPEC or any authority doc require a `DEC` entry; module docs must not contradict the SPEC; conflicts escalate per `00-INDEX` §2. v1 froze at P8 (2026-09-26); post-freeze changes are v1.x via the same process.

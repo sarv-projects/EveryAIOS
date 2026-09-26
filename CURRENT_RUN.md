@@ -1,13 +1,13 @@
 # CURRENT_RUN — handover log
 
 > Read this first. Working log for agents in `desktop_app`.
-> **v1 docs FROZEN (2026-09-26); P7 SDD finalisation complete — the code phase starts at W0 (`TODO.md`).**
+> **v1 docs FROZEN (2026-09-26); P7 SDD finalisation complete — reopened 2026-09-26 for the owner-directed full verification pass (read → understand → fix, architect-style); re-freeze follows; the code phase starts at W0 (`TODO.md`) after the re-freeze.**
 > Previous v0 handover content (≈344 KB) was replaced on 2026-09-26; it remains in git history.
 
 ## Active goal
 Rebuild the AgentCowork docs from scratch as **v1**: ARCH set + SPEC + UI + supporting docs, on the shoulders of the v0 corpus. v0 archived locally (`ARCHIVE/v0/`, git-ignored). `TODO.md` was exempt from the rebuild and now holds the v1 implementation plan (reworked in P7). No scope cuts.
 
-## Where we stopped — 2026-09-26: P0–P7 ✅ complete; v1 FROZEN (owner decision); code phase W0 next (details below)
+## Where we stopped — 2026-09-26: P0–P7 ✅ complete; v1 FROZEN (owner decision) then reopened for the verification pass (read → understand → fix); re-freeze + code phase W0 next (details below)
 **Done:**
 - v0 archived: `ARCH/` (33 entries) → `ARCHIVE/v0/ARCH/`; `RESEARCH/` → `ARCHIVE/v0/RESEARCH/`; 10 root product docs → `ARCHIVE/v0/root/`; manifest at `ARCHIVE/v0/MANIFEST.md`; archive README updated.
 - v1 foundation drafted:

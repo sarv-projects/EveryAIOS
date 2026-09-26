@@ -1,7 +1,8 @@
 # 06 — Data Model (canonical entity registry)
 
 > **Status:** Frozen v1 (frozen 2026-09-26; drafted P1). This is the **entity registry**: one canonical identity per shared entity, with one owner doc each. Module docs carry detailed schemas; this doc owns identity strategy, shared field rules, state-machine naming, and cross-entity constraints. Where this doc and a module doc disagree on naming/identity, **this doc wins**; on field detail, the owner doc wins.
-> **Evidence:** product-owner brief schemas · `ARCH/15-AGENT-X.md`, `ARCH/16-CONTEXT.md`, `ARCH/17-MEMORY.md` · `ARCHIVE/v1-research/agent-harness-verification.md` (receipt/limit shapes) · `ARCH/12-TRUST.md`/`13`/`14`/`20` pending (shapes marked *provisional*).
+> **Evidence:** product-owner brief schemas · `ARCH/15-AGENT-X.md`, `ARCH/16-CONTEXT.md`, `ARCH/17-MEMORY.md` · `ARCHIVE/v1-research/agent-harness-verification.md` (receipt/limit shapes) · entity shapes cross-checked against `ARCH/12-TRUST.md`/`13`/`14`/`20` during the P7 module passes.
+> **P9 verification pass (2026-09-26):** read line-by-line; fixes applied where needed (owner-directed; re-freeze follows).
 
 ## 0. Conventions
 
@@ -77,7 +78,7 @@ erDiagram
 **DM-004 `Session`** — `id` · `workspace_id` · `agent_binding` (Agent X or external) · `status` · `title` · `log_range` (SessionEvent span) · `retention_class` · `last_active`.
 **DM-005 `Run`** — `id` · `session_id` · `work_id` · `agent_id` · `model` · `reasoning_level` · `status` · `usage {in,out,cost}` · `receipt_refs[]`.
 **DM-006 `Checkpoint`** — `id` · `scope` · `kind` (`work` | `context` | `workflow` | `session`) · `content_ref` · `reconstructable` (produced deterministically vs model-written) · `version`.
-**DM-009 `Ticket`** — `id` · `capability_id` · `provider_id` · `environment_id` · `scope` (paths/targets/resource patterns) · `issued_at` · `expires_at` · `uses` · `approval_ref?`.
+**DM-009 `Ticket`** — `id` · `capability_id` · `provider_id` · `environment_id` · `provider_epoch` · `scope` (paths/targets/resource patterns) · `issued_at` · `expires_at` · `uses` · `approval_ref?`.
 **DM-011 `CapabilityDescriptor`** — `id` · `version` · `description` · `affordances[]` · `requirements[]` · `providers[]` · `loading_mode` (`eager|catalog|on-demand`) · `risk_class` (`safe|sensitive|dangerous`) · `auth_requirements?`.
 **DM-012 `CapabilityHandle`** — `capability_id` · `provider_id` · `provider_epoch` · `environment_id` · `permission_snapshot` · `runtime_handle_ref` · `expires_at`.
 **DM-014 `AgentProfile`** — `id` · `name` · `runtime` (`native|acp|mcp-agent|remote`) · `version` · `status` (`installed` · `discovered` · `launchable` · `available` · `disabled`) · `supported_models[]` · `capabilities[]` · `protocol` · `supports_subagents/background/steering` · `composer` capabilities.
@@ -100,7 +101,7 @@ erDiagram
 1. Every `Receipt` references exactly one `Ticket` and one effect; every externally visible effect has a receipt (INV-07).
 2. Every effect-bearing `Event` references its `work_id`; every `Work` outcome emits ≥1 event.
 3. `Artifact` versions are immutable; provenance chains are append-only; Library promotion is explicit (DEC-014).
-4. `CapabilityHandle` validity is `provider_epoch`-checked; handles never survive a provider restart (DEC-002).
+4. `CapabilityHandle` validity is `provider_epoch`-checked (DM-012, `13` §4); handles never survive a provider restart.
 5. `SessionEvent.seq` is monotonic per session; the log is append-only and is the source of all session projections (DEC-027).
 6. `WorkflowRun` executes against the `WorkflowDefinition` version it started with (INV-16).
 7. `Approval` decisions are recorded once and referenced by receipts/tickets; they are never inferred.
@@ -113,7 +114,7 @@ erDiagram
 
 1. **Resolved (`11` §2, v1):** `Task` is a **projection** over `Work` + `Step` + assignment metadata, not a separate durable entity; the id is kept for traceability. Revisit only with evidence (e.g. cross-work task graphs).
 2. `WorldObject.identity_key` per kind (file identity rules live in `25`).
-3. `ContextItem` durability: registry assumes ephemeral + references; confirm in `16` final.
+3. **Resolved (`16` §2, v1):** `ContextItem` is ephemeral and reference-first — never durable state.
 4. `SessionEvent` vs `Event` boundary: confirm which event classes are session-local vs published (`11`/`30`).
 5. Library template semantics vs versioned item (ties `29`).
 6. Session retention classes and hibernation policy (`11`).

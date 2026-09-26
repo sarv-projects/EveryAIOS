@@ -1,8 +1,9 @@
 # 07 — Contracts (canonical cross-module interfaces)
 
-> **Status:** Frozen v1 (frozen 2026-09-26; drafted P1) — the interface registry. Every named contract that crosses a module boundary lives here. **Owner** = the module that implements/stabilizes it; **consumers** = modules that call it. Module docs carry serialization/transport detail; this doc owns names, semantic signatures, and guarantees. Details marked *provisional* firm up as their owner doc lands.
+> **Status:** Frozen v1 (frozen 2026-09-26; drafted P1) — the interface registry. Every named contract that crosses a module boundary lives here. **Owner** = the module that implements/stabilizes it; **consumers** = modules that call it. Module docs carry serialization/transport detail; this doc owns names, semantic signatures, and guarantees. Contract status reflects implementation maturity — every owner doc is complete as of the v1 freeze.
 > **Rules:** signatures are transport-free (adapters map transports); every contract takes an `actor` context (user / agent / workflow) and is subject to Trust.
 > **SDD:** this registry carries the L3 interface layer for behaviors in `ARCH/08-REQUIREMENTS.md`; REQ ↔ CTR links accrue in `ARCH/09-FEATURE-MATRIX.md`.
+> **P9 verification pass (2026-09-26):** read line-by-line; fixes applied where needed (owner-directed; re-freeze follows).
 
 ## 0. Conventions
 
@@ -143,12 +144,12 @@ policies() → DelegationPolicyEntry[]
 
 ## 6. Open questions (`OQ-CTR-*`)
 
-1. Final signatures for 11/12/13/14 once their module docs land (expected churn, not design risk).
-2. `WorkService` vs `Scheduler`: one contract or two (leaning: one service, two facets).
-3. `ApprovalService` inside `Guard` vs separate (registry keeps separate for now).
-4. Idempotency-key derivation rules (with 12/14).
+1. **Resolved (P7 passes 11–14):** signatures firmed with their owner docs; churn now tracked per contract.
+2. **Resolved:** one service, two facets — `WorkService` (CTR-003) + `Scheduler` (CTR-026).
+3. **Resolved:** separate contract — `ApprovalService` (CTR-012), composed by Guard.
+4. **Resolved (§5.4):** idempotency keys derive from `work_id + ticket`.
 5. External-agent contract surface mapping to ACP (32) — which CTRs are exposed and how.
-6. Contract versioning scheme (major/minor semantics + deprecation window).
+6. **Resolved (§0):** additive = minor; breaking requires a `DEC` (+ deprecation window per `13` §8).
 
 ## 7. Evidence
 

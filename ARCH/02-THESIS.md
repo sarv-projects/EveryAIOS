@@ -2,6 +2,7 @@
 
 > **Status:** Frozen v1 (frozen 2026-09-26; drafted P0). This doc sets identity and principles; decisions that need evidence land in `ARCH/04-DECISIONS.md`, invariants in `ARCH/05-INVARIANTS.md`.
 > **SDD:** the success statements (S-01…S-10) are the falsifiable seeds of the requirement registry; REQ traceability accrues in `ARCH/09-FEATURE-MATRIX.md`.
+> **P9 verification pass (2026-09-26):** read line-by-line; fixes applied where needed (owner-directed; re-freeze follows).
 
 ## 1. Definition (one sentence)
 
@@ -39,7 +40,7 @@
 - No forced single browser, model provider, coding agent, or document format.
 - No vendoring of third-party projects as hard runtime dependencies because their *idea* was good — absorb architecture, redesign, implement independently; reuse code only where licensing is explicitly cleared (`ARCH/44-ABSORB-REGISTER.md`).
 - No anti-bot / CAPTCHA-evasion / residential-proxy tooling in browser or computer-use capabilities.
-- No universal chat syntax imposed on agents — agents keep their native grammars; AgentCowork reserves one small, collision-free namespace (`/eaios:*` analogue — final token decided in `AGENTCOWORK-UI.md`).
+- No universal chat syntax imposed on agents — agents keep their native grammars; AgentCowork reserves one small, collision-free namespace — **`/eaios:*`** for v1 (working spelling; the final token renames with the brand — `OQ-003`/`OQ-001`; normative rule in `AGENTCOWORK-UI.md` §5.7).
 - No dumping whole tool/skill/MCP catalogs or whole documents into model context by default.
 
 ## 5. The differentiator (the claim we must earn)

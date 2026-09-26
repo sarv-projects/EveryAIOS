@@ -4,6 +4,7 @@
 > **Statuses:** `Locked` — agreed for v1; changing it requires a new DEC superseding this one. `Provisional` — directionally fixed; detail pending. `Pending` — not yet decided (§3). `Deferred` — out of v1 with an explicit trigger.
 > **Change rule:** any change to an authority doc (`AGENTCOWORK-SPEC.md`, `ARCH/03-HLD.md`, module docs, contracts) that alters behavior requires a DEC entry here.
 > **SDD:** requirements cite decisions in their `Source` field; REQ ↔ DEC links accrue in `ARCH/09-FEATURE-MATRIX.md`. A Locked decision changes only by a superseding DEC — its text is never silently edited.
+> **P9 verification pass (2026-09-26):** read line-by-line; fixes applied where needed (owner-directed; re-freeze follows).
 
 ## 1. Register
 

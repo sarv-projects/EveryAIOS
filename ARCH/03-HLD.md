@@ -4,6 +4,7 @@
 > **Companion docs:** `ARCH/02-THESIS.md` (identity, principles) · `ARCH/06-DATA-MODEL.md` (entities) · `ARCH/07-CONTRACTS.md` (interfaces).
 > **SDD:** this doc is the L2 architecture layer — it satisfies behaviors registered in `ARCH/08-REQUIREMENTS.md` and must not contradict them; module → REQ traceability accrues in `ARCH/09-FEATURE-MATRIX.md`.
 > **Fleshed:** P7 (2026-09-26) — contract index (§3.1), failure model (§11), non-functional envelope (§12).
+> **P9 verification pass (2026-09-26):** read line-by-line; fixes applied where needed (owner-directed; re-freeze follows).
 
 ## 1. Shape
 
@@ -123,7 +124,7 @@ Every cross-module edge is named in `ARCH/07-CONTRACTS.md`. A module with no own
 | Runtime & Environments (19) | CTR-015 `EnvironmentService` |
 | Workflow (20) | CTR-016 `WorkflowEngine` |
 | World Model (21) | CTR-017 `WorldService` |
-| Office (22) · Browser (23) · Computer Use (24) | — (domain interfaces pending their module passes) |
+| Office (22) · Browser (23) · Computer Use (24) | — (capability descriptors through CTR-009; a named contract is registered only for a non-capability edge) |
 | Files (25) | CTR-024 `FileIdentity` / `WorkspaceWatcher` / `WriteLeases` |
 | Code (26) | CTR-025 `RepoIntelligence` |
 | Search (27) | — (implements the Core search service behind `CTR-006 context.search`; capability descriptors through CTR-009) |
@@ -213,7 +214,7 @@ Resources are installed/available at Global or Workspace and never duplicated pe
 
 ## 9. Implementation order (after docs freeze; not current work)
 
-1. **Six core contracts first:** `AgentEngine` (CTR-001), `AgentSession` (CTR-002), `ContextController` + `ContextProvider` (CTR-007/006), `CapabilityBroker` (CTR-009), `SubagentManager` (CTR-021), `ModelAdapter` (CTR-014).
+1. **Six core contracts first:** `AgentEngine` (CTR-001), `AgentSession` (CTR-002), `ContextController` + `ContextProvider` (CTR-007/006), `CapabilityBroker` (CTR-009), `DelegationService` (CTR-021), `ModelAdapter` (CTR-014).
 2. **Minimal native runtime:** model streaming, tool loop, project rules, RepoGraph/RepoMap, filesystem, shell, git, parallel workers, background execution, structured-checkpoint compaction, Core capability access.
 3. **Bolt on domains:** browser, Office, computer-use, MCP provider adapter, plugins/skills, ACP server.
 4. **Workflow Engine** wired to Capability Plane and World Model events.
@@ -243,7 +244,7 @@ The architecture fails **closed** at trust boundaries and **honestly** everywher
 | Vault unavailable | Credential *use* fails closed; no plaintext fallback, no cached secret | 12 |
 | Provider down / degraded | Health flips; the resolver may select another provider, otherwise a typed `Unavailable`; executed effects are not silently retried | 13, 14 |
 | Execution crashes mid-effect | Effect state is reconciled at next start; where the outcome cannot be determined, the receipt records uncertainty rather than claiming success | 19, 34 |
-| Domain runtime crash (Office/Browser/CUA) | Host survives; the provider epoch bumps, invalidating stale handles (DEC-002); resident contexts are bounded and released | 22–24 |
+| Domain runtime crash (Office/Browser/CUA) | Host survives; the provider epoch bumps, invalidating stale handles (DM-012, `13` §4); resident contexts are bounded and released | 22–24 |
 | Agent run crashes | Work is marked failed with its last checkpoint retained; host and other sessions are unaffected | 11, 15 |
 | Workflow runner restarts | Runs resume from checkpoints against their pinned definition version (INV-16) | 20 |
 | World scanner lags | Consumers see `freshness` stamps and must tolerate staleness — never fabricate live state | 21 |

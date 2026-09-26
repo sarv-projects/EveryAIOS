@@ -39,7 +39,7 @@ v0 grew by accretion: 33 ARCH files, 55 research files, a 355 KB spec, a 606 KB 
 | Product | `AGENTCOWORK-SPEC.md` | **WHAT** the product must be: behavior, contracts, acceptance. Root authority. |
 | Requirements | `ARCH/08-REQUIREMENTS.md` | **WHAT must be verified**: testable behaviors (`REQ-*`) derived from the SPEC, each with acceptance + failure cases. |
 | Traceability | `ARCH/09-FEATURE-MATRIX.md` | The `REQ → design → task → test` map. Owns links only, never content. |
-| Architecture | `ARCH/03-HLD.md` | **HOW** the system is structured. Module docs derive from it. Until SPEC lands, HLD + `04-DECISIONS` are the top authorities. |
+| Architecture | `ARCH/03-HLD.md` | **HOW** the system is structured. Module docs derive from it. |
 | Module LLD | `ARCH/10..34` | Their module only. MUST NOT contradict HLD/SPEC/contracts. |
 | Shared | `ARCH/06-DATA-MODEL.md`, `ARCH/07-CONTRACTS.md` | Canonical shared entities (DM-*) and interfaces (CTR-*). Module docs own local details only. |
 | UI | `AGENTCOWORK-UI.md` | UI/UX architecture, chat rendering, interaction model. Derives from SPEC + Experience plane. |
@@ -109,11 +109,12 @@ v0 grew by accretion: 33 ARCH files, 55 research files, a 355 KB spec, a 606 KB 
 | **P1** ✅ | 04-DECISIONS, 05-INVARIANTS, 06-DATA-MODEL, 07-CONTRACTS | Drafted 2026-09-26 — `DEC-001…033`, `INV-01…024`, `DM-001…027`, `CTR-001…026` |
 | **P2** ✅ | Core modules: 10 → 11 → 12 → 13 → 14 → 15 → 16 → 17 → 18 → 19 → 20 → 21 → 29 | All drafted 2026-09-26 (22 carried with P3 label) |
 | **P3** ✅ | Remaining modules: 22–28, 30, 31, 32, 34, 43, 44 | All drafted 2026-09-26 |
-| **P4** ✅ | Cross-cutting: 40-FLOWS, 41-EDGE-CASES, 42-EVIDENCE-MAP | Drafted 2026-09-26 — 24 flows · ~50 edges · FIX register |
-| **P5** ✅ | `AGENTCOWORK-SPEC.md`, `AGENTCOWORK-UI.md` | SPEC ✅ + UI ✅ drafted 2026-09-26 (UI: 583 lines, 13 sections) |
+| **P4** ✅ | Cross-cutting: 40-FLOWS, 41-EDGE-CASES, 42-EVIDENCE-MAP | Drafted 2026-09-26 — 24 flows · 138 edge cases · FIX register |
+| **P5** ✅ | `AGENTCOWORK-SPEC.md`, `AGENTCOWORK-UI.md` | SPEC ✅ + UI ✅ drafted 2026-09-26 (UI: 14 sections) |
 | **P6** ✅ | Viability + evidence sweep; consistency pass; freeze v1; README/AGENTS sync | Sweep run 2026-09-26 (cross-refs/sections/statuses/names clean; `20-WORKFLOW` interop gap fixed); freeze declared for review; README + AGENTS synced |
 | **P7** ✅ | SDD layer: `08-REQUIREMENTS` + `09-FEATURE-MATRIX`; module Requirements/Acceptance sections; `AGENTS.md` §16 + kit protocol | `REQ-*` registry seeded per domain (307); matrix traceable (307 rows); `TODO.md` reworked into `TASK-*` units (W0–W4) |
 | **P8** ✅ | **v1 freeze** — owner decision (2026-09-26): `DEC-038…045` promoted to `Locked`; doc statuses flipped | **Frozen v1 (2026-09-26)** |
+| **P9** ⏳ | Owner-directed verification pass (2026-09-26): every doc read line-by-line, understood, fixed; clashes back-propagated; missing pieces added | Re-freeze when the pass + reconciliation + independent review complete |
 
 ---
 
@@ -142,7 +143,7 @@ v0 grew by accretion: 33 ARCH files, 55 research files, a 355 KB spec, a 606 KB 
 - **Open questions:** cross-cutting `OQ-###` are registered in §9; module-scoped questions use `OQ-<MNEMONIC>-<n>` (e.g. `OQ-CTX-01`, `OQ-MEM-03`) and are defined by the owning module doc's Open questions section. Both forms are referenced inline; ids are never renumbered or reused.
 - **World-model collectors:** `W1…W7` as defined in `ARCH/21-WORLD-MODEL.md` §2.
 - **Evidence format:** `ev: path:line` (repo) · `ev: URL` (web) · confidence `H/M/L` · `UNVERIFIED` must be temporary and carry what would verify it.
-- **Status labels:** `Planned` → `Draft Pn` → `Review Pn` → `Frozen`.
+- **Status labels:** `Planned` → `Draft Pn` → `Review Pn` → `Frozen v1 (frozen <date>; drafted Pn)`.
 - **Cross-references:** use file paths (`ARCH/17-MEMORY.md`), not section numbers, so docs can evolve.
 
 ---
@@ -152,7 +153,7 @@ v0 grew by accretion: 33 ARCH files, 55 research files, a 355 KB spec, a 606 KB 
 - v0 docs: `ARCHIVE/v0/ARCH/` (33 entries incl. ADR/ and the archived coordinator loop).
 - v0 research: `ARCHIVE/v0/RESEARCH/` — `2026-ai-landscape/` (10 files), `desktop_app/` (45 files).
 - Comparator work: `~/business_Dev/REPO-COMPARE/` — `MASTER-COMPARISON.md` (190 items — its §1 “186” line is stale; see `DISPOSITION.md` §a), `DISPOSITION.md`, `LICENSE-LEDGER.md`, `BRIEFS/` (20), `clone2/` (55 full clones), `clone3/` (2).
-- v1 lane research (in progress): `ARCHIVE/v1-research/` — memory, agent-harness verification, UI evidence.
+- v1 lane research: `ARCHIVE/v1-research/` (nine evidence deliverables) + `ARCHIVE/v1-research/v1-sdd/` (code-state inventory, OpenCode/harness notes, Agent X draft, memory deep-dive, UI proposals, final-review findings).
 - **Lost:** `/tmp/opencode/recon/` reports 01–29 (temp cleanup, 2026-09-26). Do not cite them; re-verify from surviving sources.
 
 ---
@@ -171,8 +172,8 @@ Working product name: **AgentCowork** · Runtime: **Core** · Native agent: **Ag
 | OQ-002 | Platform scope for World Model collectors (Windows-first vs cross-platform parity) | Module pass 21 |
 | OQ-003 | Timing + scope of code identifier rename (`everyaios-*` crates/packages, `EveryAIOS` strings) | Post-freeze code phase |
 | OQ-004 | `docs/` folder v1 review; README/AGENTS sync ✅ done (2026-09-26) | Post-freeze |
-| OQ-005 | First-release surface set (desktop + CLI minimum? ACP server timing) | 32-CHANNELS / SPEC |
-| OQ-006 | Whether v0 doc removals are committed now or when v1 freezes | Product owner |
+| OQ-005 | CLI final binary name + command surface (`32-CHANNELS.md` §3) | Product owner (branding, `DEC-020`) |
+| OQ-006 | Whether v0 doc removals are committed now or when v1 freezes | ✅ resolved — committed `573fff0` (2026-09-26) |
 
 ---
 
