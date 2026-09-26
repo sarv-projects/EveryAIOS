@@ -36,8 +36,8 @@ use thiserror::Error;
 #[path = "confined_fs.rs"]
 mod confined_fs;
 pub use confined_fs::{
-    ConfinedError, MAX_SCAN_DEPTH, MAX_SCAN_ENTRIES, RemovalReport, canonical_root,
-    check_removal, remove_confined,
+    ConfinedError, MAX_SCAN_DEPTH, MAX_SCAN_ENTRIES, RemovalReport, canonical_root, check_removal,
+    remove_confined,
 };
 
 /// The max number of skills injected into any single planner context
@@ -1606,8 +1606,11 @@ mod tests {
         {
             let fake = root.join("fake-pkg");
             std::fs::create_dir_all(&fake).unwrap();
-            std::os::unix::fs::symlink(root.join("refactor-helper/SKILL.md"), fake.join("SKILL.md"))
-                .unwrap();
+            std::os::unix::fs::symlink(
+                root.join("refactor-helper/SKILL.md"),
+                fake.join("SKILL.md"),
+            )
+            .unwrap();
             assert!(matches!(
                 store.delete("fake-pkg"),
                 Err(SkillError::NotRegistered(_))
@@ -1683,7 +1686,9 @@ mod tests {
         {
             let mut s = sample_skill();
             s.manifest.name = "evil".into();
-            let err = store.save(&s, true).expect_err("a symlinked dir is refused");
+            let err = store
+                .save(&s, true)
+                .expect_err("a symlinked dir is refused");
             assert!(
                 matches!(
                     err,

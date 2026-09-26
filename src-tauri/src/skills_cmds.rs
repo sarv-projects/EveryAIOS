@@ -411,8 +411,10 @@ mod tests {
             outside.display().to_string(),
         ] {
             let err = store.delete(&id).expect_err("must be refused");
-            assert!(err.to_string().contains("refused") || err.to_string().contains("invalid"),
-                "`{id}` → {err}");
+            assert!(
+                err.to_string().contains("refused") || err.to_string().contains("invalid"),
+                "`{id}` → {err}"
+            );
         }
         assert!(outside.join("precious.txt").exists());
         assert!(root.join("note-taker/SKILL.md").exists());

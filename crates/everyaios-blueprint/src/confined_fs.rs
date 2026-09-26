@@ -53,7 +53,9 @@ pub enum ConfinedError {
     NotFound { path: String },
     #[error("refused to remove the confinement root itself (`{root}`)")]
     TargetIsRoot { root: String },
-    #[error("refused to remove `{path}`: it is a link (resolves to `{resolved}`), not a directory inside the root")]
+    #[error(
+        "refused to remove `{path}`: it is a link (resolves to `{resolved}`), not a directory inside the root"
+    )]
     TargetIsLink { path: String, resolved: String },
     #[error("refused to remove `{path}`: it is not a directory inside the confinement root")]
     NotADirectory { path: String },
@@ -61,7 +63,9 @@ pub enum ConfinedError {
     Outside { path: String, root: String },
     #[error("refused `{path}`: a link inside the tree leaves the confinement root `{root}`")]
     LinkEscape { path: String, root: String },
-    #[error("refused `{path}`: traversal bound exceeded (max_depth={max_depth}, max_entries={max_entries})")]
+    #[error(
+        "refused `{path}`: traversal bound exceeded (max_depth={max_depth}, max_entries={max_entries})"
+    )]
     BoundExceeded {
         path: String,
         max_depth: usize,
