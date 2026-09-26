@@ -334,6 +334,41 @@ impl ReadResult {
     pub fn may_infer_absence(&self) -> bool {
         self.status.may_infer_absence()
     }
+
+    /// The status's own sentence, for a receipt or a guidance card.
+    pub fn status_detail(&self) -> String {
+        match &self.status {
+            UiaReadStatus::Complete => "the whole readable target was walked".into(),
+            UiaReadStatus::Partial { detail }
+            | UiaReadStatus::Absent { detail }
+            | UiaReadStatus::Unknown { detail } => detail.clone(),
+        }
+    }
+
+    /// The compact JSON shape the Tauri surface and the agent tool serve.
+    ///
+    /// Kept beside the type so the fields a caller reads cannot drift from the
+    /// type, and mirrored (not re-implemented) by `desktop_cmds::snapshot_json`.
+    pub fn to_json(&self) -> serde_json::Value {
+        serde_json::json!({
+            "status": self.status.as_str(),
+            "detail": self.status_detail(),
+            "mayInferAbsence": self.may_infer_absence(),
+            "epoch": self.epoch.0,
+            "observedAtMs": self.observed_at_ms,
+            "hasTree": self.tree.is_some(),
+            "guidance": self.guidance,
+            "anomalies": self
+                .anomalies
+                .iter()
+                .map(|a| serde_json::json!({
+                    "kind": a.kind,
+                    "scope": a.scope,
+                    "detail": a.detail,
+                }))
+                .collect::<Vec<_>>(),
+        })
+    }
 }
 
 /// A text word + its bounding box (OCR vision fallback).
@@ -807,5 +842,134 @@ mod tests {
         // Nothing ran, so no rung is reported as having delivered it.
         assert_eq!(refused.rung(), None);
         assert!(refused.error.unwrap().contains("deny"));
+    }
+}
+
+/// The wire-shape contract between this crate and the Tauri surface.
+///
+/// `FIX-17` / `FIX-18` added fields to [`ReadResult`], [`SeeResult`] and
+/// [`Capabilities`], and the host reads them in `src-tauri/src/desktop_cmds.rs`.
+/// Those reads are pinned here — with the same field names and the same method
+/// calls — so a rename here cannot silently blank the UI's status chip or the
+/// agent's snapshot. The host cannot be compiled in every CI lane (it needs the
+/// Tauri toolchain), so the contract is asserted on this side of the boundary.
+#[cfg(test)]
+mod host_contract_tests {
+    use super::*;
+
+    fn window() -> WindowInfo {
+        WindowInfo {
+            id: 11,
+            title: "Editor".into(),
+            app: "notepad".into(),
+            x: 0,
+            y: 0,
+            width: 100,
+            height: 80,
+            has_a11y_tree: true,
+        }
+    }
+
+    /// What `desktop_cmds::desktop_read` and `::snapshot_json` read off a read.
+    #[test]
+    fn a_read_exposes_the_fields_the_host_surface_reads() {
+        let read = ReadResult::absent(11, 1.0, vec![window()]);
+        assert_eq!(read.window_id, 11);
+        assert!(read.tree.is_none());
+        assert_eq!(read.dpi_scale, 1.0);
+        assert_eq!(read.windows.len(), 1);
+        assert_eq!(read.status.as_str(), "absent");
+        assert!(read.may_infer_absence());
+        // Epoch 0 on a platform with no structured read: there is no generation to
+        // stamp, and saying so is honest (a structured read always stamps > 0).
+        assert_eq!(read.epoch, SnapshotEpoch(0));
+        assert!(read.observed_at_ms > 0);
+        assert!(!read.status_detail().is_empty());
+        assert!(read.guidance.is_some());
+        assert!(read.anomalies.is_empty());
+
+        // The exact JSON keys the host serializes.
+        let json = read.to_json();
+        for key in [
+            "status",
+            "detail",
+            "mayInferAbsence",
+            "epoch",
+            "observedAtMs",
+            "hasTree",
+            "guidance",
+            "anomalies",
+        ] {
+            assert!(json.get(key).is_some(), "missing host key {key}");
+        }
+
+        // And a read that could not look refuses absence.
+        let blocked = ReadResult {
+            status: UiaReadStatus::Unknown {
+                detail: "elevated".into(),
+            },
+            tree: None,
+            guidance: Some("no input is synthesized into it".into()),
+            epoch: SnapshotEpoch(4),
+            anomalies: vec![FreshnessAnomaly {
+                kind: "elevation_restricted".into(),
+                scope: "window:11".into(),
+                detail: "elevated".into(),
+                observed_at_ms: 1,
+            }],
+            ..read
+        };
+        assert!(!blocked.may_infer_absence());
+        let json = blocked.to_json();
+        assert_eq!(json["status"], "unknown");
+        assert_eq!(json["mayInferAbsence"], false);
+        assert_eq!(json["epoch"], 4);
+        assert_eq!(json["anomalies"][0]["kind"], "elevation_restricted");
+    }
+
+    /// What `desktop_cmds::desktop_see` reads off a capture, and what
+    /// `desktop_status` reads off the capability surface.
+    #[test]
+    fn a_capture_and_the_capability_surface_expose_what_the_host_reads() {
+        let see = SeeResult {
+            window_id: 11,
+            png: vec![0x89, b'P', b'N', b'G'],
+            width: 800,
+            height: 600,
+            method: SeeMethod::PrintWindow,
+            region: Region::full(800, 600),
+            scale: 1.0,
+            dpi: DpiScale::unknown(),
+            budget: None,
+            readiness: crate::capture::CaptureReadiness::ready(
+                crate::capture::CapturePipeline::PrintWindow,
+                vec![crate::capture::CaptureCheck::PipelineSupported],
+            ),
+        };
+        // `desktop_see` serializes: method, readiness, degraded, budget, describe.
+        assert_eq!(format!("{:?}", see.method), "PrintWindow");
+        assert!(!see.readiness.is_degraded());
+        let json = see.readiness.to_json();
+        assert_eq!(json["state"], "ready");
+        assert_eq!(json["pipeline"], "print_window");
+        assert!(!see.describe().is_empty());
+        // The degrade record the vision-rung discipline rides.
+        let degrade = see.degrade(true);
+        assert!(!degrade.is_degraded());
+        assert!(!degrade.describe().is_empty());
+
+        // `desktop_status` serializes the capture chip.
+        let caps = Capabilities {
+            capture_readiness: see.readiness.clone().into(),
+            ..Capabilities::default()
+        };
+        assert_eq!(caps.capture_readiness.state, "ready");
+        assert_eq!(caps.capture_readiness.pipeline.as_deref(), Some("print_window"));
+        assert!(!caps.capture_readiness.detail.is_empty());
+        assert_eq!(caps.capture_readiness.state(), crate::capture::CaptureState::Ready);
+        let mut degraded = see.readiness.clone();
+        degraded.state = crate::capture::CaptureState::Degraded;
+        let summary: CaptureReadinessSummary = degraded.into();
+        assert_eq!(summary.state(), crate::capture::CaptureState::Degraded);
     }
 }

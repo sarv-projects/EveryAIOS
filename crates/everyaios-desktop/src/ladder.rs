@@ -898,7 +898,7 @@ mod tests {
     /// would also mean moving the user's cursor for something nobody saw.
     #[test]
     fn an_unknown_region_stops_the_walk_and_never_reaches_a_lower_rung() {
-        let mut d = FakeDriver::windows_full(
+        let d = FakeDriver::windows_full(
             vec![
                 (
                     ClickRung::AccessibilityInvoke,

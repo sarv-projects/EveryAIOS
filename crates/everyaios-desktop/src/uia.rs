@@ -716,7 +716,7 @@ impl StructuredRead {
             }
         }
         if let Some(u) = self.unknowns.first()
-            && !parts.iter().any(|p| p.contains(&u.kind.as_str()))
+            && !parts.iter().any(|p| p.contains(u.kind.as_str()))
         {
             parts.push(u.guidance());
         }

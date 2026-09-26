@@ -542,7 +542,22 @@ impl DesktopEngine {
     /// capture would aim the click at a fraction of the intended point — a real
     /// bug introduced by having an honest budget, and therefore handled here
     /// rather than left to the caller.
+    ///
+    /// `REQ-CUA-001` / `REQ-CUA-008` — the vision rung is **last**: a capture is
+    /// refused when a conclusive structured read already answers the question
+    /// ("a screenshot is never taken for something an API or a tree can answer"),
+    /// and refused when the read could not see the region at all (`REQ-CUA-006`:
+    /// no input is synthesized into an unknown region). An `absent` read — the
+    /// honest "this app has no structural UI" — is exactly the case vision is for.
     pub fn vision_click(&self, window: &WindowInfo, phrase: &str) -> Result<ActOutcome> {
+        if let Err(reason) = self.vision_rung_advisable(window) {
+            return Ok(ActOutcome::err(
+                ActKind::ClickByName {
+                    name: phrase.into(),
+                },
+                reason,
+            ));
+        }
         let see = self.see(window)?;
         let scale = (
             see.budget.as_ref().map(|b| b.output_scale_x).unwrap_or(1.0),
@@ -562,6 +577,61 @@ impl DesktopEngine {
             )),
         }
     }
+
+    /// May the vision rung run for this window at all?
+    ///
+    /// The one place the structured-first rule is decided, so a caller that wants
+    /// to capture for a vision model asks here first and gets a reason when the
+    /// answer is no:
+    ///
+    /// - a **conclusive** read that found actionable controls → no. The tree
+    ///   answers it, and capturing would be a screenshot taken for something
+    ///   structure already knows (`REQ-CUA-001`).
+    /// - a read that **could not look** (elevated, dead handle) → no, and no input
+    ///   is synthesized into the unknown region (`REQ-CUA-006`).
+    /// - `absent` (no structural UI), or a read with nothing actionable → yes.
+    ///   That is the documented vision-rung case (`ARCH/24` §8: "Tree empty /
+    ///   semantics poor → OCR patch → vision rung").
+    ///
+    /// `Err` is the honest refusal, carrying the sentence a card shows.
+    pub fn vision_rung_advisable(&self, window: &WindowInfo) -> std::result::Result<(), String> {
+        let read = self
+            .read(window)
+            .map_err(|e| format!("the structured read failed before the vision rung: {e}"))?;
+        vision_rung_verdict(&read)
+    }
+}
+
+/// The structured-first decision, as a pure function of one read.
+///
+/// Split out from [`DesktopEngine::vision_rung_advisable`] so the rule is testable
+/// against every read status without a platform backend — this is the
+/// `REQ-CUA-001` / `REQ-CUA-008` discipline, and a unit test on a live desktop
+/// would not cover the states that matter.
+pub fn vision_rung_verdict(read: &ReadResult) -> std::result::Result<(), String> {
+    if read.status.as_str() == "unknown" {
+        return Err(format!(
+            "the vision rung refused for this window: {}",
+            read.guidance
+                .clone()
+                .unwrap_or_else(|| "this process could not read it".into())
+        ));
+    }
+    let actionable = read
+        .tree
+        .as_ref()
+        .map(|t| t.flatten().iter().any(|n| n.actionable))
+        .unwrap_or(false);
+    if read.may_infer_absence() && actionable {
+        return Err(
+            "the structured rung answers this window: its accessibility tree exposes actionable \
+             controls, and a screenshot is never taken for what a tree can answer (REQ-CUA-001) — \
+             act on a named control instead, or narrow the target to a \
+             canvas/custom-rendered region"
+                .into(),
+        );
+    }
+    Ok(())
 }
 
 /// Divide a coordinate by an output scale, defaulting to identity for a
@@ -718,6 +788,7 @@ pub mod prelude {
 mod p57_escalation_tests {
     use super::*;
     use crate::policy::{DenyAllGate, NoopSink};
+    use crate::uia::UiaReadStatus;
 
     fn engine(policy: AppPolicy) -> DesktopEngine {
         DesktopEngine::with_guard(
@@ -822,5 +893,107 @@ mod p57_escalation_tests {
         assert_eq!(snapshot.window_id, None);
         // A no-op restore is a success, not a fabricated one.
         assert!(engine.restore_foreground(&snapshot).is_ok());
+    }
+
+    /// `REQ-CUA-001` / `REQ-CUA-008` — the structured-first decision, pinned per
+    /// read status. This is the discipline the ladder's capture path turns on, and
+    /// it is pure so every state is covered without a desktop.
+    #[test]
+    fn the_vision_rung_runs_last_and_refuses_when_structure_answers() {
+        let w = window();
+        let action = |path: &str| ReadNode {
+            index_path: path.into(),
+            role: "Button".into(),
+            name: "Save".into(),
+            automation_id: None,
+            x: 0,
+            y: 0,
+            width: 10,
+            height: 10,
+            actionable: true,
+            children: vec![],
+        };
+        let tree = |children: Vec<ReadNode>| ReadNode {
+            index_path: "1".into(),
+            role: "Pane".into(),
+            name: "Editor".into(),
+            automation_id: None,
+            x: 0,
+            y: 0,
+            width: 100,
+            height: 100,
+            actionable: false,
+            children,
+        };
+
+        // 1. A conclusive read with an actionable control: structure answers it.
+        let conclusive = ReadResult {
+            tree: Some(tree(vec![action("1.1")])),
+            status: UiaReadStatus::Complete,
+            ..ReadResult::absent(w.id, 1.0, vec![])
+        };
+        let err = vision_rung_verdict(&conclusive).unwrap_err();
+        assert!(err.contains("REQ-CUA-001"), "{err}");
+
+        // 2. A read that could not look: refused, and the reason is the read's.
+        let blocked = ReadResult {
+            status: UiaReadStatus::Unknown {
+                detail: "elevated".into(),
+            },
+            guidance: Some("no input is synthesized into it".into()),
+            ..ReadResult::absent(w.id, 1.0, vec![])
+        };
+        let err = vision_rung_verdict(&blocked).unwrap_err();
+        assert!(err.contains("no input is synthesized"), "{err}");
+
+        // 3. An absent read — no structural UI: this is the vision-rung case.
+        assert!(vision_rung_verdict(&ReadResult::absent(w.id, 1.0, vec![])).is_ok());
+
+        // 4. A complete read with nothing actionable (a canvas, custom rendering):
+        //    vision is allowed, because structure does not answer.
+        let canvas = ReadResult {
+            tree: Some(tree(vec![ReadNode {
+                index_path: "1.1".into(),
+                role: "Image".into(),
+                name: String::new(),
+                automation_id: None,
+                x: 0,
+                y: 0,
+                width: 10,
+                height: 10,
+                actionable: false,
+                children: vec![],
+            }])),
+            status: UiaReadStatus::Complete,
+            ..ReadResult::absent(w.id, 1.0, vec![])
+        };
+        assert!(vision_rung_verdict(&canvas).is_ok());
+
+        // 5. A partial read with an actionable control: still refused, because a
+        //    conclusive answer is not required to notice that structure answered.
+        let partial = ReadResult {
+            tree: Some(tree(vec![action("1.1")])),
+            status: UiaReadStatus::Partial {
+                detail: "stopped at a bound".into(),
+            },
+            ..ReadResult::absent(w.id, 1.0, vec![])
+        };
+        assert!(vision_rung_verdict(&partial).is_ok());
+    }
+
+    /// With no platform backend at all, the rung is refused with a typed reason
+    /// rather than attempting a capture — and nothing is synthesized.
+    #[test]
+    fn an_unattached_host_refuses_the_vision_rung_with_a_reason() {
+        let engine = engine(AppPolicy::default());
+        let err = engine
+            .vision_rung_advisable(&window())
+            .expect_err("an unattached host cannot capture");
+        assert!(err.contains("structured read failed"), "{err}");
+        let outcome = engine
+            .vision_click(&window(), "Save")
+            .expect("the refusal is an outcome, not a panic");
+        assert!(!outcome.ok);
+        assert!(outcome.click.is_none());
     }
 }
