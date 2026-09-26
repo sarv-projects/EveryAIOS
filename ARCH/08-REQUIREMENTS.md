@@ -1056,6 +1056,107 @@ This registry answers one question per entry: **what behavior must this system e
 - **Tests:** pending
 - **Status:** seeded
 
+### World model (`WORLD`)
+
+#### REQ-WORLD-001 — Structural state first; queries, not screenshots
+- **Statement:** GIVEN a consumer needs machine state (apps, windows, processes, files, browser, devices), WHEN it asks the World Model, THEN it receives structural world objects/edges with identity and freshness — observation is a query over indexed state, not a screenshot — and window capture happens only on demand (explicit view, action verification, or a structured-tree miss).
+- **Priority:** must
+- **Source:** `ARCH/04-DECISIONS.md` DEC-011 · `ARCH/21-WORLD-MODEL.md` §1 · `ARCH/24-COMPUTER-USE.md` §7
+- **Acceptance:** canonical use cases ("open the spreadsheet from yesterday", "go back to that tab", "what is the active document?") resolve from the index; routine queries capture no screenshots; captures are recorded only for the allowed on-demand cases.
+- **Failure cases:** screenshot-first default → design violation; routine query triggering a capture → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-WORLD-002 — Collector set with independent enable/disable and health
+- **Statement:** GIVEN the v1 collector set — W1 file inventory + deltas · W2 process/window registry · W3 UI tree on demand · W4 window capture on demand · W5 browser world (W6 devices/registry/shares and W7 content index/OCR deferred) — WHEN collectors run, THEN each is independently enable-able/disable-able and health-reported, and the browser collector shares the `23-BROWSER` CDP machinery.
+- **Priority:** must
+- **Source:** `ARCH/21-WORLD-MODEL.md` §2
+- **Acceptance:** registry shows per-collector state + health; deferred collectors are absent in v1; the browser collector uses the same CDP path as `23`.
+- **Failure cases:** collector without health/state → defect; a deferred collector silently active → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-WORLD-003 — Per-kind identity model
+- **Statement:** GIVEN any world object, WHEN it is keyed, THEN identity follows the kind's model (`DM-026`): file `(volume, fileId, incarnation)` on Windows (`(st_dev, st_ino)` + guards on POSIX, FAT caveat declared), process `PID + start time`, window `HWND + PID + class + title + launch time`, browser tab `targetId` session-scoped and never persisted across launches, UI element handles epoch-scoped (valid for one observation/action, not persistent identity), and content hash kept separate from file identity.
+- **Priority:** must
+- **Source:** `ARCH/21-WORLD-MODEL.md` §3 · `ARCH/06-DATA-MODEL.md` DM-026
+- **Acceptance:** identity tests per kind; delete→recreate yields a new file incarnation; PID/handle reuse is rejected as a mismatch; tab identity never survives a launch; ambiguous window/process matches are rejected, not guessed.
+- **Failure cases:** reused identity accepted as the same object → defect; element ref treated as durable identity → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-WORLD-004 — Cursor and epoch discipline per collector
+- **Statement:** GIVEN any collector instance, WHEN it tracks incremental updates, THEN it stores `(source, scope, epoch, cursor, observed_at)`; WHEN its source epoch resets (journal rollover, device change, mount/watch re-generation, new document/session), THEN the old cursor is discarded and the scope rescanned — records are never applied across epochs.
+- **Priority:** must
+- **Source:** `ARCH/21-WORLD-MODEL.md` §4 · `ARCH/05-INVARIANTS.md` INV-20
+- **Acceptance:** epoch-reset test discards the cursor and rescans; cursor/epoch persisted per instance; records at or below the cursor are treated as errors, never silently applied.
+- **Failure cases:** stale cursor applied after an epoch reset → defect; cross-scope cursor reuse → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-WORLD-005 — Gaps force a scoped rescan, never a silent gap
+- **Statement:** GIVEN a lossy watcher condition (inotify/fanotify overflow, FSEvents drop, RDCW zero-length buffer, dead or truncated USN journal), WHEN a gap is detected, THEN the collector aborts incremental application and forces a rescan of the smallest known scope, recording a freshness anomaly event — a silent gap is never allowed.
+- **Priority:** must
+- **Source:** `ARCH/21-WORLD-MODEL.md` §4 · `ARCH/05-INVARIANTS.md` INV-20
+- **Acceptance:** one test per gap source shows rescan + anomaly event; no incremental record is applied across the gap; the rescan scope is bounded to the smallest known scope.
+- **Failure cases:** silent gap → verification failure; unbounded full-volume rescan when a smaller scope is known → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-WORLD-006 — Freshness contract on every object
+- **Statement:** GIVEN any world object, WHEN it is produced or read, THEN it carries `observed_at` + `source` + `epoch`; consumers receive explicit staleness, per-collector TTLs can mark objects `unknown` (files: minutes; process/window: seconds), and write paths re-validate stale objects before acting.
+- **Priority:** must
+- **Source:** `ARCH/21-WORLD-MODEL.md` §4 · `ARCH/07-CONTRACTS.md` CTR-017
+- **Acceptance:** object-freshness tests; a stale object is marked `unknown` after its TTL; write-path re-validation test; no stale object is silently reported fresh.
+- **Failure cases:** missing freshness stamps → defect; a write path acting on a stale object without re-validation → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-WORLD-007 — Queries read the index; no rescan per query
+- **Statement:** GIVEN a query or subscription, WHEN it is served, THEN it reads indexed world state (and the event stream), never walks the filesystem and never triggers a full rescan, and event delivery never triggers unbounded work.
+- **Priority:** must
+- **Source:** `ARCH/21-WORLD-MODEL.md` §2/§4/§6 · `ARCH/05-INVARIANTS.md` INV-20
+- **Acceptance:** query-path inspection shows index reads only; a query against a stale index returns freshness-marked results instead of walking; event-delivery bound test.
+- **Failure cases:** full rescan per query → INV-20 violation; unbounded work per event → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-WORLD-008 — Consent records and deny-by-default scoping
+- **Statement:** GIVEN a collector instance, WHEN it is enabled, THEN a consent record names the collector id + version · scope · required capability (standard/elevated/OS-permission) · permission actually granted and how · event source + epoch/cursor · data classes · start/stop + retention · revocation path; collection is deny-by-default, scope never expands silently, and there is no persistent "always allow" in v1.
+- **Priority:** must
+- **Source:** `ARCH/21-WORLD-MODEL.md` §5 · `ARCH/05-INVARIANTS.md` INV-20
+- **Acceptance:** consent-record completeness test; a new scope requires new consent; revocation stops the collector and its events; no persistent allow record exists.
+- **Failure cases:** collection without consent → violation; silent scope expansion → violation; revocation leaving the collector active → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-WORLD-009 — Metadata-first, capture-gated, local-first
+- **Statement:** GIVEN collectors, WHEN they observe, THEN they read metadata only (never file content); screenshots occur only for explicit view, action verification, or a W3 miss; a visible indicator shows while any capture collector is active; `IsPassword`/protected fields are excluded or masked; and no upload path exists — world-model data stays local.
+- **Priority:** must
+- **Source:** `ARCH/21-WORLD-MODEL.md` §5 · `ARCH/05-INVARIANTS.md` INV-20 · `ARCH/04-DECISIONS.md` DEC-011
+- **Acceptance:** content-read scan is clean; indicator test; masked protected-fields test; egress observation shows no world-model upload path.
+- **Failure cases:** collector reading file content → violation; capture without the indicator → defect; world data leaving the machine → violation.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-WORLD-010 — Elevated collectors degrade loudly
+- **Statement:** GIVEN an elevated collector mode (USN/MFT file index), WHEN the helper or elevation is absent or denied, THEN the collector falls back to non-admin modes (walk/RDCW), the mode actually granted is recorded per instance, and the degradation is surfaced — never silent elevation and never a silent capability loss.
+- **Priority:** must
+- **Source:** `ARCH/21-WORLD-MODEL.md` §5 · `ARCH/19-RUNTIME-ENVIRONMENTS.md` §6 · `ARCH/05-INVARIANTS.md` INV-24
+- **Acceptance:** denied-helper test yields non-admin mode + visible note + recorded mode; no USN-derived record is applied without the elevation that produced it.
+- **Failure cases:** silent elevation → security violation; degraded mode without a surfaced note → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-WORLD-011 — Query/subscribe surface with filtered projections
+- **Statement:** GIVEN the `WorldService` contract (`CTR-017`), WHEN consumers query or subscribe, THEN `query(filter)` and `subscribe(filter) → Stream` are the only surfaces, external-agent projections are sensitivity-filtered per `12`/`32`, and internals (raw stores, cursors, collector internals) are never exposed.
+- **Priority:** must
+- **Source:** `ARCH/21-WORLD-MODEL.md` §6 · `ARCH/07-CONTRACTS.md` CTR-017 · `ARCH/05-INVARIANTS.md` INV-11
+- **Acceptance:** contract-conformance test; external projection test shows filtered fields only; no consumer reads collector stores directly.
+- **Failure cases:** unfiltered projection → security violation; consumer reading collector stores directly → architecture violation.
+- **Tests:** pending
+- **Status:** seeded
+
 ### Agent X (`AGX`)
 
 #### REQ-AGX-001 — Delegation contract
@@ -1092,7 +1193,8 @@ This registry answers one question per entry: **what behavior must this system e
 | `MODEL` (12) | drafted above + expanded in pass `18` | verified during pass `18` ✅ (2026-09-26) |
 | `RTENV` (11) | drafted above + expanded in pass `19` | verified during pass `19` ✅ (2026-09-26) |
 | `WF` (11) | drafted above + expanded in pass `20` | verified during pass `20` ✅ (2026-09-26) |
-| `WORLD`, `OFFICE`, `BROWSER`, `CUA`, `FILES`, `CODE`, `SEARCH`, `COMMS`, `ART`, `EVENTS`, `SKILL`, `CHAN`, `VERIFY` | pending | seeded during each module's P7 pass |
+| `WORLD` (11) | drafted above + expanded in pass `21` | verified during pass `21` ✅ (2026-09-26) |
+| `OFFICE`, `BROWSER`, `CUA`, `FILES`, `CODE`, `SEARCH`, `COMMS`, `ART`, `EVENTS`, `SKILL`, `CHAN`, `VERIFY` | pending | seeded during each module's P7 pass |
 
 ## 6. Related
 

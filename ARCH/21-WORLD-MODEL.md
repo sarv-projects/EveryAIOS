@@ -1,6 +1,7 @@
 # 21 — World Model
 
 > **Status:** Draft P2 (early — verification integrated 2026-09-26). Must pass the `ARCH/00-INDEX.md` §5 checklist at freeze.
+> **P7 pass (2026-09-26):** line-checked; requirements seeded (`REQ-WORLD-*`, Requirements section).
 > **Thesis:** *“Don't make the AI look at the computer. Make the computer explain itself to the AI.”* — structural state first; vision is a fallback rung (`24-COMPUTER-USE`).
 > **Dependencies:** `30-EVENTS` (stream), `25-FILES` (file identity), `23-BROWSER` (browser world), `12-TRUST` (consent/guard), `19-RUNTIME-ENVIRONMENTS` (collector hosts/helpers), `16-CONTEXT` (primary consumer).
 > **Evidence:** `ARCHIVE/v1-research/world-model-verification.md` (359 lines, citations per claim) · clones `agent-browser` · `rustwright` · `obscura` · `open-codex-computer-use` · `Agent-S` · `UI-TARS-desktop` · `open-computer-use` · MS docs (UIA, MFT/USN, `FILE_ID_INFO`) · arXiv 2511.19477 · local code (`crates/everyaios-desktop`, `everyaios-storage`).
@@ -117,3 +118,21 @@ W6 devices/registry/network shares · W7 content index/OCR · continuous UIA eve
 ## 12. Evidence
 
 `ARCHIVE/v1-research/world-model-verification.md` — claims A–E with per-claim citations; §2 ladder reality; §3 identity/cursor/freshness; §4 browser-world patterns; §5 collector set + consent; §6 open questions. Key anchors: MS UIA tree/property/pattern docs · MS MFT/USN + `FILE_ID_INFO` docs · Chromium a11y/UIA docs · Agent-S `GroundingAgent.py:164-188,264-305` · open-codex `AccessibilitySnapshot.swift:48-62,92-97` · agent-browser `snapshot-refs.md:19-27,81-83` · local `win.rs:1-23,76-97` · `ladder.rs:16-24` · `walk.rs:131-157`.
+
+## 13. Requirements (`REQ-WORLD-*`)
+
+Testable behaviors owned by this module live in `ARCH/08-REQUIREMENTS.md`; the traceability chain is in `ARCH/09-FEATURE-MATRIX.md`. This table is a pointer, not a second copy.
+
+| REQ | Behavior (one line) |
+|---|---|
+| `REQ-WORLD-001` | Structural state first: consumers query indexed world objects; capture only on demand (explicit view/verification/miss) (DEC-011) |
+| `REQ-WORLD-002` | Collector set W1–W5 with independent enable/disable + health; W6/W7 deferred; browser collector shares `23` CDP machinery |
+| `REQ-WORLD-003` | Per-kind identity (DM-026): file `(volume, fileId, incarnation)`, process PID+start, window handle+launch, tab session-scoped, epoch-scoped UI handles |
+| `REQ-WORLD-004` | Every collector stores `(source, scope, epoch, cursor, observed_at)`; epoch reset discards the cursor and rescans |
+| `REQ-WORLD-005` | Watcher/journal gaps abort to a smallest-scope rescan + freshness anomaly event — never a silent gap (INV-20) |
+| `REQ-WORLD-006` | Every object carries `observed_at` + `source` + `epoch`; stale objects are explicit (TTL → `unknown`); write paths re-validate (CTR-017) |
+| `REQ-WORLD-007` | Queries/subscriptions read the index, never walk the filesystem; event delivery never triggers unbounded work (INV-20) |
+| `REQ-WORLD-008` | Deny-by-default consent records per collector instance; no silent scope expansion; no persistent "always allow" in v1 (INV-20) |
+| `REQ-WORLD-009` | Metadata-first (no content reads), capture-gated with visible indicator, masked protected fields, strictly local (no upload path) |
+| `REQ-WORLD-010` | Elevated mode absent/denied ⇒ non-admin fallback, recorded per instance, surfaced — never silent elevation (INV-24) |
+| `REQ-WORLD-011` | `CTR-017` `query`/`subscribe` only; external projections sensitivity-filtered; internals never exposed (INV-11) |

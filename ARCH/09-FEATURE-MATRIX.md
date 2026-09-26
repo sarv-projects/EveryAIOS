@@ -131,6 +131,17 @@ One row per `REQ-*`. Status only from evidence.
 | `REQ-WF-009` | `20-WORKFLOW` | pending | `DEC-031`, `DEC-033` | — | pending | pending | unplanned |
 | `REQ-WF-010` | `20-WORKFLOW` | pending | `DEC-008`, `CTR-001/CTR-009` | — | pending | pending | unplanned |
 | `REQ-WF-011` | `20-WORKFLOW` | pending | `INV-07`, `INV-23` | — | pending | pending | unplanned |
+| `REQ-WORLD-001` | `21-WORLD-MODEL` | pending | `DEC-011` | — | pending | pending | unplanned |
+| `REQ-WORLD-002` | `21-WORLD-MODEL` | pending | `—` | — | pending | pending | unplanned |
+| `REQ-WORLD-003` | `21-WORLD-MODEL` | pending | `DM-026` | — | pending | pending | unplanned |
+| `REQ-WORLD-004` | `21-WORLD-MODEL` | pending | `INV-20` | — | pending | pending | unplanned |
+| `REQ-WORLD-005` | `21-WORLD-MODEL` | pending | `INV-20` | — | pending | pending | unplanned |
+| `REQ-WORLD-006` | `21-WORLD-MODEL` | pending | `CTR-017` | — | pending | pending | unplanned |
+| `REQ-WORLD-007` | `21-WORLD-MODEL` | pending | `INV-20` | — | pending | pending | unplanned |
+| `REQ-WORLD-008` | `21-WORLD-MODEL` | pending | `INV-20` | — | pending | pending | unplanned |
+| `REQ-WORLD-009` | `21-WORLD-MODEL` | pending | `INV-20`, `DEC-011` | — | pending | pending | unplanned |
+| `REQ-WORLD-010` | `21-WORLD-MODEL` | pending | `INV-24` | — | pending | pending | unplanned |
+| `REQ-WORLD-011` | `21-WORLD-MODEL` | pending | `CTR-017`, `INV-11` | — | pending | pending | unplanned |
 
 ## 4. Maintenance
 
