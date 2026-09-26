@@ -24,13 +24,28 @@ One row per `REQ-*`. Status only from evidence.
 - `Test` names the automated test and/or the acceptance record path; `pending` is visible debt, not a failure.
 - Never restate a requirement's statement here — link to `ARCH/08-REQUIREMENTS.md`.
 
-## 3. Seed rows (format demonstration — real rows land with the P7 module passes)
+## 3. Seed rows (P7 seeds; module passes append rows as domains are seeded — `KERNEL`/`WORK` added 2026-09-26)
 
 | REQ | Module (doc) | Code paths | Design (DEC/DM/CTR) | Flow/Edge | Task (`TODO.md`) | Test | Status |
 |---|---|---|---|---|---|---|---|
 | `REQ-PROD-001` | `12-TRUST`, `13-CAPABILITY` | governed path: guard + capability planes | `DEC-002`, `INV-01/03` | — | pending | pending | unplanned |
 | `REQ-PROD-002` | `12-TRUST`, `18-MODEL-ROUTING` | `crates/everyaios-vault`, credential consumers | `INV-02` | — | pending | pending | unplanned |
 | `REQ-MEM-001` | `17-MEMORY` | memory store + extraction pipeline | `DEC-018/019` | — | pending | pending | unplanned |
+| `REQ-KERNEL-001` | `10-KERNEL` | none yet — no kernel crate (code-state baseline) | `INV-14` | — | pending | pending | unplanned |
+| `REQ-KERNEL-002` | `10-KERNEL` | pending | `INV-06` | — | pending | pending | unplanned |
+| `REQ-KERNEL-003` | `10-KERNEL` | pending | `INV-11` | — | pending | pending | unplanned |
+| `REQ-KERNEL-004` | `10-KERNEL` | pending | `INV-02` | — | pending | pending | unplanned |
+| `REQ-KERNEL-005` | `10-KERNEL` | pending | — | — | pending | pending | unplanned |
+| `REQ-KERNEL-006` | `10-KERNEL` | pending | `INV-06` | — | pending | pending | unplanned |
+| `REQ-KERNEL-007` | `10-KERNEL` | pending | `CTR-003/004/026` | — | pending | pending | unplanned |
+| `REQ-WORK-001` | `11-WORK` | pending | `DEC-003`, `INV-06`, `CTR-003/026` | — | pending | pending | unplanned |
+| `REQ-WORK-002` | `11-WORK` | pending | `DEC-027`, `INV-23`, `CTR-004`, `DM-007` | — | pending | pending | unplanned |
+| `REQ-WORK-003` | `11-WORK` | pending | `INV-16`, `DM-006` | — | pending | pending | unplanned |
+| `REQ-WORK-004` | `11-WORK` | pending | `DEC-029`, `CTR-026` | — | pending | pending | unplanned |
+| `REQ-WORK-005` | `11-WORK` | pending | `INV-22`, `DEC-029`, `DM-001` | — | pending | pending | unplanned |
+| `REQ-WORK-006` | `11-WORK` | pending | `DM-001/002` | — | pending | pending | unplanned |
+| `REQ-WORK-007` | `11-WORK` | pending | `INV-16`, `DM-006` | — | pending | pending | unplanned |
+| `REQ-WORK-008` | `11-WORK` | pending | `DM-005/007` | — | pending | pending | unplanned |
 
 ## 4. Maintenance
 

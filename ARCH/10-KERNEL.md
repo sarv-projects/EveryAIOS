@@ -1,6 +1,7 @@
 # 10 — Kernel
 
 > **Status:** Draft P2 (early). Must pass the `ARCH/00-INDEX.md` §5 checklist at freeze.
+> **P7 pass (2026-09-26):** line-checked; requirements seeded (`REQ-KERNEL-*`, Requirements section).
 > **Role:** the smallest layer: identity, errors, configuration, time, serialization, and the base conventions every module depends on. **No domain logic** (INV-14).
 > **Evidence:** `ARCH/06-DATA-MODEL.md` (conventions), `ARCH/07-CONTRACTS.md` (contract rules), product-owner brief (“the kernel stays small”), INV-14.
 
@@ -72,6 +73,17 @@ Every `CTR-*` (in `07`) carries:
 - **Idempotency:** effect invocations carry keys minted here (`work_id` + `ticket`), so retries cannot double-apply where providers support dedupe.
 - **Result envelope:** `{ ok, value } | { error: { code, message, retryable, cause? } }` — language-neutral schema, versioned.
 
+Canonical shapes (illustrative, canonical JSON):
+
+```json
+{ "ok": true, "value": {} }
+{ "error": { "code": "Unavailable", "message": "provider unreachable", "retryable": true, "cause": {} } }
+{ "actor": { "kind": "user | agent | workflow", "id": "…", "scope": "…", "permissions_ref": "…" },
+  "deadline_ms": 120000, "cancel_token": "…", "idempotency_key": "<work_id>:<ticket>" }
+```
+
+Work-owned contracts (`CTR-003` `WorkService`, `CTR-004` `SessionLog`, `CTR-026` `Scheduler`) inherit this envelope and are registered in `ARCH/07-CONTRACTS.md` (Provisional).
+
 ## 8. Minimal-kernel rule (enforcement)
 
 1. The kernel contains no domain logic — no Office, browser, file, or agent semantics.
@@ -101,3 +113,17 @@ Every `CTR-*` (in `07`) carries:
 **Depends on:** nothing.
 **Exposes to:** everything in `10`–`34`.
 **DAG check:** no cycles are possible while this rule holds (INV-14).
+
+## 12. Requirements (`REQ-KERNEL-*`)
+
+Testable behaviors owned by this module live in `ARCH/08-REQUIREMENTS.md`; the traceability chain is in `ARCH/09-FEATURE-MATRIX.md`. This table is a pointer, not a second copy.
+
+| REQ | Behavior (one line) |
+|---|---|
+| `REQ-KERNEL-001` | Minimal kernel — no domain logic; kernel depends on nothing in `10`–`34` (INV-14). |
+| `REQ-KERNEL-002` | Single-writer identity — uuidv7 minted by the owning service; ids stay opaque. |
+| `REQ-KERNEL-003` | Typed, safe errors — canonical taxonomy; no secrets; no internals across boundaries. |
+| `REQ-KERNEL-004` | Configuration layering — fixed order, typed/versioned schemas, vault refs only. |
+| `REQ-KERNEL-005` | Time discipline — epoch-ms UTC, monotonic durations, explicit timezone policy. |
+| `REQ-KERNEL-006` | Canonical serialization and store conventions — stable JSON, SQLite WAL one-writer, forward-only migrations. |
+| `REQ-KERNEL-007` | Base envelope on every contract — actor context, cancellation, idempotency, versioned result. |

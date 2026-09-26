@@ -127,6 +127,145 @@ This registry answers one question per entry: **what behavior must this system e
 - **Tests:** pending
 - **Status:** seeded
 
+### Kernel (`KERNEL`)
+
+#### REQ-KERNEL-001 — Minimal kernel
+- **Statement:** GIVEN the kernel surface, WHEN any change adds behavior, THEN domain semantics (Office, browser, files, agents) are rejected — the kernel holds identity, errors, config, time, serialization and the base envelope only.
+- **Priority:** must
+- **Source:** `ARCH/05-INVARIANTS.md` INV-14 · `ARCH/10-KERNEL.md` §8
+- **Acceptance:** dependency-direction check shows everything depends on the kernel and the kernel depends on nothing in `10`–`34`; a domain special-case in kernel code fails review.
+- **Failure cases:** domain logic placed in the kernel → rejected; kernel surface change without a `DEC` → rejected.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-KERNEL-002 — Single-writer identity
+- **Statement:** GIVEN any durable entity id, WHEN it is minted, THEN it is a uuidv7 minted by the owning service (never by callers or UI), and ids stay opaque (no state, version or meaning encoded).
+- **Priority:** must
+- **Source:** `ARCH/10-KERNEL.md` §2 · `ARCH/05-INVARIANTS.md` INV-06
+- **Acceptance:** no id-minting path outside owning services; derived short ids never used for lookup without resolving through the owner.
+- **Failure cases:** caller-minted id → rejected; id collision (uuidv7) → `Internal` error (a bug, not a case).
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-KERNEL-003 — Typed, safe error taxonomy
+- **Statement:** GIVEN any boundary error, WHEN it surfaces, THEN it uses the canonical taxonomy codes with correct retryability, carries no secrets or user content, preserves cause chains for diagnostics, and never leaks internals across boundaries.
+- **Priority:** must
+- **Source:** `ARCH/10-KERNEL.md` §3 · `ARCH/05-INVARIANTS.md` INV-11
+- **Acceptance:** every boundary error maps to a taxonomy code; secret-corpus scan of error surfaces is clean; `GuidanceRequired`/`RequiresUserAction` arrive as results with next steps, not failures.
+- **Failure cases:** untyped error crossing a boundary → review failure; retryability misclassified → defect; internals leaked → verification failure.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-KERNEL-004 — Configuration layering and validation
+- **Statement:** GIVEN configuration, WHEN it is loaded, THEN later layers win in the fixed order (defaults → user → workspace/project → agent profile → session → run override) with each source recorded; schemas are typed, versioned and validated at load; unknown keys warn with migration notes; secrets appear only as vault references.
+- **Priority:** must
+- **Source:** `ARCH/10-KERNEL.md` §4 · `ARCH/05-INVARIANTS.md` INV-02
+- **Acceptance:** layered-config tests (each layer wins); unknown-key warning test; no secret value in config stores; config changes affecting running work are versioned into that work's record.
+- **Failure cases:** parse error → fail closed for that layer, fall back to previous layer with warning + audit event; silent acceptance of unknown key → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-KERNEL-005 — Time discipline
+- **Statement:** GIVEN timestamps, durations and schedules, WHEN they are stored or measured, THEN times are integer epoch milliseconds UTC, durations/timeouts use the monotonic clock (never wall-clock deltas), and schedules carry an explicit timezone policy resolved at the boundary.
+- **Priority:** must
+- **Source:** `ARCH/10-KERNEL.md` §5
+- **Acceptance:** stored-time format tests; timers unaffected by simulated wall-clock jumps; DST-boundary schedule test.
+- **Failure cases:** wall-clock delta used for a timeout → defect; naive local-time storage → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-KERNEL-006 — Canonical serialization and store conventions
+- **Statement:** GIVEN any boundary serialization or durable store, WHEN data crosses or persists, THEN canonical JSON (stable field order, integer-safe numbers) is used at boundaries, SQLite WAL with one writer per store is the durable convention, migrations are forward-only, idempotent and tested, and content is referenced rather than copied.
+- **Priority:** must
+- **Source:** `ARCH/10-KERNEL.md` §6 · `ARCH/05-INVARIANTS.md` INV-06
+- **Acceptance:** cross-language round-trip tests on canonical JSON; no cross-module direct DB access; migration suite idempotent; a half-migrated store can never serve traffic (blocked cleanly).
+- **Failure cases:** float-precision id/size corruption → defect; migration failure → dependent feature blocked with exact migration + error reported.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-KERNEL-007 — Base envelope on every contract
+- **Statement:** GIVEN any `CTR-*` invocation, WHEN it is called, THEN it carries actor context (user/agent/workflow with scope + permissions snapshot), cooperative cancellation with deadline propagation, idempotency keys for effects (`work_id` + ticket), and a versioned `{ ok, value } | { error }` result envelope.
+- **Priority:** must
+- **Source:** `ARCH/10-KERNEL.md` §7 · `ARCH/07-CONTRACTS.md` · `ARCH/05-INVARIANTS.md` INV-16
+- **Acceptance:** contract conformance tests show the envelope on every boundary; cancellation leaves durable state consistent; duplicate effect invocation with the same key dedupes where the provider supports it.
+- **Failure cases:** missing actor context → rejected; cancellation corrupting durable state → violation; retry double-applying an effect → treated as verification failure.
+- **Tests:** pending
+- **Status:** seeded
+
+### Work (`WORK`)
+
+#### REQ-WORK-001 — One lifecycle, one scheduler
+- **Statement:** GIVEN any runnable thing (chat turn, job, workflow run, subagent task, automation), WHEN it is created, THEN it is a `Work` item on the single lifecycle and admitted by the one scheduler — no second job system or side scheduler exists.
+- **Priority:** must
+- **Source:** `ARCH/04-DECISIONS.md` DEC-003 · `ARCH/11-WORK.md` §1 · `ARCH/05-INVARIANTS.md` INV-06
+- **Acceptance:** every execution kind appears as Work with the same status machine; static check finds no parallel scheduler.
+- **Failure cases:** kind running outside Work → architecture violation; second queue → review failure.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-WORK-002 — Append-only log, projections only
+- **Statement:** GIVEN any session/history view (ui-history, prompt-history, inbox, runs), WHEN it is produced, THEN it is folded from the append-only session log; no mutable session state is authoritative.
+- **Priority:** must
+- **Source:** `ARCH/04-DECISIONS.md` DEC-027 · `ARCH/05-INVARIANTS.md` INV-23 · `ARCH/11-WORK.md` §2/§4
+- **Acceptance:** projections rebuild from the log after a crash; no writer mutates a projection store directly.
+- **Failure cases:** authoritative mutable state → defect; log gap → stale projections surfaced, not hidden.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-WORK-003 — Durable work and resume
+- **Statement:** GIVEN a crash or restart, WHEN work resumes, THEN `running` work resumes or requeues per step idempotency, `waiting`/`awaiting_approval` remain pending, `cancelled` stays cancelled, and cancellation is recorded — never implied.
+- **Priority:** must
+- **Source:** `ARCH/05-INVARIANTS.md` INV-16 · `ARCH/11-WORK.md` §4
+- **Acceptance:** crash/restart test matrix per status; interrupted effects verified before retry (where no provider dedupe, the step is marked interrupted).
+- **Failure cases:** duplicate effect after resume → verification failure; silently dropped queue → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-WORK-004 — Scheduler lanes and enforced outer bounds
+- **Statement:** GIVEN concurrent demand, WHEN work is admitted, THEN lanes (foreground 1/session · background bounded globally and per tree · detached rehydrated and bounded) and outer limits (max agents, workers/tree, depth, worker tokens, session spend, per-lane concurrency) are enforced at admission, with the decision recorded.
+- **Priority:** must
+- **Source:** `ARCH/04-DECISIONS.md` DEC-029 · `ARCH/11-WORK.md` §3
+- **Acceptance:** admission tests reject over-limit work (rejected, never trimmed silently); interactive work preempts background; a paused tree releases slots.
+- **Failure cases:** worker-tree explosion → rejected at admission; starvation → starvation guard engages.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-WORK-005 — Budgets are maxima; overrun pauses and surfaces
+- **Statement:** GIVEN per-work budgets (tokens/cost/wall-time) aggregated per tree, WHEN a soft threshold is crossed, THEN a warning event is emitted; WHEN a hard ceiling is reached, THEN work pauses and surfaces — never silently overruns; kill only by explicit policy.
+- **Priority:** must
+- **Source:** `ARCH/11-WORK.md` §5 · `ARCH/05-INVARIANTS.md` INV-22
+- **Acceptance:** budget tests show pause-at-ceiling; usage attributed into runs/receipts/telemetry.
+- **Failure cases:** silent overrun → defect; background work silently exceeding session budget → paused + surfaced.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-WORK-006 — Cancellation semantics
+- **Statement:** GIVEN an interrupt request on active work, WHEN it applies, THEN one of three verbs runs — interrupt (stop current step, keep session) · cancel (terminate work) · dispose (release environment/resources) — cooperatively, propagating parent→child, always recording state + reason, with partial effects receipted or verified, never hidden.
+- **Priority:** must
+- **Source:** `ARCH/11-WORK.md` §6
+- **Acceptance:** cancellation-propagation tests; environment release delegated to `ARCH/19-RUNTIME-ENVIRONMENTS.md`; partial effects appear in receipts.
+- **Failure cases:** cancellation hiding partial effects → verification failure; orphaned child after parent cancel → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-WORK-007 — Checkpoint cadence and side-effect safety
+- **Statement:** GIVEN work in progress, WHEN steps complete, waits/approvals start, compaction is about to run, or a worker is handed off, THEN a checkpoint is produced (step boundaries as the base cadence), versioned and reconstructable.
+- **Priority:** must
+- **Source:** `ARCH/11-WORK.md` §4 · `ARCH/16-CONTEXT.md`
+- **Acceptance:** checkpoint tests at each trigger; a resume from checkpoint needs no in-memory state.
+- **Failure cases:** missing checkpoint before compaction → resume loss; non-reconstructable checkpoint mislabeled → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-WORK-008 — Runs projection and terminal reasons
+- **Statement:** GIVEN a work tree in the UI, WHEN Runs renders, THEN it shows main agent + workers + statuses + budget from typed events; every terminal state carries a reason (receipts + typed error + blockers).
+- **Priority:** should
+- **Source:** `ARCH/11-WORK.md` §8 · `ARCH/32-CHANNELS.md`
+- **Acceptance:** Runs rebuilt solely from events; terminal-state-reason test matrix.
+- **Failure cases:** terminal state without reason → defect; UI reading store directly → architecture violation.
+- **Tests:** pending
+- **Status:** seeded
+
 ### Trust (`TRUST`)
 
 #### REQ-TRUST-001 — Egress fail-closed
@@ -246,7 +385,8 @@ This registry answers one question per entry: **what behavior must this system e
 |---|---|---|
 | `PROD` (6), `TRUST` (2), `CAP` (2), `CTX` (2), `MEM` (2) | drafted above | verify + split during the P7 module passes (`12`, `13`, `16`, `17`) |
 | `WF` (1), `AGX` (1), `UI` (1) | drafted above | `20`, Agent X finalisation lane, `AGENTCOWORK-UI.md` |
-| `KERNEL`, `WORK`, `PROV`, `MODEL`, `RTENV`, `WORLD`, `OFFICE`, `BROWSER`, `CUA`, `FILES`, `CODE`, `SEARCH`, `COMMS`, `ART`, `EVENTS`, `SKILL`, `CHAN`, `VERIFY` | pending | seeded during each module's P7 pass |
+| `KERNEL` (7), `WORK` (8) | drafted above | verified during passes `10` ✅ / `11` ✅ (2026-09-26) |
+| `PROV`, `MODEL`, `RTENV`, `WORLD`, `OFFICE`, `BROWSER`, `CUA`, `FILES`, `CODE`, `SEARCH`, `COMMS`, `ART`, `EVENTS`, `SKILL`, `CHAN`, `VERIFY` | pending | seeded during each module's P7 pass |
 
 ## 6. Related
 
