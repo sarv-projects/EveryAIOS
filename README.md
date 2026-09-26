@@ -1,6 +1,6 @@
 # AgentCowork (working name)
 
-> **Status: architecture docs v1** — the documentation set was rebuilt from scratch in September 2026 on the shoulders of the v0 corpus (archived locally at `ARCHIVE/v0/`). **The code is frozen during this phase**; delivery status lives in [`TODO.md`](TODO.md). Nothing here is released.
+> **Status: architecture docs v1** — the documentation set was rebuilt from scratch in September 2026 on the shoulders of the v0 corpus (archived locally at `ARCHIVE/v0/`). **The code is frozen during this phase**; delivery status lives in [`TODO.md`](TODO.md). Nothing here is released. The spec-driven finalisation pass (P7, 2026-09-26) is complete; the owner freeze decision is pending.
 
 AgentCowork is a **local-first AI work environment** that composes interchangeable agents, models, capabilities and execution environments behind one governed execution model, on top of a continuously updated model of the user's digital world. It is an AI-native execution layer on your existing computer — not an operating-system replacement.
 

@@ -1,13 +1,13 @@
 # CURRENT_RUN — handover log
 
 > Read this first. Working log for agents in `desktop_app`.
-> **v1 docs built; spec-driven-development finalisation (pass P7) in progress — code is frozen until v1 freezes.**
+> **v1 docs built; spec-driven-development finalisation (pass P7) complete — code is frozen until v1 freezes; owner freeze decision pending.**
 > Previous v0 handover content (≈344 KB) was replaced on 2026-09-26; it remains in git history.
 
 ## Active goal
-Rebuild the AgentCowork docs from scratch as **v1**: ARCH set + SPEC + UI + supporting docs, on the shoulders of the v0 corpus. v0 archived locally (`ARCHIVE/v0/`, git-ignored). `TODO.md` untouched by design. No scope cuts.
+Rebuild the AgentCowork docs from scratch as **v1**: ARCH set + SPEC + UI + supporting docs, on the shoulders of the v0 corpus. v0 archived locally (`ARCHIVE/v0/`, git-ignored). `TODO.md` was exempt from the rebuild and now holds the v1 implementation plan (reworked in P7). No scope cuts.
 
-## Where we stopped — 2026-09-26: P0–P6 ✅ complete; P7 (SDD finalisation) in flight (details below)
+## Where we stopped — 2026-09-26: P0–P6 ✅ complete; P7 (SDD finalisation) ✅ complete — awaiting owner freeze (details below)
 **Done:**
 - v0 archived: `ARCH/` (33 entries) → `ARCHIVE/v0/ARCH/`; `RESEARCH/` → `ARCHIVE/v0/RESEARCH/`; 10 root product docs → `ARCHIVE/v0/root/`; manifest at `ARCHIVE/v0/MANIFEST.md`; archive README updated.
 - v1 foundation drafted:
@@ -26,7 +26,7 @@ Rebuild the AgentCowork docs from scratch as **v1**: ARCH set + SPEC + UI + supp
   - `gen-25` (general) → `provider-layer-absorption.md` — ✅ completed (279 lines; OpenCode `fe3f3a4` · Cline `254f40c` pinned); integrated into `ARCH/18`/`14`, `DEC-034/035`, and `44` ledger amendments (cline + grok-build were missing).
   - `gen-26` (general) → `async-subagents-websearch-absorption.md` — ✅ completed (416 lines; Claude Code docs · Codex/Grok/Cline/OpenCode pinned); integrated into `ARCH/15` §7 + `28` §Web + `27` + SPEC §8 + `DEC-036/037`. Aider verdict: no upstream subagents (RepoMap only).
 - P1–P6 ✅ complete: `ARCH/04-DECISIONS.md` (DEC-001…037) · `ARCH/05-INVARIANTS.md` (INV-01…024) · `ARCH/06-DATA-MODEL.md` (DM-001…027) · `ARCH/07-CONTRACTS.md` (CTR-001…026) drafted; module drafts `ARCH/10-KERNEL.md`, `ARCH/11-WORK.md`, `ARCH/12-TRUST.md`, `ARCH/13-CAPABILITY.md`, `ARCH/14-PROVIDERS.md`, `ARCH/15-AGENT-X.md`, `ARCH/16-CONTEXT.md`, `ARCH/17-MEMORY.md`, `ARCH/18-MODEL-ROUTING.md`, `ARCH/19-RUNTIME-ENVIRONMENTS.md`, `ARCH/20-WORKFLOW.md`, `ARCH/21-WORLD-MODEL.md`, `ARCH/22-OFFICE.md`, `ARCH/23-BROWSER.md`, `ARCH/24-COMPUTER-USE.md`, `ARCH/25-FILES.md`, `ARCH/26-CODE.md`, `ARCH/27-SEARCH.md`, `ARCH/28-COMMS.md`, `ARCH/29-ARTIFACTS.md`, `ARCH/30-EVENTS.md`, `ARCH/31-SKILLS-PLUGINS.md`, `ARCH/32-CHANNELS.md`, `ARCH/34-EFFECT-VERIFICATION.md`, `ARCH/43-GLOSSARY.md`, `ARCH/44-ABSORB-REGISTER.md`, `ARCH/40-FLOWS.md` (24 flows), `ARCH/41-EDGE-CASES.md` (~50 edges), `ARCH/42-EVIDENCE-MAP.md` (acceptance + FIX register) (evidence-integrated). `AGENTCOWORK-SPEC.md` + `AGENTCOWORK-UI.md` (both root) ✅; `README.md` + `AGENTS.md` v1-synced. Research: wave 1 ✅ (memory · harness · UI-evidence · MCP · world-model · workflow · office). **v1 frozen for review (2026-09-26); reopened for owner-directed absorption wave 2** — `gen-25` provider-layer ✅ integrated (`18`/`14` + `DEC-034` + `44` ledger amendments) incl. the **OpenCode Go client contract** (own UA + `x-opencode-session` affinity, `DEC-035`); `gen-26` async-subagents/web-search ✅ integrated (`15` §7 · `28` §Web · `27` · SPEC §8 · `DEC-036/037`). **Absorption wave 2 complete — docs re-frozen for review.**
-- Evidence note: `/tmp/opencode/recon/` reports were lost to a temp cleanup. Surviving evidence: `ARCHIVE/v0/RESEARCH/**` (55 files), `~/business_Dev/REPO-COMPARE/**` (`MASTER-COMPARISON.md`, `DISPOSITION.md`, `LICENSE-LEDGER.md`, `BRIEFS/` 20 files, `clone2/` 58 clones).
+- Evidence note: `/tmp/opencode/recon/` reports were lost to a temp cleanup. Surviving evidence: `ARCHIVE/v0/RESEARCH/**` (55 files), `~/business_Dev/REPO-COMPARE/**` (`MASTER-COMPARISON.md`, `DISPOSITION.md`, `LICENSE-LEDGER.md`, `BRIEFS/` 20 files, `clone2/` 55 clones + `clone3/` 2).
 
 **Repo cleanup — 2026-09-26 (tracked-doc cleanup pass):**
 - Moved out of the tracked tree (16 files) to `ARCHIVE/v0/repo-cleanup-2026-09-26/`: `CODEBASE-MAP.md`; `docs/codebase/` (10 md + `freshness.json`); `docs/download.md`; `docs/release/post-v1.md`; `docs/release/retrospective-pack.md`; `.agents/docs/research.md`. `ARCHIVE/v0/MANIFEST.md` + `ARCHIVE/README.md` record the move.
@@ -34,27 +34,25 @@ Rebuild the AgentCowork docs from scratch as **v1**: ARCH set + SPEC + UI + supp
 - Gate state after the re-homing: `check-doc-refs.mjs`, `check-public-surface.mjs` and `gen-release-surface.mjs --check` exit 0.
 - **Pre-existing red (out of scope, left as-is):** `check-doc-sync.mjs` reads archived v0 files (`ARCH/09-FEATURE-MATRIX.md`, `DESKTOP-APP-SPEC.md`, `SPEC-CHANGELOG.md`) and fails on main; it is the only FAIL in release-qualify E3 and is queued for re-homing.
 
-**Working-tree state:** the v0→v1 doc work was committed by the product owner; the 2026-09-26 tracked-doc cleanup is committed (`573fff0`); P7 increments continue on top (HEAD `91c8e8c` at this writing — see the P7 section below). `ARCHIVE/**` is git-ignored, so the archive side is never committed. Code tree clean — the code phase has not started.
+**Working-tree state:** HEAD `ce6a3cb` (P7 complete; **2 commits ahead of `origin/main` — push blocked by a transient network/DNS failure, retry when connectivity returns**). `ARCHIVE/**` is git-ignored, so the archive side is never committed. Code tree clean — the code phase has not started.
 
-**SDD finalisation — pass P7 (2026-09-26, in progress):**
-- Commits landed: `b646cf1` spec layer (`ARCH/08` registry + `ARCH/09` matrix + protocol/template + `AGENTS.md` §16) · `5ae5f53` HLD fleshing (`03` §3.1/§11/§12, `06` ER, `07` note) · `0644a20` batch-1 kit/banner pass · `5936b8c` KERNEL+WORK seeds · `80b970f` TRUST+CAP · `65ea68b` PROV · `293af71` CTX · `c453537` MEM · `e12bf45` MODEL · `48e0484` RTENV · `b88b3e5` UI doc pass · `0760255` edge-case coverage · `8a2c17d` WF · `5f7023f` WORLD · `e11dae3` OFFICE · `0c227d3` BROWSER · `91c8e8c` CUA.
-- Batch 1: `ARCH/00–07` line-checked (SDD banner links on `02`/`04`/`05`); agent kit aligned (template §13 SDD; kit docs re-pointed at the retired `docs/codebase/` surface; `codebase-intelligence` skill gained the spec-work section).
-- Module passes done: `10`–`24` (REQ counts: KERNEL 7 · WORK 8 · TRUST 10 · CAP 10 · PROV 10 · CTX 10 · MEM 12 · MODEL 12 · RTENV 11 · WF 11 · WORLD 11 · OFFICE 11 · BROWSER 12 · CUA 12). Every pass: P7 banner + Requirements pointer table + registry entries + §5 row + matrix rows; `check-doc-refs` green per pass. In flight: `25–28` (FILES/CODE/SEARCH/COMMS) and `40`/`42`/`43`/`44` line-checks. Pending: `29–32`, `34`, Agent X finalisation (`15`), UI/memory registry merges, `TODO.md` rework, final review.
-- Evidence lanes: `gen-27` code-state inventory ✅ → `ARCHIVE/v1-research/v1-sdd/code-state-inventory.md` (309 lines; 25 ARCH modules → code paths; key: coordinator is shared-plane only, **no World-Model owner and no kernel crate in code**, `walk.rs:146-157` Windows dev/ino zeroing confirmed live (FIX-10), 367 Tauri commands 0 broken / 49 dead, UI 12 centers + 22 rail viewports). `gen-28` OpenCode harness study ✅ → `agentx-opencode-harness-notes.md` (647 lines; R-01…R-12). `gen-31` memory↔driving-agent deep dive in flight. Corrections to carry: Codex has a provider-native compaction path (`ARCH/16` §4.3/OQ-CTX-01 reframe needed); OpenCode child permissions inherit only parent *deny* rules (`DEC-029`/Guard must intersect); OpenCode V2 lacks the `task` subagent; its `prune` config has no execution path.
-- Edge-case coverage (`0760255`): `ARCH/41` +56 entries (126 total; families K–P for kernel, agent/model plane, runtime environments, code/search/comms, multi-agent coexistence, effect verification); the gen-30 gap list is pending fold-in to the owning docs.
-- UI doc pass (`b88b3e5`): `AGENTCOWORK-UI.md` UI-17/UI-18 + §5.13 + §14 REQ-UI pointer table; proposed REQ-UI-002…014 saved to `ARCHIVE/v1-research/v1-sdd/req-ui-proposed.md`.
+**SDD finalisation — pass P7 (2026-09-26, ✅ complete):**
+- **Spec layer** (`b646cf1`): `ARCH/08-REQUIREMENTS.md` (behavioral registry — **307 REQs** across 26 domains, each with Statement/priority/source/acceptance/failure cases) + `ARCH/09-FEATURE-MATRIX.md` (307 traceability rows, 1:1) + `.agents/docs/spec-driven-development.md` + `.agents/templates/SPEC.template.md` + `AGENTS.md` §16. HLD fleshing (`5ae5f53`: `03` §3.1/§11/§12, `06` ER, `07` note); batch-1 kit/banner pass (`0644a20`).
+- **Every module doc `10`–`34` passed** (P7 banner + Requirements pointer table + registry entries + §5 row + matrix rows; `check-doc-refs` green per pass): KERNEL 7 · WORK 8 · TRUST 10 · CAP 10 · PROV 10 · CTX 10 · MEM 27 · MODEL 12 · RTENV 11 · WF 11 · WORLD 11 · OFFICE 11 · BROWSER 12 · CUA 12 · FILES 12 · CODE 12 · SEARCH 12 · COMMS 13 · ART 12 · EVENTS 12 · SKILL 13 · CHAN 13 · VERIFY 13 · AGX 13 · UI 14 · PROD 6. Line-checks `40`/`42`/`43`/`44` (`81be4fe`) + count reconciliation (`12c191d`; clone2 55 + clone3 2; 190-item register).
+- **Agent X finalisation applied** (`90c0f72`): REQ-AGX-002…013; `DEC-045` (Provisional — corrects DEC-027's evidence clause, DEC-027 rules untouched); CTR-001 `cancel(run)`; DM-016 `will_wake`/`partial`; subagent event names aligned to DEC-036; `ARCH/15` tool plane + implementation home + §16 pointer table.
+- **Memory deep-dive merge** (`df42a9b` + `35baf9e`): blockers F-01/F-03/F-04/F-19/F-27 fixed; C-01…C-10 resolved; REQ-MEM-013…027 + corrections to 001/004/006/010/011/012; `DEC-038…044` (Provisional; PEND-06 closed by DEC-039); `ARCH/41` EDGE-157/158/170–179.
+- **UI merge** (`66867b9`): REQ-UI-002…014 appended; REQ-UI-001 narrowed to reasoning-only (004/005 own markdown/mermaid); parity 14↔14.
+- **Edge cases** (`0760255`): `ARCH/41` +56 entries → 126 total (families K–P; gen-30 gap list tracked for owning docs).
+- **SPEC pass** (`342f7c9`) + **TODO rework** (`9f9a6d2`): `TODO.md` 2,902 → 916 lines — the v1 implementation plan (W0 security/FIX wave · W1 plane foundations · W2 domain runtimes · W3 surfaces/events/verification · W4 Agent X with `TASK-AGX-001…014`), 307/307 REQs referenced, history preserved non-authoritatively (`git show 3eeb8f0:TODO.md`).
+- **Independent final review** (oracle → `ARCHIVE/v1-research/v1-sdd/final-review-findings.md`): 1 blocker + 7 majors + ~20 minors; reconciliation applied (`e60adeb` + `ce6a3cb`) — DEC-045/DEC-027 scope, INV-01 qualification (DEC-042), search ownership (CTR-006 façade vs `27` implementation), `Task`-as-projection (OQ-DM-1 closed), DEC-040 propagation, SPEC §16 PENDs, OQ namespace convention, decision citations, minors.
+- Evidence deliverables in `ARCHIVE/v1-research/v1-sdd/`: `code-state-inventory.md` (309) · `agentx-opencode-harness-notes.md` (647) · `memory-agent-deep-dive.md` (604) · `agentx-finalization-draft.md` (554) · `req-ui-proposed.md` · `final-review-findings.md`.
+- Remaining owner items: promote/inspect Provisional DECs at freeze (DEC-038…044, DEC-045); optional `Task`-projection DEC; workspace `.agents/skills/ui-ux/SKILL.md` drift (outside this repo).
 
 ## Next exact steps
-1. Pass P7 (SDD finalisation) — continue in order:
-   - module doc passes: `ARCH/25–28` (in flight) → `29–32` → `34` (line-by-line; Requirements/Acceptance/Interfaces/LLD; extend `ARCH/08` + `ARCH/09` as modules are passed);
-   - reconcile `gen-33` (`40`/`42`/`43`/`44` line-checks) and `gen-31` (memory deep dive → merge MEM findings);
-   - Agent X finalisation (`ARCH/15` + related `14`/`16`/`17`/`18`/`26`/`27`/`28`/`31`) fed by `gen-28` notes;
-   - UI registry merge from `ARCHIVE/v1-research/v1-sdd/req-ui-proposed.md` (decide REQ-UI-001 vs 004/005 overlap);
-   - `TODO.md` rework into TASK-* units from the REQ registry + `gen-27` code-state inventory (keep the useful history, no mishmash);
-   - fold the gen-30 edge-case gap list into the owning docs;
-   - final consistency check + independent review; commit at each milestone with vendor-neutral messages. Docs remain UNFROZEN until the product owner freezes.
-2. Code-phase prep (after the doc freeze): re-verify `ARCH/42-EVIDENCE-MAP.md` §4 FIX-01…18 → open the P0 wave per §5. Live candidates from `gen-27`: FIX-05 `skill_store.rs:442-449`, FIX-06 `fs_cmds.rs:129-137`, FIX-07 `acp_cmds.rs:1676`, FIX-09 (`tools.rs`/`messaging.rs`/`vault/oauth.rs` direct `ureq`), FIX-10 (`walk.rs:146-157`).
-3. `check-doc-sync.mjs` re-homing decision remains open (pre-existing red; re-home to v1 / retire with the v0 chain / leave until code phase).
+1. **Push `e60adeb` + `ce6a3cb`** when network returns — branch is 2 ahead of `origin/main` (`git push`; retry; no force).
+2. **Owner freeze decision** on the v1 doc set. Docs remain UNFROZEN until then; P7 banners + `ARCH/00-INDEX.md` §4 record the pass.
+3. After freeze — **code phase, W0 first**: re-verify `ARCH/42-EVIDENCE-MAP.md` §4 FIX-01…18 → open the P0 wave per §5, plus the inventory's live candidates: FIX-05 `skill_store.rs:442-449`, FIX-06 `fs_cmds.rs:129-137`, FIX-07 `acp_cmds.rs:1676`, FIX-09 (`tools.rs`/`messaging.rs`/`vault/oauth.rs` direct `ureq`), FIX-10 (`walk.rs:146-157`). Work the plan from `TODO.md` (W0→W4) against the `ARCH/09` chain.
+4. Open items queued: `check-doc-sync.mjs` re-homing (pre-existing red); gen-30 edge-gap folds into owning docs; workspace `.agents/skills/ui-ux/SKILL.md` drift (outside this repo); Provisional DEC promotion at freeze.
 
 ## Decisions & gotchas
 - Names: product **AgentCowork** (working), runtime **Core**, native agent **Agent X** (`ARCH/01-NAMING.md`). Code identifiers (`everyaios-*`) stay until a post-freeze code-phase rename (OQ-003).
