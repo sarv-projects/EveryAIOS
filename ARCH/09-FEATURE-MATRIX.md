@@ -213,6 +213,19 @@ One row per `REQ-*`. Status only from evidence.
 | `REQ-SEARCH-010` | `27-SEARCH` | pending | `—` | — | pending | pending | unplanned |
 | `REQ-SEARCH-011` | `27-SEARCH` | pending | `—` | — | pending | pending | unplanned |
 | `REQ-SEARCH-012` | `27-SEARCH` | pending | `—` | — | pending | pending | unplanned |
+| `REQ-COMMS-001` | `28-COMMS` | pending | `CTR-009` | — | pending | pending | unplanned |
+| `REQ-COMMS-002` | `28-COMMS` | pending | `DEC-025`, `CTR-010` | — | pending | pending | unplanned |
+| `REQ-COMMS-003` | `28-COMMS` | pending | `INV-02`, `CTR-013` | — | pending | pending | unplanned |
+| `REQ-COMMS-004` | `28-COMMS` | pending | `—` | — | pending | pending | unplanned |
+| `REQ-COMMS-005` | `28-COMMS` | pending | `DEC-021`, `INV-07` | — | pending | pending | unplanned |
+| `REQ-COMMS-006` | `28-COMMS` | pending | `DM-011` | — | pending | pending | unplanned |
+| `REQ-COMMS-007` | `28-COMMS` | pending | `CTR-018`, `DEC-037` | — | pending | pending | unplanned |
+| `REQ-COMMS-008` | `28-COMMS` | pending | `CTR-019` | — | pending | pending | unplanned |
+| `REQ-COMMS-009` | `28-COMMS` | pending | `—` | — | pending | pending | unplanned |
+| `REQ-COMMS-010` | `28-COMMS` | pending | `—` | — | pending | pending | unplanned |
+| `REQ-COMMS-011` | `28-COMMS` | pending | `DEC-037` | — | pending | pending | unplanned |
+| `REQ-COMMS-012` | `28-COMMS` | pending | `DEC-037` | — | pending | pending | unplanned |
+| `REQ-COMMS-013` | `28-COMMS` | pending | `INV-02/05`, `DEC-016/037` | — | pending | pending | unplanned |
 
 ## 4. Maintenance
 

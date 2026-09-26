@@ -1,6 +1,7 @@
 # 28 — Communication (Connectors)
 
 > **Status:** Draft P3 (early). Must pass the `ARCH/00-INDEX.md` §5 checklist at freeze.
+> **P7 pass (2026-09-26):** line-checked; requirements seeded (`REQ-COMMS-*`, Requirements section).
 > **Role:** an **agentic action layer** over communication systems — email, calendar, messaging — delivered as **capabilities over connectors**. Not another messaging client (owner brief).
 > **Dependencies:** `13-CAPABILITY` (descriptors) · `14-PROVIDERS` (transport/auth) · `12-TRUST` (permissions, vault, egress) · `30-EVENTS` (arrival events) · `29-ARTIFACTS` (attachments) · `20-WORKFLOW` (triggers). **Consumers:** `15` (agent), UI (`32`).
 > **Evidence:** product-owner brief (communication section: read/classify/draft/reply; calendar; Slack/Teams/WhatsApp/Discord; “don’t make it another messaging client”; permission defaults) · `ARCH/12-TRUST.md` §3 · `ARCH/13-CAPABILITY.md` · v0 connector evidence (`REPO-COMPARE/BRIEFS/02-connectors-nango.md`, `12`, `13` — pattern reference only, not authority).
@@ -92,3 +93,23 @@ Full mailbox mirror/search index · real-time chat presence/typing · SMS/voice 
 ## 11. Evidence
 
 Product-owner brief (comms capabilities; permission table; “not another messaging client”) · `ARCH/12-TRUST.md` §3 (dangerous tier), §6 (vault), §7 (egress) · `ARCH/13-CAPABILITY.md` §2–§3 · `ARCH/20-WORKFLOW.md` §5 (trigger feeding), §7 (edit semantics) · `ARCH/29-ARTIFACTS.md` §5 (gateway) · v0 `REPO-COMPARE/BRIEFS/{02,12,13}` (connector patterns — reference only).
+
+## 12. Requirements (`REQ-COMMS-*`)
+
+Testable behaviors owned by this module live in `ARCH/08-REQUIREMENTS.md`; the traceability chain is in `ARCH/09-FEATURE-MATRIX.md`. This table is a pointer, not a second copy.
+
+| REQ | Behavior (one line) |
+|---|---|
+| `REQ-COMMS-001` | Communication ships as capability verbs (`mail.*`/`calendar.*`/`messaging.*`/`web.*`) — never a second inbox client or mirrored mailbox |
+| `REQ-COMMS-002` | Connectors are providers behind the `14` adapter contract; nothing above Capability knows the transport (DEC-025) |
+| `REQ-COMMS-003` | Connector descriptors + per-instance consent; auth flows local, tokens only in the vault (INV-02) |
+| `REQ-COMMS-004` | On-demand queries + subscriptions; bounded caches; no bulk ingestion or default mirroring |
+| `REQ-COMMS-005` | Sends follow draft → approval → send → receipt; uncertain outcomes land in `needs_attention` (DEC-021, INV-07) |
+| `REQ-COMMS-006` | Risk classes: reads `sensitive`, sends `dangerous`; bodies default `confidential` (DM-011) |
+| `REQ-COMMS-007` | Content is untrusted input; bounded excerpts only; attachments via the artifact gateway (DEC-037) |
+| `REQ-COMMS-008` | Arrival events carry refs + metadata (never bodies) with provenance + dedupe keys (CTR-019) |
+| `REQ-COMMS-009` | Account/scope isolation; cross-account access is explicit, never implicit |
+| `REQ-COMMS-010` | Failures are typed and bounded: re-auth guidance, backoff, flagged coverage, rate caps — no cached-credential fallback |
+| `REQ-COMMS-011` | `web.search` honors caps (≤20, default 8), returns cited results, and consumes the per-session budget across subagents (DEC-037) |
+| `REQ-COMMS-012` | `web.fetch` is size-capped, cached per `(normalized URL, format)` with TTL + `fresh` bypass, and always surfaces `retrieved_at` (DEC-037) |
+| `REQ-COMMS-013` | Web egress obeys vault-only credentials, Guard allow/block, the SSRF floor, redirect surfacing and no-evasion rules (INV-02/05, DEC-016) |

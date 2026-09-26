@@ -1830,6 +1830,125 @@ This registry answers one question per entry: **what behavior must this system e
 - **Tests:** pending
 - **Status:** seeded
 
+### Communication (`COMMS`)
+
+#### REQ-COMMS-001 — Capabilities, never a client
+- **Statement:** GIVEN communication functionality, WHEN it is exposed, THEN it is capability verbs (`mail.*` · `calendar.*` · `messaging.*` · `web.*`) over connectors — the product never ships a second inbox/messaging client or a mirrored mailbox.
+- **Priority:** must
+- **Source:** `ARCH/28-COMMS.md` §1/§3/§9 · `AGENTCOWORK-SPEC.md` §8
+- **Acceptance:** capability-surface test; no mailbox mirror store exists; UI surfaces act through capability calls.
+- **Failure cases:** a mirror inbox → architecture violation; a second send path outside capabilities → violation.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-COMMS-002 — Connectors are providers behind the adapter contract
+- **Statement:** GIVEN a connector (native HTTP · MCP server · plugin), WHEN it registers, THEN it implements the `14` provider adapter contract and nothing above Capability knows the transport; a transport swap preserves capability contracts.
+- **Priority:** must
+- **Source:** `ARCH/28-COMMS.md` §1/§2 · `ARCH/14-PROVIDERS.md` §2/§3 · `ARCH/04-DECISIONS.md` DEC-025
+- **Acceptance:** connector-swap test with no capability change; descriptors carry no transport vocabulary; `14` conformance per connector.
+- **Failure cases:** transport details leaking into capability contracts → defect; a connector outside the adapter contract → review failure.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-COMMS-003 — Connector descriptors, consent and vault-only credentials
+- **Statement:** GIVEN a connector instance, WHEN it is configured, THEN its descriptor declares id · provider · auth type · scopes · capabilities · sync model · rate limits · data classes, auth flows run locally with tokens landing only in the vault, and a per-instance consent record exists.
+- **Priority:** must
+- **Source:** `ARCH/28-COMMS.md` §2 · `ARCH/12-TRUST.md` §6 · `ARCH/21-WORLD-MODEL.md` §5 · `ARCH/05-INVARIANTS.md` INV-02
+- **Acceptance:** descriptor-completeness test; secret scan finds no token outside the vault; consent record present per instance; a scope change requires new consent.
+- **Failure cases:** token in config/log/event → custody violation; connector active without consent → violation.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-COMMS-004 — On-demand sync; no bulk ingestion
+- **Statement:** GIVEN connector data, WHEN it is accessed, THEN queries run on demand plus subscriptions where the provider offers them, caches are bounded (headers only where a capability requires it), and nothing (mailbox/calendar/messages) is mirrored by default.
+- **Priority:** must
+- **Source:** `ARCH/28-COMMS.md` §1/§2/§5 · `AGENTCOWORK-SPEC.md` §8
+- **Acceptance:** mirror-store absence test; cache-bound test; an offline query reports coverage rather than stale data.
+- **Failure cases:** silent bulk mirror → violation; unbounded cache growth → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-COMMS-005 — Sends are approval-gated and receipted
+- **Statement:** GIVEN a send-class action (`mail.send` · `messaging.send` · `calendar.create` with invites), WHEN it executes, THEN it follows draft → approval primitive with `edit` semantics → send → receipt; an uncertain outcome lands in `needs_attention` with no silent retry.
+- **Priority:** must
+- **Source:** `ARCH/28-COMMS.md` §1/§3/§6 · `ARCH/04-DECISIONS.md` DEC-021 · `ARCH/05-INVARIANTS.md` INV-07 · `ARCH/20-WORKFLOW.md` §7
+- **Acceptance:** send without approval is denied; the receipt cites the exact content ref; timeout-after-submit yields `needs_attention` and no duplicate send.
+- **Failure cases:** ungated send → violation; duplicate send after an uncertain outcome → defect; receiptless send → violation.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-COMMS-006 — Read/write risk classes are declared and honored
+- **Statement:** GIVEN a communication capability, WHEN its risk class is set, THEN reads are `sensitive` and externally visible sends are `dangerous`, default decisions follow the policy model, and content sensitivity defaults apply (message bodies `confidential`, profile metadata `personal`).
+- **Priority:** must
+- **Source:** `ARCH/28-COMMS.md` §3/§5 · `ARCH/12-TRUST.md` §3 · `ARCH/06-DATA-MODEL.md` DM-011
+- **Acceptance:** descriptor risk-class test; default-decision tests for read/send; sensitivity defaults asserted on stored refs.
+- **Failure cases:** send classified `safe` → violation; read exposed without policy evaluation → violation.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-COMMS-007 — Content is untrusted; excerpts bounded; attachments gated
+- **Statement:** GIVEN message/calendar/web content, WHEN it enters the agent, THEN it is untrusted input (no instruction authority), enters context only as bounded excerpts on demand, and attachments move through the artifact gateway with the connector's permissions recorded.
+- **Priority:** must
+- **Source:** `ARCH/28-COMMS.md` §3/§5 · `ARCH/29-ARTIFACTS.md` §5 · `ARCH/16-CONTEXT.md` §2 · `ARCH/04-DECISIONS.md` DEC-037
+- **Acceptance:** injection-corpus test (content never auto-executes); excerpt-bound test; attachment permission record present.
+- **Failure cases:** message content treated as instructions → violation; bulk bodies imported into memory → violation; attachment bypassing the gateway → security failure.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-COMMS-008 — Arrival events carry refs, not bodies, with dedupe
+- **Statement:** GIVEN `email.arrived` · `message.received` · `calendar.event.upcoming`, WHEN published, THEN payloads carry refs + metadata only (never full bodies) with provenance and dedupe keys, and workflows may subscribe; content fetches remain separate permission-checked capability calls.
+- **Priority:** must
+- **Source:** `ARCH/28-COMMS.md` §4 · `ARCH/30-EVENTS.md` · `ARCH/20-WORKFLOW.md` §5
+- **Acceptance:** payload-shape test (no bodies); duplicate delivery deduped by key; a subscribed workflow triggers once per distinct event.
+- **Failure cases:** body content in an event payload → violation; duplicate event causing a duplicate side effect → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-COMMS-009 — Accounts and scopes are isolated
+- **Statement:** GIVEN multiple accounts, WHEN a query or send runs, THEN scopes isolate accounts and cross-account access is explicit — never implicit.
+- **Priority:** must
+- **Source:** `ARCH/28-COMMS.md` §5
+- **Acceptance:** cross-account query denied without an explicit scope; per-account token/scope isolation; an account switch does not merge results.
+- **Failure cases:** implicit account mixing → violation; cross-account send → security failure.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-COMMS-010 — Connector failures are typed, bounded and honest
+- **Statement:** GIVEN connector failures (expired/revoked token · rate limit · partial sync · uncertain send · abuse guard), WHEN they occur, THEN behavior is bounded and typed: re-auth guidance with no cached-credential fallback, backoff + queue, flagged coverage, `needs_attention`, and per-connector rate caps.
+- **Priority:** must
+- **Source:** `ARCH/28-COMMS.md` §7 · `ARCH/12-TRUST.md` §6 · `ARCH/13-CAPABILITY.md` §3
+- **Acceptance:** failure-mode matrix tests (one per row); no fallback to cached credentials; persistent limits surfaced to the user.
+- **Failure cases:** silent fallback to stale credentials → violation; unbounded retry → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-COMMS-011 — `web.search` is a bounded, cited capability
+- **Statement:** GIVEN a `web.search` call, WHEN it executes, THEN it honors declared affordances (query · count ≤20 with default 8 · freshness · type · domain allow/block · locale), returns results carrying `{ref, url, title?, retrieved_at, …}`, and consumes the per-session search budget counted across subagents.
+- **Priority:** must
+- **Source:** `ARCH/28-COMMS.md` §3 (Web search & fetch) · `ARCH/04-DECISIONS.md` DEC-037 · `AGENTCOWORK-SPEC.md` §3
+- **Acceptance:** cap test (hard max 20, default 8); budget test across subagents; citation-fields test; domain filters honored.
+- **Failure cases:** uncited result → defect; budget bypass via a subagent → violation; count over 20 → rejected.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-COMMS-012 — `web.fetch` content is size-capped, cached transparently, and cited
+- **Statement:** GIVEN a `web.fetch` call, WHEN it executes, THEN it enforces caps (5 MB body · timeout ≤120 s · declared max chars/tokens), caches per session by `(normalized URL, format)` with a default 15-minute TTL and an explicit `fresh` bypass, and returns `retrieved_at` (+ `sha256`) with content kept as an artifact ref.
+- **Priority:** must
+- **Source:** `ARCH/28-COMMS.md` §3 (Web search & fetch) · `ARCH/04-DECISIONS.md` DEC-037
+- **Acceptance:** cap tests; cache key/TTL tests; `fresh` bypass test; a cached result always surfaces its retrieval time; no silent page substitution.
+- **Failure cases:** uncapped fetch → defect; cache key collision → defect; silently serving a different page → violation.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-COMMS-013 — Web access obeys custody, egress and no-evasion rules
+- **Statement:** GIVEN any web search/fetch, WHEN it leaves the machine, THEN provider credentials travel only via vault refs (never in URLs), egress passes Guard with a domain allow/block policy that overrides model requests, the SSRF floor rejects localhost/no-dot/private/link-local/metadata targets after resolution, cross-host redirects are surfaced, and fetched content is untrusted — robots/ToS honored, no evasion.
+- **Priority:** must
+- **Source:** `ARCH/28-COMMS.md` §3 (Web search & fetch) · `ARCH/05-INVARIANTS.md` INV-02/INV-05 · `ARCH/04-DECISIONS.md` DEC-016/DEC-037
+- **Acceptance:** SSRF corpus test (resolve-then-check); key-in-URL scan clean; a model-requested domain denied when policy blocks it; redirect host changes surfaced; no CAPTCHA/anti-bot code path exists.
+- **Failure cases:** credential in a URL/query → custody violation; SSRF target reached → security failure; evasion behavior → catastrophic-class violation.
+- **Tests:** pending
+- **Status:** seeded
+
 ## 5. Seeding status
 
 | Domain | Seeds | Next pass |
@@ -1851,7 +1970,8 @@ This registry answers one question per entry: **what behavior must this system e
 | `FILES` (12) | drafted above + expanded in pass `25` | verified during pass `25` ✅ (2026-09-26) |
 | `CODE` (12) | drafted above + expanded in pass `26` | verified during pass `26` ✅ (2026-09-26) |
 | `SEARCH` (12) | drafted above + expanded in pass `27` | verified during pass `27` ✅ (2026-09-26) |
-| `COMMS`, `ART`, `EVENTS`, `SKILL`, `CHAN`, `VERIFY` | pending | seeded during each module's P7 pass |
+| `COMMS` (13) | drafted above + expanded in pass `28` | verified during pass `28` ✅ (2026-09-26) |
+| `ART`, `EVENTS`, `SKILL`, `CHAN`, `VERIFY` | pending | seeded during each module's P7 pass |
 
 ## 6. Related
 
