@@ -1,6 +1,7 @@
 # AGENTCOWORK-UI — UI Architecture: shell · DocumentSurface · chat · composer
 
 > **Status:** Draft **P5**. Must pass the `ARCH/00-INDEX.md` §5 checklist at freeze.
+> **P7 pass (2026-09-26):** line-checked; requirements proposed (`REQ-UI-*`, Requirements section).
 > **Authority:** root for the **UI** row of `ARCH/00-INDEX.md` §2 — "UI/UX architecture, chat rendering, interaction model. Derives from SPEC + Experience plane." Compliance order: `AGENTCOWORK-SPEC.md` §9 (Experience contract — WHAT) → `ARCH/03-HLD.md` §2/§5 (HOW) → this doc. A change that alters behaviour described here requires a `DEC-*`; this doc MUST NOT contradict a `DEC-*`, `INV-*`, `DM-*` or `CTR-*`.
 > **Derives from:** SPEC §3/§4/§6/§9/§11 · HLD §2 (Experience plane: *rendering, input, presentation, view state — never domain logic, execution, policy*), §5, §6, §7 · `ARCH/13-CAPABILITY.md` §6 (composer capability negotiation) · `ARCH/18-MODEL-ROUTING.md` §5 (normalized reasoning dial) · `ARCH/30-EVENTS.md` §3 (typed stream — *the UI's only progress channel*) · `ARCH/32-CHANNELS.md` §1/§3/§7 (surfaces are projections; approval routing) · `ARCH/29-ARTIFACTS.md` · `ARCH/22-OFFICE.md` · `ARCH/16-CONTEXT.md` §7 (Context Inspector) · `ARCH/11-WORK.md` §2/§3/§8.
 > **Evidence base:** `ARCHIVE/v1-research/ui-architecture-evidence.md` (Draft 2026-09-26; 1,710 lines) — first-hand `ui/` inventory with `path:line`, the shipped token contract, competitor teardown, chat proposals R1–R40, shell/composer proposals R41–R56, the token-discipline table, gaps G1–G38 and the three delivery slices. Cited here as `ev: evidence §n / Rn / Gn`; direct `ui/` reads made in this pass are cited as `ev: ui/…:line`.
@@ -56,6 +57,8 @@ The UI never evaluates policy, never opens a socket, and never talks to a provid
 | UI-14 | **Never render raw chain-of-thought as prose.** Reasoning renders only through the `reasoning` projection; a raw variant, if ever surfaced, sits behind a named *Technical details* disclosure. | R29; `18` §5 |
 | UI-15 | **The transcript is linear.** Trees and DAGs belong to the Runs lens (and Computer-use's existing DAG projection), never to the conversation. | R46; §6 |
 | UI-16 | **Name the owner.** Each surface states which projection it reads; no hidden side channels for state. | `INV-23`; `30` §1 |
+| UI-17 | **Windows-first provenance.** An agent/runtime row shows a discriminated *location* (`managed · windows_path · app_paths · user_path · package_manager · wsl · unavailable`) and keeps `installed` · `discovered` · `launchable` distinct; a catalog or registry row is never occupancy. | §5.13; UI/UX skill §8 |
+| UI-18 | **No fabricated progress.** A determinate progress affordance reflects a measured value; an unknown is indeterminate-with-label or absent. Never a fake percentage, and never a spinner standing in for a value we do not have. | §3.3, §11; UI-03 |
 
 ### 1.3 What already exists (verified) — and two corrections to the evidence base
 
@@ -237,6 +240,8 @@ Changes:
 | **R26** | **Big payloads spool; the full body resolves on demand.** Keep the 2 000-token spool card and add lazy full-payload fetch so a collapsed row can open the complete record without it riding the transcript. | R26 |
 | **R27** | **The transcript never becomes a scroll trap.** Inline widgets fit one scroll of the response, carry ≤2 primary actions, never scroll internally; escalation to the Workbench is an explicit panel button, not a growing widget. | R27 / S4 |
 
+**Streaming is `running`, not a sixth state.** A call still emitting output — a CLI stream or a partial result — stays `running` and carries `tool.progress` events (`30` §3); it does not gain a separate `streaming` member, so the vocabulary stays the five names above and the icon/border treatment has exactly one live look. `running` on a settled turn with no terminal event is itself a defect (UI-03).
+
 Blocked ≠ error: a Guard-denied call renders neutral ink + lock with the reason; red is reserved for failures (UI-04).
 
 ### 4.4 Reasoning and the plan
@@ -354,6 +359,20 @@ Keep the shipped split: casual shows one simple autonomy dial; power shows `Work
 ### 5.12 Mic and telemetry honesty
 
 The microphone capture is real but the missing speech-to-text engine is reported instead of a fabricated transcript (`ev: evidence §1.5`; `ev: ui/src/components/chat/chat-composer.tsx:850-886`): keep that honesty (UI-03). The telemetry footer shows web-search state in its reserved slot plus token counts in mono/tabular (`ev: ui/src/components/chat/chat-composer.tsx:929-966`).
+
+### 5.13 Agent configuration — agent-owner model, two-pane runtime surface, Windows-first provenance
+
+The composer's agent control is the compact expression of the agent-owner model; the configuration surface behind it is where provenance and readiness are told truthfully. This subsection completes §5.3 (ownership unchanged); it adds the surface and the Windows-first rules the shipped picker does not yet state.
+
+- **Compact control set.** Power mode: `Agent ▾ → agent-owned Model ▾ → Work Mode ▾ → Autonomy ▾` (§5.11); casual keeps one plain dial and no identity stack, matching the shipped split. The identity readback a casual user sees lives in the status bar, not the composer (`ev: ui/src/components/chat/chat-composer.tsx:795-797`).
+- **Opening agent configuration expands to a responsive two-pane / full-screen surface** — never a flat tool dump and never a second picker. Left: the installed / discovered runtimes for this workspace; right: the *selected* runtime's own model / auth / native-capability surface plus the EveryAIOS shared grants. EveryAIOS Native uses the EveryAIOS provider / catalog / local surface; an external ACP agent shows only what it exposes through `configOptions`, or the explicit "managed by \<agent\>" state — **a Native model is never offered for an external runtime** (`ev: ui/DESIGN-SYSTEM.md:11`; §5.3).
+- **Provenance is a discriminated location, not a path string.** A runtime row renders exactly one of: `managed` (an EveryAIOS-pinned absolute executable) · `windows_path` (`.exe`/`.cmd`/`.bat` from the effective PATH) · Windows **App Paths** · `user_path` · `package_manager` (`npx`/`uvx`) · `wsl` (distro + Linux path + `wsl.exe` launcher) · `unavailable`. **A catalog or registry row is never occupancy** (UI-17).
+- **Three facts never collapse:** `installed` (a managed install or package-manager readiness) · `discovered` (a verified location exists, e.g. WSL-only) · `launchable` (the current adapter can actually start it). A `wsl` row is *discovered* but not *launchable* until its spawn adapter exists — render it non-selectable with an honest reason, and never hand a Linux path to `CreateProcess` (`ev: ARCH/06-DATA-MODEL.md` DM-014 `installed/available/disabled`; `ARCH/13-CAPABILITY.md` §6 effective set).
+- **Session capability loadout, not a tool dump.** MCP servers, skills, plugins, connectors, Office, Browser, Computer Use, artifacts and memory are session rows carrying `enabled` · `health` · `scope` · `source` · `native_or_shared` · `applies_from`; a change applies to the next turn/run and is frozen into the Work manifest — it never silently changes an in-flight run and never dumps every schema into the prompt.
+- **Vault reuse is a launch-time binding.** "Use key from EveryAIOS vault" shows environment-variable **names**, never values, and MUST NOT write the external agent's own config file (`INV-02`).
+- **Readiness is evidence-gated.** Office / Browser / Computer Use / Memory / MCP / skills / plugins stay `unverified` (or `available`) until a real Windows acceptance record exists; a mock row, browser preview, static catalog entry, or unit-only Office test is **not** pass evidence. Every status colour carries an accessible label, never colour alone (UI-04, UI-18).
+
+**Sources:** the workspace UI/UX skill (`.agents/skills/ui-ux/SKILL.md`, section 8) and the Windows-first release target; `ARCH/12-TRUST.md` §8 (projection-only), `ARCH/13-CAPABILITY.md` §6, `ARCH/32-CHANNELS.md` §3, `ARCH/43-GLOSSARY.md` (Catalog).
 
 ---
 
@@ -581,3 +600,26 @@ Carried from the evidence base (OQ-UI-001…008; wording tightened above and res
 | Tauri v2 `app.security.csp` semantics | `https://v2.tauri.app/reference/config/` | the documented CSP field options; the shipped value is read first-hand (`tauri.conf.json:27`), only the documentation is unverified |
 
 **Known weakness of the evidence pass, carried forward:** competitor conclusions are drawn from reading clones, not running them; where a mechanism's behaviour depends on runtime configuration the file does not show, the conclusion is inference (`inf`) and is labelled. Not covered here and still open for a further pass: onboarding/setup/vault gates, localisation (`ui/src/lib/i18n.ts` unread), and the mobile/compact proposal beyond the 900 px breakpoint.
+
+---
+
+## 14. Requirements (`REQ-UI-*`)
+
+Testable behaviors owned by this module live in `ARCH/08-REQUIREMENTS.md`; the traceability chain is in `ARCH/09-FEATURE-MATRIX.md`. This table is a pointer, not a second copy.
+
+| REQ | Behavior (one line) |
+|---|---|
+| `REQ-UI-001` | Reasoning is summarized, never rendered as raw chain-of-thought; markdown/mermaid render only through the policy-gated pipeline (§4.1, §4.2, §4.4; UI-14). |
+| `REQ-UI-002` | Rendering, navigation, diagram conversion and reference discovery are local and never spend model tokens (§8; UI-02). |
+| `REQ-UI-003` | An inferred value is never presented as measured — unknown renders `—` or nothing, and no fabricated progress or spinner stands in for a value we lack (§1.2; §11). |
+| `REQ-UI-004` | The answer body renders headings, tables, blockquotes, `hr`, ordered lists and images from the token palette, streaming-safe (block caching, closed-fence code gate, coalesced writes) (§4.1, R1–R8). |
+| `REQ-UI-005` | A fenced `mermaid` block auto-converts only through the policy-gated, `secure`-locked, blob-`<img>` path — never inline SVG/HTML — themed from live tokens at CLS 0, with failure as a state (§4.2, R10–R18). |
+| `REQ-UI-006` | Tool calls carry five states (`proposed · running · succeeded · failed · cancelled`); streaming stays `running`; a group containing an error never auto-collapses; a turn reads as one rail (§4.3, R21–R23). |
+| `REQ-UI-007` | A plan bar binds to the running turn, appears and disappears with it, and reports a version delta rather than a false "no change" (§4.4, R31). |
+| `REQ-UI-008` | The reasoning dial offers only model-supported levels, clamps on model switch, keeps `auto` off the track, and names the current level (§5.4, R51). |
+| `REQ-UI-009` | One document surface opens one tab per document identity and N documents per kind, re-deriving content from a light ref and pre-checking existence in the host (§3, R45). |
+| `REQ-UI-010` | The agent picker paints the agent-owned model or an explicit em dash, selects installed-only, and opens a two-pane runtime surface; a Native model is never offered for an external runtime (§5.3, §5.13). |
+| `REQ-UI-011` | Runtime rows show a discriminated location and keep `installed`/`discovered`/`launchable` distinct; readiness is evidence-gated, never fabricated from a catalog, preview, mock or unit-only result (§5.13; UI-17). |
+| `REQ-UI-012` | Every workflow, tab, disclosure, approval choice and composer control is keyboard-reachable with a visible focus ring, aria-live discipline, and an automated accessibility gate (§9.1; UI-12). |
+| `REQ-UI-013` | Advanced detail sits behind a labelled collapsed row; a blocked control stays visible with its reason; a finished tool never steals focus or navigates (§1.2; UI-04, UI-05, UI-07). |
+| `REQ-UI-014` | Live regions reserve their space (`min-h`, fixed readout slots, intrinsic-size hints); CLS = 0 is a standing standard (§1.2; UI-08). |
