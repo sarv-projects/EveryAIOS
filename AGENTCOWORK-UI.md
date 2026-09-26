@@ -2,6 +2,7 @@
 
 > **Status:** Frozen v1 (frozen 2026-09-26; drafted P5).
 > **P7 pass (2026-09-26):** line-checked; requirements proposed (`REQ-UI-*`, Requirements section).
+> **P9 verification pass (2026-09-26):** read line-by-line; fixes applied where needed (owner-directed; re-freeze follows).
 > **Authority:** root for the **UI** row of `ARCH/00-INDEX.md` §2 — "UI/UX architecture, chat rendering, interaction model. Derives from SPEC + Experience plane." Compliance order: `AGENTCOWORK-SPEC.md` §9 (Experience contract — WHAT) → `ARCH/03-HLD.md` §2/§5 (HOW) → this doc. A change that alters behaviour described here requires a `DEC-*`; this doc MUST NOT contradict a `DEC-*`, `INV-*`, `DM-*` or `CTR-*`.
 > **Derives from:** SPEC §3/§4/§6/§9/§11 · HLD §2 (Experience plane: *rendering, input, presentation, view state — never domain logic, execution, policy*), §5, §6, §7 · `ARCH/13-CAPABILITY.md` §6 (composer capability negotiation) · `ARCH/18-MODEL-ROUTING.md` §5 (normalized reasoning dial) · `ARCH/30-EVENTS.md` §3 (typed stream — *the UI's only progress channel*) · `ARCH/32-CHANNELS.md` §1/§3/§7 (surfaces are projections; approval routing) · `ARCH/29-ARTIFACTS.md` · `ARCH/22-OFFICE.md` · `ARCH/16-CONTEXT.md` §7 (Context Inspector) · `ARCH/11-WORK.md` §2/§3/§8.
 > **Evidence base:** `ARCHIVE/v1-research/ui-architecture-evidence.md` (Draft 2026-09-26; 1,710 lines) — first-hand `ui/` inventory with `path:line`, the shipped token contract, competitor teardown, chat proposals R1–R40, shell/composer proposals R41–R56, the token-discipline table, gaps G1–G38 and the three delivery slices. Cited here as `ev: evidence §n / Rn / Gn`; direct `ui/` reads made in this pass are cited as `ev: ui/…:line`.
@@ -51,7 +52,7 @@ The UI never evaluates policy, never opens a socket, and never talks to a provid
 | UI-08 | **Reserve space for anything that ticks.** CLS = 0 is a standing standard: `min-h` on live regions, fixed slots for readouts, intrinsic-size hints on the transcript. | `ev: ui/src/components/chat/message-bubble.tsx:197`; `ev: ui/src/components/chat/tool-chip.tsx:533,541`; C8 |
 | UI-09 | **Tokens only.** No literal hue outside `globals.css`'s token blocks; never assume the accent is blue; a label on the accent uses `--brand-foreground`. | C1–C4; `ev: ui/src/globals.css:44-105,244-345` |
 | UI-10 | **Telemetry is mono + tabular.** Every duration, token count, percentage or id is JetBrains Mono with `tabular-nums`. | C5; `ev: ui/src/globals.css:119-120`; `ev: ui/src/components/chat/message-bubble.tsx:202,209` |
-| UI-11 | **Motion is a vocabulary, not a mood.** 100–300 ms utility animations; damped springs for the few high-impact moments; exit faster than enter; no entrance animation on high-frequency surfaces; reduced motion kills all. | C7; `ev: ui/src/globals.css:627-745,772-781` |
+| UI-11 | **Motion is a vocabulary, not a mood.** ~100–300 ms utility animations (the chart crossfade runs to 400 ms, §9.2); damped springs for the few high-impact moments; exit faster than enter; no entrance animation on high-frequency surfaces; reduced motion kills all. | C7; `ev: ui/src/globals.css:627-745,772-781` |
 | UI-12 | **Keyboard-complete.** Every action reachable by keyboard, `focus-visible` ring on all interactives, `aria-live` on status, no nested scroll traps except one explicitly labelled overflow region. | `ev: ui/src/globals.css:791-795`; `ev: ui/src/components/chat/tool-chip.tsx:545,554`; §9 |
 | UI-13 | **No raw ids / JSON / ANSI in the transcript.** Tool ids live in *Technical details*; CLI streams are normalized at the drawer boundary. | `ev: ui/src/components/chat/tool-chip.tsx:121-136,199-213`; C11 |
 | UI-14 | **Never render raw chain-of-thought as prose.** Reasoning renders only through the `reasoning` projection; a raw variant, if ever surfaced, sits behind a named *Technical details* disclosure. | R29; `18` §5 |
@@ -96,7 +97,7 @@ StatusBar · CommandPalette · ApprovalStack (transcript-owned) · Toasts
 **Two structural moves, both stated as proposals pending the open questions they touch:**
 
 - The far rail and session sidebar split the shipped single collapsible sidebar into two panes (global destinations vs workspace-scoped sessions). This is a restructure of existing behaviour, not new surface area → **OQ-UI-011**.
-- Nothing is removed. Every destination that exists today still exists, reachable through the rail, the session sidebar, the Workbench launcher, or the command palette (which keeps its exact group set `actions | navigate | chats | views | settings`, `ev: ui/src/components/shell/command-palette.tsx:52`, with the `views` group enumerating every viewport `:89-111`).
+- Nothing is removed. Every destination that exists today still exists, reachable through the rail, the session sidebar, the Workbench launcher, or the command palette (which keeps its exact group set `actions | navigate | chats | views | settings`, `ev: ui/src/components/shell/command-palette.tsx:52`; the `views` group lists the viewports `:89-112` — 20 of 22 today, with `run` and `tool-output` added in v1).
 
 ### 2.2 Workbench: a launcher of six slots, not a tab bar of 22 peers
 
@@ -167,7 +168,7 @@ PreviewKind =
 | `slides` | `views/office-pptx-view.tsx` | Office runtime underneath |
 | `pdf` | `views/office-pdf-view.tsx` + `pdf-canvas.tsx` | redact must remove content, never annotate (`22` §10) |
 | `image` | the existing canvas/lightbox pattern | zoom/pan without internal scroll traps |
-| `html` / `webapp` | `views/artifact-view.tsx` + loopback artifact server (`ev: ui/src/lib/artifact.ts:24-51`) | CSP: `frame-src 'none'`, so **no inline iframes** (`ev: src-tauri/tauri.conf.json:27`) |
+| `html` / `webapp` | `views/artifact-view.tsx` + loopback artifact server (`ev: ui/src/lib/artifact.ts:24-51`) | CSP: `frame-src 'none'` bans a frame whose `src` addresses a URL (`ev: src-tauri/tauri.conf.json:27`); HTML preview therefore keeps to the sandboxed `srcdoc` artifact path (§3.4) |
 | `browser` | `views/browse-view.tsx` | live dot only while CDP is attached |
 
 ### 3.3 Office is a runtime under this surface — not a sidebar mode
@@ -182,7 +183,7 @@ PreviewKind =
 
 ### 3.4 Isolation rules (from the security envelope)
 
-- `frame-src 'none'` (`ev: src-tauri/tauri.conf.json:27`) forbids inline sandboxed iframes — the archived v0 proposal for generative UI is impossible and MUST NOT be revived. HTML previews take the artifact-loopback route the app already ships (`ev: ui/src/lib/artifact.ts:15-43`).
+- `frame-src 'none'` (`ev: src-tauri/tauri.conf.json:27`) blocks a frame whose `src` addresses a URL — so a preview must not point an in-shell `<iframe src=…>` at the loopback artifact server, and the archived v0 proposal to revive generative UI as a `src`-addressed inline frame MUST NOT be revived. The app's generative sandbox keeps to `srcdoc` (`ev: ui/src/components/views/generative/generative-ui.tsx:166-187`); `artifact-view.tsx`'s real-server branch frames the loopback URL via `src` (`ev: ui/src/components/views/artifact-view.tsx:100-106`), which the envelope does not permit — a gap v1 closes by moving the real-server preview to the `srcdoc`/Browser route. The mermaid path adds no frame at all (blob `<img>`, §4.2).
 - `img-src 'self' data: blob: https:` (same line) permits the blob-`<img>` pattern used for diagrams (§4.2).
 - **No document or diagram is injected via `dangerouslySetInnerHTML`.** After the mermaid change (§4.2), the only remaining site is the chart primitive (`ev: evidence §4.2` R15).
 
@@ -290,11 +291,11 @@ Artifact cards keep their shape: type-coloured cards in a responsive grid with e
 
 ### 5.2 Send gate
 
-Keep the shipped four-case gate verbatim: `empty · unbound · readiness-unknown · not-ready · preview`, each refusing **before anything moves** with a plain-language reason and an actionable next step (`ev: ui/src/components/chat/chat-composer.tsx:70-163`, `:617-645`). The gate is the reason the chat bar can never look sendable and then quietly refuse — it is a product invariant, not an implementation detail.
+Keep the shipped gate verbatim: the five codes `empty · unbound · readiness-unknown · not-ready · preview` (`empty` is the pass), the four refusing cases each refusing **before anything moves** with a plain-language reason and an actionable next step (`ev: ui/src/components/chat/chat-composer.tsx:70-163`, `:617-645`). The gate is the reason the chat bar can never look sendable and then quietly refuse — it is a product invariant, not an implementation detail.
 
 ### 5.3 Agent and model pickers — ownership unchanged
 
-Keep the ownership rule exactly (R50): the trigger paints the **agent-owned** model value or an explicit em dash (`ev: ui/src/components/chat/agent-model-picker.tsx:474-489`); the picker lists the agent's own ACP config options; selection is **installed-only**, and catalog-only rows render an explicit not-installed state with an install affordance instead of becoming selectable (`:526-549`). Governance badges keep their three kinds and tooltips: Governed-Mediated (green) · Self-contained (amber) · Not Governed (red) (`ev: ui/DESIGN-SYSTEM.md:58`). A model switch during a live stream applies to the next turn and says so (`:520-524`). Where the agent reports no model surface, the picker says "managed by \<agent\>" — the platform never invents a model list (`ev: ui/DESIGN-SYSTEM.md:11`).
+Keep the ownership rule exactly (R50): the trigger paints the **agent-owned** model value or an explicit em dash (`ev: ui/src/components/chat/agent-model-picker.tsx:474-489`); the picker lists the agent's own ACP config options; selection is **installed-only**, and catalog-only rows render an explicit not-installed state with an install affordance instead of becoming selectable (`:526-549`). Governance badges keep their three kinds and tooltips: Governed-Mediated (green) · Self-contained (amber) · Not Governed (red) (`ev: ui/DESIGN-SYSTEM.md:58`). A model switch during a live stream applies to the next turn and says so (comment `:511-516`). Where the agent reports no model surface, the picker says "managed by \<agent\>" — the platform never invents a model list (`ev: ui/DESIGN-SYSTEM.md:11`).
 
 ### 5.4 Reasoning dial — capability-negotiated, model-derived
 
@@ -327,7 +328,7 @@ Why it must be structured: a chip is removable without regex surgery; the ACP `r
 
 ### 5.7 `/` — one reserved host namespace, agent grammar untouched
 
-**Normative rule (R53):** the host reserves exactly one namespace — **`/eaios:*`** (SPEC §9; `ARCH/02-THESIS.md:42`) — for its own commands. Every other `/name` is the bound agent's native vocabulary, forwarded verbatim as prompt text with no local interception. The shipped behaviour is already right in substance: while an agent is bound, the local table is hidden and the list comes from the agent's live `available_commands` (`ev: ui/src/components/chat/chat-composer.tsx:544-557`; comment `:513-518`; G28 covers the missing host half).
+**Normative rule (R53):** the host reserves exactly one namespace — **`/eaios:*`** (SPEC §9; `ARCH/02-THESIS.md:43`) — for its own commands. Every other `/name` is the bound agent's native vocabulary, forwarded verbatim as prompt text with no local interception. The shipped behaviour is already right in substance: while an agent is bound, the local table is hidden and the list comes from the agent's live `available_commands` (`ev: ui/src/components/chat/chat-composer.tsx:544-557`; comment `:513-518`; G28 covers the missing host half).
 
 Two additions:
 
@@ -451,7 +452,7 @@ Required in v1:
 
 ### 9.2 Motion
 
-The shipped `@utility` vocabulary is the vocabulary — `enter-approval` 250 ms · `enter-step` 100 ms · `enter-surface` 150 ms · `cell-flash` 200 ms · `scale-in-palette` 120 ms · `step-shake` 150 ms · `chart-crossfade` 400 ms · `toast-enter` 200 ms · `treemap-morph` 300 ms · `spark-draw` 300 ms · `score-roll` 300 ms · `agent-switch-pulse` 200 ms · `enter-stagger` (per-index via `staggerStyle(i)`) · `widget-enter` 300 ms, plus the blanket 150 ms press rule with `scale(0.98)` (`ev: ui/src/globals.css:627-765`). Reduced motion kills all animation and hides the caret (`:772-781`).
+The shipped `@utility` vocabulary is the vocabulary — `live-pulse` 1 s · `enter-approval` 250 ms · `enter-step` 100 ms · `enter-surface` 150 ms · `cell-flash` 200 ms · `scale-in-palette` 120 ms · `step-shake` 150 ms · `chart-crossfade` 400 ms · `toast-enter` 200 ms · `treemap-morph` 300 ms · `spark-draw` 300 ms · `score-roll` 300 ms · `agent-switch-pulse` 200 ms · `enter-stagger` (per-index via `staggerStyle(i)`) · `widget-enter` 300 ms, plus the blanket 150 ms press rule with `scale(0.98)` (`ev: ui/src/globals.css:627-765`). Reduced motion kills all animation and hides the caret (`:772-781`).
 
 Rules: reuse utility names rather than new keyframes; **damped springs** (Framer Motion, already a dependency) only for the few high-impact moments — message entrance, streaming indicator, rail width (shipped at 300 ms `cubic-bezier(0.4,0,0.2,1)`, `ev: ui/src/components/shell/right-rail.tsx:895-906`); no entrance animation on high-frequency surfaces; exit faster than enter; shimmer only on the currently-running step (UI-11).
 
