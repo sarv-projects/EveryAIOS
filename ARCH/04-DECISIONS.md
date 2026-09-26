@@ -1,0 +1,197 @@
+# 04 — Decision Register
+
+> **Status:** Draft P1. Every decision that shapes v1 is recorded here with its evidence. Module docs cite `DEC-*` instead of repeating rationale.
+> **Statuses:** `Locked` — agreed for v1; changing it requires a new DEC superseding this one. `Provisional` — directionally fixed; detail pending. `Pending` — not yet decided (§3). `Deferred` — out of v1 with an explicit trigger.
+> **Change rule:** any change to an authority doc (`AGENTCOWORK-SPEC.md`, `ARCH/03-HLD.md`, module docs, contracts) that alters behavior requires a DEC entry here.
+
+## 1. Register
+
+| ID | Decision | Status | Affects |
+|---|---|---|---|
+| DEC-001 | Product frame: Work + Capability runtime layered on the user's computer — not an OS replacement | Locked | 02, SPEC |
+| DEC-002 | One governed execution path; control path bounded, effect path asynchronous | Locked | 03, 12, 13, 14 |
+| DEC-003 | Work is the universal execution abstraction | Locked | 11 |
+| DEC-004 | Agent ≠ Model ≠ Provider; Capability ≠ Provider | Locked | 13, 14, 15, 18 |
+| DEC-005 | Protocols (MCP/ACP/CLI/HTTP/plugin) are provider adapters only | Locked | 14, 32 |
+| DEC-006 | Domain runtimes own specialized complexity; the kernel stays small | Locked | 10, 22–28 |
+| DEC-007 | Context: infrastructure in Core, control in the agent, projection for external agents | Locked | 16 |
+| DEC-008 | Workflow engine is Core infrastructure; agent ⇄ workflow composition in both directions | Locked | 20 |
+| DEC-009 | External agents get projections only (identity/capabilities/context/workspace/tools/artifacts/events) | Locked | 12, 16, 32 |
+| DEC-010 | Agent X is an architectural peer — one `AgentEngine` contract, no privileged path | Locked | 15, 32 |
+| DEC-011 | World Model is first-class; computer-use ladder; vision is fallback | Locked | 21, 24 |
+| DEC-012 | Browser: managed Chromium default; Chrome/Edge/Firefox/Opera as adapters | Locked | 23 |
+| DEC-013 | Office: runtime under the universal document surface; L1/L2/L3; resident contexts | Locked | 22 |
+| DEC-014 | Artifacts (work products) ≠ Library (reusable inventory); promotion explicit | Locked | 29 |
+| DEC-015 | Token discipline: deterministic operations never touch an LLM | Locked | 02, 16, 34 |
+| DEC-016 | No captcha-evasion / anti-bot / residential-proxy tooling | Locked | 23, 24 |
+| DEC-017 | Absorb strategy: study → redesign → implement; licensing ledger gates code reuse | Locked | 44 |
+| DEC-018 | Memory v1 store: SQLite + FTS5; ADD-only extraction + `superseded_by`; suppression-based forget; no vectors/graph/decay | Locked | 17 |
+| DEC-019 | Memory ≠ context; recall returns candidates; non-touching read; budget is a maximum | Locked | 16, 17 |
+| DEC-020 | Working names: AgentCowork / Core / Agent X; code identifiers frozen until post-freeze | Provisional | 01 |
+| DEC-021 | Approval is a first-class primitive for agents and workflows | Locked | 12, 20 |
+| DEC-022 | Receipts mandatory for externally visible effects; verification proportional to risk | Locked | 29, 34 |
+| DEC-023 | Effect-verification plane (validate / render / reconcile) | Locked | 34 |
+| DEC-024 | Four-state scoping (Installed/Available/Activated/Executing) + five scopes | Locked | 03, 13, 31 |
+| DEC-025 | Native-first capability resolution for agents; Core enforces | Locked | 13, 15 |
+| DEC-026 | Docs rebuild process: v1 from scratch, v0 archived, pass protocol + viability checklist, evidence-first, TODO exempt | Locked | 00 |
+| DEC-027 | Context budget & compaction discipline: named terms (keep/buffer/reserve) · pre-turn feasibility check · overflow recovery · checkpoint as projection boundary over a durable log · pruning separate; no copied "native" path | Locked | 16, 11, 15 |
+| DEC-028 | Guard composes three layers: platform confinement × approval policy × declarative exec rules | Locked | 12, 19 |
+| DEC-029 | Subagent model: child session per subagent · per-spawn worktree option · full escaped rules · receipts not transcripts · Core-enforced bounds; review queue is our own build | Locked | 15, 11, 20 |
+| DEC-030 | MCP dual-era policy: modern `2026-07-28` first (stateless, `_meta`, `server/discover`), legacy `2025-11-25` fallback; era cached per process/origin; force-legacy escape hatch; façade stateless modern + initialize compat; HTTP+SSE and sessions/sampling/roots/logging are non-goals | Locked | 14, 32 |
+| DEC-031 | Work scheduler: three lanes (foreground/background/detached) + Core-enforced outer limits (agents/workers/depth/tokens/spend); interactive priority; pause-and-surface on budget exhaustion | Locked | 11, 15, 20 |
+| DEC-032 | Artifact storage & retention: managed per-workspace content-addressed store · immutable versions · receipt-pinned versions never GC'd · explicit promotion | Locked | 29, 25 |
+| DEC-033 | Workflow durability: append-only journal · occurrence rows + leases · exactly-once claims · `wake_at` + misfire policy · pinned versions · `needs_attention` for keyless side effects | Locked | 20, 11, 30 |
+
+## 2. Details
+
+### DEC-001 — Product frame
+AgentCowork is an AI-native execution environment layered on the user's existing computer: a universal Work + Capability runtime composing interchangeable agents, models, providers and environments behind one governed execution model. It is not an OS/kernel/bootloader replacement and never markets itself as one.
+**Evidence:** product-owner brief (2026-09-26).
+
+### DEC-002 — One governed execution path
+Every externally visible effect follows exactly one path: `Work → Capability → Provider → Handle → Guard → Ticket → Execute → Effect → Verify → Receipt → Event`. Control path: bounded, synchronous (targets p50 < 2 ms · p95 < 10 ms · p99 < 25 ms). Effect path: asynchronous, observable, unbounded. No bypasses — not for domains, adapters, UI, or the native agent.
+**Evidence:** owner brief; `ARCH/03-HLD.md §5`.
+
+### DEC-003 — Work as the universal abstraction
+Chat turns, workflow runs, background jobs and subagent tasks all materialize as `Work` items with one lifecycle, checkpoints, cancellation and receipts.
+**Affects:** `ARCH/11-WORK.md`.
+
+### DEC-004 — Three-way independence
+`Agent ≠ Model ≠ Provider` and `Capability ≠ Provider`: an agent asks the router for a model; a capability resolves to whatever provider implements it. Nothing is hard-coded to a vendor.
+**Affects:** `13`, `14`, `15`, `18`.
+
+### DEC-005 — Protocols are adapters
+MCP, ACP, CLI, HTTP and plugins live only in provider/channel adapters. Nothing above the Capability Plane knows which transport executed an operation.
+**Affects:** `14`, `32`.
+
+### DEC-006 — Domain runtimes own complexity
+Office/Browser/Computer/Files/Code/Search/Comms own their specialized execution; the kernel never reimplements domain logic and domains never govern themselves.
+**Affects:** `10`, `22`–`28`.
+
+### DEC-007 — Context split
+Context infrastructure (store/query/snapshot/checkpoint/projection) is Core's; context control (selection/ranking/budget/prune/compact/rebuild) is the agent's; external agents receive a scoped context projection. "Core answers what exists; the agent answers what the model sees now."
+**Affects:** `ARCH/16-CONTEXT.md`.
+
+### DEC-008 — Workflow engine placement
+The Workflow Engine is Core infrastructure, a peer of the Agent Runtime — not a feature inside Agent X. Workflows call agents; agents author and invoke workflows (workflows-as-tools). Deterministic vs adaptive is an explicit distinction.
+**Affects:** `ARCH/20-WORKFLOW.md`.
+
+### DEC-009 — External agents get projections
+External agents (ACP/A2A/API/CLI) connect through the Agent Gateway and receive exactly: identity contract, capability projection, context projection, workspace projection (allowed/read-only paths), filtered tool set, artifact gateway, filtered event stream. No Core internals, no Agent X internals.
+**Affects:** `12`, `16`, `32`.
+
+### DEC-010 — Native agent parity
+Agent X implements the same `AgentEngine` contract as every external agent and passes the same Guard. Any proposal to give it a shortcut (direct store access, bypassed tickets, internal hooks) is rejected unless a superseding DEC records the full trade-off.
+**Affects:** `15`, `32`.
+
+### DEC-011 — World Model + ladder
+A continuously-updated World Model (apps, windows, browser, files, processes, devices, relationships) is first-class; computer use follows the deterministic ladder (native API → structured UI → DOM/AX → CLI/MCP → vision → raw input). Vision is the fallback, not the default.
+**Affects:** `21`, `24`.
+
+### DEC-012 — Browser runtime
+Default is AgentCowork-managed Chromium (isolated profile, predictable automation). Google Chrome / Edge / Firefox / Opera / system browser are selectable adapters, not parallel embedded runtimes.
+**Affects:** `ARCH/23-BROWSER.md`.
+
+### DEC-013 — Office runtime
+Office is a capability runtime underneath a universal document surface — not a sidebar mode. Progressive L1 (semantic read) → L2 (structured mutation) → L3 (raw escape hatch); documents stay resident for active editing sessions.
+**Affects:** `ARCH/22-OFFICE.md`.
+
+### DEC-014 — Artifacts vs Library
+Artifacts are work products scoped to session/run/workflow/project; Library is global reusable inventory (agents, skills, workflows, connectors, plugins, templates, prompts, saved artifacts). Promotion is explicit ("Save to Library"), never automatic.
+**Affects:** `ARCH/29-ARTIFACTS.md`.
+
+### DEC-015 — Token discipline
+Rendering, navigation, listing, opening, previewing, index search and deterministic user-triggered operations never consume model tokens. The OS renders; the model reasons.
+**Affects:** `02`, `16`, `34`.
+
+### DEC-016 — No evasion tooling
+No CAPTCHA solving, anti-bot evasion, fingerprint spoofing, or residential-proxy infrastructure in browser/computer-use capabilities. Capability success must not depend on evasion.
+**Affects:** `23`, `24`.
+
+### DEC-017 — Absorb strategy
+Three levels: integrate directly (only with cleared licensing), reimplement the primitive (study → redesign around our contracts), use as external provider. Default posture: study → model → redesign → implement independently. The licensing ledger (`44`) must record each reuse decision.
+**Affects:** `ARCH/44-ABSORB-REGISTER.md`.
+
+### DEC-018 — Memory v1 store
+One SQLite file + FTS5 (`memory_items`, `memory_fts`, `memory_suppressions`, `memory_jobs`); one bounded extractor with verbs `ADD | SUPERSEDE | NONE` (single LLM call, off the hot path); explicit `superseded_by` pointer for contradiction; permanent forget via content-hash suppression. Vectors, graph, decay/activation math and autonomous consolidation are deferred behind measured triggers (U0–U11).
+**Evidence:** `ARCHIVE/v1-research/memory.md` §0, §2.7, §4; anchors: mem0 ADD-only (`clone2/mem0/mem0/memory/main.py:879-1195`), TEPA revocation (`https://arxiv.org/abs/2608.07429`), STALE (`https://arxiv.org/abs/2605.06527`).
+
+### DEC-019 — Memory ≠ context
+Memory is the durable scoped store; context is a per-turn selection under budget. The interface is `recall(query, scopes, budget) → candidates`; the Context Controller decides inclusion. Injection is non-touching (never bumps counters/salience) and budgets are maxima (zero relevant hits ⇒ zero injected tokens).
+**Evidence:** `ARCHIVE/v1-research/memory.md` §4.1; NOOA non-touching read (`clone2/nooa/packages/nooa-memory/src/nooa_memory/schema.py:315-331`); claude-mem whole-item budget degradation (`clone2/claude-mem/src/services/context/ContextBudget.ts:4-40`).
+
+### DEC-020 — Working names
+AgentCowork (product), Core (runtime), Agent X (native agent) are working names for v1; the rename map and rules live in `ARCH/01-NAMING.md`. Code identifiers (`everyaios-*`, `EveryAIOS` strings) stay frozen until a post-freeze code-phase rename.
+**Status note:** Provisional — branding may change; the architecture must not depend on the names.
+
+### DEC-021 — Approval primitive
+Human-in-the-loop decisions are first-class: agents can request approval; workflows have approval nodes (`approve/reject/edit/provide-data`). One primitive, recorded in events and receipts, routed through Trust.
+**Affects:** `12`, `20`.
+
+### DEC-022 — Receipts + risk-proportional verification
+Every externally visible effect produces a durable receipt; before a receipt is issued, verification runs at a depth determined by the capability's risk class. "Implemented but unverified" cannot masquerade as complete.
+**Affects:** `29`, `34`.
+
+### DEC-023 — Verification plane
+Validate → render → verify → reconcile is a plane, not an afterthought: deterministic validators per domain (Office, files, browser state), optional visual/render inspection, and reconciliation against the intended effect.
+**Affects:** `ARCH/34-EFFECT-VERIFICATION.md`.
+
+### DEC-024 — Scoping model
+Installed / Available / Activated / Executing, with scopes Global → Workspace → Agent → Session → Run. Resources are never duplicated per agent; only activation/execution are narrow.
+**Affects:** `03`, `13`, `31`.
+
+### DEC-025 — Native-first resolution
+When an agent has a native way to do something (its own tools, shell, editor), the agent uses it; AgentCowork augments when the native capability is absent or worse on quality/cost/permission/latency. The platform never removes or duplicates an external agent's native tools.
+**Affects:** `13`, `15`.
+
+### DEC-026 — Rebuild process
+v1 is written from scratch; v0 is archived locally (`ARCHIVE/v0/`) and is reference-only; docs are built in passes (P0–P6) gated by the viability checklist in `00-INDEX`; external claims require primary evidence; `TODO.md` is exempt.
+**Affects:** `ARCH/00-INDEX.md`.
+
+### DEC-027 — Context budget & compaction discipline
+Named budget vocabulary (`keep` ≈ 8k retained recent tokens; `buffer`/`reserve` ≈ 20k safety margin; summary output reserve), a pre-turn feasibility check (resolved window × effective percent), mandatory overflow recovery (compact-after-overflow → retry the **same step**), and compaction as a **projection boundary over a durable log**: the full session event log is never rewritten; a checkpoint segment is rendered as historical context. Tool-output pruning is a separate, opt-in transform that never touches log truth. A provider-native compaction path is ours to design — the verified shipping set has none (OpenCode summarizes with the model in both generations).
+**Evidence:** `agent-harness-verification.md` §C1–C2, §E2; anchors `clone2/opencode/packages/core/src/session/compaction.ts:12-15, 178, 232-243` · `to-llm-message.ts:152-162` · `history.ts:13-80` · `clone2/codex/codex-rs/core/src/session/mod.rs:4560-4587`.
+**Affects:** `16-CONTEXT`, `11-WORK`, `15-AGENT-X`.
+
+### DEC-028 — Guard as three layers
+Permission enforcement composes three distinct layers and never collapses them into one enum: (1) **platform confinement** (sandbox policy — OS-level bounds per platform); (2) **approval policy** (when a human is asked; policy enum + granular per-category config); (3) **declarative exec rules** (pre-authorized command/prefix/network patterns). Guard turns the composition into ALLOW/ASK/DENY; tickets encode the outcome; protected subpaths (e.g. VCS hooks) stay read-only inside writable roots.
+**Evidence:** `agent-harness-verification.md` §A4; anchors `clone2/codex/codex-rs/protocol/src/protocol.rs:969-1125` · `sandbox.rs:10-16` · `execpolicy/src/`.
+**Affects:** `12-TRUST`, `19-RUNTIME-ENVIRONMENTS`.
+
+### DEC-029 — Subagent model
+One child session per subagent (own context/toolset/persona), full escaped project rules delivered to children; `fork_context` is a per-spawn option (default fresh + bounded snapshot); worktree isolation is a per-spawn option, with write leases for overlapping files; parents receive **worker receipts**, never transcripts; the platform enforces outer bounds (parallel/total/depth/tokens/spend) while the running agent decides within them. A "review queue" is our own product-layer feature — not borrowed (Codex source contains no queue).
+**Evidence:** `agent-harness-verification.md` §A3, §B3, §E7; anchors `clone2/grok-build/crates/codegen/xai-grok-shell/src/agent/subagent/spawn.rs:1-33` · `host_service.rs:500-503, 566-578` · `prompt/context.rs:152,196` · `clone2/codex/codex-rs/core/src/tools/handlers/multi_agents_spec.rs:14-16, 726-737`.
+**Affects:** `15-AGENT-X`, `11-WORK`, `20-WORKFLOW`.
+
+### DEC-030 — MCP dual-era policy
+Client side: detect and negotiate per transport — **stdio** probes `server/discover` (10 s cap) then falls back to legacy `initialize`; **HTTP** classifies the `400` body; the negotiated era is cached per process/origin; a per-server force-legacy escape hatch exists. Implement on `rmcp` 3.4.x (verified to carry both `2026-07-28` and `2025-11-25`). Server façade (our own MCP surface): stateless modern + `initialize` compatibility, with the mandatory `server/discover` method and `Mcp-Method`/`Mcp-Name` validation. **Non-goals:** HTTP+SSE transport, sessions/resumability, sampling, roots, logging.
+**Corrections on record:** HTTP+SSE has been deprecated since `2025-03-26` (~18 months; removal clock = SEP-2596, Final 2026-05-18 + 3 months ⇒ eligible ≈2026-08-18, not yet removed) — the earlier “≥12 months” framing was wrong. Code-phase fixes identified: the existing in-repo remote client sends no `_meta`/modern headers; `server/discover` is absent from the current façade.
+**Evidence:** `ARCHIVE/v1-research/mcp-provider-verification.md` (641 lines) — spec changelog `2026-07-28`; versioning/transports/deprecated pages; `clone2/grok-build/crates/codegen/xai-grok-mcp/src/servers.rs:3782-3910`; `clone2/codex/codex-rs/rmcp-client/src/protocol_mode.rs:9-51`; `rmcp@3.4.1`; SEP-2596.
+**Affects:** `14-PROVIDERS`, `32-CHANNELS`.
+
+### DEC-031 — Work scheduler lanes + outer limits
+Three lanes — **foreground** (the active interactive turn; 1/session) · **background** (jobs/workers admitted without blocking the UI) · **detached** (long work that may outlive the app session; rehydrated on start) — with Core-enforced outer bounds the running agent cannot exceed: max simultaneous agents · max total workers per work tree · max depth · max worker tokens · max session spend · per-lane concurrency. Interactive > background priority; starvation guard; queue-depth backpressure; parent→child cancellation; budget exhaustion pauses and surfaces (no silent overrun).
+**Evidence:** product-owner brief (lanes, limits; “background work is essential”); `ARCH/11-WORK.md` §3; `agent-harness-verification.md` §A3 (background guidance), §E7 (bounds as per-spawn policy).
+**Affects:** `11-WORK`, `15-AGENT-X`, `20-WORKFLOW`.
+
+### DEC-032 — Artifact storage & retention
+Artifacts live in a **managed per-workspace store** with content-addressed immutable versions; workspace-file artifacts are referenced by identity (`25`) plus a managed copy when they must survive edits. **Receipt-pinned versions are never garbage-collected** — chain integrity is never traded for storage. Unreferenced versions are pruned by age/count policy; all deletions are audited. External-agent exchange uses artifact refs through the gateway (working scheme token `eaios://artifact/<id>`; the final scheme renames with the brand — OQ-003 tie).
+**Evidence:** product-owner brief (`Artifact`/`LibraryItem` schemas, “Save to Library”); `ARCH/06-DATA-MODEL.md` DM-019/020/023; `ARCH/29-ARTIFACTS.md` §6.
+**Affects:** `29-ARTIFACTS`, `25-FILES`, `32-CHANNELS`.
+
+### DEC-033 — Workflow durability model
+State lives in a single append-only journal (SQLite WAL): pinned workflow version + digest · trigger rows (`next_due_at`, misfire policy) · materialized **occurrence rows** with unique idempotency keys · run rows with leases/heartbeats/`cancel_requested` · step-attempt rows with idempotency keys · effect intents/receipts · wait rows (`wake_at`) · approval rows · event log. One scheduler loop: reconcile leases → materialize occurrences → claim exactly-once → execute step-by-step → compute the nearest wake. Resume: settled steps reuse results; unsettled idempotent steps retry with the **same** key; **keyless side effects land in `needs_attention`** — completion is never fabricated. In-flight runs keep their pinned version; new triggers take the latest published. Desktop misfire default: Skip + record (bounded grace).
+**Evidence:** `ARCHIVE/v1-research/workflow-engine-verification.md` §0/§4 — n8n durable scheduler; Temporal timers/versioning; OpenWork `types/src/automations.ts:346-371`; Grok Build `occurrence_journal.rs:1-12`; DeepSeek README:128 (un-journaled falsifier).
+**Affects:** `20-WORKFLOW`, `11-WORK`, `30-EVENTS`.
+
+## 3. Pending decisions
+
+| ID | Decision needed | Inform by | Affects |
+|---|---|---|---|
+| PEND-01 | ~~MCP era policy~~ → resolved as DEC-030 | ✅ `lib-4` (2026-09-26) | 14 |
+| PEND-02 | ~~Compaction strategy priority + cache-stability rules~~ → resolved as DEC-027 | ✅ `gen-21` (2026-09-26) | 16 |
+| PEND-03 | ~~Scheduler lanes + global limits~~ → resolved as DEC-031 | ✅ `11-WORK` (2026-09-26) | 11, 15 |
+| PEND-04 | First-release surfaces (desktop + CLI minimum? ACP timing) | 32, SPEC | 32 |
+| PEND-05 | Agent profile / "assistant" composition model naming | 15, UI doc | 15 |
+| PEND-06 | Memory encryption at rest (SQLCipher vs plaintext; item-level for confidential) | OQ-MEM-04 → 17 | 17 |
+| PEND-07 | ~~Artifact storage layout + retention policy~~ → resolved as DEC-032 | ✅ `29-ARTIFACTS` (2026-09-26) | 29 |

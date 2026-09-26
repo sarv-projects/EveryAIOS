@@ -765,7 +765,10 @@ mod tests {
         let sweep = e.sweep_media("ppt/slides/slide1.xml").unwrap();
         assert!(sweep.referenced.is_empty());
         assert_eq!(sweep.removed_rels, vec!["rId2".to_string()]);
-        assert_eq!(sweep.removed_parts, vec!["ppt/media/image1.png".to_string()]);
+        assert_eq!(
+            sweep.removed_parts,
+            vec!["ppt/media/image1.png".to_string()]
+        );
         assert!(sweep.candidates.is_empty());
 
         let out = e.save().unwrap();
@@ -819,7 +822,9 @@ mod tests {
             max_archive_bytes: (bytes.len() - 1) as u64,
             ..crate::limits::PatchLimits::default_policy()
         };
-        let err = PptxEngine::open_with_limits(bytes, tight).err().expect("must refuse");
+        let err = PptxEngine::open_with_limits(bytes, tight)
+            .err()
+            .expect("must refuse");
         assert!(matches!(
             err,
             crate::OfficeError::TooLarge {
@@ -859,7 +864,9 @@ mod tests {
             max_parts: 2,
             ..crate::limits::PatchLimits::default_policy()
         };
-        let err = PptxEngine::open_with_limits(bytes, tight).err().expect("must refuse");
+        let err = PptxEngine::open_with_limits(bytes, tight)
+            .err()
+            .expect("must refuse");
         assert!(matches!(
             err,
             crate::OfficeError::TooManyParts { limit: 2, .. }

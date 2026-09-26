@@ -1,0 +1,98 @@
+# 30 — Events
+
+> **Status:** Draft P3 (early). Must pass the `ARCH/00-INDEX.md` §5 checklist at freeze.
+> **Role:** **one event store + one bus**. UI projections, workflow triggers, world updates, telemetry and audit feeds all derive from it — no hidden side channels (INV-23).
+> **Boundary:** `SessionEvent` (DM-007, owned by `11`) is the session-local append-only log; `Event` (DM-008, owned here) is the **published system stream**. Everything material emits ≥1 published event; session logs remain the session’s truth.
+> **Dependencies:** `10-KERNEL` · `11-WORK` (producers) · all modules (producers/consumers). **Consumers:** UI (`32`), `20` (triggers), `21` (world updates), `12` (audit feed), telemetry.
+> **Evidence:** INV-23 · DEC-027 (log + projections) · DEC-033 (workflow events) · `agent-harness-verification.md` §E3 (typed stream vocabulary) §E4 (log + projections) · `ARCH/15-AGENT-X.md` §4 (typed stream), `ARCH/20-WORKFLOW.md` §4, `ARCH/21-WORLD-MODEL.md` §4.
+
+## 1. Purpose & rules
+
+**Owns:** the append-only event store · the bus (publish/subscribe) · replay · subscription filters · the stream vocabulary · usage/cost telemetry events · the external-agent event projection.
+**Never owns:** session logs (`11`) · the audit chain (`12` appends its own tamper-evident entries and also consumes events) · payload data (events carry **refs**, not documents).
+
+1. **One store** — every projection (UI Runs, pending work, world state, workflow triggers) is derived; never a second source of truth.
+2. **Typed** — namespaced event types with declared payload schemas; no opaque “output chunk” events.
+3. **Refs over payloads** — large data lives in artifacts/stores; events carry ids + bounded metadata (no secrets, INV-02).
+4. **At-least-once delivery; idempotent consumers** — consumers dedupe by event id; ordering is guaranteed per work/session, not globally.
+
+## 2. Event model (DM-008)
+
+| Field | Meaning |
+|---|---|
+| `id` | uuidv7 (dedupe key for consumers) |
+| `type` | namespaced dotted (`run.started`, `tool.completed`, `artifact.created`, `memory.item.added`, `world.file.changed`, …) |
+| `actor` | `system` · `user` · `agent:<id>` · `workflow:<id>` |
+| refs | `work_id?` · `session_id?` · `run_id?` · `artifact_id?` · provider/step refs |
+| `payload` | bounded metadata or refs (schemas per type; no credentials/PII) |
+| `occurred_at` | epoch ms UTC |
+
+**Producers** append; **consumers** subscribe with filters. Storage is SQLite-class append-only with sequence for range reads; hot delivery is in-memory fan-out.
+
+## 3. Stream vocabulary (typed — the UI’s only progress channel)
+
+| Family | Types (representative) |
+|---|---|
+| Run/step | `run.started` · `plan.created` · `step.started` · `step.completed` · `run.completed` · `run.failed` |
+| Model | `model.started` · `model.delta` · `usage.recorded` |
+| Tools | `tool.proposed` · `tool.started` · `tool.progress` · `tool.completed` |
+| Subagents | `subagent.started` · `subagent.progress` · `subagent.completed` |
+| Approvals | `approval.requested` · `approval.granted` · `approval.expired` |
+| Context | `context.compacting` · `context.compacted` |
+| Verification | `verification.started` · `verification.completed` |
+| Artifacts | `artifact.created` · `artifact.updated` · `receipt.recorded` |
+| Memory | `memory.item.added` · `memory.item.superseded` · `memory.item.forgotten` · `memory.extraction.run` |
+| Workflow | `wf.occurrence.materialized` · `wf.run.claimed` · `wf.node.settled` · `wf.wait.armed` · `wf.lease.reaped` |
+| World | `world.file.changed` · `world.tab.navigated` · `world.window.focused` · `world.rescan` |
+| Provider | `provider.health.changed` · `provider.epoch.bumped` |
+
+Namespacing rules: `<domain>.<noun>.<verb>`; additive evolution preferred; deprecations are declared with a window. `model.delta` (streaming tokens) is **ephemeral delivery only** — deltas are not persisted as individual events (the settled message is).
+
+## 4. Bus, subscriptions, replay
+
+- **Publish:** single API with backpressure; slow consumers get lag markers, never unbounded queues.
+- **Subscribe:** filters by type/refs/scope + auth via `12`; delivery at-least-once; consumers idempotent by id.
+- **Replay:** `read(range)` reconstructs projections (Runs, pending work, world state) after restarts; projections must be rebuildable from the store (+ checkpoints).
+- **Retention:** durable events pruned by age policy per family; **receipts/audit are separate stores and not pruned with events** (`29`/`12`).
+- **Poison events:** quarantine + reconciliation entry; never block the stream.
+
+## 5. Telemetry (usage & cost — where budgets live)
+
+Usage events (`usage.recorded`) carry: model tokens in/out · estimated cost · latency · provider/model id · work/session refs. Aggregations power UI analytics and per-work budget checks (`11` §5). **No prompt or completion content** — counts and refs only.
+
+## 6. External-agent projection (DEC-009)
+
+External agents receive a **filtered stream** for their own work only: session/run/tool/artifact/approval/context events with sensitivity filtering (`12`); never the internal bus, never other agents’ events. The exposed vocabulary is a declared **stable subset** of §3.
+
+## 7. Failure modes
+
+| Failure | Behavior |
+|---|---|
+| Store growth | Retention prunes by age policy; projections/critical evidence live elsewhere (receipts/audit). |
+| Consumer lag | Lag marker event; pull-based catch-up from the store. |
+| Duplicate delivery | Consumers dedupe by event id (idempotent by contract). |
+| Bus restart | Subscribers re-attach + replay from last ack. |
+| Poison event | Quarantine + reconciliation; stream continues. |
+| Projection drift | Rebuild projections from store (they are derivable — INV-23). |
+
+## 8. Interop
+
+**Depends on:** `10` · storage.
+**Exposes to:** UI (`32`), `20` (triggers), `21` (world), `12` (audit feed), analytics, `32` (external-agent projection).
+**DAG check:** the event store never calls into producers; it records what they publish.
+
+## 9. Not in v1
+
+Distributed log/federation · cross-device streaming · external schema registry service (schemas documented in `06`/module docs) · persisted token-level deltas.
+
+## 10. Open questions (`OQ-EVT-*`)
+
+1. Retention windows per family (proposal: operational events 30–90 d; telemetry aggregates longer).
+2. Sequence strategy (global vs per-partition) for range reads.
+3. Subscription limits/quotas for external agents.
+4. Frozen subset vocabulary for the external-agent projection.
+5. Whether `model.delta` needs a coalesced persistence mode for replay UX (proposal: no).
+
+## 11. Evidence
+
+INV-23 (one log) · DEC-027 (log + projections) · DEC-033 (workflow event set) · `agent-harness-verification.md` §E3 (typed stream union as wire vocabulary), §E4 (log + projections pattern) · `ARCH/15-AGENT-X.md` §4 · `ARCH/20-WORKFLOW.md` §4 · `ARCH/21-WORLD-MODEL.md` §4 · `ARCH/17-MEMORY.md` §4 (memory events) · `ARCH/29-ARTIFACTS.md` §3 (receipt emission).

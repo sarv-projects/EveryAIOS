@@ -1626,65 +1626,16 @@ impl WorkGateway {
                     event.sequence,
                 )?;
             }
-            WorkEvent::Domain(DomainEvent::FileChangeSetCaptured { change_set })
-            | WorkEvent::Domain(DomainEvent::FileChangeSetSettled { change_set }) => {
-                // Fail-closed: a malformed or half-written set refuses the
-                // replay rather than being dropped, because silently losing it
-                // would leave a crashed turn with no rollback record at all.
-                change_set
-                    .validate()
-                    .map_err(|e| format!("change set `{}` is invalid: {e}", change_set.change_set_id))?;
-                self.file_change_sets
-                    .entry(change_set.work_id.clone())
-                    .or_default()
-                    .insert(change_set.step_id.clone(), change_set.clone());
-            }
-            WorkEvent::Domain(DomainEvent::DelegationRefused { refusal }) => {
-                let record = self
-                    .delegation_refusals
-                    .entry(work_id.clone())
-                    .or_insert_with(|| DelegationRefusalRecord {
-                        work_id: work_id.clone(),
-                        count: 0,
-                        last: refusal.clone(),
-                    });
-                record.count = record.count.saturating_add(1);
-                record.last = refusal.clone();
-            }
-            WorkEvent::Domain(DomainEvent::DelegationLeaseFact {
-                child_work_id,
-                fact,
-            }) => {
-                // The one lease state machine, replayed with `recovery = true`:
-                // a delegation lease that was active when the process died
-                // lands `uncertain` (ADR-0008 §6.1), never live.
-                if fact.lease_id.as_str().is_empty() {
-                    return Err("delegation lease fact has an empty lease id".into());
-                }
-                self.delegation_leases
-                    .apply_fact(fact, true)
-                    .map_err(|e| format!("delegation lease fact for `{child_work_id}`: {e}"))?;
-            }
-            WorkEvent::Domain(DomainEvent::SubagentHeartbeat { child_work_id, at_ms }) => {
-                if child_work_id.trim().is_empty() {
-                    return Err("subagent heartbeat names no child work".into());
-                }
-                let slot = self
-                    .subagent_heartbeats
-                    .entry(child_work_id.clone())
-                    .or_insert(0);
-                // Liveness is monotonic per child: a replayed out-of-order beat
-                // never rewinds the clock, so silence can only grow.
-                if *at_ms >= *slot {
-                    *slot = *at_ms;
-                }
-            }
-            WorkEvent::Domain(DomainEvent::SubagentLeaseReclaimed { receipt }) => {
-                if receipt.child_work_id.trim().is_empty() {
-                    return Err("subagent reclaim names no child work".into());
-                }
-                self.subagent_reclaims
-                    .insert(receipt.child_work_id.clone(), receipt.clone());
+            WorkEvent::Domain(DomainEvent::FileChangeSetCaptured { .. })
+            | WorkEvent::Domain(DomainEvent::FileChangeSetSettled { .. })
+            | WorkEvent::Domain(DomainEvent::DelegationRefused { .. })
+            | WorkEvent::Domain(DomainEvent::DelegationLeaseFact { .. })
+            | WorkEvent::Domain(DomainEvent::SubagentHeartbeat { .. })
+            | WorkEvent::Domain(DomainEvent::SubagentLeaseReclaimed { .. }) => {
+                // P69.G2 facts are projected by one shared function that the
+                // live append path and replay both call, so the two can never
+                // disagree about what the journal contains.
+                self.project_p69g2_event(&work_id, &event.event, true)?;
             }
             WorkEvent::Operational(OperationalEvent::SessionAttached { client_id }) => {
                 let p = self.presence.entry(work_id.clone()).or_default();
@@ -4554,6 +4505,117 @@ impl WorkGateway {
         }
     }
 
+    /// P69.G2 — validate a recovery fact before it is allowed near the journal.
+    /// Pure: an event that fails here is refused, never written and never
+    /// projected, so a malformed change set cannot become a durable row.
+    fn validate_p69g2_event(&self, work_id: &str, event: &WorkEvent) -> Result<(), String> {
+        let WorkEvent::Domain(domain) = event else {
+            return Ok(());
+        };
+        match domain {
+            DomainEvent::FileChangeSetCaptured { change_set }
+            | DomainEvent::FileChangeSetSettled { change_set } => {
+                change_set.validate().map_err(|e| {
+                    format!("change set `{}` is invalid: {e}", change_set.change_set_id)
+                })?;
+                if change_set.work_id != work_id {
+                    return Err(format!(
+                        "change set `{}` is journaled under Work `{work_id}`, not `{}`",
+                        change_set.change_set_id, change_set.work_id
+                    ));
+                }
+            }
+            DomainEvent::DelegationLeaseFact {
+                child_work_id,
+                fact,
+            } => {
+                if fact.lease_id.as_str().is_empty() {
+                    return Err("delegation lease fact has an empty lease id".into());
+                }
+                if child_work_id.trim().is_empty() {
+                    return Err("delegation lease fact names no child work".into());
+                }
+                fact.validate()
+                    .map_err(|e| format!("delegation lease fact is invalid: {e}"))?;
+            }
+            DomainEvent::SubagentHeartbeat { child_work_id, .. } => {
+                if child_work_id.trim().is_empty() {
+                    return Err("subagent heartbeat names no child work".into());
+                }
+            }
+            DomainEvent::SubagentLeaseReclaimed { receipt } => {
+                if receipt.child_work_id.trim().is_empty() {
+                    return Err("subagent reclaim names no child work".into());
+                }
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
+    /// P69.G2 — the one projection for the recovery facts this module adds
+    /// (change sets, cycle refusals, delegation-lease facts, heartbeats,
+    /// reclaims). Both [`Self::append`] and journal replay call it, which is
+    /// what keeps the live view and the restarted view identical.
+    ///
+    /// `recovery` is set on the replay path only: a delegation lease that was
+    /// active when the process died must land `uncertain` (ADR-0008 §6.1),
+    /// never live.
+    fn project_p69g2_event(
+        &mut self,
+        work_id: &str,
+        event: &WorkEvent,
+        recovery: bool,
+    ) -> Result<(), String> {
+        self.validate_p69g2_event(work_id, event)?;
+        let WorkEvent::Domain(domain) = event else {
+            return Ok(());
+        };
+        match domain {
+            DomainEvent::FileChangeSetCaptured { change_set }
+            | DomainEvent::FileChangeSetSettled { change_set } => {
+                self.file_change_sets
+                    .entry(change_set.work_id.clone())
+                    .or_default()
+                    .insert(change_set.step_id.clone(), change_set.clone());
+            }
+            DomainEvent::DelegationRefused { refusal } => {
+                let record = self
+                    .delegation_refusals
+                    .entry(work_id.to_string())
+                    .or_insert_with(|| DelegationRefusalRecord {
+                        work_id: work_id.to_string(),
+                        count: 0,
+                        last: refusal.clone(),
+                    });
+                record.count = record.count.saturating_add(1);
+                record.last = refusal.clone();
+            }
+            DomainEvent::DelegationLeaseFact { fact, .. } => {
+                self.delegation_leases
+                    .apply_fact(fact, recovery)
+                    .map_err(|e| format!("delegation lease fact: {e}"))?;
+            }
+            DomainEvent::SubagentHeartbeat { child_work_id, at_ms } => {
+                let slot = self
+                    .subagent_heartbeats
+                    .entry(child_work_id.clone())
+                    .or_insert(0);
+                // Liveness is monotonic per child: a replayed out-of-order beat
+                // never rewinds the clock, so silence can only grow.
+                if *at_ms >= *slot {
+                    *slot = *at_ms;
+                }
+            }
+            DomainEvent::SubagentLeaseReclaimed { receipt } => {
+                self.subagent_reclaims
+                    .insert(receipt.child_work_id.clone(), receipt.clone());
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
     /// Append an event and acknowledge it only after the journal is durable.
     ///
     /// The sequence is reserved for this attempt, but it is not committed to
@@ -4576,6 +4638,9 @@ impl WorkGateway {
             }
             self.validate_run_transition(work_id, &run_id, state)?;
         }
+        // P69.G2 — validate the recovery facts *before* the journal write, so a
+        // malformed change set or heartbeat never reaches disk.
+        self.validate_p69g2_event(work_id, &event)?;
         let sequence = self.next_seq;
         let next_sequence = sequence
             .checked_add(1)
@@ -4615,6 +4680,10 @@ impl WorkGateway {
             // provenance update (without a second owner call) replayable.
             self.apply_work_update(work_id, patch, envelope.sequence)?;
         }
+        // P69.G2 — same acknowledgement rule for the recovery facts: they are
+        // projected only once the journal row is durable, exactly as replay
+        // would find them.
+        self.project_p69g2_event(work_id, &envelope.event, false)?;
         self.subscribers
             .retain(|subscriber| subscriber.send(envelope.clone()).is_ok());
         Ok(envelope)

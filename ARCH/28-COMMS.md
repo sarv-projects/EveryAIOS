@@ -1,0 +1,83 @@
+# 28 — Communication (Connectors)
+
+> **Status:** Draft P3 (early). Must pass the `ARCH/00-INDEX.md` §5 checklist at freeze.
+> **Role:** an **agentic action layer** over communication systems — email, calendar, messaging — delivered as **capabilities over connectors**. Not another messaging client (owner brief).
+> **Dependencies:** `13-CAPABILITY` (descriptors) · `14-PROVIDERS` (transport/auth) · `12-TRUST` (permissions, vault, egress) · `30-EVENTS` (arrival events) · `29-ARTIFACTS` (attachments) · `20-WORKFLOW` (triggers). **Consumers:** `15` (agent), UI (`32`).
+> **Evidence:** product-owner brief (communication section: read/classify/draft/reply; calendar; Slack/Teams/WhatsApp/Discord; “don’t make it another messaging client”; permission defaults) · `ARCH/12-TRUST.md` §3 · `ARCH/13-CAPABILITY.md` · v0 connector evidence (`REPO-COMPARE/BRIEFS/02-connectors-nango.md`, `12`, `13` — pattern reference only, not authority).
+
+## 1. Purpose & rules
+
+**Owns:** the connector framework (auth flows · credential refs · scopes · sync model · rate limits) · communication capability descriptors (`mail.*` · `calendar.*` · `messaging.*`) · event ingestion (`email.arrived`, `calendar.event.upcoming`, `message.received`) · draft/reply support · consent/records per connector instance.
+**Never owns:** credential custody (`12` vault) · mail-client UI (`32`) · the user’s inbox as a mirror (we do not build one).
+
+1. **Capabilities, not clients** — the product exposes verbs (`mail.search`, `calendar.availability`), never a second inbox UI.
+2. **Sends are dangerous** — reading is sensitive, **sending is approval-gated** (ASK tier, `12` §3) with receipts (externally visible effect, INV-07).
+3. **Connectors are providers** — native APIs or MCP/plugin connectors behind the `14` adapter contract; nothing above Capability knows the transport.
+4. **No bulk ingestion** — query on demand + subscription events where offered; nothing is mirrored by default.
+
+## 2. Connector framework
+
+| Concern | Shape |
+|---|---|
+| Descriptor | id · provider · auth type (OAuth2 · API key · IMAP/SMTP creds) · scopes requested · capabilities offered · sync model (push/poll) · rate limits · data classes |
+| Auth | OAuth/credential flows run locally; tokens land in the vault (`12` §6); scopes recorded; per-instance consent record (`21` §5 pattern) |
+| Sync | on-demand queries + event subscriptions where the provider offers them; bounded local caches (headers) only where a capability requires it |
+| Providers | native HTTP (Graph, Gmail, CalDAV, IMAP/SMTP) · MCP connector servers · plugin connectors (`31`) |
+| Failure | expiry → `requires_user_action` “reconnect”; limits → backoff; partial responses flagged |
+
+## 3. Capability surface (v1)
+
+| Domain | Capabilities (L1 read → L2 act) | Risk |
+|---|---|---|
+| Mail | `mail.search` · `mail.read` · `mail.thread` · `mail.labels` → `mail.draft` · `mail.reply-draft` · `mail.send` (approval) · attachment via artifact refs | read: sensitive · send: dangerous |
+| Calendar | `calendar.list` · `calendar.availability` · `calendar.briefing` → `calendar.create` · `calendar.update` (external invites approval-gated) | read: sensitive · write: sensitive→dangerous |
+| Messaging | `messaging.search` · `messaging.read` → `messaging.send` (approval) | read: sensitive · send: dangerous |
+
+Every capability carries a descriptor, risk class, and verification hook (`13` §2); sends produce receipts with the exact content reference.
+
+## 4. Events & triggers
+
+Connector-originated events (`email.arrived` · `message.received` · `calendar.event.upcoming`) are published to the event store (`30`) with provenance + dedupe keys, where workflows may subscribe (`20` §5). Event payloads are **refs + metadata**, never full bodies; fetching content is a capability call with its own permission check.
+
+## 5. Context & privacy
+
+- Message content enters context only when needed, as bounded excerpts (`16` §2) — never bulk ingestion into memory.
+- Default sensitivity: `confidential` (project-scoped) for message bodies; `personal` for user profile-ish metadata.
+- Attachments move through the artifact gateway (`29` §5) with the connector’s permissions recorded.
+- Multi-account: scopes isolate accounts; cross-account queries are explicit.
+
+## 6. Sending & approval flow
+
+`mail.send` / `messaging.send` / `calendar.create` follow: draft → **approval primitive** (`DEC-021`) with `edit` semantics (`20` §7: editable draft payload, immutable original) → send → receipt. Uncertain send outcomes (timeout after submit) go to `needs_attention` — never silent retry of an outbound message.
+
+## 7. Failure modes
+
+| Failure | Behavior |
+|---|---|
+| Token expired/revoked | `requires_user_action` re-auth guidance; no fallback to cached credentials. |
+| Provider rate limit | Backoff + queue; surface if persistent. |
+| Partial sync | Flagged freshness; queries report coverage. |
+| Send uncertain | `needs_attention` + receipt with the attempt; no duplicate sends. |
+| Abuse/spam guard | Rate caps per connector; bulk sends require explicit policy enablement. |
+
+## 8. Interop
+
+**Depends on:** `10` · `12` (auth/egress/approvals) · `13`/`14` · `19` (flows where needed) · `29` · `30`.
+**Exposes to:** `15` (comm actions), `20` (triggers), UI (`32`: compose/review surfaces live in the UI doc), `17` (explicit “remember this thread” promotions).
+**DAG check:** connectors never write memory or work state directly; they act through capabilities and emit events.
+
+## 9. Not in v1
+
+Full mailbox mirror/search index · real-time chat presence/typing · SMS/voice · automated scheduling negotiation · consumer-only channels without stable APIs (best-effort adapters later).
+
+## 10. Open questions (`OQ-COMMS-*`)
+
+1. First connector set (proposal: Microsoft Graph + Gmail + CalDAV + Slack; IMAP/SMTP as generic fallback).
+2. Read default: sensitive-tier ASK vs allow-with-consent-record (owner brief lists “email read: ASK”; confirm at SPEC).
+3. Attachment policy: size/type caps + scan rules.
+4. Multi-account UX + per-account scopes.
+5. Whether messaging read ships in v1 or after mail/calendar prove the framework.
+
+## 11. Evidence
+
+Product-owner brief (comms capabilities; permission table; “not another messaging client”) · `ARCH/12-TRUST.md` §3 (dangerous tier), §6 (vault), §7 (egress) · `ARCH/13-CAPABILITY.md` §2–§3 · `ARCH/20-WORKFLOW.md` §5 (trigger feeding), §7 (edit semantics) · `ARCH/29-ARTIFACTS.md` §5 (gateway) · v0 `REPO-COMPARE/BRIEFS/{02,12,13}` (connector patterns — reference only).

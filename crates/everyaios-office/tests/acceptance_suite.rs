@@ -14,6 +14,8 @@
 //!    with page counts asserted at each step (P4.4 / P18-1).
 //! 4. **PPTX slide surgery** — shape-text patch + slide add/remove with the
 //!    `<p:sldIdLst>` re-derived (P4.3).
+//! 5. **ARCH/04 §4.6 round-trip guards** — field balance, orphaned-media GC,
+//!    and the fail-closed size ceiling, proven on real package bytes.
 //!
 //! Cross-platform: runs on every host. The Windows live acceptance run
 //! (Office + Silverlight-era OLE edge cases) remains open — see TODO P66.6.
@@ -28,8 +30,8 @@ use everyaios_office::xlsx::read::CellValue;
 use everyaios_office::xlsx::recalc::recalc;
 use everyaios_office::zip::OoxmlArchive;
 use everyaios_office::{
-    DocxEngine, PptxEngine, Snapshot, extract_pages, inspect, page_count, replace_text,
-    rotate_pages,
+    DocxEngine, LimitKind, OfficeError, PatchLimits, PptxEngine, Snapshot, extract_pages, inspect,
+    page_count, parts_diff, replace_text, rotate_pages,
 };
 
 fn cell(row: u32, col: u32) -> CellRef {
@@ -427,4 +429,215 @@ fn pptx_patches_text_and_adds_and_removes_slides() {
         archive.read_part("ppt/slides/slide1.xml").is_err(),
         "the removed slide part must not exist in the archive"
     );
+}
+
+// ---------------------------------------------------------------------------
+// 5. ARCH/04 §4.6 — field balance, orphaned-media GC, bounded-memory ceiling.
+// ---------------------------------------------------------------------------
+
+/// A docx whose body references one image (`rId1`, live) and carries a
+/// balanced `PAGE` field, while `rId2`'s image is referenced by nothing — the
+/// state a removed picture paragraph leaves behind.
+fn docx_with_field_and_orphan_media() -> (Vec<u8>, &'static str) {
+    const BODY: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"><w:body><w:p><w:r><w:t>See figure</w:t></w:r><w:r><w:drawing><wp:inline><a:blip r:embed="rId1"/></wp:inline></w:drawing></w:r></w:p><w:p><w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText>PAGE</w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:t>1</w:t></w:r><w:r><w:fldChar w:fldCharType="end"/></w:r></w:p></w:body></w:document>"#;
+    let mut zip = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+    let opts = zip::write::SimpleFileOptions::default();
+    let mut add = |name: &str, bytes: &[u8]| {
+        zip.start_file(name, opts).unwrap();
+        zip.write_all(bytes).unwrap();
+    };
+    add(
+        "[Content_Types].xml",
+        br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="png" ContentType="image/png"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>"#,
+    );
+    add(
+        "_rels/.rels",
+        br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>"#,
+    );
+    add(
+        "word/_rels/document.xml.rels",
+        br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/image1.png"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/image2.png"/></Relationships>"#,
+    );
+    add("word/document.xml", BODY.as_bytes());
+    add("word/media/image1.png", b"PNGDATA-1");
+    add("word/media/image2.png", b"PNGDATA-2");
+    (zip.finish().unwrap().into_inner(), BODY)
+}
+
+#[test]
+fn field_balance_and_media_gc_round_trip_on_real_package_bytes() {
+    let (original, _) = docx_with_field_and_orphan_media();
+    let mut snapshot = Snapshot::capture(original.clone());
+
+    // (a) The balanced PAGE field is reported as one complete field, and
+    //     editing its cached result commits cleanly.
+    let mut engine = DocxEngine::open(original.clone()).expect("open");
+    let report = engine.field_report().expect("field report");
+    assert_eq!(report.len(), 1);
+    assert_eq!(report[0].1.fields, 1, "one complete PAGE field");
+    assert_eq!(report[0].1.dirty, 0);
+    engine
+        .patch_block("p2", "2")
+        .expect("edit the field result");
+    let after_patch = engine.save().expect("commit the field edit");
+    let diff = parts_diff(&original, &after_patch).unwrap();
+    assert_eq!(
+        diff.changed,
+        vec!["word/document.xml".to_string()],
+        "a field-bearing edit touches only the body part"
+    );
+    assert!(diff.added.is_empty() && diff.removed.is_empty());
+
+    // (b) The orphaned media is collected, and the relationship entry goes
+    //     with it in the same commit — never a dangling relationship.
+    let mut engine = DocxEngine::open(after_patch.clone()).expect("reopen");
+    let sweep = engine.sweep_media().expect("sweep orphaned media");
+    assert!(sweep.orphan_rels.contains("rId2"));
+    assert!(
+        !sweep.orphan_rels.contains("rId1"),
+        "the live image is referenced"
+    );
+    assert_eq!(sweep.removed_rels, vec!["rId2".to_string()]);
+    assert_eq!(
+        sweep.removed_parts,
+        vec!["word/media/image2.png".to_string()]
+    );
+    assert!(sweep.candidates.is_empty(), "nothing unsafe to remove here");
+
+    let after_sweep = engine.save().expect("commit the sweep");
+    let diff = parts_diff(&after_patch, &after_sweep).unwrap();
+    assert_eq!(
+        diff.changed,
+        vec!["word/_rels/document.xml.rels".to_string()],
+        "the sweep rewrites only the relationships part"
+    );
+    assert_eq!(diff.removed, vec!["word/media/image2.png".to_string()]);
+    assert!(diff.added.is_empty());
+
+    // The still-referenced payload is untouched, and the edited field result
+    // survived the sweep.
+    let mut archive = OoxmlArchive::open(after_sweep.clone()).unwrap();
+    assert_eq!(
+        archive.read_part("word/media/image1.png").unwrap(),
+        b"PNGDATA-1"
+    );
+    assert!(archive.read_part("word/media/image2.png").is_err());
+    let rels =
+        String::from_utf8(archive.read_part("word/_rels/document.xml.rels").unwrap()).unwrap();
+    assert!(
+        !rels.contains("rId2"),
+        "a removed payload must lose its rel: {rels}"
+    );
+    let reopened = DocxEngine::open(after_sweep.clone()).expect("reopen after sweep");
+    assert_eq!(reopened.render_text(), "See figure\n2\n");
+
+    // Rollback is still byte-exact over both commits.
+    snapshot.record_save(after_sweep);
+    assert!(snapshot.dirty());
+    assert_eq!(
+        snapshot.undo(),
+        original,
+        "undo restores the original bytes"
+    );
+}
+
+#[test]
+fn an_unbalanced_field_refuses_the_commit_and_leaves_the_file_intact() {
+    // A field whose `end` marker is missing: the patch and the commit are both
+    // refused, so the caller never receives bytes to write.
+    let (original, body) = docx_with_field_and_orphan_media();
+    let broken = original_body(&original).replace(
+        r#"<w:r><w:fldChar w:fldCharType="end"/></w:r></w:p></w:body>"#,
+        "</w:p></w:body>",
+    );
+    assert_ne!(broken, body, "the fixture must actually be mutated");
+    let broken_package = repack_body(&original, &broken);
+
+    let mut engine = DocxEngine::open(broken_package).expect("open");
+    let err = engine.patch_block("p1", "See figure v2").unwrap_err();
+    match err {
+        OfficeError::FieldBalance { part, field, .. } => {
+            assert_eq!(part, "word/document.xml");
+            assert_eq!(field, 1, "the unclosed field is named by index");
+        }
+        other => panic!("expected a FieldBalance refusal, got {other:?}"),
+    }
+    // The commit gate refuses too: no bytes at all, so nothing can be written.
+    let err = engine.save().unwrap_err();
+    assert!(
+        matches!(err, OfficeError::FieldBalance { field: 1, .. }),
+        "the commit gate must refuse, got {err:?}"
+    );
+    assert!(err.to_string().contains("word/document.xml"));
+}
+
+#[test]
+fn an_oversized_package_is_refused_by_name_rather_than_loaded() {
+    // The engine is DOM + byte-range and does not stream; over the documented
+    // ceiling it refuses with a named reason instead of attempting a load it
+    // cannot bound.
+    let (original, _) = docx_with_field_and_orphan_media();
+    let tight = PatchLimits {
+        max_archive_bytes: (original.len() - 1) as u64,
+        ..PatchLimits::default_policy()
+    };
+    let err = DocxEngine::open_with_limits(original.clone(), tight)
+        .err()
+        .expect("must refuse");
+    match err {
+        OfficeError::TooLarge {
+            kind,
+            actual,
+            limit,
+            ..
+        } => {
+            assert_eq!(kind, LimitKind::ArchiveBytes);
+            assert_eq!(kind.as_str(), "archive_size");
+            assert!(actual > limit);
+        }
+        other => panic!("expected TooLarge, got {other:?}"),
+    }
+    // The default policy is generous enough for the same package.
+    let engine = DocxEngine::open_with_limits(original, PatchLimits::default_policy())
+        .expect("the default ceilings must not block a normal document");
+    assert_eq!(engine.render_block("p1").unwrap(), "See figure");
+
+    // Per-part ceiling: checked against the decompressed size, before the
+    // part is parsed, so the refusal names the part it refused.
+    let tight = PatchLimits {
+        max_part_bytes: 1,
+        ..PatchLimits::default_policy()
+    };
+    let err = DocxEngine::open_with_limits(docx_with_field_and_orphan_media().0, tight)
+        .err()
+        .expect("must refuse");
+    assert!(matches!(
+        err,
+        OfficeError::TooLarge {
+            kind: LimitKind::PartBytes,
+            ..
+        }
+    ));
+    assert!(
+        err.to_string().contains("[Content_Types].xml"),
+        "the refusal names the part: {err}"
+    );
+}
+
+/// The current bytes of `word/document.xml` inside a package.
+fn original_body(pkg: &[u8]) -> String {
+    let mut a = OoxmlArchive::open(pkg.to_vec()).unwrap();
+    String::from_utf8(a.read_part("word/document.xml").unwrap()).unwrap()
+}
+
+/// Rebuild a package with a different `word/document.xml`, copying every
+/// other entry verbatim (the same discipline the engine itself uses).
+fn repack_body(pkg: &[u8], body: &str) -> Vec<u8> {
+    let mut a = OoxmlArchive::open(pkg.to_vec()).unwrap();
+    a.save(&[("word/document.xml".to_string(), body.as_bytes().to_vec())])
+        .unwrap()
 }

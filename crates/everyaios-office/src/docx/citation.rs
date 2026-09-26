@@ -231,9 +231,9 @@ pub fn insert_citation_into_docx(
     } else if let Some(pos) = xml.rfind("</w:body>") {
         xml.insert_str(pos, &para);
     } else {
-        return Err(CitationInsertError::Archive(crate::zip::ArchiveError::PartNotFound(
-            "no body anchor in word/document.xml".into(),
-        )));
+        return Err(CitationInsertError::Archive(
+            crate::zip::ArchiveError::PartNotFound("no body anchor in word/document.xml".into()),
+        ));
     }
     let patched = xml.into_bytes();
     crate::docx::field_balance::verify("word/document.xml", &patched)?;

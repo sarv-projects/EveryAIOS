@@ -135,6 +135,13 @@ pub use challenge::{
     create_task, parse_grounding_choice, poll_task, solve_captcha,
 };
 pub use chat::{ChatRelay, ChatRelayError, ChatWireEvent};
+// P64.11/P69.G5 — the content-addressed tool-output spool. Re-exported so the
+// shell names the kernel's threshold and policy instead of repeating them.
+pub use spool::{
+    REDACTION, SPOOL_MAX_TOTAL_BYTES, SPOOL_RETENTION_DAYS, Spool, SpoolError, SpoolRef,
+    SpoolSlice, SpoolStats, SpoolText, TOOL_OUTPUT_SERIALIZE_CAP, content_hash, estimate_tokens,
+    is_valid_hash, retention_policy_note, should_spool,
+};
 pub use config::SubagentPolicy;
 pub use config::{Config, ConfigError};
 pub use cua::{
@@ -300,16 +307,32 @@ pub fn boot(args: &[String]) -> Result<String, Box<dyn std::error::Error>> {
     // named store instead of being read by a build that cannot understand it.
     let stores = store_schema::ensure_all(&cfg.data_dir)?;
 
+    // P64.11 — the tool-output spool's retention pass runs at boot. Writing is
+    // the other trigger (`Spool::write` prunes first), but a machine that only
+    // *reads* an install for a week still reclaims, so the spool cannot outlive
+    // its policy simply because nobody spooled anything today.
+    let spool_stats = spool::Spool::new(&cfg.data_dir).prune_at_boot(now_ms());
 
     Ok(format!(
-        "everyaios-core {} ready — data_dir={} vault={} ({}), retention_days={}, {}",
+        "everyaios-core {} ready — data_dir={} vault={} ({}), retention_days={}, {}, {}",
         version::VERSION,
         cfg.data_dir.display(),
         vault_path.display(),
         status,
         cfg.retention_days,
         store_schema::summary(&stores),
+        spool_summary(&spool_stats),
     ))
+}
+
+/// One line for the boot report: how much the tool-output spool is holding, so
+/// a spool that is quietly growing is visible at startup rather than inferred
+/// later.
+pub fn spool_summary(stats: &spool::SpoolStats) -> String {
+    format!(
+        "spool={} blob(s) {}/{} bytes",
+        stats.blob_count, stats.total_bytes, stats.max_total_bytes
+    )
 }
 
 /// Milliseconds since the Unix epoch, the one clock the spool policy uses.

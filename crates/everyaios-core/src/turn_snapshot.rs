@@ -753,7 +753,10 @@ mod tests {
             )
             .unwrap();
         assert!(out.is_fully_rolled_back());
-        assert_eq!(out.deleted, vec!["src/new.rs".to_string()]);
+        // The recorded path is the floored absolute one, never the caller's
+        // relative spelling: that is what the path floor decided to act on.
+        assert_eq!(out.deleted.len(), 1);
+        assert!(out.deleted[0].ends_with("src/new.rs"));
         assert!(!f.work.join("src/new.rs").exists());
     }
 
@@ -987,7 +990,7 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("ea-turn-snap-journal-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
-        let journal = dir.join("work").join("events.jsonl");
+        let journal = dir.join("events.jsonl");
         let work = dir.join("workspace");
         std::fs::create_dir_all(&work).unwrap();
         std::fs::write(work.join("a.rs"), b"a before\n").unwrap();

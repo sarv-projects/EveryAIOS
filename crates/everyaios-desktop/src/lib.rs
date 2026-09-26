@@ -312,7 +312,7 @@ impl DesktopEngine {
             ));
         }
         if Self::is_ladder_act(act) {
-            return self.act_ladder(window, act, provenance, mode);
+            return self.act_ladder(window, act, provenance);
         }
         self.backend.act(window, act, mode)?;
         Ok(ActOutcome::ok(act.clone()))
@@ -334,14 +334,8 @@ impl DesktopEngine {
         window: &WindowInfo,
         act: &ActKind,
         provenance: ActProvenance,
-        mode: InteractionMode,
     ) -> Result<ActOutcome> {
-        let driver = PlatformLadderDriver {
-            engine: self,
-            profile: self.backend.click_profile(),
-            mode,
-            provenance,
-        };
+        let driver = PlatformLadderDriver::new(&self.backend, &self.guard, provenance);
         let target = LadderTarget::new(window.clone(), act.clone());
         let verdict = walk_ladder(&driver, &target);
         // The verdict is audited whatever it was: which rung ran (or why none
@@ -564,10 +558,29 @@ fn divide(value: i32, scale: f64) -> i32 {
 ///   backend added later cannot forget it. The backends keep their own floor as
 ///   defence in depth; this is the single place that decides.
 struct PlatformLadderDriver<'a> {
-    engine: &'a DesktopEngine,
+    backend: &'a platform::PlatformBackend,
+    guard: &'a DesktopGuard,
     profile: ClickProfile,
     mode: InteractionMode,
     provenance: ActProvenance,
+}
+
+impl<'a> PlatformLadderDriver<'a> {
+    fn new(
+        backend: &'a platform::PlatformBackend,
+        guard: &'a DesktopGuard,
+        provenance: ActProvenance,
+    ) -> Self {
+        let profile = backend.click_profile();
+        let mode = guard.policy().interaction_mode;
+        Self {
+            backend,
+            guard,
+            profile,
+            mode,
+            provenance,
+        }
+    }
 }
 
 impl ClickLadderDriver for PlatformLadderDriver<'_> {
@@ -590,16 +603,14 @@ impl ClickLadderDriver for PlatformLadderDriver<'_> {
                 rung.describe()
             ));
         }
-        self.engine
-            .backend
-            .deliver_rung(rung, target, self.mode)
+        self.backend.deliver_rung(rung, target, self.mode)
     }
 
     fn authorize(&self, rung: ClickRung, target: &LadderTarget) -> std::result::Result<(), String> {
         // The rung's authorization rides the **same** provenance the act
         // declared, so a human-gesture cursor takeover is never filed as an
         // agent action on the Merkle chain (or the reverse).
-        self.engine.guard.authorize_rung(
+        self.guard.authorize_rung(
             &target.window.app,
             &target.act,
             None,

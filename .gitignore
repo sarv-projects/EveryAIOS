@@ -63,3 +63,7 @@ multiagent.txt
 
 # Deepwork progress state (local planning only)
 .slim/deepwork/
+
+# Local overhaul archive: superseded docs moved out of the tracked set
+# (root-anchored; ARCH/archive/ is tracked and unaffected)
+/ARCHIVE/

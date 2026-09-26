@@ -155,10 +155,21 @@ impl FileSnapshotEntry {
         }
     }
 
-    /// Whether the entry holds a restorable pre-image (as opposed to a
-    /// creation marker).
+    /// Whether the entry holds a stored pre-image (as opposed to a creation
+    /// marker, whose undo is a delete).
     pub fn is_restorable(&self) -> bool {
         matches!(self.capture, FileCaptureKind::Bytes) && self.blob.is_some()
+    }
+
+    /// Whether undo can return this file to its captured state at all. Both
+    /// capture kinds can: a pre-image is written back, a creation is deleted.
+    /// A `Bytes` entry with no stored pre-image cannot — and
+    /// [`Self::validate`] refuses to build one.
+    pub fn undo_handles(&self) -> bool {
+        match self.capture {
+            FileCaptureKind::Bytes => self.blob.is_some(),
+            FileCaptureKind::AbsentMarker => true,
+        }
     }
 
     /// The work this file belongs to is a creation when undo must *delete* it.
@@ -222,10 +233,14 @@ impl TurnChangeSet {
         self.outcome.is_none()
     }
 
-    /// The files whose restore could not be verified, if any. A non-empty list
-    /// means the set is `Uncertain`, whatever the recorded outcome says.
+    /// The entries undo cannot return to their captured state. A validated set
+    /// has none; a set whose stored pre-image went missing has one, and that is
+    /// exactly the case that must settle as `uncertain`.
     pub fn unrestored(&self) -> Vec<&FileSnapshotEntry> {
-        self.entries.iter().filter(|e| !e.is_restorable()).collect()
+        self.entries
+            .iter()
+            .filter(|e| !e.undo_handles())
+            .collect()
     }
 
     pub fn validate(&self) -> Result<(), String> {
@@ -258,13 +273,16 @@ impl TurnChangeSet {
             seen.push(entry.path.as_str());
         }
         if let Some(outcome) = self.outcome {
-            if matches!(outcome, ChangeSetOutcome::RolledBackDueToFailure) {
-                if self.entries.iter().any(|e| !e.is_restorable()) {
-                    return Err(
-                        "a fully-rolled-back change set cannot contain a non-restorable entry"
-                            .into(),
-                    );
-                }
+            if matches!(outcome, ChangeSetOutcome::RolledBackDueToFailure)
+                && !self.entries.iter().all(|e| e.undo_handles())
+            {
+                return Err(
+                    "a fully-rolled-back change set cannot contain an entry undo cannot handle"
+                        .into(),
+                );
+            }
+            if matches!(outcome, ChangeSetOutcome::Open) {
+                return Err("`open` is not a settling outcome; leave `outcome` empty instead".into());
             }
         }
         Ok(())
@@ -357,6 +375,8 @@ mod tests {
         assert_eq!(s.entries[0].lease_label(), "none");
         assert!(s.entries[0].undo_deletes());
         assert!(!s.entries[0].is_restorable());
+        // A creation is still fully undoable: undo deletes the created file.
+        assert!(s.entries[0].undo_handles());
 
         let mut lying = s.clone();
         lying.entries[0].pre_digest = "deadbeef".into();
@@ -388,7 +408,7 @@ mod tests {
         assert!(ChangeSetOutcome::parse("RolledBackDueToFailure").is_some());
         assert!(ChangeSetOutcome::parse("definitely_done").is_none());
 
-        // A creation in the set means the world is only *partly* back.
+        // A creation in the set is still a full restore: undo deletes it.
         s.entries.push(FileSnapshotEntry {
             path: "/work/new.rs".into(),
             capture: FileCaptureKind::AbsentMarker,
@@ -397,8 +417,23 @@ mod tests {
             blob: None,
             lease: None,
         });
-        assert!(s.validate().is_err());
-        assert_eq!(s.unrestored().len(), 1);
+        assert!(s.validate().is_ok());
+        assert!(s.unrestored().is_empty());
+
+        // What *is* refused: a `bytes` capture with no stored pre-image. Undo
+        // could not return that file, so such a set is not constructible at
+        // all — the store detects the on-disk case (a pre-image deleted after
+        // capture) separately and settles `uncertain` there.
+        let mut unverifiable = set(vec![entry("/work/a.rs")]);
+        unverifiable.entries[0].blob = None;
+        assert!(unverifiable.validate().is_err());
+        assert!(set(vec![entry("/work/a.rs")]).unrestored().is_empty());
+
+        // A set is never left half-settled: `open` is the absence of a verdict,
+        // not one.
+        let mut half = set(vec![entry("/work/a.rs")]);
+        half.outcome = Some(ChangeSetOutcome::Open);
+        assert!(half.validate().is_err());
     }
 
     #[test]

@@ -202,7 +202,12 @@ impl LoadBudget {
 
     /// Check `part` against the per-part ceiling, then charge it against the
     /// running total. Both refusals are named; neither mutates the budget.
-    pub fn charge(&mut self, limits: &PatchLimits, part: &str, bytes: u64) -> Result<(), OfficeError> {
+    pub fn charge(
+        &mut self,
+        limits: &PatchLimits,
+        part: &str,
+        bytes: u64,
+    ) -> Result<(), OfficeError> {
         limits.check_part(part, bytes)?;
         let next = self.used.saturating_add(bytes);
         if next > limits.max_total_part_bytes {
@@ -299,7 +304,9 @@ mod tests {
         budget.charge(&limits, "word/header1.xml", 1000).unwrap();
         assert_eq!(budget.used(), 2000);
         // Each part is under the per-part ceiling, but the total is not.
-        let err = budget.charge(&limits, "word/header2.xml", 1000).unwrap_err();
+        let err = budget
+            .charge(&limits, "word/header2.xml", 1000)
+            .unwrap_err();
         assert!(matches!(
             err,
             OfficeError::TooLarge {

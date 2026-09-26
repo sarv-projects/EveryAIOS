@@ -190,6 +190,12 @@ pub trait DoctorProbe {
     fn sidecar_binary(&self) -> Option<Result<PathBuf, String>> {
         None
     }
+    /// P64.11 — the tool-output spool's live occupancy, so a spool that is
+    /// quietly growing is *visible* rather than inferred. `None` = the probe
+    /// cannot see a data dir (skipped, not failed).
+    fn spool_usage(&self) -> Option<Result<SpoolUsage, String>> {
+        None
+    }
     /// P70.D3 — the host OS the report is running on ("windows", "linux",
     /// "macos", …). Doctor flags hosts outside the published matrix.
     fn platform(&self) -> String {
@@ -201,6 +207,52 @@ pub trait DoctorProbe {
 pub const DISK_WARN_PCT: f64 = 90.0;
 /// Disk-free hard-fail floor (almost full — writes will start failing).
 pub const DISK_FAIL_PCT: f64 = 98.0;
+
+/// The fraction of the spool's byte ceiling above which doctor warns. Chosen
+/// well below 1.0 so the warning lands while there is still room to react —
+/// the policy itself is a hard bound, not an alert.
+pub const SPOOL_WARN_FRACTION: f64 = 0.80;
+
+/// P64.11 — the observable shape of the tool-output spool, as the doctor
+/// reports it. Counts and bytes only: never content, never a preview.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SpoolUsage {
+    pub blob_count: u64,
+    pub total_bytes: u64,
+    pub max_total_bytes: u64,
+    pub retention_days: u32,
+    pub used_fraction: f64,
+    /// Blobs + bytes the most recent retention pass reclaimed.
+    pub pruned_blobs: u64,
+    pub pruned_bytes: u64,
+}
+
+/// Render one spool line for the doctor table. Over the warn fraction is a
+/// `Warn`; the policy is still enforcing the bound, so this is "look at it",
+/// not "it is broken".
+pub fn spool_check(usage: &SpoolUsage) -> Check {
+    let detail = format!(
+        "{} blob(s), {} of {} bytes ({:.1}% of the ceiling); kept {} day(s), reclaimed {} blob(s) / {} bytes on the last pass",
+        usage.blob_count,
+        usage.total_bytes,
+        usage.max_total_bytes,
+        usage.used_fraction * 100.0,
+        usage.retention_days,
+        usage.pruned_blobs,
+        usage.pruned_bytes,
+    );
+    if usage.used_fraction >= SPOOL_WARN_FRACTION {
+        Check::warn(
+            "Tool output spool",
+            detail,
+            "an over-cap tool result is written to this cache so it does not crowd the model \
+             out; the retention policy reclaims the oldest first, or clear the spool directory",
+        )
+    } else {
+        Check::ok("Tool output spool", detail)
+    }
+}
 
 /// Build the full report from a probe. Pure given the probe — this is the
 /// unit-tested core; the CLI/Tauri wiring only supplies a live probe.
@@ -382,6 +434,23 @@ pub fn run_doctor(version: &str, probe: &dyn DoctorProbe) -> DoctorReport {
         "engine compiled in (a11y-tree + CDP); live session attaches on first use",
     ));
 
+    // P64.11 — the tool-output spool's real occupancy. A spool with no
+    // retention pass, or one quietly eating a disk, is exactly the failure a
+    // user cannot see from the outside.
+    match probe.spool_usage() {
+        Some(Ok(usage)) => checks.push(spool_check(&usage)),
+        Some(Err(e)) => checks.push(Check::warn(
+            "Tool output spool",
+            format!("occupancy could not be read: {e}"),
+            "the retention policy could not confirm what the spool is holding; \
+             check that the data directory is readable",
+        )),
+        None => checks.push(Check::ok(
+            "Tool output spool",
+            "no data directory on this probe — occupancy not sampled",
+        )),
+    }
+
     DoctorReport::from_checks(version.to_string(), checks)
 }
 
@@ -544,6 +613,21 @@ impl DoctorProbe for LiveProbe {
         Some(Err(
             "not in EVERYAIOS_COORDINATOR_BIN or the workspace build output".to_string(),
         ))
+    }
+
+    /// P64.11 — read the spool's real occupancy. The directory is only walked,
+    /// never written: doctor stays a read-only, side-effect-free report.
+    fn spool_usage(&self) -> Option<Result<SpoolUsage, String>> {
+        let stats = crate::spool::Spool::new(&self.data_dir).stats();
+        Some(Ok(SpoolUsage {
+            blob_count: stats.blob_count,
+            total_bytes: stats.total_bytes,
+            max_total_bytes: stats.max_total_bytes,
+            retention_days: stats.retention_days,
+            used_fraction: stats.used_fraction,
+            pruned_blobs: stats.pruned_blobs,
+            pruned_bytes: stats.pruned_bytes,
+        }))
     }
 }
 

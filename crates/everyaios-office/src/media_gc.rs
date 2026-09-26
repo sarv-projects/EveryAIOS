@@ -113,10 +113,9 @@ impl CandidateReason {
 impl std::fmt::Display for CandidateReason {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            CandidateReason::SharedTarget { rels_part, rel_id } => write!(
-                f,
-                "still targeted by {rels_part} ({rel_id})"
-            ),
+            CandidateReason::SharedTarget { rels_part, rel_id } => {
+                write!(f, "still targeted by {rels_part} ({rel_id})")
+            }
             CandidateReason::UnresolvedReferrer { rels_part } => {
                 write!(f, "exclusivity unprovable: {rels_part} is unreadable")
             }
@@ -250,7 +249,8 @@ pub fn referenced_relationship_ids(part_xml: &[u8]) -> Result<BTreeSet<String>, 
                 out.insert(attr.value().to_string());
             }
         }
-    }    Ok(out)
+    }
+    Ok(out)
 }
 
 /// Sweep the media owned by one part.
@@ -514,9 +514,7 @@ pub(crate) mod tests {
         move |name: &str| match name {
             "word/document.xml" => Some(p.body.clone()),
             "word/_rels/document.xml.rels" => Some(RELS.as_bytes().to_vec()),
-            "word/media/image1.png" | "word/media/image2.png" => {
-                Some(b"PNGDATA".to_vec())
-            }
+            "word/media/image1.png" | "word/media/image2.png" => Some(b"PNGDATA".to_vec()),
             "[Content_Types].xml" => Some(CONTENT_TYPES.as_bytes().to_vec()),
             _ => None,
         }
@@ -562,14 +560,20 @@ pub(crate) mod tests {
         let p = pkg(LIVE);
         let mut read = reader(&p);
         let plan = sweep_part("word/document.xml", &p.body, &p.read, &mut read).unwrap();
-        assert!(!plan.sweep.removed_parts.contains(&"word/media/image1.png".to_string()));
+        assert!(
+            !plan
+                .sweep
+                .removed_parts
+                .contains(&"word/media/image1.png".to_string())
+        );
     }
 
     #[test]
     fn a_shared_payload_is_reported_not_removed() {
         // A header's rels also targets image2.png → the body does not own it.
         let p = pkg(LIVE);
-        let mut read = |name: &str| match name {
+        let mut read = |name: &str| {
+            match name {
             "word/document.xml" => Some(p.body.clone()),
             "word/_rels/document.xml.rels" => Some(RELS.as_bytes().to_vec()),
             "ppt/slides/_rels/slide1.xml.rels" => Some(
@@ -579,6 +583,7 @@ pub(crate) mod tests {
             "word/media/image1.png" | "word/media/image2.png" => Some(b"PNG".to_vec()),
             "[Content_Types].xml" => Some(CONTENT_TYPES.as_bytes().to_vec()),
             _ => None,
+        }
         };
         let mut names = p.read.clone();
         names.insert("ppt/slides/_rels/slide1.xml.rels".to_string());
@@ -594,10 +599,7 @@ pub(crate) mod tests {
                 rel_id: "rId9".to_string(),
             }
         );
-        assert_eq!(
-            plan.sweep.candidates[0].reason.as_str(),
-            "shared_target"
-        );
+        assert_eq!(plan.sweep.candidates[0].reason.as_str(), "shared_target");
     }
 
     #[test]
@@ -663,7 +665,11 @@ pub(crate) mod tests {
             _ => None,
         };
         let plan = sweep_part("word/document.xml", &p.body, &p.read, &mut read).unwrap();
-        assert!(plan.sweep.orphan_rels.is_empty(), "{:?}", plan.sweep.orphan_rels);
+        assert!(
+            plan.sweep.orphan_rels.is_empty(),
+            "{:?}",
+            plan.sweep.orphan_rels
+        );
         assert!(plan.sweep.candidates.is_empty());
         assert!(plan.sweep.is_noop());
     }
@@ -721,10 +727,16 @@ pub(crate) mod tests {
         );
         // The package root rels resolve against the package root.
         assert_eq!(
-            resolve_target("word/document.xml", &owner_of_rels_part("_rels/.rels").unwrap_or_default()),
+            resolve_target(
+                "word/document.xml",
+                &owner_of_rels_part("_rels/.rels").unwrap_or_default()
+            ),
             "word/document.xml"
         );
-        assert_eq!(rels_part_for("word/document.xml"), "word/_rels/document.xml.rels");
+        assert_eq!(
+            rels_part_for("word/document.xml"),
+            "word/_rels/document.xml.rels"
+        );
         assert_eq!(
             rels_part_for("ppt/slides/slide1.xml"),
             "ppt/slides/_rels/slide1.xml.rels"

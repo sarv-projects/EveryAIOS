@@ -100,7 +100,12 @@ pub fn apply_batch(
     batch: &WorkbookCommandBatch,
     sheet: &str,
 ) -> Result<PatchOutcome, PatchError> {
-    apply_batch_with_limits(archive_bytes, batch, sheet, crate::limits::PatchLimits::default())
+    apply_batch_with_limits(
+        archive_bytes,
+        batch,
+        sheet,
+        crate::limits::PatchLimits::default(),
+    )
 }
 
 /// [`apply_batch`] under an explicit size policy: the container, its entry
@@ -1713,14 +1718,9 @@ mod tests {
             max_archive_bytes: (bytes.len() - 1) as u64,
             ..crate::limits::PatchLimits::default_policy()
         };
-        let err = apply_batch_with_limits(
-            &bytes,
-            &batch(vec![]),
-            "Sheet1",
-            tight,
-        )
-        .err()
-        .expect("must refuse");
+        let err = apply_batch_with_limits(&bytes, &batch(vec![]), "Sheet1", tight)
+            .err()
+            .expect("must refuse");
         assert!(matches!(
             err,
             PatchError::TooLarge {

@@ -1,0 +1,80 @@
+# 27 — Search
+
+> **Status:** Draft P3 (early). Must pass the `ARCH/00-INDEX.md` §5 checklist at freeze.
+> **Role:** **one** search service over all context sources. Deterministic retrieval — **never an LLM call** (DEC-015). The kernel owns search; other modules register index adapters.
+> **Dependencies:** source owners (`17` memory · `21` world · `25` files · `26` repo · `29` artifacts · `30` events) · `12-TRUST` (scope/sensitivity). **Consumers:** `16` (retrieval), `15` (agent queries), UI (global search), `32` (external-agent projection).
+> **Evidence:** repo principle (kernel search = the one implementation; `everyaios-search`) · product-owner brief (search/file-index rows are explicitly token-free) · `ARCH/16-CONTEXT.md` §1, `ARCH/17-MEMORY.md` §6, `ARCH/21-WORLD-MODEL.md` §4.
+
+## 1. Purpose & rules
+
+**Owns:** the unified search surface (query → ranked results across sources) · per-source index adapters · ranking & result-shaping policy · scope + sensitivity filtering at query time · the result citation format (refs + bounded snippets).
+**Never owns:** source data (each owner owns its store) · context selection (`16` consumes results) · answer synthesis (the agent’s job).
+
+1. **One implementation** — a single kernel search service; sidecar/UI call it through contracts. No second search path anywhere.
+2. **Deterministic first** — lexical/structured queries; semantic retrieval is deferred behind a measured trigger (`16` §11).
+3. **Scoped by construction** — every query carries scopes + a sensitivity ceiling; cross-project leakage is a defect (INV-10).
+4. **Refs, not copies** — results are references with bounded snippets; resolving content is a separate, permission-checked read.
+
+## 2. Sources & adapters
+
+| Source | Adapter | Query powers |
+|---|---|---|
+| Files (metadata) | `25` index | lexical (names/paths) + structured filters (type/time/size) |
+| Files (content) | **deferred** (W7) | — |
+| Memory | `17` FTS5 | lexical + scope/kind filters (`17` §6) |
+| Artifacts | `29` | name/type/provenance filters |
+| World objects | `21` registries | kind/attribute filters (apps · windows · tabs · processes) |
+| Repo symbols | `26` RepoGraph | **structural queries delegate to `26`** (definitions/callers/imports); `27` does not re-index code |
+| Events | `30` | operator-style filtered reads (bounded) |
+
+Adapters declare: supported query forms · freshness semantics · cost class. `27` composes; it never bypasses an owner’s store.
+
+## 3. Query model
+
+- **Forms:** lexical (BM25) · structured filters (scope/kind/time/type/attribute) · exact (id/ref lookup) · structural (delegated to `26`).
+- **Composition:** a query may mix forms; per-source results are normalized and merged by **source priority + recency** in v1 (fusion/RRF deferred until multi-source quality proves the need — mirror of memory U6).
+- **Budget:** result count + snippet size are capped; zero results is a valid outcome (no padding).
+
+## 4. Ranking & result shaping
+
+v1 ranking: source-native score (BM25 etc.) × recency × pin/priority boosts; deterministic tie-breaks. Every result carries: `ref` · `source` · `score` · `freshness` · `snippet` (bounded) · `sensitivity`. **Abstention is correct behavior** — “no relevant memory” must yield nothing (`17` §6).
+
+## 5. Scoping & security
+
+- Scope filters (workspace/project/agent/session) and sensitivity ceilings are applied **at query time** using the caller’s policy snapshot (`12`).
+- External agents receive a filtered search projection (own project + granted scopes only; `32`).
+- Filtering is **not** un-discovery: out-of-scope sources are never queried for that caller.
+
+## 6. Performance & costs
+
+Local indexes only; no network in the search path; no model calls. Targets (declared, measured in `42`): metadata search p95 ≤ 50 ms at 100k files; memory recall target owned by `17`; result shaping bounded by budget. Index freshness follows each source’s update cadence (`21` §4).
+
+## 7. Failure modes
+
+| Failure | Behavior |
+|---|---|
+| Source index missing/stale | Freshness flag on results; degraded notice; never silent wrong answers. |
+| Over-broad query | Bounded by caps + scopes; suggestion to narrow (guidance). |
+| Sensitive hit for lower clearance | Filtered before scoring (structural test, `41`). |
+| Adapter error | Partial results + typed error path; other sources unaffected. |
+
+## 8. Interop
+
+**Depends on:** `10` · `12` · source owners (`17`, `21`, `25`, `26`, `29`, `30`).
+**Exposes to:** `16` (retrieval), `15`/`20` (queries), UI (global search), `32` (projection).
+**DAG check:** `27` reads indexes owned by others; it never writes source state.
+
+## 9. Not in v1
+
+Semantic/vector search (trigger: recall misses) · cross-repository federation · personalized ranking · content indexing (deferred W7) · web search (that is a capability, `28`/`14`, not the local search plane).
+
+## 10. Open questions (`OQ-SRCH-*`)
+
+1. Per-source p95 targets and their measurement harness.
+2. Fusion/RRF trigger thresholds (when source-priority stops being enough).
+3. Content-index timing (with `25` W7).
+4. Global-search UI scope (single bar vs per-surface filters) — ties `AGENTCOWORK-UI.md`.
+
+## 11. Evidence
+
+Repo principle: kernel search is the single implementation (`everyaios-search`; AGENTS.md) · product-owner brief (search/files-index rows explicitly zero-token) · `ARCH/16-CONTEXT.md` §1/§4 · `ARCH/17-MEMORY.md` §6 (BM25+boosts, abstention) · `ARCH/21-WORLD-MODEL.md` §4 (index-not-walk) · `ARCH/26-CODE.md` §5 (structural queries owned by `26`).

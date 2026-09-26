@@ -55,7 +55,7 @@ Before introducing a new dependency:
 
 Do not modify generated files manually unless the repository explicitly requires it; update the source/template and regenerate them.
 
-- **Archive rule (2026-09-22):** no new work may land in `ARCH/archive/` paths or name archived modules as owners (e.g. the coordinator loop under `ARCH/archive/coordinator-loop/`) — re-home to the live owner instead: the Rust context passport (`src-tauri/src/acp_cmds.rs`) for prompt/context work, `everyaios-acp` for per-agent behavior, `everyaios-mcp` for tool-surface work, and Work/AUTOMATION + the bound agent for coordination.
+- **Archive rule (2026-09-22; v1 note 2026-09-26):** no new work may land in the archived v0 tree (`ARCHIVE/v0/ARCH/archive/`) or name archived modules as owners (e.g. the coordinator loop under `ARCHIVE/v0/ARCH/archive/coordinator-loop/`) — re-home to the live owner instead: the Rust context passport (`src-tauri/src/acp_cmds.rs`) for prompt/context work, `everyaios-acp` for per-agent behavior, `everyaios-mcp` for tool-surface work, and Work/AUTOMATION + the bound agent for coordination.
 
 ## 6. Validation
 
@@ -137,13 +137,9 @@ Keep descriptions factual and tied to the repository. Do not add marketing langu
 
 ## 10. Architecture
 
-> **Root authority: [`ARCH/CORE.md`](ARCH/CORE.md)** (architecture thaw — see
-> [`ARCH/ADR/0003`](ARCH/ADR/0003-architecture-thaw-core-authority.md)). The
-> product contract is [`DESKTOP-APP-SPEC.md`](DESKTOP-APP-SPEC.md); delivery
-> status is [`TODO.md`](TODO.md); subsystem contracts live beside CORE under
-> [`ARCH/`](ARCH/00-INDEX.md). **This section is a teaching summary only** —
-> where it and `ARCH/CORE.md` disagree, `ARCH/CORE.md` wins. Do not restate,
-> extend, or fork the invariant set here; read it from CORE.
+> **v1 docs (2026-09-26).** The architecture was rebuilt from scratch; the v0 corpus is archived locally at `ARCHIVE/v0/` (git-ignored). Authority: [`AGENTCOWORK-SPEC.md`](AGENTCOWORK-SPEC.md) (WHAT) → [`ARCH/03-HLD.md`](ARCH/03-HLD.md) (HOW) → module docs; the door is [`ARCH/00-INDEX.md`](ARCH/00-INDEX.md). Working names: product **AgentCowork**, runtime **Core**, native agent **Agent X** ([`ARCH/01-NAMING.md`](ARCH/01-NAMING.md)). Delivery status: [`TODO.md`](TODO.md). Code remains frozen until the v1 freeze lands.
+>
+> **This section is an orientation summary only** — where it disagrees with the v1 set, the v1 set wins. The invariant list lives in [`ARCH/05-INVARIANTS.md`](ARCH/05-INVARIANTS.md); do not fork it here.
 
 The runtime's four deployment layers (a convenience view for orientation, not
 the contract):
@@ -157,15 +153,15 @@ L2  Rust Kernel        crates/everyaios-* — guard/vault/audit/office/browser
         ↓ stdio JSON-RPC 2.0, [u32 LE len][JSON] framing
 L1  Bun Sidecar        packages/coordinator — turn coordination (not reasoning)
         ↓ ACP/MCP/CDP
-L0  External Agents    the v1 engines (ADR/0005), MCP servers, Chrome
+L0  External Agents    peer agents (DEC-010), MCP servers, browsers
 ```
 
 ### The One Invariant (summary)
 
-The load-bearing invariant, quoted from `ARCH/CORE.md`: **the sidecar proposes;
-the Rust core disposes.** Every mutating effect requires an authorization
-ticket minted in Rust, and provider API keys never leave the vault. The full
-invariant set lives only in `ARCH/CORE.md`.
+**Surfaces propose; Core disposes.** Every mutating effect requires an
+authorization ticket minted in Core, and provider credentials never leave the
+vault ([`INV-01`](ARCH/05-INVARIANTS.md), [`INV-02`](ARCH/05-INVARIANTS.md)).
+The full invariant set lives in [`ARCH/05-INVARIANTS.md`](ARCH/05-INVARIANTS.md).
 
 ## 11. Development Commands
 
@@ -245,8 +241,8 @@ packages/                        # 10 TypeScript packages (the sidecar)
   coordinator/                   #   Shared plane services a turn calls into
                                  #   (memory/guard/work/skills/MCP/connectors) — no turn
                                  #   loop: the bound external agent owns the loop
-                                 #   (ADR-0005; the old loop is archived,
-                                 #   ARCH/archive/coordinator-loop/)
+                                 #   (DEC-010; the old loop is archived at
+                                 #   ARCHIVE/v0/ARCH/archive/coordinator-loop/)
   core-ai/                       #   AI runtime, streaming, retrieval
   core-providers/                #   Provider management (registry/routing; custody is the vault)
   core-agents/                   #   Agent directory projections
@@ -259,8 +255,8 @@ packages/                        # 10 TypeScript packages (the sidecar)
 
 ui/                              # React 19 SPA (the cockpit)
 src-tauri/                       # Tauri v2 shell (thin Rust layer)
-ARCH/                            # Architecture docs — CORE.md is the root authority;
-                                 #   subsystem contracts (WORK/SESSION/AGENT/…) derive from it
+ARCH/                            # v1 architecture docs (door: ARCH/00-INDEX.md);
+                                 #   product contract: AGENTCOWORK-SPEC.md (repo root)
 deploy/                          # Docker, systemd, launchd, Fly.io
 scripts/                         # CI gates, codegen, tools
 ```

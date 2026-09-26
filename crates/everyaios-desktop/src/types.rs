@@ -610,8 +610,8 @@ mod tests {
 
     fn sample_budget(scale: f64) -> SeeBudget {
         SeeBudget {
-            captured_width: 3000,
-            captured_height: 1500,
+            captured_width: 2400,
+            captured_height: 1200,
             output_width: 1232,
             output_height: 616,
             output_scale_x: scale,
@@ -631,10 +631,11 @@ mod tests {
     /// mapping back to window space is the honest inverse of the clamp.
     #[test]
     fn a_clamped_capture_maps_image_points_back_to_window_space() {
-        let see = see_result_with_budget(sample_budget(1232.0 / 3000.0));
+        let see = see_result_with_budget(sample_budget(1232.0 / 2400.0));
+        // The centre of the returned image is the centre of the capture.
         let (wx, wy) = see.image_point_to_window(616, 308);
-        assert!((wx - 1500).abs() <= 1, "got {wx}");
-        assert!((wy - 750).abs() <= 1, "got {wy}");
+        assert!((wx - 1200).abs() <= 1, "got {wx}");
+        assert!((wy - 600).abs() <= 1, "got {wy}");
         // And the description says it was clamped, with the measured DPI.
         let d = see.describe();
         assert!(d.contains("clamped"), "{d}");

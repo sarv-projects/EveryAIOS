@@ -570,9 +570,12 @@ mod tests {
 
     #[test]
     fn patch_alignment_floors_to_the_grid_and_never_reaches_zero() {
-        assert_eq!(align_to_patch(1280), 1280);
-        assert_eq!(align_to_patch(1290), 1280);
-        assert_eq!(align_to_patch(1279), 1260);
+        // 1260 = 45 * 28 is the largest multiple of the patch factor below the
+        // 1280 px ceiling — the named ceiling is deliberately *not* on the grid,
+        // so an aligned clamp lands just under it rather than over it.
+        assert_eq!(align_to_patch(1260), 1260);
+        assert_eq!(align_to_patch(1290), 1288);
+        assert_eq!(align_to_patch(1280), 1260, "1280 is not a multiple of 28");
         assert_eq!(align_to_patch(30), 28);
         assert_eq!(align_to_patch(27), 1);
         assert_eq!(align_to_patch(0), 1);
@@ -640,14 +643,20 @@ mod tests {
                 aligned: true
             }
         );
+        // Both axes land on the patch grid, and the reported scale is the
+        // honest inverse of the clamp that actually happened.
+        assert_eq!(w % IMAGE_FACTOR, 0, "width {w} must land on the patch grid");
+        assert_eq!(h % IMAGE_FACTOR, 0, "height {h} must land on the patch grid");
         // The clamp is declared, not silent.
         assert!(report.describe().contains("clamped"));
         assert!(report.describe().contains("over the max dimension"));
-        // The reported scale is the honest inverse of the clamp.
         assert!((report.output_scale_x - f64::from(w) / 3000.0).abs() < 1e-9);
-        let (wx, wy) = report.image_point_to_window(640, 320);
-        assert!((wx - 1500).abs() <= 1, "got {wx}");
-        assert!((wy - 750).abs() <= 1, "got {wy}");
+        // An image-space point maps back to the *same fraction* of the original
+        // capture, so a model that predicted (w/2, h/2) aims at the centre of
+        // the window and not at a scaled-down corner.
+        let (wx, wy) = report.image_point_to_window((w / 2) as i32, (h / 2) as i32);
+        assert!((wx - 1500).abs() <= 1, "got {wx}, expected ~1500");
+        assert!((wy - 750).abs() <= 1, "got {wy}, expected ~750");
     }
 
     #[test]

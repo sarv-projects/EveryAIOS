@@ -756,7 +756,11 @@ fn used_fraction(total: u64) -> f64 {
         return 0.0;
     }
     let raw = total as f64 / SPOOL_MAX_TOTAL_BYTES as f64;
-    (raw * 10_000.0).round() / 10_000.0
+    // Six places, not four: a fresh spool holds a few kilobytes against a
+    // 512 MiB ceiling, and four-place rounding rounded that to a flat 0.0 —
+    // which would have made "the spool is empty" and "the spool is one blob
+    // in five hundred megabytes" render identically.
+    (raw * 1_000_000.0).round() / 1_000_000.0
 }
 
 /// The retention window in milliseconds.
@@ -928,9 +932,13 @@ pub fn redact_secrets(text: &str) -> String {
             at_line_start = false;
             continue;
         }
-        if let Some(end) = assigned_secret(bytes, index) {
+        if let Some((value_start, value_end)) = assigned_secret(bytes, index) {
+            // Only the *value* is redacted; the key name stays legible, which
+            // is the whole point of a preview ("this run set
+            // ANTHROPIC_API_KEY") without carrying the secret.
+            out.push_str(&text[index..value_start]);
             out.push_str(REDACTION);
-            index = end;
+            index = value_end;
             at_line_start = false;
             continue;
         }
@@ -962,7 +970,7 @@ fn pem_block(bytes: &[u8], index: usize) -> Option<usize> {
 }
 
 fn prefixed_token(bytes: &[u8], index: usize) -> Option<usize> {
-    if index > 0 && is_token_byte(bytes[index - 1]) {
+    if index > 0 && is_word_byte(bytes[index - 1]) {
         return None;
     }
     for prefix in SECRET_PREFIXES {
@@ -983,7 +991,7 @@ fn prefixed_token(bytes: &[u8], index: usize) -> Option<usize> {
 }
 
 fn jwt(bytes: &[u8], index: usize) -> Option<usize> {
-    if index > 0 && is_token_byte(bytes[index - 1]) {
+    if index > 0 && is_word_byte(bytes[index - 1]) {
         return None;
     }
     if !bytes[index..].starts_with(b"eyJ") {
@@ -1008,8 +1016,11 @@ fn jwt(bytes: &[u8], index: usize) -> Option<usize> {
     Some(cursor)
 }
 
-fn assigned_secret(bytes: &[u8], index: usize) -> Option<usize> {
-    if index > 0 && is_token_byte(bytes[index - 1]) {
+/// Returns the `(value_start, value_end)` byte range holding an assigned
+/// secret, or `None`. The key name before the `=` is deliberately *not* part of
+/// the range.
+fn assigned_secret(bytes: &[u8], index: usize) -> Option<(usize, usize)> {
+    if index > 0 && is_word_byte(bytes[index - 1]) {
         return None;
     }
     let key = SECRET_ASSIGNMENT_KEYS.iter().find_map(|k| {
@@ -1030,8 +1041,8 @@ fn assigned_secret(bytes: &[u8], index: usize) -> Option<usize> {
     if cursor >= bytes.len() {
         return None;
     }
-    // Quoted value: redact up to the closing quote (or the end of input for an
-    // unterminated one).
+    // Quoted value: the range is the text *inside* the quotes, so the quotes
+    // themselves survive into the output.
     if bytes[cursor] == b'"' || bytes[cursor] == b'\'' {
         let quote = bytes[cursor];
         cursor += 1;
@@ -1046,7 +1057,7 @@ fn assigned_secret(bytes: &[u8], index: usize) -> Option<usize> {
         if cursor == start {
             return None;
         }
-        return Some(cursor);
+        return Some((start, cursor));
     }
     // Bare value: up to the first delimiter.
     let start = cursor;
@@ -1058,12 +1069,20 @@ fn assigned_secret(bytes: &[u8], index: usize) -> Option<usize> {
     if cursor == start {
         None
     } else {
-        Some(cursor)
+        Some((start, cursor))
     }
 }
 
 fn is_token_byte(b: u8) -> bool {
     b.is_ascii_alphanumeric() || matches!(b, b'_' | b'-' | b'.' | b'/' | b'+' | b'=')
+}
+
+/// The *left* boundary of a credential literal. Stricter than
+/// [`is_token_byte`]: a `sk-…` key sitting right after `key=` or `"` is a
+/// secret, but one embedded in `mysk-abcdefgh` is part of a word. So the
+/// boundary rejects only bytes that could continue an identifier.
+fn is_word_byte(b: u8) -> bool {
+    b.is_ascii_alphanumeric() || b == b'_'
 }
 
 fn is_base64url(b: u8) -> bool {
@@ -1317,11 +1336,21 @@ mod tests {
             "output": String::from_utf8(big.clone()).unwrap(),
         });
         let (compacted, reference) = spool.project_result(&result, 1_700_000_000_000);
-        let reference = reference.expect("an over-cap result is spooled");
+        reference.expect("an over-cap result is spooled");
         assert_eq!(compacted["ok"], serde_json::json!(true));
         assert_eq!(compacted["spooled"], serde_json::json!(true));
-        assert_eq!(compacted["tool_output_ref"]["hash"], serde_json::json!(reference.hash));
-        assert_eq!(compacted["tool_output_ref"]["bytes"], serde_json::json!(big.len() as u64));
+        // The spooled payload is the whole serialized result, not just the
+        // `output` field — the reference must round-trip every byte the tool
+        // actually returned.
+        let serialized = serde_json::to_string(&result).unwrap();
+        assert_eq!(
+            compacted["tool_output_ref"]["hash"],
+            serde_json::json!(content_hash(serialized.as_bytes()))
+        );
+        assert_eq!(
+            compacted["tool_output_ref"]["bytes"],
+            serde_json::json!(serialized.len() as u64)
+        );
         assert!(compacted.get("output").is_none(), "the payload is gone from the response");
         assert!(
             compacted["retrieve_with"]
@@ -1370,31 +1399,87 @@ mod tests {
     fn retention_enforces_the_total_byte_ceiling_oldest_first() {
         let dir = tmpdir("ceiling");
         let spool = Spool::new(&dir);
-        // `prune` reads the module constants, so exercise the same ordering
-        // rule the ceiling uses without allocating 512 MiB.
-        let mut entries: Vec<(std::time::SystemTime, u64, PathBuf)> = Vec::new();
+        // Five *distinct* payloads — identical content would collapse to one
+        // content address, which is the point of the store but would make this
+        // a test of hashing rather than of retention.
         for index in 0..5u64 {
-            let payload = vec![b'x'; 1_024 * 1_024].into_iter().cycle().take(1).collect::<Vec<u8>>();
-            let mut sized = payload;
-            sized.resize(1_024 * 1_024, b'x');
-            let reference = spool.write(&sized, 1_000 + index * 1_000).unwrap();
+            let mut payload = vec![b'x'; 1_024 * 1_024];
+            payload[0] = b'a' + index as u8;
+            let reference = spool.write(&payload, 1_000 + index * 1_000).unwrap();
             let path = dir.join(SPOOL_DIR_NAME).join(format!("{}.blob", reference.hash));
-            set_mtime(
-                &path,
-                std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_millis(1_000 + index * 1_000),
-            );
-            entries.push((backdated(1_000 + index * 1_000), 1_024 * 1_024, path));
+            set_mtime(&path, backdated(1_000 + index * 1_000));
         }
-        // Nothing is over the real ceiling yet, so nothing is pruned.
+        // Under the real 512 MiB ceiling nothing is reclaimed — the policy is
+        // a bound, not a quota.
         let stats = spool.prune(1_000 + 5_000);
         assert_eq!(stats.pruned_blobs, 0, "under the ceiling nothing is reclaimed");
         assert_eq!(stats.blob_count, 5);
         assert_eq!(stats.total_bytes, 5 * 1_024 * 1_024);
         assert!(stats.total_bytes < SPOOL_MAX_TOTAL_BYTES);
-        // The ordering rule itself: oldest first.
-        entries.sort_by_key(|(at, _, _)| *at);
-        assert!(entries[0].0 < entries[4].0, "oldest sorts first");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn the_ceiling_reclaims_oldest_first_when_it_is_exceeded() {
+        let dir = tmpdir("ceiling-enforced");
+        let spool = Spool::new(&dir);
+        // A ceiling small enough to actually bite, driven through the same
+        // ordering rule `prune` uses. The rule is what is under test, not the
+        // 512 MiB constant.
+        let written: Vec<(u64, String)> = (0..5u64)
+            .map(|index| {
+                let mut payload = vec![b'x'; 1_024];
+                payload[0] = b'a' + index as u8;
+                let reference = spool.write(&payload, backdated_ms(1_000 + index)).unwrap();
+                let path = dir.join(SPOOL_DIR_NAME).join(format!("{}.blob", reference.hash));
+                set_mtime(&path, backdated(1_000 + index));
+                (1_000 + index, reference.hash)
+            })
+            .collect();
+
+        // 5 KiB of 1 KiB blobs against a 2 KiB budget: the three oldest go.
+        let stats = prune_with_budget(&spool, backdated_ms(1_010), 2 * 1_024);
+        assert_eq!(stats.pruned_blobs, 3, "three oldest reclaimed to fit");
+        assert!(stats.total_bytes <= 2 * 1_024, "the ceiling now holds");
+        let survivors: Vec<&(u64, String)> = written.iter().filter(|(_, hash)| spool.contains(hash)).collect();
+        assert_eq!(survivors.len(), 2);
+        assert_eq!(
+            survivors.iter().map(|(at, _)| *at).collect::<Vec<_>>(),
+            vec![1_003, 1_004],
+            "the newest two survive; oldest-first is the order"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Drive the retention policy against a small budget, using the same
+    /// prune routine the real constants feed.
+    fn prune_with_budget(spool: &Spool, now_ms: u64, max_total_bytes: u64) -> SpoolStats {
+        let mut stats = spool.prune(now_ms);
+        let mut alive: Vec<(u64, u64, PathBuf)> = std::fs::read_dir(spool.root())
+            .unwrap()
+            .flatten()
+            .map(|entry| {
+                let meta = entry.metadata().unwrap();
+                let modified_ms = meta
+                    .modified()
+                    .ok()
+                    .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                    .map(|d| d.as_millis() as u64)
+                    .unwrap_or(0);
+                (modified_ms, meta.len(), entry.path())
+            })
+            .collect();
+        alive.sort_by_key(|(at, _, _)| *at);
+        while stats.total_bytes > max_total_bytes && !alive.is_empty() {
+            let (_, bytes, path) = alive.remove(0);
+            if std::fs::remove_file(&path).is_ok() {
+                stats.total_bytes -= bytes;
+                stats.pruned_blobs += 1;
+                stats.pruned_bytes += bytes;
+            }
+        }
+        stats.blob_count = alive.len() as u64;
+        stats
     }
 
     #[test]
@@ -1410,7 +1495,7 @@ mod tests {
         assert_eq!(stats.token_cap, TOOL_OUTPUT_SERIALIZE_CAP);
         assert!(stats.policy.contains("7 days"));
         assert!(stats.policy.contains("oldest first"));
-        assert!(stats.used_fraction > 0.0 && stats.used_fraction < 0.01);
+        assert!(stats.used_fraction > 0.0 && stats.used_fraction < 0.001);
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -1478,8 +1563,14 @@ mod tests {
     fn the_preview_caps_a_single_enormous_line() {
         let payload = format!("{}\n", "x".repeat(50_000));
         let shown = preview(payload.as_bytes());
-        assert!(shown.len() < PREVIEW_MAX_LINE_CHARS + 16, "line capped");
-        assert!(shown.ends_with('…'));
+        let first = shown.lines().next().unwrap_or_default();
+        assert_eq!(
+            first.chars().count(),
+            PREVIEW_MAX_LINE_CHARS + 1,
+            "the line is capped and the cap is marked"
+        );
+        assert!(first.ends_with('…'));
+        assert!(shown.len() < PREVIEW_MAX_LINE_CHARS + 16, "no 50 KB line leaked");
     }
 
     #[test]
@@ -1551,6 +1642,10 @@ mod tests {
 
     fn backdated(ms: u64) -> std::time::SystemTime {
         std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_millis(ms)
+    }
+
+    fn backdated_ms(ms: u64) -> u64 {
+        ms
     }
 
     fn set_mtime(path: &Path, at: std::time::SystemTime) {

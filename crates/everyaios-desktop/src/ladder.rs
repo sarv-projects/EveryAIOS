@@ -403,16 +403,22 @@ impl ClickProfile {
             }
             previous = Some(*rung);
         }
-        if let Some(last) = self.rungs.last()
-            && last.moves_pointer()
-            && self.rungs.len() > 1
-        {
-            return Err(format!(
-                "{} lists the pointer-moving rung {} as the last of several rungs — raw \
-                 input must be the last and only gated rung",
-                self.platform,
-                last.as_str()
-            ));
+        // The gated rung must be the *last* entry. Since the order is already
+        // strictly increasing, "raw input is last" follows from its rank — but
+        // stating it here is what makes "never fall through to raw input while a
+        // higher-fidelity rung is available" unrepresentable rather than merely
+        // documented.
+        for (i, rung) in self.rungs.iter().enumerate() {
+            if rung.gate() == RungGate::HumanAuthorization && i + 1 != self.rungs.len() {
+                return Err(format!(
+                    "{} lists the gated rung {} at position {} of {} — a gated rung must be the \
+                     last entry, or a fall-through would run past a higher-fidelity rung",
+                    self.platform,
+                    rung.as_str(),
+                    i + 1,
+                    self.rungs.len()
+                ));
+            }
         }
         Ok(())
     }
@@ -755,7 +761,10 @@ mod tests {
 
     #[test]
     fn exhaustion_names_every_rung_it_tried() {
-        let d = FakeDriver::windows_full(
+        // A profile with no gated rung at all (a platform whose ladder has no
+        // pointer-moving entry) is the shape where exhaustion — rather than an
+        // authorization gap — is the honest answer.
+        let mut d = FakeDriver::windows_full(
             vec![
                 (
                     ClickRung::AccessibilityInvoke,
@@ -768,11 +777,47 @@ mod tests {
             ],
             Some(Err("no card".into())),
         );
+        d.profile.rungs.retain(|r| *r != ClickRung::RawInput);
         let v = walk_ladder(&d, &target());
         assert!(matches!(v, LadderVerdict::Exhausted { .. }));
+        assert!(!v.delivered());
         let summary = v.describe();
         assert!(summary.contains("accessibility_invoke unavailable"), "{summary}");
         assert!(summary.contains("synthetic_event failed"), "{summary}");
+        // The gated rung was never even consulted on this profile.
+        assert!(d.authorized.borrow().is_empty());
+    }
+
+    /// On a profile that *does* end in the gated rung, the same two failures
+    /// produce an authorization gap rather than exhaustion — the walk stops at
+    /// the gate, it does not treat the gated rung as tried-and-failed.
+    #[test]
+    fn a_gated_rung_is_never_counted_as_an_attempt() {
+        let d = FakeDriver::windows_full(
+            vec![
+                (
+                    ClickRung::AccessibilityInvoke,
+                    RungDelivery::Unavailable("no tree".into()),
+                ),
+                (
+                    ClickRung::SyntheticEvent,
+                    RungDelivery::Failed("ignored".into()),
+                ),
+                (
+                    ClickRung::RawInput,
+                    RungDelivery::Delivered("SHOULD NEVER RUN".into()),
+                ),
+            ],
+            Some(Err("no card".into())),
+        );
+        let v = walk_ladder(&d, &target());
+        assert!(v.is_authorization_gap());
+        assert_eq!(v.attempts().len(), 2, "the gated rung is not an attempt");
+        assert!(
+            v.attempts()
+                .iter()
+                .all(|a| a.rung != ClickRung::RawInput)
+        );
     }
 
     // ---- the profile invariant ----------------------------------------
@@ -789,16 +834,44 @@ mod tests {
         // A duplicate is also a declared fall-through, and is rejected.
         let dup = ClickProfile::new(
             "bogus",
-            vec![
-                ClickRung::SyntheticEvent,
-                ClickRung::SyntheticEvent,
-            ],
+            vec![ClickRung::SyntheticEvent, ClickRung::SyntheticEvent],
             vec![],
         )
         .unwrap_err();
         assert!(dup.contains("twice"), "{dup}");
+        // A gated rung must also be the *last* entry. With today's rungs that
+        // rule is unreachable on its own — `RawInput` is the only gated rung and
+        // it has the lowest rank, so the fidelity-order rule above always fires
+        // first — which is exactly the safety property: a bad order is rejected
+        // by whichever rule trips, and the walk fails closed either way. The
+        // check is kept so a future gated rung at a higher rank cannot be
+        // declared mid-ladder without this catching it.
+        let gated_not_last = ClickProfile {
+            platform: "bogus",
+            rungs: vec![ClickRung::RawInput, ClickRung::AccessibilityInvoke],
+            limits: vec![],
+        };
+        assert!(
+            gated_not_last.validate().is_err(),
+            "a profile with the gated rung above a higher-fidelity rung must be rejected"
+        );
         // An empty ladder has no escalation contract at all.
         assert!(ClickProfile::new("bogus", vec![], vec![]).is_err());
+        // …and the three real orders are all accepted.
+        for rungs in [
+            vec![ClickRung::RawInput],
+            vec![ClickRung::SyntheticEvent, ClickRung::RawInput],
+            vec![
+                ClickRung::AccessibilityInvoke,
+                ClickRung::SyntheticEvent,
+                ClickRung::RawInput,
+            ],
+        ] {
+            assert!(
+                ClickProfile::new("ok", rungs.clone(), vec![]).is_ok(),
+                "{rungs:?}"
+            );
+        }
     }
 
     #[test]

@@ -114,12 +114,8 @@ impl DocxEngine {
         let mut budget = LoadBudget::new();
 
         let content_types = read_bounded(&mut archive, &limits, &mut budget, CONTENT_TYPES)?;
-        let document_rels = read_optional_bounded(
-            &mut archive,
-            &limits,
-            &mut budget,
-            DOCUMENT_RELS,
-        )?;
+        let document_rels =
+            read_optional_bounded(&mut archive, &limits, &mut budget, DOCUMENT_RELS)?;
         let parts = parts::PartsIndex::parse(&content_types, document_rels.as_deref())?;
 
         let body = read_bounded(&mut archive, &limits, &mut budget, BODY_PART)?;
@@ -314,10 +310,7 @@ impl DocxEngine {
             if bytes.is_empty() {
                 continue;
             }
-            out.push((
-                name.clone(),
-                field_balance::verify(name, bytes)?,
-            ));
+            out.push((name.clone(), field_balance::verify(name, bytes)?));
         }
         Ok(out)
     }
@@ -625,7 +618,8 @@ mod tests {
 
     #[test]
     fn save_reports_a_balanced_field_in_a_field_bearing_document() {
-        let e = DocxEngine::open(docx_with_image_and_field(BODY_WITH_LIVE_IMAGE_AND_FIELD)).unwrap();
+        let e =
+            DocxEngine::open(docx_with_image_and_field(BODY_WITH_LIVE_IMAGE_AND_FIELD)).unwrap();
         let reports = e.field_report().unwrap();
         assert_eq!(reports.len(), 1);
         assert_eq!(reports[0].0, "word/document.xml");
@@ -695,17 +689,20 @@ mod tests {
         // Even if an unbalanced part reached the engine by another route
         // (a stale rels/content-types edit, a future mutation path), the
         // commit gate catches it and returns no bytes.
-        let mut e = DocxEngine::open(docx_with_image_and_field(BODY_WITH_LIVE_IMAGE_AND_FIELD)).unwrap();
+        let mut e =
+            DocxEngine::open(docx_with_image_and_field(BODY_WITH_LIVE_IMAGE_AND_FIELD)).unwrap();
         let unbalanced = BODY_WITH_LIVE_IMAGE_AND_FIELD
             .replace(
                 r#"<w:r><w:fldChar w:fldCharType="end"/></w:r></w:p></w:body>"#,
                 r#"</w:p></w:body>"#,
             )
             .into_bytes();
-        e.current
-            .insert(BODY_PART.to_string(), unbalanced);
+        e.current.insert(BODY_PART.to_string(), unbalanced);
         let err = e.save().unwrap_err();
-        assert!(matches!(err, OfficeError::FieldBalance { field: 1, .. }), "{err:?}");
+        assert!(
+            matches!(err, OfficeError::FieldBalance { field: 1, .. }),
+            "{err:?}"
+        );
     }
 
     #[test]
@@ -713,9 +710,15 @@ mod tests {
         let original = docx_with_image_and_field(BODY_WITH_LIVE_IMAGE_AND_FIELD);
         let mut e = DocxEngine::open(original).unwrap();
         let sweep = e.sweep_media().unwrap();
-        assert_eq!(sweep.referenced, std::collections::BTreeSet::from(["rId1".into()]));
+        assert_eq!(
+            sweep.referenced,
+            std::collections::BTreeSet::from(["rId1".into()])
+        );
         assert_eq!(sweep.removed_rels, vec!["rId2".to_string()]);
-        assert_eq!(sweep.removed_parts, vec!["word/media/image2.png".to_string()]);
+        assert_eq!(
+            sweep.removed_parts,
+            vec!["word/media/image2.png".to_string()]
+        );
         assert!(sweep.candidates.is_empty());
 
         let out = e.save().unwrap();
@@ -738,11 +741,10 @@ mod tests {
         // Reference the second image too (r:link, a reference form the sweep
         // over-approximates on purpose).
         let mut e = DocxEngine::open(original).unwrap();
-        let patched = BODY_WITH_LIVE_IMAGE_AND_FIELD.replace(
-            r#"r:embed="rId1""#,
-            r#"r:embed="rId1" r:link="rId2""#,
-        );
-        e.current.insert(BODY_PART.to_string(), patched.into_bytes());
+        let patched = BODY_WITH_LIVE_IMAGE_AND_FIELD
+            .replace(r#"r:embed="rId1""#, r#"r:embed="rId1" r:link="rId2""#);
+        e.current
+            .insert(BODY_PART.to_string(), patched.into_bytes());
         let sweep = e.sweep_media().unwrap();
         assert!(sweep.is_noop());
         assert!(sweep.orphan_rels.is_empty());
@@ -757,7 +759,9 @@ mod tests {
             max_archive_bytes: (bytes.len() - 1) as u64,
             ..crate::limits::PatchLimits::default_policy()
         };
-        let err = DocxEngine::open_with_limits(bytes, tight).err().expect("must refuse");
+        let err = DocxEngine::open_with_limits(bytes, tight)
+            .err()
+            .expect("must refuse");
         match err {
             OfficeError::TooLarge {
                 kind,
@@ -781,7 +785,9 @@ mod tests {
             max_part_bytes: body_size - 1,
             ..crate::limits::PatchLimits::default_policy()
         };
-        let err = DocxEngine::open_with_limits(bytes, tight).err().expect("must refuse");
+        let err = DocxEngine::open_with_limits(bytes, tight)
+            .err()
+            .expect("must refuse");
         let msg = err.to_string();
         assert!(msg.contains("word/document.xml"), "{msg}");
         assert!(matches!(
@@ -804,7 +810,9 @@ mod tests {
             max_total_part_bytes: body, // only room for one part
             ..crate::limits::PatchLimits::default_policy()
         };
-        let err = DocxEngine::open_with_limits(bytes, tight).err().expect("must refuse");
+        let err = DocxEngine::open_with_limits(bytes, tight)
+            .err()
+            .expect("must refuse");
         assert!(matches!(
             err,
             OfficeError::TooLarge {

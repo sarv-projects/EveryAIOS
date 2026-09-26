@@ -237,7 +237,10 @@ mod tests {
         assert_eq!(sweep.removed_rels, vec!["rId2".to_string()]);
         let after_sweep = engine.save().unwrap();
         let diff = parts_diff(&after_patch, &after_sweep).unwrap();
-        assert_eq!(diff.changed, vec!["word/_rels/document.xml.rels".to_string()]);
+        assert_eq!(
+            diff.changed,
+            vec!["word/_rels/document.xml.rels".to_string()]
+        );
         assert_eq!(diff.removed, vec!["word/media/image2.png".to_string()]);
         assert!(diff.added.is_empty());
 

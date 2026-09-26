@@ -1,135 +1,166 @@
-# ARCH — Derived Index (points at CORE)
+# AgentCowork — Architecture v1 — Index & Blueprint
 
-> **⛭ ROOT AUTHORITY: [`CORE.md`](CORE.md).** Read that first. It owns the canonical primitives, the
-> ownership matrix and the invariants, and **every document in this directory derives from it and may not
-> weaken it**. This index is a *derived* map, not an authority. The thaw that made `CORE.md` the root is
-> recorded in [`ADR/0003-architecture-thaw-core-authority.md`](ADR/0003-architecture-thaw-core-authority.md).
+> **Doc set:** AgentCowork architecture **v1** — rebuilt from scratch on the shoulders of v0.
+> **Status:** Pass **P0** (blueprint). Foundation docs 00–03 drafted; module docs planned.
+> **Date:** 2026-09-26 · **Repo:** `desktop_app` · **Branch:** `main`
+> **Code:** frozen. This set describes the target architecture; no code changes until v1 freezes.
+> **v0 archive:** `ARCHIVE/v0/` (local, git-ignored) — see `ARCHIVE/v0/MANIFEST.md`. Nothing in the archive is a contract.
+> **Exempt:** `TODO.md` stays the live delivery tracker and is not part of this rebuild.
 >
-> **Status:** Architecture reference, derived from `CORE.md`. **A document that states architecture must be reachable from this file** — the Archive above is historical and is *not* cited as a contract by anything live.
->
-> **v1 scope amendment (2026-09-24):** [`ADR/0007`](ADR/0007-windows-first-v1-qualification.md) expands the
-> v1 qualification surface without adding a primitive, runtime, registry, or authority. Its scope and
-> acceptance rules are cross-referenced by the agent, automation, recovery, desktop, connector, product,
-> support, capability, and delivery surfaces; the voice family remains post-v1.
->
-> **Projection/lease amendment (2026-09-24):** [`ADR/0008`](ADR/0008-session-workbench-projection-and-resource-leases.md)
-> defines the non-authoritative `SessionWorkbenchProjection` keyed by canonical `SessionId` and the typed
-> Work/Run-owned `ResourceLease`/fencing contract. It indexes the Session → Work → Run → AgentBinding chain
-> without creating a Workbench primitive, runtime, event log, permission system, or second source of truth.
-> The subsystem contracts carry concise derivations; the ADR carries the full normative model and pending
-> acceptance matrix.
->
-> **Local-runtime interoperability amendment (2026-09-25):** [`16-LOCAL-RUNTIME-INTEROP.md`](16-LOCAL-RUNTIME-INTEROP.md)
-> derives from CORE plus ADR-0005/0007 and records managed runtime resources plus agent-owned inference handoff.
-> It adds no canonical primitive or invariant; the existing I4/I10/I15/I21/I23/I24 cover the boundary unchanged.
->
-> **Numbering note:** `16-LOCAL-RUNTIME-INTEROP.md` is the new live number-16 subsystem contract. The older
-> number-16 chat-loop document and number-17 native-agent document remain historical files under `ARCH/archive/`;
-> any text that cites either archived file as authority is stale and must point to the live subsystem contracts.
-> **Workspace count (2026-09-23):** `crates/Cargo.toml` lists **21 members**. The former 22nd member, `everyaios-engine`, was **deleted 2026-09-23** (`../TODO.md` P72) — it had been dead (zero dependents) since `P71.2c`; its purity gate (PURITY-2, D27) was retired with it. The post-v1 return vehicle, if the built-in engine ever comes back, is `P71.7` (a governed baseline binding, `ADR/0005`), not a resurrected crate. Counts of "22 crates" in older prose are historical. The `crates/` directory additionally contains non-member entries (e.g. `examples/`, `target/`) that are not workspace members and never counted.
- It works alongside the master spec `../DESKTOP-APP-SPEC.md` (**note:** spec §4.3 "Final architecture — the agent control plane", §4.4 Work Gateway / Session Runtime and §9's principles already carry a large part of the control-plane contract, so much of this directory is the *elaboration* of that contract rather than a competing statement of it); this ARCH series defines architecture boundaries, module ownership, and diagrams. Function identity is mirrored in `09-FEATURE-MATRIX.md`; historical decisions are recorded in `../SPEC-CHANGELOG.md`. Delivery status remains in `../TODO.md` (architecture-thaw work is **P69**; v1 release is **P70**).
-> **Decision (user-confirmed):** **Hybrid & Decoupled** — the `@everyaios/core-*` TypeScript engine stays as a supervised Bun-compiled sidecar; a **Rust layer owns the paths where research proved Rust wins**: browser/CDP control, script-eval sandbox (rquickjs), security guards, audit/replay ingest, **storage intelligence** (`everyaios-storage`), IronCalc spreadsheet recalculation (`everyaios-office`), and memory graph (`everyaios-memory`). External coding agents run decoupled as out-of-process ACP stdio children.
-> **Rewritten `P69.A13` (done 2026-09-20) — this file is the derived index. It points at CORE and the subsystem contracts; it states no primitives, no ownership, and no invariants of its own.**
+> **v1 freeze for review (2026-09-26):** passes P0–P6 complete — 37 `ARCH/` docs + `AGENTCOWORK-SPEC.md` + `AGENTCOWORK-UI.md` + README/AGENTS syncs. Further changes go through `DEC` entries (`ARCH/04-DECISIONS.md`).
 
-## What this index is
+---
 
-`CORE.md` owns: the 16 primitives (§3), the ownership matrix (§4), the 27 invariants I1–I27 (§6), and the 7 planes (§2, §13). The subsystem contracts own their boundaries: [`WORK.md`](WORK.md) · [`SESSION.md`](SESSION.md) · [`AGENT.md`](AGENT.md) · [`EXTERNAL-AGENTS.md`](EXTERNAL-AGENTS.md) · [`CONTEXT.md`](CONTEXT.md) · [`CAPABILITIES.md`](CAPABILITIES.md) · [`MEMORY.md`](MEMORY.md) · [`SECURITY.md`](SECURITY.md) · [`RECOVERY.md`](RECOVERY.md) · [`AUTOMATION.md`](AUTOMATION.md) · [`ROUTING.md`](ROUTING.md) · [`UI.md`](UI.md) · [`DESKTOP.md`](DESKTOP.md) · [`16-LOCAL-RUNTIME-INTEROP.md`](16-LOCAL-RUNTIME-INTEROP.md).
+## 1. Why a rebuild
 
-This file owns nothing except the reading path. Where any row below appears to restate a primitive, owner, or invariant, CORE wins.
+v0 grew by accretion: 33 ARCH files, 55 research files, a 355 KB spec, a 606 KB changelog — with drift between docs and code (stale modules, phantom traces, duplicate ownership of responsibilities). v1 is written from scratch as a small set of documents with:
 
-## Reading order (derived documents, not authorities)
+- **one owner per topic**,
+- **an explicit authority chain** (§2),
+- **evidence rules** — no claim about an external system is accepted without a primary citation (§6, §7),
+- **a pass protocol** that checks architecture viability after every pass (§4, §5),
+- **module-by-module development** — each module doc must state what it owns, what it depends on, what it exposes, and how it fails (§3).
 
-1. **01-SYSTEM-ARCHITECTURE.md** — derived overview: the module story mapped onto CORE's 7 planes (the map)
-2. **02-MODULE-LAYOUT.md** — crate/package → owning plane → ownership question, plus the disposition table (canonical / shrink / merge / remove)
-3. **03-BYOK-KEYRINGS.md** — multi-key per provider, **429-only** failover (5xx does not rotate), 4h models.dev catalog, OpenCode custom inference, **OpenCode Zen / Go / Free** (three rows), OAuth subscriptions
-4. **04-OFFICE-ENGINE.md** — open + edit Word/Excel/PPT/PDF (surgical, byte-preserving, IronCalc DAG)
-5. **05-TOKEN-ECONOMY.md** — context-engineering strategies (prefix-cache, tool-result control, pass-by-reference); the architecture is the six contracts in `CONTEXT.md` §5 plus the optimization order in §3
-6. **06-SECURITY-GUARDRAILS.md** — sole-Guard ownership per `SECURITY.md`; trust ladder as policy input; authorization provenance; sandbox as mechanism
-7. **07-MEMORY-CONTEXT.md** — keeps the algorithms, multi-scope and SOTA retrieval as **strategies** under the four memory classes in `MEMORY.md`
-8. **08-BROWSER-LAYER.md** — tiered CDP Browse (Lightpanda + Chrome CDP + stealth). E9 computer use is the real OS (vision + A11y + DAG)
-9. **09-FEATURE-MATRIX.md** — the complete submodule & function matrix
-10. **10-BUILD-PLAN.md** — phases with exit criteria
-11. **11-AI-CHAT-FEATURES.md** — AI chat derivation: copy (from APP engine + Hermes/etc.), convert, reject
-12. **12-UI-SPEC.md** — UI/UX specification **v3.10**: Windows-first runtime provenance + two-pane agent picker + agent-owned models + session function loadout; rail Folder/Shell/Browse/**Computer use**/Code + Office flyout; CUA see-pane + vision modal + DAG on Progress
-13. **13-PROMPT-ANATOMY.md** — the assembled prompt: identity/persona scanned before insertion, third-party retrieval as data-only content, `<user_document>` delimiting, byte-stable prefix above `CACHE_BOUNDARY`, prompt-is-not-permission (P1.5). Absorbed into `CONTEXT.md` (`P69.A24`): the assembler serializes Context, it does not own policy (I22). Its TS implementation (`packages/coordinator/src/prompt.ts`) was archived 2026-09-22 with the built-in engine (`P71.2c`, `ARCH/archive/coordinator-loop/`); the **live** projection for an external agent is the Rust context passport (`src-tauri/src/acp_cmds.rs`)
-14. **15-CONNECT-STORE.md** — the Connect Store (v1.0, 2026-08-29): the curated "click → sign in → use" connector surface — remote MCP + OAuth 2.1 (`everyaios-mcp::store`), device-flow/loopback PKCE for the big four (GitHub/Google/Microsoft/Slack), Guard-2 consent payloads (`ConnectConsent`), first-class remote MCP via `remote_plan`
-15. **spec §4.5** — `CapabilityBackend` (Local / Wsl / Remote); H36 terminal profiles; user-owned cloud slot. Not a new ARCH file — lives in the spec.
-16. **16-LOCAL-RUNTIME-INTEROP.md** — managed runtime resources, artifact/library/instance separation, the agent control ladder, and explicit external-agent handoff; **EveryAIOS owns the environment; the external agent owns the engine**
-17. **Archive** — [`archive/17-NATIVE-AGENT.md`](archive/17-NATIVE-AGENT.md) and [`archive/16-CHAT-LOOP-RUST-PORT.md`](archive/16-CHAT-LOOP-RUST-PORT.md) ⛔ — both **physically archived 2026-09-22 (`P71.5a`)** and neither is a contract. `17` was the v3.75 two-plane contract (its rows B10/B11/C14/C15/F16/I14–I17 remain capability *identity*); archived `16` scoped a Rust port of the built-in loop. [`ADR/0005`](ADR/0005-external-agents-are-the-v1-engines.md) defers the built-in engine to post-v1, so the loop belongs to the selected agent ([`AGENT.md`](AGENT.md) §1) and there is nothing left to port. Both are kept for the post-v1 governed-baseline return (`P71.7`), not as current architecture. `ARCH/archive/native_loop.rs` (`P71.2e`) sits beside them.
-18. **research docs 49–51** — storage intelligence (49: eDirStat/UltraSearch/WinDirStat/fclones → `everyaios-storage` + matrix D9–D11/G7), generative UI/image/voice/email gaps (50: AG-UI → H25, A10, F14–F15, H26–H28, H15 ext), aider recheck (51: doc 46 corrections — edit formats ~9, providers 100+, "4.2×/71%" flagged third-party)
-19. **research doc 52** — gap pass 2 (Aider-in-F12 + surgical hierarchy, J21 escalation rules & decision packages, D12 storage health, G8 tiered search cascade + Algorithm #33, E9/J14 refs; 26 repos live-verified, 8 hallucinated flagged → ledger 218)
-20. **research doc 53** — formalization of 4 review gaps (credential broker, ticket contract, durable events + idempotency, shortest-path routing) → SPEC v3.10 + ARCH/06 §6.9–6.11
-21. **research doc 54** — third-party dependency + catalog audit (LadybugDB confirmed → ledger 219; xxhash-rust BSL → twox-hash; `focus_window` verified rename-safe)
-22. **research doc 55** — agent-browser ecosystem (Obscura source-verified 21K★, Lightpanda/Steel/CloakBrowser honesty passes) → P2.4/P2.5 refs, 3 repos → ledger
-23. **research doc 56** — agentic dev-environments + closed-source agents (aider/opencode/Copilot CLI patterns) → P11.5.9/P12, 4 repos → ledger
-24. **research doc 57** — ACP registry + subscription-auth boundary (official Claude ACP wrapper allowed; token harvest blocked) → F12/J17, 1 repo → ledger
-25. **research doc 58** — repo batch 2 (OmniRoute provider/routing goldmine, taste-skill (I2≠C9), ppt-master/guizang, univer, codebase-memory-mcp, llmfit, GenericAgent, better-harness, holaOS competitor, worldmonitor, MAF, DeepSeek-TUI→CodeWhale correction) → A1–A7/I2/I5/I7/D3/H5/F12, 19 repos → ledger
-26. **research doc 59** — OmniRoute source-level deep-dive (13-factor scoring + mode packs + budget headers + 19 strategies + provider taxonomy) → steal-spec for A2/A3/A6/A7/A9/P6.10/J11
-27. **research doc 60** — TencentDB Agent Memory deep-dive (4-asset taxonomy + L0→L3 distillation + governance + agent-loadout) → C1/C2/C3/C7/C8/I2/I7 + F12/J17, 1 repo → ledger
-28. **research docs 88–89** — the two 2026-09 provenance docs that drove the current UI/security queues: **88** casual-surface / first-five-minutes audit → **TODO P61**, **89** guard network-destination + agent-config floor audit (a code-level audit of this repo, not market research) → **TODO P62**. (Docs 61–87 are rowed in `RESEARCH/desktop_app/00-INDEX.md`; this list is a reading path, not the full corpus.)
+**Kept from v0 (direction that survived verification):** Work-first runtime; one governed execution path for every effect; Capability ≠ Provider; custody invariants (sidecar proposes / Core disposes; keys never leave the vault); native-first capability resolution for agents.
+**Rebuilt or added in v1:** naming layer (AgentCowork / Core / Agent X); memory architecture (new); world model; workflow engine as Core infrastructure; context split (infrastructure vs control); UI architecture incl. chat rendering; module-by-module interop checks; canonical data-model + contracts as separate shared docs.
 
-## Document accounting — every document's role (nothing unaccounted)
+---
 
-`CORE.md` describes the system; this table accounts for the **documents** that describe it, so no
-Markdown file in this repository is orphaned from the architecture. If a file is not in this table, it is
-not architectural — and if a *new* architectural document appears, it belongs in a row here.
+## 2. Authority chain
 
-**HLD — high-level design (what the system is, and what owns what)**
+| Layer | Document | Authority over |
+|---|---|---|
+| Product | `AGENTCOWORK-SPEC.md` | **WHAT** the product must be: behavior, contracts, acceptance. Root authority. |
+| Architecture | `ARCH/03-HLD.md` | **HOW** the system is structured. Module docs derive from it. Until SPEC lands, HLD + `04-DECISIONS` are the top authorities. |
+| Module LLD | `ARCH/10..34` | Their module only. MUST NOT contradict HLD/SPEC/contracts. |
+| Shared | `ARCH/06-DATA-MODEL.md`, `ARCH/07-CONTRACTS.md` | Canonical shared entities (DM-*) and interfaces (CTR-*). Module docs own local details only. |
+| UI | `AGENTCOWORK-UI.md` | UI/UX architecture, chat rendering, interaction model. Derives from SPEC + Experience plane. |
+| Meta | `ARCH/00..05, 40..44` | Navigation, naming, thesis, decisions, invariants, flows, edge cases, evidence, glossary. |
+| Delivery | `TODO.md` | Implementation status only — never a design authority. |
+| Evidence | `ARCHIVE/v0/**`, `ARCHIVE/v1-research/**`, `REPO-COMPARE/**` | Historical/working evidence — never authority. |
 
-| Role | Documents |
-|---|---|
-| **Root authority** | [`CORE.md`](CORE.md) — primitives · ownership matrix · 27 invariants · planes |
-| **Subsystem contracts** (14) | [`WORK.md`](WORK.md) · [`SESSION.md`](SESSION.md) · [`AGENT.md`](AGENT.md) · [`EXTERNAL-AGENTS.md`](EXTERNAL-AGENTS.md) · [`CONTEXT.md`](CONTEXT.md) · [`CAPABILITIES.md`](CAPABILITIES.md) · [`MEMORY.md`](MEMORY.md) · [`SECURITY.md`](SECURITY.md) · [`RECOVERY.md`](RECOVERY.md) · [`AUTOMATION.md`](AUTOMATION.md) · [`ROUTING.md`](ROUTING.md) · [`UI.md`](UI.md) · [`DESKTOP.md`](DESKTOP.md) · [`16-LOCAL-RUNTIME-INTEROP.md`](16-LOCAL-RUNTIME-INTEROP.md) |
-| **Decisions** | [`ADR/0001`](ADR/0001-connector-platform-mcp-first.md) · [`0002`](ADR/0002-ui-v2-cockpit-replaces-v1-router-pages.md) · [`0003`](ADR/0003-architecture-thaw-core-authority.md) (thaw) · [`0004`](ADR/0004-behaviour-profile-invariant.md) (I27) · [`0005`](ADR/0005-external-agents-are-the-v1-engines.md) (external agents are the v1 engines; the built-in engine defers to post-v1) · [`0006`](ADR/0006-session-kinds.md) (session kinds: interactive · automation · delegated) · [`0007`](ADR/0007-windows-first-v1-qualification.md) (expanded v1 scope and evidence gate; voice remains post-v1) · [`0008`](ADR/0008-session-workbench-projection-and-resource-leases.md) (non-authoritative Session projection and Work/Run-owned resource leases) |
-| **Product contract** | `../DESKTOP-APP-SPEC.md` (§4.3 control plane · §4.4 Work Gateway · §4.6 two-plane model · §9 principles · §0 capability index) |
-| **Derived architecture** (downgraded, each bannered) | this file · [`01`](01-SYSTEM-ARCHITECTURE.md) · [`02`](02-MODULE-LAYOUT.md) · [`03`](03-BYOK-KEYRINGS.md) · [`04`](04-OFFICE-ENGINE.md) · [`05`](05-TOKEN-ECONOMY.md) · [`06`](06-SECURITY-GUARDRAILS.md) · [`07`](07-MEMORY-CONTEXT.md) · [`08`](08-BROWSER-LAYER.md) · [`09`](09-FEATURE-MATRIX.md) · [`10`](10-BUILD-PLAN.md) · [`11`](11-AI-CHAT-FEATURES.md) · [`12`](12-UI-SPEC.md) · [`13`](13-PROMPT-ANATOMY.md) · [`15`](15-CONNECT-STORE.md) · [`16`](16-LOCAL-RUNTIME-INTEROP.md) · [`DIAGRAMS.md`](DIAGRAMS.md) |
-| **Archive** (historical, never a contract) | [`archive/17-NATIVE-AGENT.md`](archive/17-NATIVE-AGENT.md) · [`archive/16-CHAT-LOOP-RUST-PORT.md`](archive/16-CHAT-LOOP-RUST-PORT.md) · `archive/native_loop.rs` |
+**Conflict resolution:** module doc vs HLD → HLD wins. HLD vs SPEC → SPEC wins (product intent), unless a recorded decision (`DEC-*`) says otherwise. Any change to an authority doc requires a new/updated `DEC` entry in `04-DECISIONS.md`.
 
-**LLD — low-level design (how the code is actually built)**
+---
 
-| Role | Documents |
-|---|---|
-| **Code-level understanding artifacts** | `../docs/codebase/` — [`README`](../docs/codebase/README.md) · [`architecture`](../docs/codebase/architecture.md) (layers, boundaries) · [`components`](../docs/codebase/components.md) (per-subsystem entry points) · [`flows`](../docs/codebase/flows.md) (execution paths, with tiers) · [`data-and-state`](../docs/codebase/data-and-state.md) (state ownership) · [`external-systems`](../docs/codebase/external-systems.md) (L0 agents, egress) · [`tests-and-verification`](../docs/codebase/tests-and-verification.md) · [`invariants`](../docs/codebase/invariants.md) (**`CE1–CE9`** code-evidenced, deliberately *not* CORE's `I1–I27`) · [`decisions`](../docs/codebase/decisions.md) (`D1–D10`) · [`hotspots`](../docs/codebase/hotspots.md) · `freshness.json` |
-| **UI design** | [`12-UI-SPEC.md`](12-UI-SPEC.md) (pixels) · `../UI-DESIGN-PROMPT.md` (canonical UI spec) · `../ui/DESIGN-SYSTEM.md` (tokens/layouts) |
-| **Test evidence** | `../TEST-CASES.md` (acceptance suite) · `../testcases.md` (scenarios) · `../UX-TESTING-PLAN.md` (UX criteria) |
-| **Generated** | `../CODEBASE-MAP.md` (every tracked file; `--check` gates it) · `hotspots` numbers (codegraph) |
+## 3. Document map
 
-**Truth sources and process**
+| ID | File | Scope | Purpose | Status |
+|---|---|---|---|---|
+| 00 | `ARCH/00-INDEX.md` | Meta | This file: authority, doc map, passes, conventions, evidence | Draft P0 |
+| 01 | `ARCH/01-NAMING.md` | Meta | Working names + v0→v1 rename map | Draft P0 |
+| 02 | `ARCH/02-THESIS.md` | Meta | Positioning, locked principles, non-goals, success statements | Draft P0 |
+| 03 | `ARCH/03-HLD.md` | Meta | Planes, module map, dependency rules, governed path, scoping model | Draft P0 |
+| 04 | `ARCH/04-DECISIONS.md` | Meta | Decision register (`DEC-*`) with evidence | Draft P1 |
+| 05 | `ARCH/05-INVARIANTS.md` | Meta | Invariants (`INV-*`) + enforcement points + verification | Draft P1 |
+| 06 | `ARCH/06-DATA-MODEL.md` | Shared | Canonical entities and schemas (`DM-*`) | Draft P1 |
+| 07 | `ARCH/07-CONTRACTS.md` | Shared | Canonical cross-module interfaces (`CTR-*`) | Draft P1 |
+| 10 | `ARCH/10-KERNEL.md` | Core kernel | ids, errors, config, time, serialization; minimal-kernel rule | Draft P2 (early) |
+| 11 | `ARCH/11-WORK.md` | Work plane | Work · Step · Task · Session · Run · Checkpoint · Scheduler | Draft P2 (early) |
+| 12 | `ARCH/12-TRUST.md` | Trust/Control | Policy · Guard · approvals · tickets · vault · egress · audit · external-agent projections | Draft P2 (early) |
+| 13 | `ARCH/13-CAPABILITY.md` | Capability | Registry · catalog · resolver · handles · affordances · guidance · capability graph | Draft P2 (early) |
+| 14 | `ARCH/14-PROVIDERS.md` | Capability/Execution | Provider adapter contract + native/MCP/ACP/HTTP/CLI/plugin/remote + MCP era policy | Draft P2 (early) |
+| 15 | `ARCH/15-AGENT-X.md` | Agent runtime | Agent X LLD: loop, planner, delegation, recovery, completion contracts, CLI/ACP surfaces | Draft P2 (early) |
+| 16 | `ARCH/16-CONTEXT.md` | Context | Context infrastructure (Core) + context control (Agent X) + projections | Draft P2 (early) |
+| 17 | `ARCH/17-MEMORY.md` | Memory | Durable memory: layers, write/read paths, minimal algorithm set, upgrade path | Draft P2 (early) |
+| 18 | `ARCH/18-MODEL-ROUTING.md` | Model plane | Model registry · router · adapters; local discovery; reasoning-effort mapping | Draft P2 (early) |
+| 19 | `ARCH/19-RUNTIME-ENVIRONMENTS.md` | Execution | Process manager · environments · sandbox · lifecycle · health | Draft P2 (early) |
+| 20 | `ARCH/20-WORKFLOW.md` | Orchestration | Workflow IR · triggers · durability · versioning · approvals | Draft P2 (early) |
+| 21 | `ARCH/21-WORLD-MODEL.md` | World | Scanner · registries · world graph · event stream · incremental updates | Draft P2 (early) |
+| 22 | `ARCH/22-OFFICE.md` | Domain | Office runtime: L1/L2/L3 · resident contexts · render/validate · format providers | Draft P3 (early) |
+| 23 | `ARCH/23-BROWSER.md` | Domain | Browser runtime: managed Chromium + adapters · browser world · ladder | Draft P3 (early) |
+| 24 | `ARCH/24-COMPUTER-USE.md` | Domain | Computer-use ladder · UI automation · vision fallback · input safety | Draft P3 (early) |
+| 25 | `ARCH/25-FILES.md` | Domain | File identity · watchers · leases · indexing | Draft P3 (early) |
+| 26 | `ARCH/26-CODE.md` | Domain | RepoGraph/RepoMap · LSP · worktrees · code execution | Draft P3 (early) |
+| 27 | `ARCH/27-SEARCH.md` | Domain | Search plane | Draft P3 (early) |
+| 28 | `ARCH/28-COMMS.md` | Domain | Connectors; email/calendar/messaging as a capability layer | Draft P3 (early) |
+| 29 | `ARCH/29-ARTIFACTS.md` | Artifacts | Artifact + Receipt models · versions · provenance · library promotion | Draft P2 (early) |
+| 30 | `ARCH/30-EVENTS.md` | Events | Event store · bus · replay · subscriptions; usage & cost telemetry | Draft P3 (early) |
+| 31 | `ARCH/31-SKILLS-PLUGINS.md` | Extensibility | Skill registry/loader/resolver; plugin surfaces | Draft P3 (early) |
+| 32 | `ARCH/32-CHANNELS.md` | Surfaces | Desktop/CLI/ACP/A2A/API/mobile projections; agent gateway | Draft P3 (early) |
+| 34 | `ARCH/34-EFFECT-VERIFICATION.md` | Verification | Validate · render · verify · reconcile; receipt policy | Draft P3 (early) |
+| 40 | `ARCH/40-FLOWS.md` | Cross | End-to-end sequences (`FLOW-*`) | Draft P4 |
+| 41 | `ARCH/41-EDGE-CASES.md` | Cross | Edge-case catalog (`EDGE-*`) + resolutions | Draft P4 |
+| 42 | `ARCH/42-EVIDENCE-MAP.md` | Cross | Evidence map + acceptance mapping for implementation | Draft P4 |
+| 43 | `ARCH/43-GLOSSARY.md` | Meta | Terms | Draft P3 |
+| 44 | `ARCH/44-ABSORB-REGISTER.md` | Meta | Competitor absorb register + licensing ledger | Draft P3 |
+| — | `AGENTCOWORK-SPEC.md` | Product | Product contract (WHAT) — root authority | Draft P5 |
+| — | `AGENTCOWORK-UI.md` | UI | UI architecture + chat rendering spec | Draft P5 |
+| — | `README.md` (root) | Product | Repo landing page — v1 sync | Draft P6 |
+| — | `AGENTS.md` (root) | Process | Agent operating instructions — v1 synced 2026-09-26 | Done |
 
-| Role | Documents |
-|---|---|
-| **Delivery truth** | `../TODO.md` (the only implementation status) · `../SPEC-CHANGELOG.md` (dated history) · `../CURRENT_RUN.md` (handover, **no architectural authority**) |
-| **Capability identity** (one triple) | `../capabilities.yaml` == [`09-FEATURE-MATRIX.md`](09-FEATURE-MATRIX.md) == spec §0 — **166** ids, CI-enforced |
-| **Repository instructions** | `../AGENTS.md` (the agent contract) · `../.agents/` (agent kit: `README` · `docs/` · `templates/AGENTS.template.md` · `skills/codebase-intelligence/**` · `skills/skill-creator/SKILL.md`) — tooling, not architecture |
-| **Product narrative** | `../README.md` (user-facing; surfaces the same governance boundary as [`EXTERNAL-AGENTS.md`](EXTERNAL-AGENTS.md) §5) · `../COMPETITIVE-POSITIONING.md` |
-| **Operations** | `../deploy/BYO-HOST.md` (self-host deployment) |
-| **Non-normative** | `../RESEARCH/**` (104 docs, frozen by decision `D8`; every file carries a non-normative label — **not a contract, and never updated with code**) |
+---
 
-> **The accounting rule.** A document that states architecture must be reachable from this file, and a
-> document that states architecture must derive from `CORE.md`. Anything else is evidence, history, tooling
-> or narrative — useful, and deliberately outside the authority chain.
+## 4. Build passes
 
+| Pass | Content | Exit condition |
+|---|---|---|
+| **P0** ✅ | Archive v0; 00-INDEX, 01-NAMING, 02-THESIS, 03-HLD | Blueprint readable end-to-end (2026-09-26) |
+| **P1** ✅ | 04-DECISIONS, 05-INVARIANTS, 06-DATA-MODEL, 07-CONTRACTS | Drafted 2026-09-26 — `DEC-001…033`, `INV-01…024`, `DM-001…027`, `CTR-001…026` |
+| **P2** ✅ | Core modules: 10 → 11 → 12 → 13 → 14 → 15 → 16 → 17 → 18 → 19 → 20 → 21 → 29 | All drafted 2026-09-26 (22 carried with P3 label) |
+| **P3** ✅ | Remaining modules: 22–28, 30, 31, 32, 34, 43, 44 | All drafted 2026-09-26 |
+| **P4** ✅ | Cross-cutting: 40-FLOWS, 41-EDGE-CASES, 42-EVIDENCE-MAP | Drafted 2026-09-26 — 24 flows · ~50 edges · FIX register |
+| **P5** ✅ | `AGENTCOWORK-SPEC.md`, `AGENTCOWORK-UI.md` | SPEC ✅ + UI ✅ drafted 2026-09-26 (UI: 583 lines, 13 sections) |
+| **P6** ✅ | Viability + evidence sweep; consistency pass; freeze v1; README/AGENTS sync | Sweep run 2026-09-26 (cross-refs/sections/statuses/names clean; `20-WORKFLOW` interop gap fixed); freeze declared for review; README + AGENTS synced |
 
+---
 
-One project = one folder + one session tree · one effect-authorization model (ARCH/06 §6.10) as the mutation gate — agent/automation = `AuthorizationTicket`, human UI = trusted native gesture, both on the one audit · one append-only event log (doc 53's 10 event types) · one Progress timeline that tabs/panels disclose rather than duplicate.
+## 5. Viability checklist (per doc, and for the whole set at freeze)
 
-## ADRs (accepted architecture decisions)
+- [ ] **One governed path:** every externally visible effect flows `Work → Capability → Provider → Handle → Guard → Ticket → Execute → Effect → Verify → Receipt → Event`.
+- [ ] **One owner per responsibility:** no duplicated engines/registries/schedulers/provider systems.
+- [ ] **Acyclic dependencies:** every module edge has a named contract (`CTR-*`).
+- [ ] **Module interop:** doc states depends-on, exposes-to, and failure behavior.
+- [ ] **Flows complete:** start, success, failure, cancel, crash-recovery.
+- [ ] **Edge cases:** enumerated and resolved, or explicitly deferred with a DEC.
+- [ ] **Evidence:** external claims cited (`path:line` / URL); no silent UNVERIFIED claims.
+- [ ] **Token discipline:** deterministic operations never require an LLM.
+- [ ] **Security:** enforcement in Core (Guard) not prompts; vault custody preserved; external agents get projections only.
+- [ ] **No stale v0 terms:** v1 names only (except `01-NAMING` map and history notes).
 
-Decisions that used to live as monolithic blockquotes in `TODO.md`'s header
-now live as numbered ADR files (Fix 2). Each is one decision + rationale +
-consequences; `TODO.md` links them instead of duplicating the text.
+---
 
-| ADR | Decision |
-|---|---|
-| [`0001`](ADR/0001-connector-platform-mcp-first.md) | MCP is the connector platform; Composio/Zapier/Nango aggregator removed |
-| [`0002`](ADR/0002-ui-v2-cockpit-replaces-v1-router-pages.md) | UI v2 cockpit replaces v1 router pages (capability map) |
-| [`0003`](ADR/0003-architecture-thaw-core-authority.md) | Architecture thaw: `ARCH/CORE.md` becomes the root authority (retires the old executive-loop term; opens the v3.64 freeze) |
-| [`0004`](ADR/0004-behaviour-profile-invariant.md) | Add **I27**: behavioural policy is declared once and compiled per adapter; an uncompilable clause is reported `unenforceable` |
-| [`0005`](ADR/0005-external-agents-are-the-v1-engines.md) | **External agents are the v1 engines.** The built-in engine (model routing, native loop, its ~50-tool catalogue) is deferred to post-v1 as a *governed baseline binding*. Amends ADR-0003's "one option among equals"; re-scopes `ROUTING.md`; narrows I10 to EveryAIOS-managed credentials; adds the `delegate.*` façade as a prerequisite |
-| [`0006`](ADR/0006-session-kinds.md) | **Session kinds** (`interactive` · `automation` · `delegated`). Resolves the silence between `SESSION.md`'s 1:1 Chat↔Session rule and `WORK.md` §7's "every trigger creates Work": a trigger-created Session has **no Chat**, and every Work still has an owning Session. Adds no invariant |
-| [`0007`](ADR/0007-windows-first-v1-qualification.md) | **Windows-first v1 qualification expansion.** Makes ACP identity/lifecycle/Channel B, automation provenance and admission, Windows runtime/release, Rust quality, durability/recovery, live acceptance, and `P70.E1`–`P70.E12` all-PASS release obligations explicit. Amends scope/evidence only; adds no primitive or authority. Voice/STT/TTS/wake-word/audio remain post-v1 |
-| [`0008`](ADR/0008-session-workbench-projection-and-resource-leases.md) | **Session workbench projection and resource leases.** Defines a non-authoritative `SessionWorkbenchProjection` keyed by canonical `SessionId`, the full `Session → Work → Run → AgentBinding` chain, and typed Work/Run-owned `ResourceLease`/generation fencing. Adds no Workbench primitive, runtime, event log, permission system, or authority; implementation/qualification remains open in `P71.10` |
+## 6. Conventions
 
-## Grounding
+- **Keywords:** MUST / SHOULD / MAY (RFC-2119 semantics).
+- **IDs:** `DEC-###` decisions · `INV-###` invariants · `DM-###` data-model entities · `CTR-###` contracts · `MOD-###` module anchors · `FLOW-###` flows · `EDGE-###` edge cases · `RISK-###` risks · `OQ-###` open questions.
+- **Evidence format:** `ev: path:line` (repo) · `ev: URL` (web) · confidence `H/M/L` · `UNVERIFIED` must be temporary and carry what would verify it.
+- **Status labels:** `Planned` → `Draft Pn` → `Review Pn` → `Frozen`.
+- **Cross-references:** use file paths (`ARCH/17-MEMORY.md`), not section numbers, so docs can evolve.
 
-All decisions trace to `RESEARCH/desktop_app/` docs 01–91 and the 282-repo ledger (doc 27 + doc 46 additions + docs 49–50: +22 + doc 52: +26 + doc 54: +1 + doc 55: +3 + doc 56: +4 + doc 57: +1 + doc 58: +19 + doc 60: +1 + doc 61: +8 + doc 62: +0 + doc 63: +0 + doc 64: +0 + doc 65: +19 + doc 66: +4 + doc 67: +3 + doc 83: +1 + docs 84–90: +0 repos — doc 63 is the 37-repo steal ledger, doc 64 the giants code-level deep-dive (rustdesk/ladybird/serenity/brave/chromium cloned + source-read; pattern-sources only), doc 67 the capability-delta batch (bolt.diy/hatchet/durable-execution-the-hard-way cloned + source-read; Sites + heartbeat steals + UI/UX finalization). Key source deep-dives: 19 (BYOK providers), 28/29 (office), 32/31 (token economy), 33 (BrowserOS — browser + audit + compaction), 05/16 (agentic coding: pi/Hermes/Reasonix/opencode), 03 (vision + security + memory), 13 (connector hub), 06/09 (browser/agentic OS), 46 (Aider + Devin Cloud — UI/UX, RepoMap, edit strategies, automations), 63 (37-repo steal ledger: harness/browser/office/user-capability clusters), 64 (giants code-level: sandbox profiles, syscall broker, adblock crate, NAT traversal), 67 (Sites/heartbeat/proactivity/inline-edit/kanban deltas + activity-rail UI finalization). Final-pass SOTA: doc 34.
+---
+
+## 7. Evidence base (surviving)
+
+- v0 docs: `ARCHIVE/v0/ARCH/` (33 entries incl. ADR/ and the archived coordinator loop).
+- v0 research: `ARCHIVE/v0/RESEARCH/` — `2026-ai-landscape/` (10 files), `desktop_app/` (45 files).
+- Comparator work: `~/business_Dev/REPO-COMPARE/` — `MASTER-COMPARISON.md` (186-item register), `DISPOSITION.md`, `LICENSE-LEDGER.md`, `BRIEFS/` (20), `clone2/` (58 full clones), `clone3/`.
+- v1 lane research (in progress): `ARCHIVE/v1-research/` — memory, agent-harness verification, UI evidence.
+- **Lost:** `/tmp/opencode/recon/` reports 01–29 (temp cleanup, 2026-09-26). Do not cite them; re-verify from surviving sources.
+
+---
+
+## 8. Working names
+
+Working product name: **AgentCowork** · Runtime: **Core** · Native agent: **Agent X**. Full map and rename table: `ARCH/01-NAMING.md`.
+
+---
+
+## 9. Open questions
+
+| ID | Question | Resolve by |
+|---|---|---|
+| OQ-001 | Product shorthand for UI copy (“AC”? “Cowork”? none) | Before UI copy freeze (P5) |
+| OQ-002 | Platform scope for World Model collectors (Windows-first vs cross-platform parity) | Module pass 21 |
+| OQ-003 | Timing + scope of code identifier rename (`everyaios-*` crates/packages, `EveryAIOS` strings) | Post-freeze code phase |
+| OQ-004 | `docs/` folder v1 review; README/AGENTS sync ✅ done (2026-09-26) | Post-freeze |
+| OQ-005 | First-release surface set (desktop + CLI minimum? ACP server timing) | 32-CHANNELS / SPEC |
+| OQ-006 | Whether v0 doc removals are committed now or when v1 freezes | Product owner |
+
+---
+
+## 10. P0 archive record
+
+**Archived to `ARCHIVE/v0/`** (git-ignored; see `ARCHIVE/v0/MANIFEST.md`): `ARCH/`, `RESEARCH/`, `DESKTOP-APP-SPEC.md`, `SPEC-CHANGELOG.md`, `COMPETITIVE-POSITIONING.md`, `PACKAGING.md`, `SUPPORT-MATRIX.md`, `TEST-CASES.md`, `testcases.md`, `UI-DESIGN-PROMPT.md`, `UX-TESTING-PLAN.md`, `multiagent.txt`.
+**Kept live:** `TODO.md` (exempt), `README.md`, `AGENTS.md`, `CURRENT_RUN.md`, `CODEBASE-MAP.md` (generated), `CONTRIBUTING.md`, `PRIVACY.md`, `SECURITY.md`, `LICENSE*`, `THIRD-PARTY-NOTICES.md`, `ui/DESIGN-SYSTEM.md` (current theme source), `docs/` (operational; later pass), `.agents/` (agent kit; later pass).
+**Interpretation:** “docs” = the product/architecture/research corpus. Operational, legal, generated and agent-kit files stay in place until their scheduled v1 sync so the repo keeps working during the rebuild.
