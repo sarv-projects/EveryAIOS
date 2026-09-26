@@ -1949,6 +1949,116 @@ This registry answers one question per entry: **what behavior must this system e
 - **Tests:** pending
 - **Status:** seeded
 
+### Artifacts & Receipts (`ART`)
+
+#### REQ-ART-001 — Artifact versions are immutable; edits create new versions
+- **Statement:** GIVEN an artifact, WHEN a new edit is written, THEN a new immutable version is created (prior versions unchanged), and derived work records lineage via `parent_artifact?`.
+- **Priority:** must
+- **Source:** `ARCH/29-ARTIFACTS.md` §2 · `ARCH/06-DATA-MODEL.md` DM-019 · `ARCH/05-INVARIANTS.md` INV-18
+- **Acceptance:** version-write test (previous version bytes unchanged); an edit produces version+1; a derived artifact carries its lineage link.
+- **Failure cases:** in-place mutation of a written version → violation; silent overwrite → violation.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-ART-002 — Provenance is mandatory on every artifact
+- **Statement:** GIVEN any artifact created by agent/workflow/user/worker, WHEN it is recorded, THEN it carries a provenance chain (`created_by_agent → run → worker → workflow`) plus an inputs digest, and provenance-less artifacts are rejected.
+- **Priority:** must
+- **Source:** `ARCH/29-ARTIFACTS.md` §1/§2 · `ARCH/06-DATA-MODEL.md` DM-019 · `ARCH/05-INVARIANTS.md` INV-18
+- **Acceptance:** provenance-completeness test; creation without provenance fails typed; the chain resolves to session/run refs.
+- **Failure cases:** missing provenance → rejected; fabricated provenance → security failure.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-ART-003 — Receipts are mandatory for externally visible effects
+- **Statement:** GIVEN an externally visible effect, WHEN it completes, THEN a receipt is emitted inside the governed path (`12` → `13` → `34` → receipt), and the effect path cannot commit without it.
+- **Priority:** must
+- **Source:** `ARCH/29-ARTIFACTS.md` §3/§8 · `ARCH/05-INVARIANTS.md` INV-07 · `ARCH/04-DECISIONS.md` DEC-022 · `AGENTCOWORK-SPEC.md` §4
+- **Acceptance:** an effect-without-receipt attempt is blocked before commit; every committed effect has a receipt citing effect/ticket/verification.
+- **Failure cases:** visible effect without receipt → violation; receipt written outside the governed path → violation.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-ART-004 — Receipts are immutable; replay is evidence replay
+- **Statement:** GIVEN a recorded receipt, WHEN `replay(receipt)` runs, THEN it reconstructs inputs and shows what verification ran and what changed; re-doing the action is a new work item, never a silent re-fire.
+- **Priority:** must
+- **Source:** `ARCH/29-ARTIFACTS.md` §3 · `ARCH/07-CONTRACTS.md` CTR-018 · `ARCH/05-INVARIANTS.md` INV-07
+- **Acceptance:** receipt-mutation attempt fails; replay performs no provider call or side effect; replay output matches the recorded verification.
+- **Failure cases:** replay re-executing the effect → violation; mutated receipt → violation.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-ART-005 — Receipt emission yields three views of one fact
+- **Statement:** GIVEN a receipt emission, WHEN it occurs, THEN it also writes an event (`30`) and an audit entry (`12`) — three views of one fact with no duplicated state.
+- **Priority:** must
+- **Source:** `ARCH/29-ARTIFACTS.md` §3 · `ARCH/30-EVENTS.md` §3 (`receipt.recorded`) · `ARCH/12-TRUST.md` §9 · `ARCH/05-INVARIANTS.md` INV-23/INV-24
+- **Acceptance:** emission produces exactly one event and one audit entry referencing the receipt; no store duplicates the receipt payload.
+- **Failure cases:** receipt without an event or audit entry → defect; duplicated receipt state across stores → violation.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-ART-006 — Library promotion is explicit and versioned
+- **Statement:** GIVEN a reusable inventory item, WHEN it is promoted from work ("Save to Library" / "Save as template"), THEN promotion is explicit (never automatic), the Library item is global and durable with a `DM-023` kind, and versioning/deprecation are explicit operations.
+- **Priority:** must
+- **Source:** `ARCH/29-ARTIFACTS.md` §4 · `ARCH/04-DECISIONS.md` DEC-014 · `ARCH/06-DATA-MODEL.md` DM-023
+- **Acceptance:** no automatic library entries after work completion; promotion requires an explicit action; artifact scope ≠ library scope test.
+- **Failure cases:** auto-promotion → violation; library item without a promotion origin where applicable → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-ART-007 — Artifact gateway exchanges refs only under permissions
+- **Statement:** GIVEN an external agent, WHEN it reads/writes/attaches/transforms/publishes an artifact, THEN exchange is by refs (`artifact_id` · `mime_type` · `uri`) under per-verb permission checks; raw storage paths are never exposed, and v1 is workspace-scoped — a cross-workspace request is denied typed (explicit export only).
+- **Priority:** must
+- **Source:** `ARCH/29-ARTIFACTS.md` §5 · `ARCH/41-EDGE-CASES.md` EDGE-105 · `ARCH/05-INVARIANTS.md` INV-11
+- **Acceptance:** gateway verbs are gated per permission; no path leakage in responses or errors; a cross-workspace request is denied typed.
+- **Failure cases:** raw path in a projection → security failure; unpermissioned verb → violation; implicit cross-workspace access → violation.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-ART-008 — Receipt-pinned versions are never GC'd
+- **Statement:** GIVEN garbage collection or retention pruning, WHEN a version is pinned by a receipt, THEN the pin check runs in the GC transaction and the version is skipped — chain integrity outranks storage savings.
+- **Priority:** must
+- **Source:** `ARCH/29-ARTIFACTS.md` §6 · `ARCH/41-EDGE-CASES.md` EDGE-100 · `ARCH/04-DECISIONS.md` DEC-032 · `AGENTCOWORK-SPEC.md` §7
+- **Acceptance:** GC-vs-receipt race test (pinned version survives); an unpinned version is pruned per policy; the GC outcome is recorded.
+- **Failure cases:** receipt-pinned version collected → violation; pin/GC race → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-ART-009 — Retention pruning and explicit delete are audited
+- **Statement:** GIVEN retention policy or an explicit delete, WHEN versions are pruned/deleted, THEN pruning follows the per-workspace age/count policy, delete is a user/authorized operation, and both are audited.
+- **Priority:** must
+- **Source:** `ARCH/29-ARTIFACTS.md` §6 · `ARCH/05-INVARIANTS.md` INV-24 · `ARCH/04-DECISIONS.md` DEC-032
+- **Acceptance:** a deletion audit entry is present; an unauthorized delete is denied; retained versions match policy; media follows the same rules.
+- **Failure cases:** silent deletion → violation; delete outside authorization → security failure.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-ART-010 — Previews are projections; rendering consumes zero model tokens
+- **Statement:** GIVEN an artifact preview, WHEN the UI opens/renders it, THEN artifacts store render refs (thumbnail/render refs produced by domains, not pixels), and opening/rendering consumes zero model tokens.
+- **Priority:** must
+- **Source:** `ARCH/29-ARTIFACTS.md` §7 · `ARCH/04-DECISIONS.md` DEC-015 · `AGENTCOWORK-SPEC.md` §9
+- **Acceptance:** opening a preview makes no model call; the artifact record stores refs; the render ref resolves through the domain renderer.
+- **Failure cases:** preview generating a model call → violation; artifact storing raw pixels → defect.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-ART-011 — Unresolved artifact locations keep digest and re-link
+- **Statement:** GIVEN a moved/deleted backing location, WHEN the identity check (`25`) detects it, THEN the artifact is marked `unresolved`, receipts referencing it keep the digest, and the item is surfaced for re-link — never silently re-pointed.
+- **Priority:** must
+- **Source:** `ARCH/29-ARTIFACTS.md` §8 · `ARCH/41-EDGE-CASES.md` EDGE-101 · `ARCH/25-FILES.md` §2
+- **Acceptance:** a moved-location test shows `unresolved` + re-link guidance; the receipt digest is unchanged; no path is guessed.
+- **Failure cases:** artifact silently re-pointed to a different file → violation; receipt digest lost → violation.
+- **Tests:** pending
+- **Status:** seeded
+
+#### REQ-ART-012 — Write failures are atomic; effects cannot complete without a receipt
+- **Statement:** GIVEN a write failure mid-version or disk full during an artifact/receipt write, WHEN it occurs, THEN no partial version or receipt becomes visible (retry or discard), and a mandatory-receipt effect cannot complete — it pauses with reason.
+- **Priority:** must
+- **Source:** `ARCH/29-ARTIFACTS.md` §8 · `ARCH/41-EDGE-CASES.md` EDGE-104 · `ARCH/05-INVARIANTS.md` INV-07
+- **Acceptance:** crash/disk-full injection leaves no partial records; the effect pauses instead of committing; the failure is audited.
+- **Failure cases:** partial version visible → defect; effect committed with a missing receipt → violation.
+- **Tests:** pending
+- **Status:** seeded
+
 ## 5. Seeding status
 
 | Domain | Seeds | Next pass |
@@ -1971,7 +2081,8 @@ This registry answers one question per entry: **what behavior must this system e
 | `CODE` (12) | drafted above + expanded in pass `26` | verified during pass `26` ✅ (2026-09-26) |
 | `SEARCH` (12) | drafted above + expanded in pass `27` | verified during pass `27` ✅ (2026-09-26) |
 | `COMMS` (13) | drafted above + expanded in pass `28` | verified during pass `28` ✅ (2026-09-26) |
-| `ART`, `EVENTS`, `SKILL`, `CHAN`, `VERIFY` | pending | seeded during each module's P7 pass |
+| `ART` (12) | drafted above + expanded in pass `29` | verified during pass `29` ✅ (2026-09-26) |
+| `EVENTS`, `SKILL`, `CHAN`, `VERIFY` | pending | seeded during each module's P7 pass |
 
 ## 6. Related
 

@@ -1,6 +1,7 @@
 # 29 — Artifacts & Receipts
 
 > **Status:** Draft P2 (early). Must pass the `ARCH/00-INDEX.md` §5 checklist at freeze.
+> **P7 pass (2026-09-26):** line-checked; requirements seeded (`REQ-ART-*`, Requirements section).
 > **Role:** **Artifacts** are work products — versioned, provenance-carrying, scoped to work. **Receipts** are durable evidence of effects. **Library** is the reusable inventory; promotion is explicit (DEC-014).
 > **Dependencies:** `10-KERNEL` · `25-FILES` (identity/locations) · `30-EVENTS` (stream, telemetry) · `34-EFFECT-VERIFICATION` (verification precedes receipts). **Consumers:** `15`, `20`, UI (`32`), external agents (artifact gateway).
 > **Evidence:** product-owner brief (`Artifact` / `ProvenanceChain` / `LibraryItem` schemas; “Save to Library”; receipts first-class) · `ARCH/06-DATA-MODEL.md` DM-019/020/023 · `ARCH/07-CONTRACTS.md` CTR-018 · DEC-014 / DEC-022 / DEC-023 / DEC-032 · INV-07 / INV-18.
@@ -77,6 +78,8 @@ Previews are **projections** (thumbnail/render refs) produced by domains (`22`) 
 | Write fails mid-version | Version is atomic — no partial versions visible; retry or discard; audit. |
 | Location moved/deleted | Identity check (`25`) marks artifact `unresolved`; receipts referencing it keep the digest; surfaced for re-link. |
 | Receipt missing for a visible effect | Blocked before commit (INV-07); the effect path cannot complete without it. |
+| Disk full / write failure during artifact or receipt write | Typed failure; no partial version or receipt becomes visible; a mandatory-receipt effect pauses with reason (EDGE-104, INV-07). |
+| Cross-workspace gateway request | Denied typed with no path leakage; v1 is workspace-scoped — cross-workspace sharing is explicit export only (EDGE-105, INV-11). |
 | GC vs receipt race | Receipt pin check runs in the GC transaction; pinned versions are skipped. |
 | Gateway permission denied | Typed `AuthorizationDenied`; no path leakage. |
 
@@ -97,3 +100,22 @@ Previews are **projections** (thumbnail/render refs) produced by domains (`22`) 
 ## 11. Evidence
 
 Product-owner brief (`Artifact`, `ProvenanceChain`, `LibraryItem`; promotion lifecycle; receipts) · `ARCH/06-DATA-MODEL.md` DM-019/020/023 · `ARCH/07-CONTRACTS.md` CTR-018 · DEC-014/022/023/032 · INV-07/18/24 · `ARCH/17-MEMORY.md` (export/import pattern).
+
+## 12. Requirements (`REQ-ART-*`)
+
+Testable behaviors owned by this module live in `ARCH/08-REQUIREMENTS.md`; the traceability chain is in `ARCH/09-FEATURE-MATRIX.md`. This table is a pointer, not a second copy.
+
+| REQ | Behavior (one line) |
+|---|---|
+| `REQ-ART-001` | Artifact versions are immutable; every edit creates a new version with lineage (DM-019, INV-18) |
+| `REQ-ART-002` | Provenance is mandatory on every artifact (INV-18) |
+| `REQ-ART-003` | Receipts are mandatory for externally visible effects, emitted inside the governed path (INV-07, DEC-022) |
+| `REQ-ART-004` | Receipts are immutable; `replay` is evidence replay, never re-execution (CTR-018) |
+| `REQ-ART-005` | A receipt emission writes event + audit — three views of one fact, never duplicated state (INV-23/24) |
+| `REQ-ART-006` | Library promotion is explicit; artifacts are work-scoped, the Library global and durable (DEC-014, DM-023) |
+| `REQ-ART-007` | Gateway exchange is refs-only under per-verb permissions; v1 workspace-scoped, cross-workspace denied (EDGE-105, INV-11) |
+| `REQ-ART-008` | Receipt-pinned versions are never GC'd; the pin check runs in the GC transaction (DEC-032) |
+| `REQ-ART-009` | Retention pruning and explicit delete are audited (INV-24, DEC-032) |
+| `REQ-ART-010` | Previews store render refs, not pixels; opening/rendering consumes zero model tokens (DEC-015) |
+| `REQ-ART-011` | Moved/deleted locations mark the artifact `unresolved`; receipts keep the digest and re-link is explicit (EDGE-101) |
+| `REQ-ART-012` | Writes are atomic under failure; a mandatory-receipt effect cannot complete without its receipt (EDGE-104, INV-07) |

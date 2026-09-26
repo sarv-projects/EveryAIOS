@@ -226,6 +226,18 @@ One row per `REQ-*`. Status only from evidence.
 | `REQ-COMMS-011` | `28-COMMS` | pending | `DEC-037` | — | pending | pending | unplanned |
 | `REQ-COMMS-012` | `28-COMMS` | pending | `DEC-037` | — | pending | pending | unplanned |
 | `REQ-COMMS-013` | `28-COMMS` | pending | `INV-02/05`, `DEC-016/037` | — | pending | pending | unplanned |
+| `REQ-ART-001` | `29-ARTIFACTS` | pending | `DM-019`, `INV-18` | — | pending | pending | unplanned |
+| `REQ-ART-002` | `29-ARTIFACTS` | pending | `DM-019`, `INV-18` | — | pending | pending | unplanned |
+| `REQ-ART-003` | `29-ARTIFACTS` | pending | `DEC-022`, `INV-07`, `CTR-018` | — | pending | pending | unplanned |
+| `REQ-ART-004` | `29-ARTIFACTS` | pending | `CTR-018`, `INV-07` | — | pending | pending | unplanned |
+| `REQ-ART-005` | `29-ARTIFACTS` | pending | `INV-23/24` | — | pending | pending | unplanned |
+| `REQ-ART-006` | `29-ARTIFACTS` | pending | `DEC-014`, `DM-023` | — | pending | pending | unplanned |
+| `REQ-ART-007` | `29-ARTIFACTS` | pending | `INV-11` | `EDGE-105` | pending | pending | unplanned |
+| `REQ-ART-008` | `29-ARTIFACTS` | pending | `DEC-032` | `EDGE-100` | pending | pending | unplanned |
+| `REQ-ART-009` | `29-ARTIFACTS` | pending | `DEC-032`, `INV-24` | — | pending | pending | unplanned |
+| `REQ-ART-010` | `29-ARTIFACTS` | pending | `DEC-015` | — | pending | pending | unplanned |
+| `REQ-ART-011` | `29-ARTIFACTS` | pending | `INV-18` | `EDGE-101` | pending | pending | unplanned |
+| `REQ-ART-012` | `29-ARTIFACTS` | pending | `INV-07` | `EDGE-104` | pending | pending | unplanned |
 
 ## 4. Maintenance
 
